@@ -1,0 +1,3 @@
+﻿"source_id","file_name","format","kept","role","note"
+"kaggle_datasnaek_mbti_type","kaggle_datasnaek_mbti_type__mbti_1.csv","csv","True","main weak-label training source","16-type MBTI labels are split into EI/NS/FT/JP after post chunking."
+"mbtibench","mbtibench__mbtibench.jsonl","jsonl","True","axis label support/evaluation source","Contains hardlabels and softlabels for E/I, S/N, T/F, J/P."

@@ -1,0 +1,93 @@
+{
+  "purpose": "Curated weak-label dataset for chatbot user utterance MBTI 4-axis tendency estimation.",
+  "output_dir": "C:\\dev\\project\\SKN27-FINAL-4Team\\etl\\datasets\\personality_training\\axis_ready",
+  "schema": [
+    "text",
+    "EI",
+    "NS",
+    "FT",
+    "JP"
+  ],
+  "total_rows": 321989,
+  "by_source": {
+    "kaggle_datasnaek_mbti_type": 315182,
+    "mbtibench": 7819
+  },
+  "axis_counts_total": {
+    "EI": {
+      "E": 74328,
+      "I": 247661
+    },
+    "NS": {
+      "N": 276456,
+      "S": 45533
+    },
+    "FT": {
+      "F": 173683,
+      "T": 148306
+    },
+    "JP": {
+      "J": 127429,
+      "P": 194560
+    }
+  },
+  "axis_counts_by_source": {
+    "kaggle_datasnaek_mbti_type": {
+      "EI": {
+        "E": 70297,
+        "I": 244885
+      },
+      "NS": {
+        "N": 273449,
+        "S": 41733
+      },
+      "FT": {
+        "F": 170259,
+        "T": 144923
+      },
+      "JP": {
+        "J": 123998,
+        "P": 191184
+      }
+    },
+    "mbtibench": {
+      "EI": {
+        "E": 4801,
+        "I": 3018
+      },
+      "NS": {
+        "N": 3442,
+        "S": 4377
+      },
+      "FT": {
+        "F": 3872,
+        "T": 3947
+      },
+      "JP": {
+        "J": 3945,
+        "P": 3874
+      }
+    }
+  },
+  "included_sources": [
+    "kaggle_datasnaek_mbti_type",
+    "mbtibench"
+  ],
+  "removed_sources": {
+    "hf_babak_sentencebroken": "Too preprocessed; less natural as chatbot-like utterance.",
+    "kaggle_mazlumi_twitter_mbti": "Often concatenated tweet timelines rather than one clear utterance.",
+    "kaggle_tapanvijay_mbti_cleaned": "Likely duplicate of datasnaek.",
+    "hf_epinfomax_mbti_korean": "Parquet schema could not be verified in this environment; removed to keep project focused.",
+    "hf_jtatman_tweet_classify": "Parquet schema could not be verified in this environment; removed to keep project focused."
+  },
+  "cleaning_rules": [
+    "Split datasnaek posts by ||| into post chunks.",
+    "Convert MbtiBench JSONL posts to CSV rows.",
+    "Remove URLs, emails, mentions, control characters, and noisy symbols.",
+    "Drop rows shorter than 20 characters or longer than 2000 characters.",
+    "Drop rows with fewer than 4 alphabetic words.",
+    "Drop rows containing MBTI label leakage such as mbti, INFP, ENFJ, or cognitive functions.",
+    "Deduplicate by text and four axis labels."
+  ],
+  "label_note": "Most rows are weak labels derived from author-level MBTI, not human-labeled utterance-level psychological truth."
+}

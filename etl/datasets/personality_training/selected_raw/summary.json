@@ -1,0 +1,10 @@
+﻿{
+    "purpose":  "Raw sources kept for chatbot utterance MBTI 4-axis tendency estimation.",
+    "source_count":  2,
+    "data_file_count":  2,
+    "logical_size_mb":  61.74,
+    "kept_files":  [
+                       "kaggle_datasnaek_mbti_type__mbti_1.csv",
+                       "mbtibench__mbtibench.jsonl"
+                   ]
+}
