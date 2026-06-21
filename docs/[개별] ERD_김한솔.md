@@ -210,30 +210,30 @@ erDiagram
 >   - `MESSAGE`, `EMOTION_ANALYSIS`, `SCALE_SCORE` 레코드는 세션 종료 즉시 영구 물리 삭제
 >   - `TEA_RECOMMENDATION` 및 마음 리포트 생성 금지
 >   - `LTM_MEMORY` 업데이트 금지
->   - 단, 백그라운드 위기 탐지는 익명으로 작동 후 즉시 파기
+>   - 단, 백그라운드 안전성 가드레일은 익명으로 작동 후 즉시 파기
 
 ---
 
-## 4. Chroma 벡터 DB — 심리이론 RAG 구조
+## 4. Neo4j 벡터 인덱스 — 심리이론 RAG 구조
 
-> [!info] Chroma 역할
-> Neo4j는 LTM 기억(사람·사건·관계)만 담당.
-> 심리이론 RAG 지식 노드는 **Chroma 벡터 DB**로 분리 운영.
+> [!info] Neo4j Vector Index 역할
+> 별도의 Chroma DB를 구축하지 않고, **Neo4j의 내장 Vector Index 기능**을 활성화하여 사용합니다.
+> 심리학 이론 마크다운 문서 청크들을 `(:TheoryChunk)` 노드로 저장하고 임베딩 속성을 연결해 검색을 전담합니다.
 
-### 저장 문서 구조
+### 저장 노드 구조
 
-| 컬렉션 | 문서 예시 | 메타데이터 |
+| 노드 레이블 | 프로퍼티 속성 | 메타데이터 속성 |
 | :--- | :--- | :--- |
-| `psych_theory_rag` | "CBT 생각 검증 질문: 늘 실패한다는 느낌, 어떤 상황에서 그런 생각이 제일 크게 들어?" | emotion: 불안, theory: CBT |
-| `psych_theory_rag` | "ACT 탈융합: 불안이라는 파도가 너를 치고 지나가는 것뿐이야" | emotion: 불안, theory: ACT |
-| `psych_theory_rag` | "내러티브 외재화: 무기력이라는 불청객이 널 힘들게 하는구나" | emotion: 슬픔, theory: 내러티브 |
+| `(:TheoryChunk)` | content: "CBT 생각 검증 질문: 늘 실패한다는 느낌, 어떤 상황에서 그런 생각이 제일 크게 들어?", embedding: [1536차원 벡터] | emotion: "불안", theory: "CBT" |
+| `(:TheoryChunk)` | content: "ACT 탈융합: 불안이라는 파도가 너를 치고 지나가는 것뿐이야", embedding: [1536차원 벡터] | emotion: "불안", theory: "ACT" |
+| `(:TheoryChunk)` | content: "내러티브 외재화: 무기력이라는 불청객이 널 힘들게 하는구나", embedding: [1536차원 벡터] | emotion: "슬픔", theory: "내러티브" |
 
 ### 실시간 검색 흐름
 
 ```
 XGBoost → 감정 클래스 (예: 불안)
     ↓
-Chroma 유사도 검색 (emotion=불안 필터)
+Neo4j Vector Index 유사도 검색 (emotion=불안 필터)
     ↓
 상위 2개 템플릿 반환
     ↓
