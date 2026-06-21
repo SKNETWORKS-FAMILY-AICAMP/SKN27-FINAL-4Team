@@ -1,0 +1,31 @@
+# 환경 변수 및 비밀키
+.env
+.env.development
+.env.production
+
+# 대용량 모델 가중치 파일
+*.pkl
+*.bin
+*.pt
+*.pth
+
+# 데이터베이스 캐시 및 볼륨 데이터
+postgres_data/
+neo4j_data/
+storage/
+
+# 파이썬 캐시 및 가상환경
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# 임시 덤프 및 복사본 파일
+_tmp_*.txt
+_update_*.py
+_write_*.py
+__mount_test.txt
+
+# 데이터셋
+*.json
