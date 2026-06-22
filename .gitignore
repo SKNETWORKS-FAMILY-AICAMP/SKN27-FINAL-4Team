@@ -21,6 +21,21 @@ __pycache__/
 venv/
 env/
 
+# Node.js
+node_modules/
+dist/
+.cache/
+
+# Vite
+*.local
+
+# 임시/테스트 파일
+screenshot_*.png
+*.mjs
+take_screenshot*
+view_svgs*
+shot_dark*
+
 # 임시 덤프 및 복사본 파일
 _tmp_*.txt
 _update_*.py

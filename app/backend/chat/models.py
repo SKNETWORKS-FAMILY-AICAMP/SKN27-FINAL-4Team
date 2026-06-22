@@ -13,6 +13,8 @@ class ChatSession(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='chat_sessions',
+        null=True,
+        blank=True,
     )
     character = models.CharField(max_length=10, choices=CHARACTER_CHOICES, default='haeon')
     is_secret = models.BooleanField(default=False)

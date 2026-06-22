@@ -72,7 +72,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { chatApi } from '../api/chat.js'
+import { chatApi } from '../../api/chat.js'
 
 const router = useRouter()
 const route  = useRoute()

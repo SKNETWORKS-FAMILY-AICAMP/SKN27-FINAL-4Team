@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
 from openai import OpenAI
@@ -63,14 +63,15 @@ def _classify_emotion(client: OpenAI, history: list[dict], user_content: str) ->
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def session_list(request):
-    sessions = ChatSession.objects.filter(user=request.user, is_secret=False)
+    user = request.user if request.user.is_authenticated else None
+    sessions = ChatSession.objects.filter(user=user, is_secret=False)
     return Response(ChatSessionSerializer(sessions, many=True).data)
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def create_session(request):
     character = request.data.get('character', 'haeon')
     is_secret = bool(request.data.get('is_secret', False))
@@ -78,8 +79,9 @@ def create_session(request):
     if character not in VALID_CHARACTERS:
         return Response({'error': '유효하지 않은 캐릭터입니다.'}, status=status.HTTP_400_BAD_REQUEST)
 
+    user = request.user if request.user.is_authenticated else None
     session = ChatSession.objects.create(
-        user=request.user,
+        user=user,
         character=character,
         is_secret=is_secret,
     )
@@ -87,10 +89,10 @@ def create_session(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def send_message(request, session_id):
     try:
-        session = ChatSession.objects.get(id=session_id, user=request.user)
+        session = ChatSession.objects.get(id=session_id)
     except ChatSession.DoesNotExist:
         return Response({'error': '세션을 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
 
