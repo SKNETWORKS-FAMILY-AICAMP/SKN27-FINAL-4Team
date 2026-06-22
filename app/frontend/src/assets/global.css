@@ -1,0 +1,62 @@
+:root {
+  /* ── 다크 판타지 팔레트 (SVG 설계서 추출) ── */
+  --bg-deep:       #120826;
+  --bg-mid:        #1E0F3C;
+  --bg-card:       rgba(255, 255, 255, 0.07);
+  --bg-card-hover: rgba(255, 255, 255, 0.12);
+  --card-border:   rgba(255, 255, 255, 0.14);
+
+  --text-primary:   #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.62);
+  --text-muted:     rgba(255, 255, 255, 0.38);
+
+  /* 포인트 컬러 */
+  --accent-teal:   #5EEAD4;
+  --accent-orange: #FF8A65;
+  --accent-yellow: #FFF5C8;
+  --accent-purple: #E9CAFF;
+
+  /* 기존 변수명 유지 (컴포넌트 호환) */
+  --ink:    #ffffff;
+  --mut:    rgba(255,255,255,0.5);
+  --bd:     rgba(255,255,255,0.14);
+  --gray:   rgba(255,255,255,0.1);
+  --soft:   rgba(255,255,255,0.06);
+  --canvas: #120826;
+  --teal:   #5EEAD4;
+  --tealbg: rgba(94, 234, 212, 0.15);
+  --blue:   #93C5FD;
+  --bluebg: rgba(147,197,253,0.18);
+  --pur:    #C4B5FD;
+  --purbg:  rgba(196,181,253,0.15);
+  --cor:    #FCA5A5;
+  --corbg:  rgba(252,165,165,0.15);
+  --amber:  #FCD34D;
+  --amberbg:rgba(252,211,77,0.15);
+  --red:    #F87171;
+  --redbg:  rgba(248,113,113,0.15);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Malgun Gothic', 'Noto Sans KR', system-ui, sans-serif;
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: inherit;
+}
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }

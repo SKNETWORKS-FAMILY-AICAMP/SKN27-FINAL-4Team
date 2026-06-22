@@ -1,0 +1,49 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>화면설계서 최종 통합본</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f4f3f0; color: #2c2c2a; font-family: "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif; }
+  .merge-shell { padding: 24px; }
+  .merge-title { max-width: 1240px; margin: 0 auto 10px; font-size: 24px; font-weight: 800; }
+  .merge-note { max-width: 1240px; margin: 0 auto 22px; color: #6b6b66; font-size: 13px; line-height: 1.6; }
+  .merge-divider { max-width: 1240px; margin: 42px auto 18px; border-left: 4px solid #0f6e56; border-radius: 6px; padding: 9px 14px; background: #e1f5ee; color: #0f6e56; font-size: 16px; font-weight: 800; }
+  .merge-frame { display: block; width: 100%; border: 0; overflow: hidden; background: transparent; }
+  .merge-sid { font-size: 12px; font-weight: 500; opacity: 0.75; margin-left: 10px; }
+  @media (max-width: 720px) { .merge-shell { padding: 14px; } .merge-title { font-size: 20px; } }
+</style>
+</head>
+<body>
+<div class="merge-shell">
+  <h1 class="merge-title">화면설계서 최종 통합본</h1>
+  <p class="merge-note">온보딩 → 마이페이지/커뮤니티/관리자 → 챗봇 → 마음 리포트 순으로 구성되어 있습니다.</p>
+</div>
+
+<div class="merge-shell"><div class="merge-divider">① 이성진 — 온보딩 페이지 <span class="merge-sid">Screen ID: ONB-001 ~ ONB-008</span></div></div>
+<iframe class="merge-frame" title="이성진 — 온보딩" src="./navigator.html"></iframe>
+
+<div class="merge-shell"><div class="merge-divider">② 한재웅 — 마이페이지 · 커뮤니티 · 관리자 <span class="merge-sid">Screen ID: F-MY-001~005 · F-COM-001~003 · F-ADM-001~008</span></div></div>
+<iframe class="merge-frame" title="한재웅 — 마이페이지/커뮤니티/관리자" src="./한재웅.html"></iframe>
+
+<div class="merge-shell"><div class="merge-divider">③ 김한솔 — 챗봇 대화 <span class="merge-sid">Screen ID: SCR-003 · SCR-003-S · SCR-004</span></div></div>
+<iframe class="merge-frame" title="김한솔 — 챗봇" src="./김한솔.html"></iframe>
+
+<div class="merge-shell"><div class="merge-divider">④ 박송원 — 마음 리포트 <span class="merge-sid">Screen ID: MR-001</span></div></div>
+<iframe class="merge-frame" title="박송원 — 마음 리포트" src="./박송원.html"></iframe>
+
+<script>
+  // 각 iframe 높이를 내용에 맞게 자동 조정
+  document.querySelectorAll('.merge-frame').forEach(function(frame) {
+    frame.addEventListener('load', function() {
+      try {
+        var h = frame.contentDocument.body.scrollHeight;
+        frame.style.height = h + 'px';
+      } catch(e) {}
+    });
+  });
+</script>
+</body>
+</html>
