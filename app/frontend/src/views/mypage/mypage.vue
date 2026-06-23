@@ -1,24 +1,13 @@
 <template>
     <main class="app-shell">
-      <header class="topbar">
-        <div class="brand">
-          <div class="brand-mark">M</div>
-          <div>
-            <h1>MindRoom</h1>
-            <p>{{ t.subtitle }}</p>
-          </div>
-        </div>
-        <div class="user-chip" aria-label="현재 사용자">
-          <span class="mini-avatar"></span>
-          <strong>{{ t.user }}</strong>
-        </div>
-      </header>
-
       <section class="room-stage">
-        <div class="room-toolbar">
-          <strong>{{ t.roomTitle }}</strong>
-          <span class="status-text">{{ t.hint }}</span>
-        </div>
+        <nav class="legend" aria-label="기능 바로가기">
+          <button type="button" @click="openPanel('profile')">{{ t.profile }}</button>
+          <button type="button" @click="openPanel('mbti')">{{ t.mbti }}</button>
+          <button type="button" @click="openPanel('taste')">{{ t.taste }}</button>
+          <button type="button" @click="openPanel('reports')">{{ t.reports }}</button>
+          <button type="button" @click="openPanel('settings')">{{ t.settings }}</button>
+        </nav>
         <div class="room-canvas">
           <img class="room-image" src="../../assets/UI 신버전4.png" alt="야간 톤 MindRoom 방 일러스트" />
           <button class="hotspot profile" type="button" :aria-label="t.profile" @click="openPanel('profile')"></button>
@@ -27,13 +16,6 @@
           <button class="hotspot reports" type="button" :aria-label="t.reports" @click="openPanel('reports')"></button>
           <button class="hotspot settings" type="button" :aria-label="t.settings" @click="openPanel('settings')"></button>
         </div>
-        <nav class="legend" aria-label="기능 바로가기">
-          <button type="button" @click="openPanel('profile')">{{ t.profile }}</button>
-          <button type="button" @click="openPanel('mbti')">{{ t.mbti }}</button>
-          <button type="button" @click="openPanel('taste')">{{ t.taste }}</button>
-          <button type="button" @click="openPanel('reports')">{{ t.reports }}</button>
-          <button type="button" @click="openPanel('settings')">{{ t.settings }}</button>
-        </nav>
 
         <transition name="fade">
           <section v-if="activePanel" class="modal-backdrop" @click.self="closePanel">
@@ -525,8 +507,8 @@ export default {
 };
 </script>
 
-<style>
-:root {
+<style scoped>
+.app-shell {
   --ink: #f4efff;
   --mut: #b9acd8;
   --bd: #4d3a82;
@@ -559,37 +541,26 @@ export default {
   --font-scale: 1;
 }
 
-[data-contrast="true"] {
+.app-shell[data-contrast="true"] {
   --primary: #d7b7ff;
   --accent: #8fa0ff;
   --line: #d7b7ff;
 }
 
-* { box-sizing: border-box; }
-
-html,
-body {
-  height: 100%;
-  overflow: auto;
-}
-
-body {
-  margin: 0;
-  min-height: 100vh;
-  background: var(--canvas);
-  color: var(--text);
-  font-family: Pretendard, "Noto Sans KR", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: calc(16px * var(--font-scale));
-}
-
-button, input, select, textarea { font: inherit; }
-button { cursor: pointer; }
+.app-shell button, .app-shell input, .app-shell select, .app-shell textarea { font: inherit; }
+.app-shell button { cursor: pointer; }
 
 .app-shell {
   min-height: 100vh;
   padding: 12px;
   overflow: auto;
+  background: transparent;
+  color: var(--text);
+  font-family: Pretendard, "Noto Sans KR", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: calc(16px * var(--font-scale));
+  box-sizing: border-box;
 }
+.app-shell *, .app-shell *::before, .app-shell *::after { box-sizing: border-box; }
 
 .topbar {
   display: flex;
@@ -660,7 +631,7 @@ button { cursor: pointer; }
 
 .room-stage {
   position: relative;
-  width: min(1280px, 100%, calc((100vh - 138px) * 16 / 9));
+  width: min(1560px, 100%, calc((100vh - 96px) * 16 / 9));
   height: auto;
   margin: 0 auto;
   border: 1px solid var(--line);
@@ -769,7 +740,7 @@ button { cursor: pointer; }
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   padding: 10px 16px;
-  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   background: rgba(23, 16, 68, 0.98);
 }
 
