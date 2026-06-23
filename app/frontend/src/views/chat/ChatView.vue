@@ -48,7 +48,7 @@
       <!-- ===== 왼쪽 패널: 캐릭터 영역 ===== -->
       <aside class="left-panel">
         <div class="char-face" :style="{ background: CHARACTER_META[character].bg, color: CHARACTER_META[character].color }">
-          {{ CHARACTER_META[character].face }}
+          {{ CHARACTER_META[character].faces[currentEmotion] }}
         </div>
         <div class="char-name">{{ CHARACTER_META[character].name }}</div>
         <div class="char-faces">표정 4분기 : 응원 · 속상 · 화남 · 계획</div>
@@ -112,8 +112,9 @@
 
     <!-- ===== 추천 질문 ===== -->
     <div class="suggest-bar">
-      <span class="suggest-label">✦ 이런 얘기 어때요?</span>
-      <button v-for="q in suggestedQuestions" :key="q" class="q-chip" @click="fillInput(q)">
+      <span class="suggest-label">✦ 이런 말 어때요?</span>
+      <span v-if="suggestLoading" class="suggest-loading">생각 중…</span>
+      <button v-else v-for="q in suggestedQuestions" :key="q" class="q-chip" @click="fillInput(q)">
         {{ q }}
       </button>
     </div>
@@ -190,22 +191,35 @@ const EMOTION_LABELS = {
   plan:      '✦ 계획 모드',
 }
 
-const character     = ref(route.query.character || 'haeon')
-const isSecret      = ref(route.query.secret === 'on')
-const sessionId     = ref(null)
-const showExitModal = ref(false)
-const messages  = ref([])
-const inputText = ref('')
-const isTyping  = ref(false)
+const character      = ref(route.query.character || 'haeon')
+const isSecret       = ref(route.query.secret === 'on')
+const sessionId      = ref(null)
+const showExitModal  = ref(false)
+const messages       = ref([])
+const inputText      = ref('')
+const isTyping       = ref(false)
+const suggestLoading = ref(false)
+const suggestedQuestions = ref([])
+const currentEmotion = ref('default')
 const threadRef = ref(null)
 const inputRef  = ref(null)
 
-const SUGGEST_NORMAL = ['오늘 회사에서 무슨 일 있었어?', '요즘 제일 힘든 게 뭐야?', '그냥 가볍게 수다 떨까?']
-const SUGGEST_SECRET = ['털어놓고 싶은 비밀이 있어', '요즘 너무 지쳐', '그냥 들어줘']
-const suggestedQuestions = computed(() => isSecret.value ? SUGGEST_SECRET : SUGGEST_NORMAL)
 const openerText = computed(() =>
-  isSecret.value ? '여긴 아무 기록도 안 남아. 편하게 다 털어놔도 돼.' : '오늘 서울 비 온대~ 우산 챙겼어?'
+  isSecret.value ? '여긴 아무 기록도 안 남아. 편하게 다 털어놔도 돼.' : '오늘 어떤 하루였어?'
 )
+
+async function refreshSuggestions() {
+  if (!sessionId.value || isSecret.value) return
+  suggestLoading.value = true
+  try {
+    const result = await chatApi.suggestQuestions(sessionId.value)
+    suggestedQuestions.value = result.questions ?? []
+  } catch {
+    suggestedQuestions.value = []
+  } finally {
+    suggestLoading.value = false
+  }
+}
 
 onMounted(async () => {
   try {
@@ -224,6 +238,8 @@ async function sendMessage() {
   try {
     const reply = await chatApi.sendMessage(sessionId.value, content)
     messages.value.push(reply)
+    if (reply.emotion_label) currentEmotion.value = reply.emotion_label
+    refreshSuggestions()
   } catch {
     messages.value.push({ _tempId: Date.now(), role: 'assistant', content: '잠시 연결이 끊겼어요. 다시 시도해 줄래요? 🙏' })
   } finally {
@@ -236,8 +252,14 @@ async function requestTea() {
   isTyping.value = true
   await scrollToBottom()
   try {
-    const reply = await chatApi.sendMessage(sessionId.value, '힐링 차 추천해줘')
-    messages.value.push({ ...reply, _teaCard: { name: '캐모마일 차', desc: '긴장 완화 · 수면 도움 · 카페인 없음' } })
+    const tea = await chatApi.recommendTea(sessionId.value)
+    messages.value.push({
+      _tempId: Date.now(), role: 'assistant',
+      content: `${tea.emoji ?? '🍵'} **${tea.name}**\n${tea.reason}\n효능: ${tea.effect}`,
+      _teaCard: { name: tea.name, desc: tea.reason },
+    })
+  } catch {
+    messages.value.push({ _tempId: Date.now(), role: 'assistant', content: '차 추천을 불러오지 못했어요.' })
   } finally { isTyping.value = false; await scrollToBottom() }
 }
 
@@ -245,8 +267,13 @@ async function requestBgm() {
   isTyping.value = true
   await scrollToBottom()
   try {
-    const reply = await chatApi.sendMessage(sessionId.value, 'BGM 추천해줘')
-    messages.value.push(reply)
+    const bgm = await chatApi.recommendBgm(sessionId.value)
+    messages.value.push({
+      _tempId: Date.now(), role: 'assistant',
+      content: `🎵 **${bgm.title}** — ${bgm.artist}\n${bgm.mood}`,
+    })
+  } catch {
+    messages.value.push({ _tempId: Date.now(), role: 'assistant', content: 'BGM 추천을 불러오지 못했어요.' })
   } finally { isTyping.value = false; await scrollToBottom() }
 }
 
@@ -761,6 +788,12 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   transition: background 0.2s;
 }
 .q-chip:hover { background: rgba(192,132,252,0.22); }
+
+.suggest-loading {
+  font-size: 13.5px;
+  color: rgba(255,255,255,0.35);
+  font-style: italic;
+}
 
 /* ── 입력바 ── */
 .input-zone {
