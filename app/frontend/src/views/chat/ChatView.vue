@@ -26,23 +26,25 @@
       <button class="secret-exit-btn" @click="showExitModal = true">✕ 시크릿챗 종료</button>
     </div>
 
-    <!-- 시크릿챗 종료 확인 모달 -->
-    <Transition name="modal">
-      <div v-if="showExitModal" class="modal-backdrop" @click.self="showExitModal = false">
-        <div class="modal-box">
-          <div class="modal-icon">🔒</div>
-          <h3 class="modal-title">시크릿챗을 종료할까요?</h3>
-          <p class="modal-desc">
-            지금까지의 대화 내용이 <strong>모두 삭제</strong>됩니다.<br>
-            저장되지 않으며 복구할 수 없습니다.
-          </p>
-          <div class="modal-actions">
-            <button class="modal-btn modal-btn--cancel" @click="showExitModal = false">계속 대화할게요</button>
-            <button class="modal-btn modal-btn--confirm" @click="confirmExitSecret">종료할게요</button>
+    <!-- 시크릿챗 종료 확인 모달 (body로 텔레포트 → 화면 전체 덮고 중앙 정렬) -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div v-if="showExitModal" class="modal-backdrop" @click.self="showExitModal = false">
+          <div class="modal-box">
+            <div class="modal-icon">🔒</div>
+            <h3 class="modal-title">시크릿챗을 종료할까요?</h3>
+            <p class="modal-desc">
+              지금까지의 대화 내용이 <strong>모두 삭제</strong>됩니다.<br>
+              저장되지 않으며 복구할 수 없습니다.
+            </p>
+            <div class="modal-actions">
+              <button class="modal-btn modal-btn--cancel" @click="showExitModal = false">계속 대화할게요</button>
+              <button class="modal-btn modal-btn--confirm" @click="confirmExitSecret">종료할게요</button>
+            </div>
           </div>
         </div>
-      </div>
-    </Transition>
+      </Transition>
+    </Teleport>
 
     <div class="chat-layout">
       <!-- ===== 왼쪽 패널: 캐릭터 영역 ===== -->
@@ -147,6 +149,7 @@ import { ref, computed, nextTick, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { chatApi } from '../../api/chat.js'
 import chatBg from '../../assets/chat-bg.png'
+import { useSecret } from '../../composables/useSecret.js'
 
 const router = useRouter()
 const route  = useRoute()
@@ -191,7 +194,7 @@ const EMOTION_LABELS = {
 }
 
 const character      = ref(route.query.character || 'haeon')
-const isSecret       = ref(route.query.secret === 'on')
+const { secret: isSecret, setSecret } = useSecret()
 const sessionId      = ref(null)
 const showExitModal  = ref(false)
 const messages       = ref([])
@@ -220,7 +223,23 @@ async function refreshSuggestions() {
   }
 }
 
+const OPENER_MSG = {
+  haeon:   isSecret => isSecret
+    ? '여긴 아무도 몰라. 뭐든 다 말해도 괜찮아 ◠‿◠'
+    : '안녕! 오늘 하루 어땠어? 좋은 일도 있었어? ◠‿◠',
+  greung:  isSecret => isSecret
+    ? '여기선 솔직하게 말해도 돼. 뭐가 문제야? ◣_◢'
+    : '왔어? 오늘 뭐가 제일 걸렸어? 말해봐 ◣_◢',
+  dalkong: isSecret => isSecret
+    ? '비밀이잖아, 다 괜찮아! 무슨 일이야? ◕‿◕'
+    : '안녕! 오늘 뭔가 좋은 일 있었지? ◕‿◕',
+}
+
 onMounted(async () => {
+  const openerContent = OPENER_MSG[character.value]?.(isSecret.value)
+    ?? '안녕! 오늘 어떤 하루였어?'
+  messages.value.push({ _tempId: Date.now(), role: 'assistant', content: openerContent })
+
   try {
     const sess = await chatApi.createSession(character.value, isSecret.value)
     sessionId.value = sess.id
@@ -278,7 +297,7 @@ async function requestBgm() {
 }
 
 async function toggleSecret() {
-  isSecret.value = !isSecret.value
+  setSecret(!isSecret.value)
   messages.value = []
   try {
     const sess = await chatApi.createSession(character.value, isSecret.value)
@@ -289,7 +308,7 @@ async function toggleSecret() {
 
 async function confirmExitSecret() {
   showExitModal.value = false
-  isSecret.value = false
+  setSecret(false)
   messages.value = []
   try {
     const sess = await chatApi.createSession(character.value, false)
@@ -331,9 +350,9 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   position: absolute;
   inset: 0;
   background: linear-gradient(180deg,
-    rgba(13, 5, 32, 0.55) 0%,
-    rgba(20, 8, 48, 0.70) 45%,
-    rgba(13, 5, 32, 0.86) 100%);
+    rgba(13, 5, 32, 0.18) 0%,
+    rgba(20, 8, 48, 0.30) 45%,
+    rgba(13, 5, 32, 0.46) 100%);
 }
 
 /* ── 시크릿챗: 밤하늘 ── */
