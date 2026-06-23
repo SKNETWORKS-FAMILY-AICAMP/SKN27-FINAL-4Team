@@ -44,3 +44,6 @@ __mount_test.txt
 
 # 데이터셋
 *.json
+
+# 개별 문서
+docs/\[개별\]*
