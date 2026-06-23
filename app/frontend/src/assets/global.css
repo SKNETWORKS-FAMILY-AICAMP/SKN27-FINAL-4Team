@@ -1,40 +1,47 @@
 :root {
-  /* ── 다크 판타지 팔레트 (SVG 설계서 추출) ── */
-  --bg-deep:       #120826;
-  --bg-mid:        #1E0F3C;
-  --bg-card:       rgba(255, 255, 255, 0.07);
-  --bg-card-hover: rgba(255, 255, 255, 0.12);
-  --card-border:   rgba(255, 255, 255, 0.14);
+  /* ── 배경 이미지(노을 판타지) 추출 팔레트 ── */
+  --bg-deep:       #0D0520;
+  --bg-mid:        #2A0E6B;
+  --bg-card:       rgba(42, 14, 107, 0.35);
+  --bg-card-hover: rgba(42, 14, 107, 0.55);
+  --card-border:   rgba(192, 132, 252, 0.2);
 
   --text-primary:   #ffffff;
-  --text-secondary: rgba(255, 255, 255, 0.62);
+  --text-secondary: rgba(255, 255, 255, 0.65);
   --text-muted:     rgba(255, 255, 255, 0.38);
 
-  /* 포인트 컬러 */
-  --accent-teal:   #5EEAD4;
-  --accent-orange: #FF8A65;
-  --accent-yellow: #FFF5C8;
-  --accent-purple: #E9CAFF;
+  /* 포인트 컬러 — 배경 이미지 직접 추출 */
+  --accent-orange: #FF6335;   /* 노을 오렌지 (지평선) */
+  --accent-gold:   #FFB347;   /* 집 불빛 골드 */
+  --accent-yellow: #FFC566;   /* 태양 코어 */
+  --accent-purple: #C084FC;   /* 라벤더 꽃 */
+  --accent-lavender: #E9CAFF; /* 밝은 라벤더 */
+  --accent-teal:   #5EEAD4;   /* 호환용 유지 */
+
+  /* 핵심 그라디언트 */
+  --grad-sunset: linear-gradient(135deg, #FF6335, #FFB347);
+  --grad-sky:    linear-gradient(180deg, #2A0E6B, #0D0520);
+  --grad-dusk:   linear-gradient(135deg, #7C3AED, #C084FC);
 
   /* 기존 변수명 유지 (컴포넌트 호환) */
   --ink:    #ffffff;
   --mut:    rgba(255,255,255,0.5);
-  --bd:     rgba(255,255,255,0.14);
-  --gray:   rgba(255,255,255,0.1);
-  --soft:   rgba(255,255,255,0.06);
-  --canvas: #120826;
+  --bd:     rgba(192,132,252,0.2);
+  --gray:   rgba(255,255,255,0.08);
+  --soft:   rgba(42,14,107,0.3);
+  --canvas: #0D0520;
   --teal:   #5EEAD4;
-  --tealbg: rgba(94, 234, 212, 0.15);
+  --tealbg: rgba(94, 234, 212, 0.12);
   --blue:   #93C5FD;
-  --bluebg: rgba(147,197,253,0.18);
-  --pur:    #C4B5FD;
-  --purbg:  rgba(196,181,253,0.15);
+  --bluebg: rgba(147,197,253,0.15);
+  --pur:    #C084FC;
+  --purbg:  rgba(192,132,252,0.15);
   --cor:    #FCA5A5;
-  --corbg:  rgba(252,165,165,0.15);
-  --amber:  #FCD34D;
-  --amberbg:rgba(252,211,77,0.15);
+  --corbg:  rgba(252,165,165,0.12);
+  --amber:  #FFB347;
+  --amberbg:rgba(255,179,71,0.15);
   --red:    #F87171;
-  --redbg:  rgba(248,113,113,0.15);
+  --redbg:  rgba(248,113,113,0.12);
 }
 
 * {
@@ -48,6 +55,11 @@ body {
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
+  background-image: url('@/assets/bg-main.png');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
 }
 
 button {

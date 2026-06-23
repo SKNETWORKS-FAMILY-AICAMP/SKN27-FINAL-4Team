@@ -53,10 +53,7 @@ function starStyle(i) {
   flex-direction: column;
   min-height: 100vh;
   position: relative;
-  background:
-    radial-gradient(ellipse at 68% 8%,  rgba(106, 44, 112, 0.5) 0%, transparent 52%),
-    radial-gradient(ellipse at 18% 85%, rgba(20,  10, 55,  0.8) 0%, transparent 55%),
-    linear-gradient(160deg, #1a0b30 0%, #120826 55%, #0d1a3a 100%);
+  background: transparent;
 }
 
 /* 별빛 */
@@ -89,16 +86,19 @@ function starStyle(i) {
   padding: 0 24px;
   height: 54px;
   flex-shrink: 0;
-  background: rgba(18, 8, 38, 0.7);
+  background: rgba(13, 5, 32, 0.45);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(192, 132, 252, 0.2);
   font-size: 13px;
 }
 
 .logo {
   font-weight: 700;
-  color: var(--accent-yellow);
+  background: linear-gradient(135deg, #FF8A65, #FFB347);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   font-size: 15px;
   letter-spacing: 0.5px;
 }
@@ -110,7 +110,7 @@ function starStyle(i) {
 }
 .gnav a:hover { color: rgba(255,255,255,0.9); }
 .gnav a.router-link-active {
-  color: var(--accent-teal);
+  color: #FFB347;
   font-weight: 600;
 }
 
