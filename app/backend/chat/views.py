@@ -18,8 +18,11 @@ GROQ_MODEL = 'llama-3.3-70b-versatile'
 
 
 def _client() -> OpenAI:
+    api_key = os.environ.get('GROQ_API_KEY', '').strip()
+    if not api_key:
+        raise ValueError('GROQ_API_KEY가 설정되지 않았습니다. app/backend/.env 파일을 확인하세요.')
     return OpenAI(
-        api_key=os.environ.get('GROQ_API_KEY', ''),
+        api_key=api_key,
         base_url=os.environ.get('GROQ_BASE_URL', 'https://api.groq.com/openai/v1'),
     )
 
