@@ -47,3 +47,7 @@ __mount_test.txt
 
 # 개별 문서
 docs/\[개별\]*
+
+# IDE 설정
+.vscode/
+.idea/
