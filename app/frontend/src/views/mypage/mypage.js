@@ -233,7 +233,7 @@ createApp({
           <span class="status-text">{{ t.hint }}</span>
         </div>
         <div class="room-canvas">
-          <img class="room-image" src="../docs/UI 신버전4.png" alt="야간 톤 MindRoom 방 일러스트" />
+          <img class="room-image" src="../../assets/UI 신버전4.png" alt="야간 톤 MindRoom 방 일러스트" />
           <button class="hotspot profile" type="button" :aria-label="t.profile" @click="openPanel('profile')"></button>
           <button class="hotspot mbti" type="button" :aria-label="t.mbti" @click="openPanel('mbti')"></button>
           <button class="hotspot taste" type="button" :aria-label="t.taste" @click="openPanel('taste')"></button>
