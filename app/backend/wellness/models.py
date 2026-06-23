@@ -1,5 +1,5 @@
-﻿from django.conf import settings
 from django.db import models
+from django.conf import settings
 
 
 class ClinicalScale(models.Model):
@@ -46,17 +46,3 @@ class UserScaleEstimate(models.Model):
     class Meta:
         db_table = 'user_scale_estimates'
         ordering = ['-target_date']
-
-
-class UserMypageProfile(models.Model):
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='mypage_profile')
-    profile_data = models.JSONField(default=dict, blank=True)
-    settings_data = models.JSONField(default=dict, blank=True)
-    selected_character = models.CharField(max_length=20, default='sol', blank=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        db_table = 'user_mypage_profiles'
-
-    def __str__(self):
-        return f'mypage:{self.user_id}'

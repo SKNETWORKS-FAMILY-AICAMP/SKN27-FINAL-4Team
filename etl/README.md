@@ -1,31 +1,39 @@
-# ETL
+# 데이터 수집하는 공간 (벡터db)
 
-Project data collection, source preservation, intermediate conversion, and final training data live under `etl/`.
+DB 적재 및 초기 데이터 세팅 스크립트 모음입니다.
 
-## Dataset Folders
+---
 
-| folder | role |
-| --- | --- |
-| `datasets/원천 데이터/` | Original or source-level datasets kept for reproducibility. |
-| `datasets/중간 가공 데이터/` | First-pass converted files, such as Parquet converted to CSV. |
-| `datasets/실사용 데이터/` | Final datasets intended for modeling or embedding. |
-| `datasets/personality_training/metadata/` | Notes and curation records for personality training data. |
+## 파일별 설명
 
-## Scripts
+| 파일 | 대상 DB | 내용 |
+|---|---|---|
+| `load_ltm_sample_to_neo4j.py` | Neo4j | 장기기억(LTM) 샘플 데이터 적재 — User, LifeEvent, CognitiveThought, EmotionState, CoreBelief 노드 생성 |
+| `load_scales_to_postgres.py` | PostgreSQL | 심리 척도 JSON 파일을 DB에 적재 — PHQ-9, GAD-7, PHQ-15, RSES, UCLA-3, SPANE 6종 |
+| `load_tea_metadata_etl.py` | (API 수집) | 차(茶) 64종 메타데이터 수집 스크립트 — 감정별(우울/불안/분노 등) 카테고리로 분류 |
+| `load_tea_to_neo4j.py` | Neo4j | `storage/마시는_차_추천_데이터셋.json`을 Neo4j에 적재 |
+| `load_theories_to_vector_db.py` | PostgreSQL + Neo4j | 심리이론 마크다운 파일을 청크로 파싱 후 벡터 DB에 적재 |
+| `seed_postgres_static_data.py` | PostgreSQL | PERSONAS, EXPRESSION_ASSETS 등 정적 기초 데이터 시딩 |
 
-All personality-training preprocessing scripts are collected in:
+---
 
-`scripts/personality_training/`
+## 실행 순서 (처음 세팅할 때)
 
-## Current Main Dataset
+```bash
+# 1. 정적 기초 데이터 먼저
+python seed_postgres_static_data.py
 
-The Korean MBTI training dataset ready for embedding is:
+# 2. 척도 데이터
+python load_scales_to_postgres.py
 
-`datasets/실사용 데이터/epinfomax_mbti_korean_4axis/`
+# 3. 차 데이터 (Neo4j)
+python load_tea_to_neo4j.py
 
-Reproduce it with:
+# 4. 심리이론 (벡터 DB)
+python load_theories_to_vector_db.py
 
-```powershell
-$env:UV_CACHE_DIR = '.uv-cache'
-uv run python etl\scripts\personality_training\preprocess_epinfomax_korean_4axis.py
+# 5. LTM 샘플
+python load_ltm_sample_to_neo4j.py
 ```
+
+> `.env` 파일에 DB 접속 정보가 있어야 실행됩니다.

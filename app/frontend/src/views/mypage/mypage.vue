@@ -1,66 +1,21 @@
 <template>
     <main class="app-shell">
-      <header class="topbar">
-        <div class="brand">
-          <div class="brand-mark">M</div>
-          <div>
-            <h1>MindRoom</h1>
-            <p>{{ t.subtitle }}</p>
-          </div>
-        </div>
-        <div class="user-chip" aria-label="현재 사용자">
-          <span class="mini-avatar"></span>
-          <strong>{{ t.user }}</strong>
-        </div>
-      </header>
-
-      <section v-if="reportArchiveOpen" class="report-archive-page" aria-labelledby="report-archive-title">
-        <header class="report-archive-header">
-          <div>
-            <p class="eyebrow">Mind Report</p>
-            <h2 id="report-archive-title">{{ t.reports }}</h2>
-            <span>리포트 전용 라우트가 연결되기 전까지 보여주는 임시 보관함입니다.</span>
-          </div>
-          <button class="secondary-button" type="button" @click="closeReportArchive">마이페이지로 돌아가기</button>
-        </header>
-
-        <section class="card report-archive-card">
-          <div class="report-archive-list">
-            <article class="insight" v-for="report in reports" :key="`${report.title}-${report.date}`">
-              <div class="insight-icon">R</div>
-              <div>
-                <strong>{{ report.title }}</strong>
-                <span>{{ report.date }} · 백엔드 리포트 목록 연결 영역</span>
-              </div>
-              <div class="trend">{{ report.state }}</div>
-            </article>
-          </div>
-          <p class="notice">
-            이후 `/report` 또는 `/mypage/reports` 라우트가 추가되면 이 버튼은 자동으로 해당 화면으로 이동하도록 준비되어 있습니다.
-          </p>
-        </section>
-      </section>
-
-      <section v-else class="room-stage">
-        <div class="room-toolbar">
-          <strong>{{ t.roomTitle }}</strong>
-          <span class="status-text">{{ t.hint }}</span>
-        </div>
+      <section class="room-stage">
+        <nav class="legend" aria-label="기능 바로가기">
+          <button type="button" @click="openPanel('profile')">{{ t.profile }}</button>
+          <button type="button" @click="openPanel('mbti')">{{ t.mbti }}</button>
+          <button type="button" @click="openPanel('taste')">{{ t.taste }}</button>
+          <button type="button" @click="openPanel('reports')">{{ t.reports }}</button>
+          <button type="button" @click="openPanel('settings')">{{ t.settings }}</button>
+        </nav>
         <div class="room-canvas">
           <img class="room-image" src="../../assets/UI 신버전4.png" alt="야간 톤 MindRoom 방 일러스트" />
           <button class="hotspot profile" type="button" :aria-label="t.profile" @click="openPanel('profile')"></button>
           <button class="hotspot mbti" type="button" :aria-label="t.mbti" @click="openPanel('mbti')"></button>
           <button class="hotspot taste" type="button" :aria-label="t.taste" @click="openPanel('taste')"></button>
-          <button class="hotspot reports" type="button" :aria-label="t.reports" @click="openReportArchive"></button>
+          <button class="hotspot reports" type="button" :aria-label="t.reports" @click="openPanel('reports')"></button>
           <button class="hotspot settings" type="button" :aria-label="t.settings" @click="openPanel('settings')"></button>
         </div>
-        <nav class="legend" aria-label="기능 바로가기">
-          <button type="button" @click="openPanel('profile')">{{ t.profile }}</button>
-          <button type="button" @click="openPanel('mbti')">{{ t.mbti }}</button>
-          <button type="button" @click="openPanel('taste')">{{ t.taste }}</button>
-          <button type="button" @click="openReportArchive">{{ t.reports }}</button>
-          <button type="button" @click="openPanel('settings')">{{ t.settings }}</button>
-        </nav>
 
         <transition name="fade">
           <section v-if="activePanel" class="modal-backdrop" @click.self="closePanel">
@@ -337,14 +292,6 @@
 </template>
 
 <script>
-import axios from "axios";
-
-const http = axios.create({
-  baseURL: "/api",
-  withCredentials: true,
-  headers: { "Content-Type": "application/json" }
-});
-
 const i18n = {
   ko: {
     subtitle: "대화와 분석 결과를 조용히 정리하는 개인 공간",
@@ -375,7 +322,6 @@ export default {
   data() {
     return {
       activePanel: null,
-      reportArchiveOpen: false,
       toast: "",
       showCharacterPicker: false,
       profileSavedAt: "",
@@ -495,127 +441,11 @@ export default {
       };
     }
     this.applySettings();
-    this.fetchMypageData();
   },
   methods: {
-    async fetchMypageData() {
-      await Promise.allSettled([
-        this.fetchUserProfile(),
-        this.fetchReports(),
-        this.fetchTodayReport()
-      ]);
-    },
-    async fetchUserProfile() {
-      try {
-        const { data } = await http.get("/user/profile/");
-        this.applyUserProfile(data);
-      } catch (error) {
-        if (error.response?.status === 401 || error.response?.status === 403) {
-          this.showToast("로그인 후 마이페이지 정보를 불러올 수 있습니다.");
-          return;
-        }
-        console.error("Failed to load mypage profile:", error);
-        this.showToast("프로필 정보를 불러오지 못했습니다.");
-      }
-    },
-    async fetchReports() {
-      try {
-        const { data } = await http.get("/mypage/reports/");
-        if (Array.isArray(data) && data.length > 0) {
-          this.reports = data.map(this.normalizeReport);
-        }
-      } catch (error) {
-        console.error("Failed to load mypage reports:", error);
-      }
-    },
-    async fetchTodayReport() {
-      try {
-        const { data } = await http.get("/mypage/reports/today/");
-        if (data?.message && !this.reports.some(report => report.title === data.message)) {
-          this.reports = [
-            {
-              title: data.message,
-              date: this.formatDate(new Date()),
-              state: "준비 중"
-            },
-            ...this.reports
-          ];
-        }
-      } catch (error) {
-        console.error("Failed to load today's mypage report:", error);
-      }
-    },
-    applyUserProfile(user) {
-      const displayName = user.nickname || user.email || this.profile.name;
-      this.profile.name = displayName;
-      this.account.email = user.email || this.account.email;
-      this.account.provider = user.provider || this.account.provider;
-      this.account.joinedAt = this.formatDate(user.created_at || user.joined_at) || this.account.joinedAt;
-      this.account.lastLogin = this.formatDateTime(user.last_login) || this.account.lastLogin;
-      this.account.session = user.onboarding_done ? "온보딩 완료" : "온보딩 미완료";
-
-      if (user.character) {
-        const character = this.characters.find(item => item.id === user.character);
-        if (character) {
-          this.selectedCharacter = character.id;
-        }
-      }
-    },
-    normalizeReport(report) {
-      return {
-        title: report.title || report.message || report.name || "마이페이지 리포트",
-        date: this.formatDate(report.date || report.target_date || report.created_at || report.calculated_at) || "-",
-        state: report.state || report.status || "연결됨"
-      };
-    },
-    formatDate(value) {
-      if (!value) return "";
-      const date = value instanceof Date ? value : new Date(value);
-      if (Number.isNaN(date.getTime())) return "";
-      return date.toLocaleDateString("ko-KR", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit"
-      });
-    },
-    formatDateTime(value) {
-      if (!value) return "";
-      const date = new Date(value);
-      if (Number.isNaN(date.getTime())) return "";
-      return date.toLocaleString("ko-KR", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit"
-      });
-    },
     openPanel(panel) {
       this.activePanel = panel;
-      this.reportArchiveOpen = false;
       this.showCharacterPicker = false;
-    },
-    openReportArchive() {
-      const reportRoutes = ["/report", "/mypage/reports", "/reports"];
-      const nextRoute = reportRoutes.find(path => {
-        const resolved = this.$router?.resolve(path);
-        return resolved?.matched?.length;
-      });
-
-      this.activePanel = null;
-      this.showCharacterPicker = false;
-
-      if (nextRoute) {
-        this.$router.push(nextRoute);
-        return;
-      }
-
-      this.reportArchiveOpen = true;
-      this.fetchReports();
-      this.fetchTodayReport();
-    },
-    closeReportArchive() {
-      this.reportArchiveOpen = false;
     },
     closePanel() {
       this.activePanel = null;
@@ -677,8 +507,8 @@ export default {
 };
 </script>
 
-<style>
-:root {
+<style scoped>
+.app-shell {
   --ink: #f4efff;
   --mut: #b9acd8;
   --bd: #4d3a82;
@@ -711,37 +541,26 @@ export default {
   --font-scale: 1;
 }
 
-[data-contrast="true"] {
+.app-shell[data-contrast="true"] {
   --primary: #d7b7ff;
   --accent: #8fa0ff;
   --line: #d7b7ff;
 }
 
-* { box-sizing: border-box; }
-
-html,
-body {
-  height: 100%;
-  overflow: auto;
-}
-
-body {
-  margin: 0;
-  min-height: 100vh;
-  background: var(--canvas);
-  color: var(--text);
-  font-family: Pretendard, "Noto Sans KR", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: calc(16px * var(--font-scale));
-}
-
-button, input, select, textarea { font: inherit; }
-button { cursor: pointer; }
+.app-shell button, .app-shell input, .app-shell select, .app-shell textarea { font: inherit; }
+.app-shell button { cursor: pointer; }
 
 .app-shell {
   min-height: 100vh;
   padding: 12px;
   overflow: auto;
+  background: transparent;
+  color: var(--text);
+  font-family: Pretendard, "Noto Sans KR", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: calc(16px * var(--font-scale));
+  box-sizing: border-box;
 }
+.app-shell *, .app-shell *::before, .app-shell *::after { box-sizing: border-box; }
 
 .topbar {
   display: flex;
@@ -810,57 +629,9 @@ button { cursor: pointer; }
   box-shadow: 0 0 0 1px var(--line);
 }
 
-.report-archive-page {
-  width: min(1080px, 100%);
-  margin: 0 auto;
-  display: grid;
-  gap: 14px;
-}
-
-.report-archive-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 18px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(23, 16, 68, 0.96);
-  box-shadow: 0 18px 42px rgba(4, 7, 28, 0.28);
-}
-
-.report-archive-header h2 {
-  margin: 2px 0 4px;
-  color: var(--primary);
-  font-size: 24px;
-}
-
-.report-archive-header span {
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.eyebrow {
-  margin: 0;
-  color: #d7b7ff;
-  font-size: 12px;
-  font-weight: 900;
-  letter-spacing: 0;
-}
-
-.report-archive-card {
-  display: grid;
-  gap: 12px;
-}
-
-.report-archive-list {
-  display: grid;
-  gap: 8px;
-}
-
 .room-stage {
   position: relative;
-  width: min(1280px, 100%, calc((100vh - 138px) * 16 / 9));
+  width: min(1560px, 100%, calc((100vh - 96px) * 16 / 9));
   height: auto;
   margin: 0 auto;
   border: 1px solid var(--line);
@@ -969,7 +740,7 @@ button { cursor: pointer; }
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   padding: 10px 16px;
-  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   background: rgba(23, 16, 68, 0.98);
 }
 

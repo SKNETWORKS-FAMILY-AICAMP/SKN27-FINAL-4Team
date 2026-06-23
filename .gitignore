@@ -1,33 +1,53 @@
-.venv/
-.codex_tmp/
-__pycache__/
-*.py[cod]
-.ipynb_checkpoints/
+# 환경 변수 및 비밀키
+.env
+.env.development
+.env.production
 
-# Dependencies and build outputs
+# 대용량 모델 가중치 파일
+*.pkl
+*.bin
+*.pt
+*.pth
+
+# 데이터베이스 캐시 및 볼륨 데이터
+postgres_data/
+neo4j_data/
+storage/
+
+# 파이썬 캐시 및 가상환경
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# Node.js
 node_modules/
 dist/
-build/
-coverage/
-.vite/
+.cache/
 
-# Local environment and logs
-.env
-.env.*
-!.env.example
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
+# Vite
+*.local
 
-# Local databases / OS metadata
-db.sqlite3
-*.sqlite3
-.DS_Store
-Thumbs.db
+# 임시/테스트 파일
+screenshot_*.png
+*.mjs
+take_screenshot*
+view_svgs*
+shot_dark*
 
-# Keep project dependency manifests trackable
-requirements.txt
-!ai/requirements.txt
-!app/backend/requirements.txt
+# 임시 덤프 및 복사본 파일
+_tmp_*.txt
+_update_*.py
+_write_*.py
+__mount_test.txt
+
+# 데이터셋
+*.json
+
+# 개별 문서
+docs/\[개별\]*
+
+# IDE 설정
+.vscode/
+.idea/
