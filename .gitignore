@@ -43,4 +43,11 @@ _write_*.py
 __mount_test.txt
 
 # 데이터셋
-# *.json
+*.json
+
+# 개별 문서
+docs/\[개별\]*
+
+# IDE 설정
+.vscode/
+.idea/

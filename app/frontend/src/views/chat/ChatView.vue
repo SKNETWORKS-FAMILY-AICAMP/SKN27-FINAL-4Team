@@ -26,29 +26,31 @@
       <button class="secret-exit-btn" @click="showExitModal = true">✕ 시크릿챗 종료</button>
     </div>
 
-    <!-- 시크릿챗 종료 확인 모달 -->
-    <Transition name="modal">
-      <div v-if="showExitModal" class="modal-backdrop" @click.self="showExitModal = false">
-        <div class="modal-box">
-          <div class="modal-icon">🔒</div>
-          <h3 class="modal-title">시크릿챗을 종료할까요?</h3>
-          <p class="modal-desc">
-            지금까지의 대화 내용이 <strong>모두 삭제</strong>됩니다.<br>
-            저장되지 않으며 복구할 수 없습니다.
-          </p>
-          <div class="modal-actions">
-            <button class="modal-btn modal-btn--cancel" @click="showExitModal = false">계속 대화할게요</button>
-            <button class="modal-btn modal-btn--confirm" @click="confirmExitSecret">종료할게요</button>
+    <!-- 시크릿챗 종료 확인 모달 (body로 텔레포트 → 화면 전체 덮고 중앙 정렬) -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div v-if="showExitModal" class="modal-backdrop" @click.self="showExitModal = false">
+          <div class="modal-box">
+            <div class="modal-icon">🔒</div>
+            <h3 class="modal-title">시크릿챗을 종료할까요?</h3>
+            <p class="modal-desc">
+              지금까지의 대화 내용이 <strong>모두 삭제</strong>됩니다.<br>
+              저장되지 않으며 복구할 수 없습니다.
+            </p>
+            <div class="modal-actions">
+              <button class="modal-btn modal-btn--cancel" @click="showExitModal = false">계속 대화할게요</button>
+              <button class="modal-btn modal-btn--confirm" @click="confirmExitSecret">종료할게요</button>
+            </div>
           </div>
         </div>
-      </div>
-    </Transition>
+      </Transition>
+    </Teleport>
 
     <div class="chat-layout">
       <!-- ===== 왼쪽 패널: 캐릭터 영역 ===== -->
       <aside class="left-panel">
         <div class="char-face" :style="{ background: CHARACTER_META[character].bg, color: CHARACTER_META[character].color }">
-          {{ CHARACTER_META[character].face }}
+          {{ CHARACTER_META[character].faces[currentEmotion] }}
         </div>
         <div class="char-name">{{ CHARACTER_META[character].name }}</div>
         <div class="char-faces">표정 4분기 : 응원 · 속상 · 화남 · 계획</div>
@@ -96,7 +98,6 @@
           <div v-if="msg._teaCard" class="tea-card">
             <strong>🍵 {{ msg._teaCard.name }}</strong>
             <div class="tea-desc">{{ msg._teaCard.desc }}</div>
-            <div class="tea-bgm">▶ 마음 달래는 BGM 들으러 가기</div>
           </div>
 
           <div v-else class="bubble" :class="msg.role === 'user' ? 'bubble-user' : 'bubble-char'">
@@ -112,8 +113,9 @@
 
     <!-- ===== 추천 질문 ===== -->
     <div class="suggest-bar">
-      <span class="suggest-label">✦ 이런 얘기 어때요?</span>
-      <button v-for="q in suggestedQuestions" :key="q" class="q-chip" @click="fillInput(q)">
+      <span class="suggest-label">✦ 이런 말 어때요?</span>
+      <span v-if="suggestLoading" class="suggest-loading">생각 중…</span>
+      <button v-else v-for="q in suggestedQuestions" :key="q" class="q-chip" @click="fillInput(q)">
         {{ q }}
       </button>
     </div>
@@ -147,6 +149,7 @@ import { ref, computed, nextTick, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { chatApi } from '../../api/chat.js'
 import chatBg from '../../assets/chat-bg.png'
+import { useSecret } from '../../composables/useSecret.js'
 
 const router = useRouter()
 const route  = useRoute()
@@ -190,27 +193,57 @@ const EMOTION_LABELS = {
   plan:      '✦ 계획 모드',
 }
 
-const character     = ref(route.query.character || 'haeon')
-const isSecret      = ref(route.query.secret === 'on')
-const sessionId     = ref(null)
-const showExitModal = ref(false)
-const messages  = ref([])
-const inputText = ref('')
-const isTyping  = ref(false)
+const character      = ref(route.query.character || 'haeon')
+const { secret: isSecret, setSecret } = useSecret()
+const sessionId      = ref(null)
+const showExitModal  = ref(false)
+const messages       = ref([])
+const inputText      = ref('')
+const isTyping       = ref(false)
+const suggestLoading = ref(false)
+const suggestedQuestions = ref([])
+const currentEmotion = ref('default')
 const threadRef = ref(null)
 const inputRef  = ref(null)
 
-const SUGGEST_NORMAL = ['오늘 회사에서 무슨 일 있었어?', '요즘 제일 힘든 게 뭐야?', '그냥 가볍게 수다 떨까?']
-const SUGGEST_SECRET = ['털어놓고 싶은 비밀이 있어', '요즘 너무 지쳐', '그냥 들어줘']
-const suggestedQuestions = computed(() => isSecret.value ? SUGGEST_SECRET : SUGGEST_NORMAL)
 const openerText = computed(() =>
-  isSecret.value ? '여긴 아무 기록도 안 남아. 편하게 다 털어놔도 돼.' : '오늘 서울 비 온대~ 우산 챙겼어?'
+  isSecret.value ? '여긴 아무 기록도 안 남아. 편하게 다 털어놔도 돼.' : '오늘 어떤 하루였어?'
 )
 
+async function refreshSuggestions() {
+  if (!sessionId.value || isSecret.value) return
+  suggestLoading.value = true
+  try {
+    const result = await chatApi.suggestQuestions(sessionId.value)
+    suggestedQuestions.value = result.questions ?? []
+  } catch {
+    suggestedQuestions.value = []
+  } finally {
+    suggestLoading.value = false
+  }
+}
+
+const OPENER_MSG = {
+  haeon:   isSecret => isSecret
+    ? '여긴 아무도 몰라. 뭐든 다 말해도 괜찮아 ◠‿◠'
+    : '안녕! 오늘 하루 어땠어? 좋은 일도 있었어? ◠‿◠',
+  greung:  isSecret => isSecret
+    ? '여기선 솔직하게 말해도 돼. 뭐가 문제야? ◣_◢'
+    : '왔어? 오늘 뭐가 제일 걸렸어? 말해봐 ◣_◢',
+  dalkong: isSecret => isSecret
+    ? '비밀이잖아, 다 괜찮아! 무슨 일이야? ◕‿◕'
+    : '안녕! 오늘 뭔가 좋은 일 있었지? ◕‿◕',
+}
+
 onMounted(async () => {
+  const openerContent = OPENER_MSG[character.value]?.(isSecret.value)
+    ?? '안녕! 오늘 어떤 하루였어?'
+  messages.value.push({ _tempId: Date.now(), role: 'assistant', content: openerContent })
+
   try {
     const sess = await chatApi.createSession(character.value, isSecret.value)
     sessionId.value = sess.id
+    refreshSuggestions()
   } catch { /* 백엔드 미연결 시 무시 */ }
 })
 
@@ -224,6 +257,8 @@ async function sendMessage() {
   try {
     const reply = await chatApi.sendMessage(sessionId.value, content)
     messages.value.push(reply)
+    if (reply.emotion_label) currentEmotion.value = reply.emotion_label
+    refreshSuggestions()
   } catch {
     messages.value.push({ _tempId: Date.now(), role: 'assistant', content: '잠시 연결이 끊겼어요. 다시 시도해 줄래요? 🙏' })
   } finally {
@@ -236,8 +271,14 @@ async function requestTea() {
   isTyping.value = true
   await scrollToBottom()
   try {
-    const reply = await chatApi.sendMessage(sessionId.value, '힐링 차 추천해줘')
-    messages.value.push({ ...reply, _teaCard: { name: '캐모마일 차', desc: '긴장 완화 · 수면 도움 · 카페인 없음' } })
+    const tea = await chatApi.recommendTea(sessionId.value)
+    messages.value.push({
+      _tempId: Date.now(), role: 'assistant',
+      content: `${tea.emoji ?? '🍵'} **${tea.name}**\n${tea.reason}\n효능: ${tea.effect}`,
+      _teaCard: { name: tea.name, desc: tea.reason },
+    })
+  } catch {
+    messages.value.push({ _tempId: Date.now(), role: 'assistant', content: '차 추천을 불러오지 못했어요.' })
   } finally { isTyping.value = false; await scrollToBottom() }
 }
 
@@ -245,13 +286,18 @@ async function requestBgm() {
   isTyping.value = true
   await scrollToBottom()
   try {
-    const reply = await chatApi.sendMessage(sessionId.value, 'BGM 추천해줘')
-    messages.value.push(reply)
+    const bgm = await chatApi.recommendBgm(sessionId.value)
+    messages.value.push({
+      _tempId: Date.now(), role: 'assistant',
+      content: `🎵 **${bgm.title}** — ${bgm.artist}\n${bgm.mood}`,
+    })
+  } catch {
+    messages.value.push({ _tempId: Date.now(), role: 'assistant', content: 'BGM 추천을 불러오지 못했어요.' })
   } finally { isTyping.value = false; await scrollToBottom() }
 }
 
 async function toggleSecret() {
-  isSecret.value = !isSecret.value
+  setSecret(!isSecret.value)
   messages.value = []
   try {
     const sess = await chatApi.createSession(character.value, isSecret.value)
@@ -262,7 +308,7 @@ async function toggleSecret() {
 
 async function confirmExitSecret() {
   showExitModal.value = false
-  isSecret.value = false
+  setSecret(false)
   messages.value = []
   try {
     const sess = await chatApi.createSession(character.value, false)
@@ -304,9 +350,9 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   position: absolute;
   inset: 0;
   background: linear-gradient(180deg,
-    rgba(13, 5, 32, 0.55) 0%,
-    rgba(20, 8, 48, 0.70) 45%,
-    rgba(13, 5, 32, 0.86) 100%);
+    rgba(13, 5, 32, 0.18) 0%,
+    rgba(20, 8, 48, 0.30) 45%,
+    rgba(13, 5, 32, 0.46) 100%);
 }
 
 /* ── 시크릿챗: 밤하늘 ── */
@@ -703,9 +749,7 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   font-size: 13px;
   color: #fff;
 }
-.tea-desc { font-size: 11px; color: rgba(255,255,255,0.5); margin: 4px 0 8px; }
-.tea-bgm  { font-size: 12px; color: #93C5FD; cursor: pointer; }
-.tea-bgm:hover { text-decoration: underline; }
+.tea-desc { font-size: 11px; color: rgba(255,255,255,0.5); margin: 4px 0; }
 
 /* 타이핑 인디케이터 */
 .typing-indicator {
@@ -761,6 +805,12 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   transition: background 0.2s;
 }
 .q-chip:hover { background: rgba(192,132,252,0.22); }
+
+.suggest-loading {
+  font-size: 13.5px;
+  color: rgba(255,255,255,0.35);
+  font-style: italic;
+}
 
 /* ── 입력바 ── */
 .input-zone {

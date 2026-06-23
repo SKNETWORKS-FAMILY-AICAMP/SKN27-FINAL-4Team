@@ -25,7 +25,21 @@ export const chatApi = {
     return data
   },
 
-  // SCR-004 이너 카운슬 — 백엔드 엔드포인트 추가 예정
+  async recommendTea(sessionId) {
+    const { data } = await http.post(`/chat/sessions/${sessionId}/tea/`)
+    return data
+  },
+
+  async recommendBgm(sessionId) {
+    const { data } = await http.post(`/chat/sessions/${sessionId}/bgm/`)
+    return data
+  },
+
+  async suggestQuestions(sessionId) {
+    const { data } = await http.post(`/chat/sessions/${sessionId}/questions/`)
+    return data
+  },
+
   async runCouncil(sessionId, userInput, turn) {
     const { data } = await http.post(`/chat/sessions/${sessionId}/council/`, {
       user_input: userInput,

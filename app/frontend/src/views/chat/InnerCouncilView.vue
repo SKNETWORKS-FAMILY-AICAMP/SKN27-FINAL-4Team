@@ -185,9 +185,9 @@ function goBack() {
   position: absolute;
   inset: 0;
   background: linear-gradient(180deg,
-    rgba(11,4,28,0.74) 0%,
-    rgba(16,7,40,0.82) 45%,
-    rgba(9,4,24,0.92) 100%);
+    rgba(11,4,28,0.30) 0%,
+    rgba(16,7,40,0.40) 45%,
+    rgba(9,4,24,0.55) 100%);
 }
 /* 중앙 스포트라이트 (3캐릭터에 시선 집중) */
 .council-spot {
