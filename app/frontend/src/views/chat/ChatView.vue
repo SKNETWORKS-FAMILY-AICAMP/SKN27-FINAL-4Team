@@ -96,7 +96,6 @@
           <div v-if="msg._teaCard" class="tea-card">
             <strong>🍵 {{ msg._teaCard.name }}</strong>
             <div class="tea-desc">{{ msg._teaCard.desc }}</div>
-            <div class="tea-bgm">▶ 마음 달래는 BGM 들으러 가기</div>
           </div>
 
           <div v-else class="bubble" :class="msg.role === 'user' ? 'bubble-user' : 'bubble-char'">
@@ -730,9 +729,7 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   font-size: 13px;
   color: #fff;
 }
-.tea-desc { font-size: 11px; color: rgba(255,255,255,0.5); margin: 4px 0 8px; }
-.tea-bgm  { font-size: 12px; color: #93C5FD; cursor: pointer; }
-.tea-bgm:hover { text-decoration: underline; }
+.tea-desc { font-size: 11px; color: rgba(255,255,255,0.5); margin: 4px 0; }
 
 /* 타이핑 인디케이터 */
 .typing-indicator {
