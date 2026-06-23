@@ -24,9 +24,27 @@ def _client() -> OpenAI:
     )
 
 
+_DEFAULT_PROMPTS = {
+    'haeon': {
+        'system_instruction': '당신은 해온이입니다. 따뜻하고 공감 능력이 뛰어난 감성 상담 캐릭터로, 사용자의 감정을 부드럽게 위로하고 공감해줍니다.',
+        'model_settings': {'max_tokens': 250, 'temperature': 0.7},
+    },
+    'greung': {
+        'system_instruction': '당신은 그릉이입니다. 현실적이고 직설적인 상담 캐릭터로, CBT 기반의 날카로운 피드백으로 사용자가 현실을 직면하도록 돕습니다.',
+        'model_settings': {'max_tokens': 250, 'temperature': 0.7},
+    },
+    'dalkong': {
+        'system_instruction': '당신은 달콩이입니다. 긍정적이고 활기찬 코칭 캐릭터로, ACT 기반의 행동 지향적 조언으로 사용자를 응원합니다.',
+        'model_settings': {'max_tokens': 250, 'temperature': 0.7},
+    },
+}
+
 def _load_prompt(character: str) -> dict:
-    with open(PROMPT_DIR / f'{character}_prompt.json', encoding='utf-8') as f:
-        return json.load(f)
+    prompt_file = PROMPT_DIR / f'{character}_prompt.json'
+    if prompt_file.exists():
+        with open(prompt_file, encoding='utf-8') as f:
+            return json.load(f)
+    return _DEFAULT_PROMPTS.get(character, _DEFAULT_PROMPTS['haeon'])
 
 
 def _build_system_message(prompt_data: dict) -> str:
