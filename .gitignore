@@ -43,4 +43,4 @@ _write_*.py
 __mount_test.txt
 
 # 데이터셋
-*.json
+# *.json
