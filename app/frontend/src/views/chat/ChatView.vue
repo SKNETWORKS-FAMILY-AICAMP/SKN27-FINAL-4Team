@@ -224,6 +224,7 @@ onMounted(async () => {
   try {
     const sess = await chatApi.createSession(character.value, isSecret.value)
     sessionId.value = sess.id
+    refreshSuggestions()
   } catch { /* 백엔드 미연결 시 무시 */ }
 })
 
