@@ -1,0 +1,608 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>빈틈사이 화면 구성 네비게이터</title>
+<style>
+  :root {
+    --ink: #2c2c2a;
+    --muted: #6b6b66;
+    --line: #d4d2cb;
+    --paper: #fff;
+    --canvas: #edecea;
+    --soft: #f7f6f3;
+    --teal: #0f6e56;
+    --teal-soft: #e1f5ee;
+    --red: #e24b4a;
+    --purple: #5b3d91;
+    --purple-soft: #efebfb;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 24px;
+    background: #f4f3f0;
+    color: var(--ink);
+    font-family: "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .doc-title {
+    max-width: 1240px;
+    margin: 0 auto 10px;
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 0;
+  }
+
+  .doc-sub {
+    max-width: 1240px;
+    margin: 0 auto 22px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .index {
+    max-width: 1240px;
+    margin: 0 auto 24px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .index a {
+    text-decoration: none;
+    color: var(--teal);
+    border: 1px solid #badfd2;
+    background: #fff;
+    border-radius: 999px;
+    padding: 7px 12px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .section-title {
+    max-width: 1240px;
+    margin: 34px auto 14px;
+    border-left: 4px solid var(--teal);
+    border-radius: 6px;
+    padding: 8px 13px;
+    background: var(--teal-soft);
+    color: var(--teal);
+    font-size: 15px;
+    font-weight: 800;
+  }
+
+  .sheet {
+    max-width: 1240px;
+    margin: 0 auto 28px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--paper);
+    padding: 20px;
+  }
+
+  .meta {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    margin-bottom: 18px;
+    font-size: 12.5px;
+  }
+
+  .meta td {
+    border: 1px solid var(--line);
+    padding: 8px 10px;
+    overflow-wrap: anywhere;
+    word-break: keep-all;
+  }
+
+  .meta td:first-child,
+  .meta td:nth-child(3),
+  .meta td:nth-child(5) {
+    width: 96px;
+    text-align: center;
+    background: #e9e9e6;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 330px;
+    gap: 20px;
+    align-items: start;
+  }
+
+  .canvas {
+    min-width: 0;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--canvas);
+    padding: 22px;
+  }
+
+  .browser {
+    overflow: visible;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: #fff;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, .07);
+  }
+
+  .browser-bar {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 11px;
+    border-bottom: 1px solid var(--line);
+    border-radius: 8px 8px 0 0;
+    background: #e4e3df;
+  }
+
+  .dot {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+  }
+
+  .dot.red { background: #ff655f; }
+  .dot.yellow { background: #f5bd4f; }
+  .dot.green { background: #62c65a; }
+
+  .url {
+    flex: 1;
+    margin-left: 6px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--muted);
+    padding: 4px 10px;
+    font-size: 11px;
+  }
+
+  .shot {
+    position: relative;
+    overflow: hidden;
+    aspect-ratio: 1440 / 879;
+    background: #120826;
+  }
+
+  .shot img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .marker {
+    position: absolute;
+    left: var(--x);
+    top: var(--y);
+    z-index: 5;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #fff;
+    background: var(--red);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 800;
+    box-shadow: 0 2px 7px rgba(0, 0, 0, .35);
+  }
+
+  .marker::after {
+    content: "";
+    position: absolute;
+    inset: -7px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, .5);
+  }
+
+  .panel {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    overflow: hidden;
+  }
+
+  .panel-head {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--purple-soft);
+    color: var(--purple);
+    text-align: center;
+    font-size: 14px;
+    font-weight: 800;
+  }
+
+  .navigator {
+    list-style: none;
+    margin: 0;
+    padding: 13px 14px 8px;
+    font-size: 12.5px;
+  }
+
+  .navigator li {
+    display: grid;
+    grid-template-columns: 25px 1fr;
+    gap: 9px;
+    padding: 0 0 12px;
+    line-height: 1.55;
+  }
+
+  .navigator .n {
+    width: 25px;
+    height: 25px;
+    border-radius: 50%;
+    background: var(--red);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .22);
+  }
+
+  .navigator b {
+    display: block;
+    margin-bottom: 2px;
+    font-size: 12.8px;
+  }
+
+  .extra {
+    border-top: 1px solid var(--line);
+    background: var(--soft);
+    padding: 12px 14px;
+    color: var(--muted);
+    font-size: 11.5px;
+    line-height: 1.55;
+  }
+
+  .tag-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid #badfd2;
+    border-radius: 999px;
+    background: #fff;
+    color: var(--teal);
+    padding: 3px 8px;
+    font-size: 10.5px;
+    font-weight: 700;
+  }
+
+  @media (max-width: 980px) {
+    body { padding: 14px; }
+    .grid { grid-template-columns: 1fr; }
+    .canvas { padding: 12px; }
+  }
+
+  @media (max-width: 640px) {
+    .sheet { padding: 12px; }
+    .meta,
+    .meta tbody,
+    .meta tr,
+    .meta td {
+      display: block;
+      width: 100%;
+    }
+
+    .meta tr {
+      border: 1px solid var(--line);
+      border-bottom: 0;
+    }
+
+    .meta tr:last-child {
+      border-bottom: 1px solid var(--line);
+    }
+
+    .meta td {
+      border: 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .meta td:last-child {
+      border-bottom: 0;
+    }
+
+    .meta td:first-child,
+    .meta td:nth-child(3) {
+      width: 100%;
+      text-align: left;
+    }
+  }
+</style>
+</head>
+<body>
+  <h1 class="doc-title">빈틈사이 화면 구성 네비게이터</h1>
+  <p class="doc-sub">
+    `file.html`의 화면설계서 형식을 기준으로, 빈틈사이 메인페이지 자산을 브라우저 목업과 번호형 네비게이터로 정리한 HTML입니다.
+    빨간 번호는 화면 내 주요 기능, 정보 영역, 사용자 행동 지점을 의미합니다.
+  </p>
+
+  <nav class="index" aria-label="화면 바로가기">
+    <a href="#main">01 메인화면</a>
+    <a href="#balance">02 밸런스게임</a>
+    <a href="#login">03 로그인</a>
+    <a href="#character">04 캐릭터 설정</a>
+    <a href="#userinfo">05 사용자 정보</a>
+    <a href="#result">06 성향결과</a>
+    <a href="#fortune">07 카드 운세</a>
+    <a href="#calendar">08 캘린더</a>
+  </nav>
+
+  <div class="section-title" id="main">담당: 이성진 - 온보딩 페이지</div>
+  <section class="sheet">
+    <table class="meta">
+      <tr><td>화면명</td><td>메인화면</td><td>Screen ID</td><td>ONB-001</td><td>목적</td><td>서비스 첫 진입, 대화 시작, 주요 메뉴 탐색</td></tr>
+      <tr><td>파일</td><td colspan="3">01 Main Landing / Binteumsai Image Asset Layout.svg</td><td>Author</td><td>이성진</td></tr>
+    </table>
+    <div class="grid">
+      <div class="canvas">
+        <div class="browser">
+          <div class="browser-bar"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span><span class="url">binteumsai.app / home</span></div>
+          <div class="shot">
+            <img src="./main-landing.svg" alt="빈틈사이 메인화면">
+            <span class="marker" style="--x: 05%; --y: 20%;">1</span>
+            <span class="marker" style="--x: 65%; --y: 11%;">2</span>
+            <span class="marker" style="--x: 29%; --y: 95%;">3</span>
+            <span class="marker" style="--x: 88%; --y: 34%;">4</span>
+          </div>
+        </div>
+      </div>
+      <aside class="panel">
+        <div class="panel-head">화면 네비게이터</div>
+        <ol class="navigator">
+          <li><span class="n">1</span><span><b>서비스 간략 소개 및 대화 시작하기</b>빈틈사이의 정서적 톤, 서비스 가치, 첫 행동 버튼을 한 번에 전달합니다.</span></li>
+          <li><span class="n">2</span><span><b>상단 바</b>소개, 챗봇대화(산책하기), 리포트, 페이지, 캘린더, 로그인, 시작하기로 이동하는 글로벌 네비게이션입니다.</span></li>
+          <li><span class="n">3</span><span><b>하단 바 서비스 콘텐츠 소개</b>산책 시작, 다락방 둘러보기 등 주요 콘텐츠로 이어지는 진입 영역입니다.</span></li>
+          <li><span class="n">4</span><span><b>오늘의 한마디</b>짧은 문장으로 오늘의 감정 분위기와 재방문 동기를 제공합니다.</span></li>
+        </ol>
+        <div class="extra">
+          추가 권장: 비회원도 바로 체험할 수 있는 CTA와 로그인 후 저장되는 기능을 구분하면 전환 흐름이 더 명확합니다.
+          <div class="tag-row"><span class="tag">첫 진입</span><span class="tag">CTA</span><span class="tag">감성 브랜딩</span></div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <table class="meta">
+      <tr><td>화면명</td><td>심리 밸런스 게임</td><td>Screen ID</td><td>ONB-002</td><td>목적</td><td>가벼운 선택을 통해 사용자 성향 데이터를 수집</td></tr>
+      <tr><td>파일</td><td colspan="3">빈틈사이_심리밸런스게임_UI_FigmaImport 1.svg</td><td>Author</td><td>이성진</td></tr>
+    </table>
+    <div class="grid">
+      <div class="canvas">
+        <div class="browser">
+          <div class="browser-bar"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span><span class="url">binteumsai.app / balance-game</span></div>
+          <div class="shot">
+            <img src="./balance-game.svg" alt="심리 밸런스 게임 화면">
+            <span class="marker" style="--x: 05%; --y: 20%;">1</span>
+            <span class="marker" style="--x: 76%; --y: 79%;">2</span>
+            <span class="marker" style="--x: 91%; --y: 88%;">3</span>
+          </div>
+        </div>
+      </div>
+      <aside class="panel">
+        <div class="panel-head">화면 네비게이터</div>
+        <ol class="navigator">
+          <li><span class="n">1</span><span><b>심리 문제 카테고리</b>음식, 취미, 관계, 종합 등 질문 묶음을 선택하는 영역입니다.</span></li>
+          <li><span class="n">2</span><span><b>2~3개 선택지 중 선택</b>A/B 또는 3지 선택 카드로 사용자의 즉각적 선호를 입력받습니다.</span></li>
+          <li><span class="n">3</span><span><b>다음으로</b>선택 완료 후 다음 질문으로 이동하며 진행률을 갱신합니다.</span></li>
+        </ol>
+        <div class="extra">
+          추가 권장: 선택 직후 카드 강조, 선택 취소, 진행률 저장 상태를 표시하면 중간 이탈 후 복귀가 쉬워집니다.
+          <div class="tag-row"><span class="tag">선택형 테스트</span><span class="tag">진행률</span><span class="tag">성향 데이터</span></div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <table class="meta">
+      <tr><td>화면명</td><td>로그인</td><td>Screen ID</td><td>ONB-003</td><td>목적</td><td>사용자 계정 연결 및 결과 저장</td></tr>
+      <tr><td>파일</td><td colspan="3">binteum_sai_login_figma_mockup 1.svg</td><td>Author</td><td>이성진</td></tr>
+    </table>
+    <div class="grid">
+      <div class="canvas">
+        <div class="browser">
+          <div class="browser-bar"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span><span class="url">binteumsai.app / login</span></div>
+          <div class="shot">
+            <img src="./login.svg" alt="로그인 화면">
+            <span class="marker" style="--x: 10%; --y: 20%;">1</span>
+          </div>
+        </div>
+      </div>
+      <aside class="panel">
+        <div class="panel-head">화면 네비게이터</div>
+        <ol class="navigator">
+          <li><span class="n">1</span><span><b>소셜로그인</b>카카오, 네이버, 구글 계정으로 빠르게 로그인합니다. 결과 저장, 캘린더 기록, 캐릭터 설정 유지에 필요합니다.</span></li>
+        </ol>
+        <div class="extra">
+          추가 권장: “비회원으로 둘러보기”와 “로그인하면 저장되는 것” 안내를 함께 두면 첫 진입 부담이 줄어듭니다.
+          <div class="tag-row"><span class="tag">카카오</span><span class="tag">네이버</span><span class="tag">구글</span></div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <table class="meta">
+      <tr><td>화면명</td><td>캐릭터 설정</td><td>Screen ID</td><td>ONB-004</td><td>목적</td><td>대화 동행자와 페르소나 설정</td></tr>
+      <tr><td>파일</td><td colspan="3">binteum_sai_character_persona_figma_mockup 1.svg</td><td>Author</td><td>이성진</td></tr>
+    </table>
+    <div class="grid">
+      <div class="canvas">
+        <div class="browser">
+          <div class="browser-bar"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span><span class="url">binteumsai.app / character</span></div>
+          <div class="shot">
+            <img src="./character-setting.svg" alt="캐릭터 설정 화면">
+            <span class="marker" style="--x: 20%; --y: 33%;">1</span>
+            <span class="marker" style="--x: 63%; --y: 45%;">2</span>
+            <span class="marker" style="--x: 78%; --y: 76%;">3</span>
+            <span class="marker" style="--x: 93%; --y: 21%;">4</span>
+          </div>
+        </div>
+      </div>
+      <aside class="panel">
+        <div class="panel-head">화면 네비게이터</div>
+        <ol class="navigator">
+          <li><span class="n">1</span><span><b>캐릭터 설정</b>사용자와 대화할 마음 동행자의 기본 성격과 스타일을 선택합니다.</span></li>
+          <li><span class="n">2</span><span><b>표정 미리보기</b>선택한 표정이 실제 캐릭터에 어떻게 반영되는지 즉시 확인합니다.</span></li>
+          <li><span class="n">3</span><span><b>간단한 캐릭터 설명</b>선택한 표정과 성격이 대화 톤에 어떤 영향을 주는지 안내합니다.</span></li>
+          <li><span class="n">4</span><span><b>설정 전환 버튼</b>캐릭터와 사용자의 정보 입력 화면을 전환합니다.</span></li>
+        </ol>
+        <div class="extra">
+          추가 권장: 캐릭터별 말투 예시를 한 문장씩 보여주면 사용자가 선택 결과를 더 쉽게 예상할 수 있습니다.
+          <div class="tag-row"><span class="tag">페르소나</span><span class="tag">표정</span><span class="tag">대화 톤</span></div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <table class="meta">
+      <tr><td>화면명</td><td>사용자 정보</td><td>Screen ID</td><td>ONB-005</td><td>목적</td><td>맞춤 대화를 위한 기본 정보와 관심사 입력</td></tr>
+      <tr><td>파일</td><td colspan="3">binteum_sai_character_persona_figma_mockup 2.svg</td><td>Author</td><td>이성진</td></tr>
+    </table>
+    <div class="grid">
+      <div class="canvas">
+        <div class="browser">
+          <div class="browser-bar"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span><span class="url">binteumsai.app / profile-setup</span></div>
+          <div class="shot">
+            <img src="./user-info.svg" alt="사용자 정보 입력 화면">
+            <span class="marker" style="--x: 06%; --y: 20%;">1</span>
+            <span class="marker" style="--x: 18%; --y: 32%;">2</span>
+            <span class="marker" style="--x: 21%; --y: 63%;">3</span>
+            <span class="marker" style="--x: 90%; --y: 90%;">4</span>
+          </div>
+        </div>
+      </div>
+      <aside class="panel">
+        <div class="panel-head">화면 네비게이터</div>
+        <ol class="navigator">
+          <li><span class="n">1</span><span><b>사용자 정보 입력</b>맞춤형 대화를 위해 필요한 기본 설정을 한 화면에서 입력합니다.</span></li>
+          <li><span class="n">2</span><span><b>이름, 나이 등 입력</b>이름, 나이, 생일, 성별, 직업처럼 응답 개인화에 쓰이는 값을 입력합니다.</span></li>
+          <li><span class="n">3</span><span><b>취미, 관심분야 키워드 설정</b>대화 소재와 추천 콘텐츠에 활용할 관심 키워드를 선택합니다.</span></li>
+          <li><span class="n">4</span><span><b>설정완료</b>캐릭터 및 사용자 정보 입력을 모두 마치면 저장합니다.</span></li>
+        </ol>
+        <div class="extra">
+          추가 권장: 필수/선택 입력을 분리하고, 민감 정보 사용 목적을 짧게 노출하면 신뢰도를 높일 수 있습니다.
+          <div class="tag-row"><span class="tag">프로필</span><span class="tag">관심사</span><span class="tag">개인화</span></div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <table class="meta">
+      <tr><td>화면명</td><td>성향결과</td><td>Screen ID</td><td>ONB-006</td><td>목적</td><td>밸런스 게임 응답을 성향 그래프와 키워드로 요약</td></tr>
+      <tr><td>파일</td><td colspan="3">binteum_sai_test_result_type_figma_mockup 1.svg</td><td>Author</td><td>이성진</td></tr>
+    </table>
+    <div class="grid">
+      <div class="canvas">
+        <div class="browser">
+          <div class="browser-bar"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span><span class="url">binteumsai.app / result</span></div>
+          <div class="shot">
+            <img src="./test-result.svg" alt="심리 밸런스 게임 성향 결과 화면">
+            <span class="marker" style="--x: 10%; --y: 20%;">1</span>
+            <span class="marker" style="--x: 40%; --y: 20%;">2</span>
+          </div>
+        </div>
+      </div>
+      <aside class="panel">
+        <div class="panel-head">화면 네비게이터</div>
+        <ol class="navigator">
+          <li><span class="n">1</span><span><b>심리 밸런스 게임 결과 화면</b>사용자의 대표 성향 타입을 큰 제목과 캐릭터로 보여줍니다.</span></li>
+          <li><span class="n">2</span><span><b>성향 분석 그래프와 키워드 설명</b>밸런스 게임 답변을 바탕으로 그래프, 핵심 키워드, 성향 요약을 제공합니다.</span></li>
+        </ol>
+        <div class="extra">
+          추가 권장: 결과 공유, 다시 테스트하기, 캐릭터/대화방으로 이어지는 다음 행동을 결과 하단에 배치하면 흐름이 자연스럽습니다.
+          <div class="tag-row"><span class="tag">결과 요약</span><span class="tag">그래프</span><span class="tag">키워드</span></div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <table class="meta">
+      <tr><td>화면명</td><td>카드 운세</td><td>Screen ID</td><td>ONB-007</td><td>목적</td><td>카드 선택을 통한 운세 확인과 LLM 기반 오늘의 조언 제공</td></tr>
+      <tr><td>파일</td><td colspan="3">binteum_sai_card_fortune_figma_mockup 1.svg</td><td>Author</td><td>이성진</td></tr>
+    </table>
+    <div class="grid">
+      <div class="canvas">
+        <div class="browser">
+          <div class="browser-bar"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span><span class="url">binteumsai.app / card-fortune</span></div>
+          <div class="shot">
+            <img src="./card-fortune.svg" alt="카드 운세 화면">
+            <span class="marker" style="--x: 10%; --y: 34%;">1</span>
+            <span class="marker" style="--x: 13%; --y: 60%;">2</span>
+            <span class="marker" style="--x: 68%; --y: 20%;">3</span>
+          </div>
+        </div>
+      </div>
+      <aside class="panel">
+        <div class="panel-head">화면 네비게이터</div>
+        <ol class="navigator">
+          <li><span class="n">1</span><span><b>운세 카테고리 선택</b>관계, 재물, 성공, 직업운 중 한 가지 카테고리를 선택합니다.</span></li>
+          <li><span class="n">2</span><span><b>4~5가지 카드 중 한 장 선택</b>카드 뒷면 상태에서 직관적으로 한 장을 고르는 인터랙션입니다.</span></li>
+          <li><span class="n">3</span><span><b>선택한 카드의 운세 내용</b>카드 선택 후 해당 카드가 의미하는 오늘의 운세 내용과 개인화된 조언을 표시합니다.</span></li>
+        </ol>
+        <div class="extra">
+          추가 권장: 선택 전/후 상태가 명확히 바뀌도록 카드 플립, 결과 패널, 저장 버튼을 함께 설계하면 콘텐츠 완결감이 좋아집니다.
+          <div class="tag-row"><span class="tag">카드 선택</span><span class="tag">운세</span><span class="tag">LLM 조언</span></div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <table class="meta">
+      <tr><td>화면명</td><td>캘린더</td><td>Screen ID</td><td>ONB-008</td><td>목적</td><td>하루 감정, 운세, 대화 기록을 날짜별로 회고</td></tr>
+      <tr><td>파일</td><td colspan="3">binteum_sai_calendar_figma_mockup 1.svg</td><td>Author</td><td>이성진</td></tr>
+      
+    </table>
+    <div class="grid">
+      <div class="canvas">
+        <div class="browser">
+          <div class="browser-bar"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span><span class="url">binteumsai.app / calendar</span></div>
+          <div class="shot">
+            <img src="./calendar.svg" alt="마음 캘린더 화면">
+            <span class="marker" style="--x: 08%; --y: 35%;">1</span>
+            <span class="marker" style="--x: 69%; --y: 17%;">2</span>
+            <span class="marker" style="--x: 69%; --y: 68%;">3</span>
+          </div>
+        </div>
+      </div>
+      <aside class="panel">
+        <div class="panel-head">화면 네비게이터</div>
+        <ol class="navigator">
+          <li><span class="n">1</span><span><b>하루 기분 캐릭터 이모지</b>각 날짜에 그날의 감정을 캐릭터 이모지로 기록하고 표시합니다.</span></li>
+          <li><span class="n">2</span><span><b>일자 클릭 상세</b>날짜를 클릭하면 이모지와 오늘의 감정 한줄평, 해당 날짜의 카드 운세를 보여줍니다.</span></li>
+          <li><span class="n">3</span><span><b>일주일 감정 그래프</b>최근 일주일 감정 흐름을 그래프로 보여주어 회고를 돕습니다.</span></li>
+
+        </ol>
+        <div class="extra">
+          추가 권장: 감정 없는 날짜, 여러 기록이 있는 날짜, 운세만 본 날짜를 서로 다른 상태로 표시하면 캘린더 해석이 더 쉬워집니다.
+          <div class="tag-row"><span class="tag">감정 기록</span><span class="tag">주간 그래프</span><span class="tag">회고</span></div>
+        </div>
+      </aside>
+    </div>
+  </section>
+</body>
+</html>
