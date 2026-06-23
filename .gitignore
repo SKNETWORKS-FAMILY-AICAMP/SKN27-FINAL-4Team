@@ -51,3 +51,10 @@ docs/\[개별\]*
 # IDE 설정
 .vscode/
 .idea/
+
+# 프로토타입 파일 (Vue로 대체됨)
+app/frontend/src/views/mypage/mypage.html
+app/frontend/src/views/mypage/mypage.js
+app/frontend/src/views/mypage/mypage.css
+app/frontend/src/assets/b97c24d60f8306b5.png
+app/frontend/src/assets/design-system.css
