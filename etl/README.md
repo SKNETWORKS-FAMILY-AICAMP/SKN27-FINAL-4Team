@@ -1,19 +1,31 @@
 # ETL
 
-데이터 수집, 선별, 전처리 산출물을 관리한다.
+Project data collection, source preservation, intermediate conversion, and final training data live under `etl/`.
 
-## 현재 유지 기준
+## Dataset Folders
 
-- `datasets/personality_training/selected_raw/`: 최종 학습 데이터 재현에 필요한 원천 2종
-- `datasets/personality_training/axis_ready/all_axis_ready.csv`: 모델 학습 후보 통합본
-- `datasets/personality_training/axis_ready/summary.json`: 최종 데이터 요약
-- `datasets/personality_training/metadata/`: 선별/검증 근거
-- `scripts/datasets/build_mbti_axis_ready_dataset.py`: 원천에서 최종 통합 CSV를 재생성
-- `scripts/datasets/validate_axis_ready_against_raw.py`: 원천과 최종 통합 CSV 일치 여부 검증
+| folder | role |
+| --- | --- |
+| `datasets/원천 데이터/` | Original or source-level datasets kept for reproducibility. |
+| `datasets/중간 가공 데이터/` | First-pass converted files, such as Parquet converted to CSV. |
+| `datasets/실사용 데이터/` | Final datasets intended for modeling or embedding. |
+| `datasets/personality_training/metadata/` | Notes and curation records for personality training data. |
 
-## 재현
+## Scripts
+
+All personality-training preprocessing scripts are collected in:
+
+`scripts/personality_training/`
+
+## Current Main Dataset
+
+The Korean MBTI training dataset ready for embedding is:
+
+`datasets/실사용 데이터/epinfomax_mbti_korean_4axis/`
+
+Reproduce it with:
 
 ```powershell
-python etl\scripts\datasets\build_mbti_axis_ready_dataset.py
-python etl\scripts\datasets\validate_axis_ready_against_raw.py
+$env:UV_CACHE_DIR = '.uv-cache'
+uv run python etl\scripts\personality_training\preprocess_epinfomax_korean_4axis.py
 ```

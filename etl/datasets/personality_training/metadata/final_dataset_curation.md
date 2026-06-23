@@ -1,46 +1,86 @@
-# Final Dataset Curation
+# Personality Training Dataset Curation
 
-## Intent
+## Goal
 
-자유대화 챗봇 발화에서 MBTI 4축 경향을 가볍게 추정하기 위한 약지도 학습 후보 데이터셋을 만든다.
+Prepare data for a model that estimates MBTI axis tendencies from user utterances or chatbot conversation logs.
 
-최종 모델 입력 스키마는 다음 5개 컬럼으로 제한한다.
+The intended modeling flow is:
 
 ```text
-text, EI, NS, FT, JP
+text -> embedding model -> EI / NS / FT / JP prediction
 ```
 
-## Kept Sources
+Only the `text` column should be embedded. Label columns should be kept as supervised targets.
 
-| source | reason |
+## Folder Policy
+
+| stage | folder | content |
+| --- | --- | --- |
+| source | `etl/datasets/원천 데이터/` | Original or source-level datasets. |
+| intermediate | `etl/datasets/중간 가공 데이터/` | First-pass converted files, such as Parquet converted to CSV. |
+| ready-to-use | `etl/datasets/실사용 데이터/` | Cleaned files intended for embedding and model training. |
+
+## Selected Korean Dataset
+
+The primary Korean dataset is Hugging Face `epinfomax/mbti-korean-dataset`.
+
+Source structure:
+
+| column | meaning |
 | --- | --- |
-| `kaggle_datasnaek_mbti_type` | `posts`를 `|||` 기준 chunk로 나눌 수 있고, 16유형 라벨을 4축 라벨로 변환할 수 있다. |
-| `mbtibench` | `E/I`, `S/N`, `T/F`, `J/P` hard/soft label이 있어 보조 학습/검증 원천으로 적합하다. |
+| `text` | Korean source text |
+| `label` | integer MBTI label |
 
-## Removed Sources
+The integer labels are restored to 16 MBTI types with the dataset training script mapping, then split into four axis labels:
 
-| source | reason |
-| --- | --- |
-| `hf_babak_sentencebroken` | 문장 단위로 과하게 가공되어 자유대화 발화 chunk로 보기 어렵다. |
-| `kaggle_mazlumi_twitter_mbti` | 여러 트윗이 한 행에 붙은 타임라인 형태가 많아 단일 발화 기준과 맞지 않는다. |
-| `kaggle_tapanvijay_mbti_cleaned` | `datasnaek`와 중복 가능성이 높다. |
-| `hf_epinfomax_mbti_korean` | 현재 환경에서 Parquet 스키마 검증이 되지 않았고 MVP 범위를 좁히기 위해 제외했다. |
-| `hf_jtatman_tweet_classify` | 현재 환경에서 Parquet 스키마 검증이 되지 않았고 MVP 범위를 좁히기 위해 제외했다. |
+```text
+mbti_type -> EI, NS, FT, JP
+```
 
-## Final Data
+## Ready-to-Use Output
 
-- Final CSV: `etl/datasets/personality_training/axis_ready/all_axis_ready.csv`
-- Total rows: 321,989
-- `kaggle_datasnaek_mbti_type`: 315,182
-- `mbtibench`: 7,819
+`etl/datasets/실사용 데이터/epinfomax_mbti_korean_4axis/`
 
-## Validation
+| file | rows |
+| --- | ---: |
+| `huggingface_epinfomax_mbti_korean_4axis_train.csv` | 14,550 |
+| `huggingface_epinfomax_mbti_korean_4axis_validation.csv` | 1,819 |
+| `huggingface_epinfomax_mbti_korean_4axis_test.csv` | 1,821 |
 
-- MBTI label leakage in `text`: 0
-- Text shorter than 20 characters: 0
-- Text longer than 2,000 characters: 0
-- Rows regenerated from selected raw sources match the final CSV exactly.
+Columns:
+
+```text
+text,label,mbti_type,EI,NS,FT,JP
+```
+
+## Current Text Policy
+
+- Preserve the original train, validation, and test split assignments.
+- Remove leakage/noise characters inside `text` instead of dropping whole rows.
+- Remove direct MBTI type names, Korean MBTI aliases, generic MBTI terms, English letters, URLs, and non-emotional symbols.
+- Keep Korean characters, digits, spaces, and conservative emotion markers: `?`, `!`, `~`, `.`, `ㅋ`, `ㅎ`, `ㅜ`, and `ㅠ`.
+- Collapse repeated emotion markers to at most 3 characters.
+
+Korean MBTI aliases are treated as direct label leakage. The current alias list is:
+
+```text
+엔프제, 엔프피, 엔티제, 엔팁
+엣프제, 엣프피, 엣티제, 엣팁
+인프제, 인프피, 인티제, 인팁
+잇프제, 잇프피, 잇티제, 잇팁
+```
+- Drop only rows whose sanitized text has fewer than 5 Korean/digit context characters.
+
+## Scripts
+
+All personality-training preprocessing scripts are collected under:
+
+`etl/scripts/personality_training/`
+
+Current script:
+
+`etl/scripts/personality_training/preprocess_epinfomax_korean_4axis.py`
 
 ## Limitation
 
-대부분의 라벨은 발화 자체를 사람이 직접 판정한 값이 아니라 작성자 수준 MBTI 또는 축 라벨에서 온 weak label이다. 이 데이터셋은 재미용/참고용 4축 경향 추정 MVP에 사용하고, 심리 진단처럼 표현하지 않는다.
+This dataset is useful for an MBTI tendency estimator, but it should not be treated as a clinical or definitive personality diagnosis dataset. Model outputs should be presented as tendency scores, not fixed identity labels.

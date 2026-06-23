@@ -1,0 +1,56 @@
+{
+  "created_at": "2026-06-22T02:19:49",
+  "purpose": "Qwen3 embeddings for MBTI 4-axis ML training.",
+  "embedding_model": "Qwen/Qwen3-Embedding-0.6B",
+  "embedding_backend": "sentence-transformers",
+  "batch_size": 32,
+  "normalize_embeddings": true,
+  "input_column": "text",
+  "label_columns": [
+    "label",
+    "mbti_type",
+    "EI",
+    "NS",
+    "FT",
+    "JP"
+  ],
+  "important_rule": "embeddings[i] must match labels.iloc[i] and texts.iloc[i]",
+  "splits": [
+    {
+      "split": "train",
+      "rows": 14550,
+      "embedding_dim": 1024,
+      "embedding_shape": [
+        14550,
+        1024
+      ],
+      "embedding_file": "/content/drive/MyDrive/final_project/후처리_데이터/train_embeddings.npy",
+      "labels_file": "/content/drive/MyDrive/final_project/후처리_데이터/train_labels.csv",
+      "texts_file": "/content/drive/MyDrive/final_project/후처리_데이터/train_texts.csv"
+    },
+    {
+      "split": "validation",
+      "rows": 1819,
+      "embedding_dim": 1024,
+      "embedding_shape": [
+        1819,
+        1024
+      ],
+      "embedding_file": "/content/drive/MyDrive/final_project/후처리_데이터/validation_embeddings.npy",
+      "labels_file": "/content/drive/MyDrive/final_project/후처리_데이터/validation_labels.csv",
+      "texts_file": "/content/drive/MyDrive/final_project/후처리_데이터/validation_texts.csv"
+    },
+    {
+      "split": "test",
+      "rows": 1821,
+      "embedding_dim": 1024,
+      "embedding_shape": [
+        1821,
+        1024
+      ],
+      "embedding_file": "/content/drive/MyDrive/final_project/후처리_데이터/test_embeddings.npy",
+      "labels_file": "/content/drive/MyDrive/final_project/후처리_데이터/test_labels.csv",
+      "texts_file": "/content/drive/MyDrive/final_project/후처리_데이터/test_texts.csv"
+    }
+  ]
+}
