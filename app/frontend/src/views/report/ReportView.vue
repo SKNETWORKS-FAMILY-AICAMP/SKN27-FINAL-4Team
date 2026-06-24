@@ -5,11 +5,34 @@
         <section class="panel">
           <div class="panel-head">
             <p>마음 리포트 보관함</p>
-            <span>기간 선택</span>
+            <button
+              type="button"
+              class="filter-toggle"
+              :class="{ active: isMonthFilterOpen }"
+              :aria-expanded="isMonthFilterOpen"
+              @click="isMonthFilterOpen = !isMonthFilterOpen"
+            >
+              기간 선택
+            </button>
+          </div>
+
+          <div v-if="isMonthFilterOpen" class="month-filter" aria-label="월별 리포트 필터">
+            <button
+              v-for="month in monthOptions"
+              :key="month.value"
+              type="button"
+              class="month-chip"
+              :class="{ active: selectedMonth === month.value }"
+              :aria-pressed="selectedMonth === month.value"
+              @click="selectedMonth = month.value"
+            >
+              <span class="month-check" aria-hidden="true"></span>
+              {{ month.label }}
+            </button>
           </div>
 
           <button
-            v-for="period in reports"
+            v-for="period in filteredReports"
             :key="period.id"
             type="button"
             class="period-card"
@@ -27,7 +50,12 @@
             <span>시계열 감정 흐름</span>
           </div>
           <div class="emotion-strip" :class="{ 'emotion-strip--monthly': currentReport.emotions.length > 7 }">
-            <article v-for="day in currentReport.emotions" :key="day.day" class="emotion-day">
+            <article
+              v-for="day in currentReport.emotions"
+              :key="day.day"
+              class="emotion-day"
+              :class="emotionToneClass(day)"
+            >
               <div class="mood">{{ day.icon }}</div>
               <span>{{ day.day }}</span>
             </article>
@@ -77,7 +105,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import reportBg from '../../assets/report-bg.png'
 
 const monthlyEmotionIcons = [
@@ -152,10 +180,47 @@ const reports = [
   },
 ]
 
-const selectedReportId = ref(reports[0].id)
+const getReportStartDate = (report) => new Date(report.range.split(' ~ ')[0].replaceAll('.', '-'))
+const getReportMonth = (report) => report.range.slice(0, 7)
+const formatMonthLabel = (month) => {
+  const [year, value] = month.split('.')
+  return `${year}년 ${Number(value)}월`
+}
+
+const reportsByNewest = [...reports].sort((a, b) => getReportStartDate(b) - getReportStartDate(a))
+const latestMonth = getReportMonth(reportsByNewest[0])
+const isMonthFilterOpen = ref(false)
+const selectedMonth = ref(latestMonth)
+const selectedReportId = ref(reportsByNewest[0].id)
+
+const monthOptions = computed(() => {
+  const months = [...new Set(reportsByNewest.map(getReportMonth))]
+  return months.map((month) => ({
+    value: month,
+    label: formatMonthLabel(month),
+  }))
+})
+
+const filteredReports = computed(() => (
+  reportsByNewest.filter((report) => getReportMonth(report) === selectedMonth.value)
+))
+
 const currentReport = computed(
-  () => reports.find((report) => report.id === selectedReportId.value) ?? reports[0],
+  () => filteredReports.value.find((report) => report.id === selectedReportId.value) ?? filteredReports.value[0],
 )
+
+watch(selectedMonth, () => {
+  selectedReportId.value = filteredReports.value[0]?.id
+})
+
+const negativeEmotionIcons = new Set(['😣', '😮‍💨', '😔'])
+const positiveEmotionIcons = new Set(['🙂', '😌', '😄', '😊', '🥲'])
+
+const emotionToneClass = (day) => {
+  if (negativeEmotionIcons.has(day.icon)) return 'emotion-day--low'
+  if (positiveEmotionIcons.has(day.icon)) return 'emotion-day--good'
+  return 'emotion-day--neutral'
+}
 </script>
 
 <style scoped>
@@ -259,6 +324,68 @@ const currentReport = computed(
   font-size: 12px;
 }
 
+.filter-toggle {
+  min-height: 31px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+}
+
+.filter-toggle:hover,
+.filter-toggle.active {
+  border-color: rgba(94, 234, 212, 0.5);
+  background: rgba(94, 234, 212, 0.12);
+  color: #BFF8EF;
+}
+
+.month-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.month-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 31px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+}
+
+.month-check {
+  width: 12px;
+  height: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.month-chip:hover,
+.month-chip.active {
+  border-color: rgba(94, 234, 212, 0.5);
+  background: rgba(94, 234, 212, 0.12);
+  color: #BFF8EF;
+}
+
+.month-chip.active .month-check {
+  border-color: rgba(94, 234, 212, 0.85);
+  background: linear-gradient(135deg, rgba(94, 234, 212, 0.95), rgba(191, 248, 239, 0.85));
+  box-shadow: 0 0 8px rgba(94, 234, 212, 0.38);
+}
+
 .emotion-strip {
   display: grid;
   grid-template-columns: repeat(7, minmax(34px, 1fr));
@@ -280,6 +407,25 @@ const currentReport = computed(
   border: 1px solid rgba(255, 255, 255, 0.13);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.08);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.emotion-day--low {
+  border: 2px solid rgba(255, 64, 98, 0.92);
+  background: rgba(255, 64, 98, 0.09);
+  box-shadow: 0 0 12px rgba(255, 64, 98, 0.48), inset 0 0 10px rgba(255, 64, 98, 0.12);
+}
+
+.emotion-day--neutral {
+  border: 2px solid rgba(169, 176, 190, 0.72);
+  background: rgba(169, 176, 190, 0.07);
+  box-shadow: 0 0 8px rgba(169, 176, 190, 0.18);
+}
+
+.emotion-day--good {
+  border: 2px solid rgba(75, 255, 162, 0.82);
+  background: rgba(75, 255, 162, 0.08);
+  box-shadow: 0 0 12px rgba(75, 255, 162, 0.36), inset 0 0 10px rgba(75, 255, 162, 0.1);
 }
 
 .mood {
