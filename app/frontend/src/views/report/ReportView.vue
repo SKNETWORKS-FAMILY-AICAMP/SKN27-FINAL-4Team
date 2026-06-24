@@ -76,7 +76,7 @@
         </header>
 
         <section class="report-section">
-          <h2>스트레스 주요 원인</h2>
+          <h2>스트레스 주요 원인.</h2>
           <div class="tag-row danger">
             <span v-for="item in currentReport.stressCauses" :key="item">{{ item }}</span>
           </div>
