@@ -4,15 +4,19 @@
         <nav class="legend" aria-label="기능 바로가기">
           <button type="button" @click="openPanel('profile')">{{ t.profile }}</button>
           <button type="button" @click="openPanel('mbti')">{{ t.mbti }}</button>
-          <button type="button" @click="openPanel('taste')">{{ t.taste }}</button>
-          <button type="button" @click="openPanel('settings')">{{ t.settings }}</button>
+          <!-- 취향 분석 탭: 당장 비활성화. 재활성화 시 아래 버튼 주석 해제 -->
+          <!-- <button type="button" @click="openPanel('taste')">{{ t.taste }}</button> -->
+          <!-- 설정 탭: 당장 비활성화. 재활성화 시 아래 버튼 주석 해제 -->
+          <!-- <button type="button" @click="openPanel('settings')">{{ t.settings }}</button> -->
         </nav>
         <div class="room-canvas">
           <img class="room-image" src="../../assets/UI 신버전4.png" alt="야간 톤 MindRoom 방 일러스트" />
           <button class="hotspot profile" type="button" :aria-label="t.profile" @click="openPanel('profile')"></button>
           <button class="hotspot mbti" type="button" :aria-label="t.mbti" @click="openPanel('mbti')"></button>
-          <button class="hotspot taste" type="button" :aria-label="t.taste" @click="openPanel('taste')"></button>
-          <button class="hotspot settings" type="button" :aria-label="t.settings" @click="openPanel('settings')"></button>
+          <!-- 취향 분석 hotspot: 당장 비활성화. 재활성화 시 아래 버튼 주석 해제 -->
+          <!-- <button class="hotspot taste" type="button" :aria-label="t.taste" @click="openPanel('taste')"></button> -->
+          <!-- 설정 hotspot: 당장 비활성화. 재활성화 시 아래 버튼 주석 해제 -->
+          <!-- <button class="hotspot settings" type="button" :aria-label="t.settings" @click="openPanel('settings')"></button> -->
         </div>
 
         <transition name="fade">
@@ -74,18 +78,43 @@
                         <label for="profile-age">나이</label>
                         <input id="profile-age" type="number" min="14" max="99" v-model.number="profile.age" :readonly="!profileEdit" />
                       </div>
+                      <div class="field">
+                        <label for="profile-birthday">생일</label>
+                        <input id="profile-birthday" v-model="profile.birthday" placeholder="예: 06.23" :readonly="!profileEdit" />
+                      </div>
+                      <div class="field">
+                        <label for="profile-job">직업/상황</label>
+                        <input id="profile-job" v-model="profile.job" placeholder="예: 취업 준비, 직장인, 학생" :readonly="!profileEdit" />
+                      </div>
                     </div>
                     <div class="form-grid profile-extra-grid">
+                      <div class="field">
+                        <label for="profile-status">현재 상태</label>
+                        <input id="profile-status" v-model="profile.status" placeholder="예: 쉬고 싶음, 대화하고 싶음" :readonly="!profileEdit" />
+                      </div>
                       <div class="field">
                         <label for="profile-keywords">키워드</label>
                         <input id="profile-keywords" v-model="profile.keywords" :readonly="!profileEdit" />
                       </div>
-                      <div class="field">
-                        <label for="profile-interests">관심 분야</label>
-                        <select id="profile-interests" class="pretty-select" v-model="profile.interests" :disabled="!profileEdit">
-                          <option v-for="option in profileOptions.interests" :key="option" :value="option">{{ option }}</option>
-                        </select>
-                      </div>
+                      <section class="field interest-keyword-field" aria-label="관심분야 키워드 설정">
+                        <div class="interest-keyword-head">
+                          <label>관심분야 키워드</label>
+                          <strong>{{ profile.interests.length }}개 선택</strong>
+                        </div>
+                        <div class="interest-keyword-list">
+                          <button
+                            v-for="keyword in profileOptions.interests"
+                            :key="keyword"
+                            type="button"
+                            class="interest-chip"
+                            :class="{ active: profile.interests.includes(keyword) }"
+                            :disabled="!profileEdit"
+                            @click="toggleInterestKeyword(keyword)"
+                          >
+                            {{ keyword }}
+                          </button>
+                        </div>
+                      </section>
                       <div class="field">
                         <label for="profile-hobbies">취미</label>
                         <select id="profile-hobbies" class="pretty-select" v-model="profile.hobbies" :disabled="!profileEdit">
@@ -122,37 +151,115 @@
               </div>
 
               <div class="panel-body" v-if="activePanel === 'mbti'">
-                <div class="mbti-dashboard">
-                  <section class="mbti-result-board">
-                    <div>
-                      <div class="mbti-type">{{ mbtiData.type }}</div>
-                      <div class="mbti-confidence">신뢰도 {{ mbtiData.confidence }}% · {{ mbtiData.period }}</div>
-                    </div>
-                  </section>
-                  <section class="card">
-                    <h3>MBTI 4축 점수그래프</h3>
-                    <div class="axis-list">
-                      <div class="axis-item" v-for="axis in mbtiData.axes" :key="axis.pair">
-                        <div class="axis-head">
-                          <span>{{ axis.pair }} 중 {{ axis.label }} 우세</span>
-                          <span>{{ axis.score }}%</span>
-                        </div>
-                        <div class="meter"><span :style="{ width: axis.score + '%' }"></span></div>
+                <p class="example-flag">
+                  예시 화면 · {{ currentMbtiView.step }} {{ currentMbtiView.title }} · 이번달에 보는 MBTI 내용은 전달에 쌓인 데이터를 분석한 결과입니다.
+                </p>
+
+                <template v-if="mbtiViewMode === 'onboardingType'">
+                  <div class="mbti-dashboard mbti-dashboard-single">
+                    <section class="mbti-result-board mbti-onboarding-board">
+                      <div>
+                        <span class="mbti-kicker">초기 자기보고 MBTI</span>
+                        <div class="mbti-type">{{ mbtiData.onboarding.type }}</div>
+                        <div class="mbti-confidence">{{ mbtiData.onboarding.period }}</div>
                       </div>
+                    </section>
+                    <section class="card report-panel mbti-type-description">
+                      <h3>온보딩 MBTI 기준 유형 설명</h3>
+                      <p>{{ mbtiData.onboarding.description }}</p>
+                      <ol class="report-lines compact-report">
+                        <li v-for="line in mbtiData.onboarding.report" :key="line">{{ line }}</li>
+                      </ol>
+                      <p class="notice">온보딩 MBTI는 설문 점수 기반 추정이 아니라 사용자가 가입 초기에 직접 입력한 자기보고 MBTI입니다. 따라서 점수그래프는 표시하지 않습니다.</p>
+                    </section>
+                  </div>
+                </template>
+
+                <template v-else-if="mbtiViewMode === 'onboardingNext'">
+                  <section class="card mbti-combined-card">
+                    <div class="mbti-combined-grid">
+                      <div class="mbti-type-stack">
+                        <article class="mbti-type-panel current">
+                          <span>현재 기준 MBTI</span>
+                          <strong class="mbti-letter-row">
+                            <span
+                              v-for="(letter, index) in mbtiData.current.type"
+                              :key="letter + index"
+                              class="mbti-type-letter"
+                              :style="{ color: isMbtiTypeLetterChanged(letter, index) ? '#ffcf5a' : 'inherit' }"
+                            >{{ letter }}</span>
+                          </strong>
+                          <small>{{ mbtiData.current.monthLabel }} 기준 또는 온보딩 월 기준</small>
+                        </article>
+                        <article class="mbti-type-panel previous">
+                          <span>전 MBTI</span>
+                          <strong>{{ mbtiData.previous.type }}</strong>
+                          <small>{{ mbtiData.previous.monthLabel }} 기준 또는 온보딩 입력</small>
+                        </article>
+                      </div>
+
+                      <article class="mbti-current-graph">
+                        <div class="mbti-combined-head">
+                          <div>
+                            <h3>현재 MBTI 선호성향 그래프</h3>
+                  
+                          </div>
+                          <div class="mbti-type mbti-type-current mbti-letter-row">
+                            <span
+                              v-for="(letter, index) in mbtiData.current.type"
+                              :key="'header-' + letter + index"
+                              class="mbti-type-letter"
+                              :style="{ color: isMbtiTypeLetterChanged(letter, index) ? '#ffcf5a' : 'inherit' }"
+                            >{{ letter }}</span>
+                          </div>
+                        </div>
+                        <div class="axis-list graph-only-list">
+                          <div
+                            class="axis-item"
+                            v-for="axis in mbtiData.current.axes"
+                            :key="axis.pair"
+                          >
+                            <div class="axis-head graph-axis-head">
+                              <span class="graph-axis-label">
+                                <strong>{{ axis.pair }}</strong>
+                                <small>{{ axis.label }} 우세</small>
+                              </span>
+                              <span>{{ axis.score }}%</span>
+                            </div>
+                            <div class="meter" :aria-label="axis.pair + ' 중 ' + axis.label + ' 우세 ' + axis.score + '%'"><span :style="{ width: axis.score + '%' }"></span></div>
+                          </div>
+                        </div>
+                      </article>
+
+                      <article class="mbti-evidence-report">
+                        <h3>근거 리포트</h3>
+                        <ol class="report-lines compact-report">
+                          <li v-for="line in mbtiData.report" :key="line">{{ line }}</li>
+                        </ol>
+                      </article>
                     </div>
                   </section>
+                </template>
+                <div class="actions mbti-switch-actions" aria-label="MBTI 예시 화면 스위치">
+                  <button
+                    v-for="view in mbtiViews"
+                    :key="view.key"
+                    class="secondary-button"
+                    :class="{ active: mbtiViewMode === view.key }"
+                    type="button"
+                    @click="setMbtiView(view.key)"
+                  >
+                    {{ view.step }} {{ view.shortLabel }}
+                  </button>
                 </div>
-                <section class="card report-panel">
-                  <h3>근거 리포트</h3>
-                  <ol class="report-lines">
-                    <li v-for="line in mbtiData.report" :key="line">{{ line }}</li>
-                  </ol>
-                  <p class="notice">비의료 참고 정보이며, 최근 대화량과 표현 방식에 따라 결과가 달라질 수 있습니다.</p>
-                  <div class="actions">
-                    <button class="primary-button" type="button" @click="randomizeMbti">분석 다시 실행</button>
-                  </div>
-                </section>
               </div>
+
+              <!--
+              취향 분석 탭은 당장 비활성화되어 있습니다. 재활성화 방법:
+              1) 아래 panel-body 블록의 주석(<!- - ... - ->)을 해제
+              2) 상단 nav.legend의 "취향 분석" 버튼 주석 해제
+              3) room-canvas의 hotspot.taste 버튼 주석 해제
+              4) i18n(ko/en)의 taste 문구는 그대로 두었으므로 추가 작업 불필요
 
               <div class="panel-body" v-if="activePanel === 'taste'">
                 <div class="log-summary">
@@ -175,14 +282,14 @@
                 </div>
                 <div class="taste-layout taste-keyword-layout">
                   <section class="card taste-wide">
-                    <h3>기준 충족 키워드</h3>
+                    <h3>최근 30일 기준 충족 키워드</h3>
                     <div class="keyword-table">
                       <div class="keyword-row keyword-head">
                         <span>키워드</span>
                         <span>유형</span>
-                        <span>등장</span>
+                        <span>등장 횟수</span>
                         <span>대화 맥락</span>
-                        <span>최근</span>
+                        <span>최근 등장일</span>
                       </div>
                       <div class="keyword-row" v-for="item in taste.keywords" :key="item.text">
                         <strong>{{ item.text }}</strong>
@@ -203,6 +310,15 @@
                   </section>
                 </div>
               </div>
+              -->
+
+              <!--
+              설정 탭은 당장 비활성화되어 있습니다. 재활성화 방법:
+              1) 아래 panel-body 블록의 주석(<!- - ... - ->)을 해제
+              2) 상단 nav.legend의 "설정" 버튼 주석 해제
+              3) room-canvas의 hotspot.settings 버튼 주석 해제
+              4) computed.t / watch.settings / mounted / methods(resetSettings, applySettings)는
+                 언어·접근성 설정과 함께 쓰이므로 그대로 두었습니다. 추가 작업 불필요.
 
               <div class="panel-body" v-if="activePanel === 'settings'">
                 <section class="card settings-card">
@@ -251,6 +367,7 @@
                   </div>
                 </section>
               </div>
+              -->
             </article>
           </section>
         </transition>
@@ -307,29 +424,51 @@ export default {
         mbti: "INFP",
         gender: "여성",
         age: 24,
+        birthday: "06.23",
+        job: "프로젝트를 준비 중인 사람",
+        status: "교류하고 싶음",
         keywords: "공감형, 느린 집중, 감성 기록, 안정 선호",
-        interests: "음악",
+        interests: ["산책", "음악", "관계"],
         hobbies: "플레이리스트 만들기"
       },
       profileOptions: {
-        interests: ["음악", "산책", "기록", "작은 식물", "심리", "카페 탐방", "차 추천"],
+        interests: ["산책", "음악", "요리", "관계", "일", "수면", "운동", "공부", "가족", "혼자 있는 시간"],
         hobbies: ["플레이리스트 만들기", "짧은 에세이 읽기", "방 정리", "필사", "가벼운 요가", "사진 찍기", "드라마 보기"]
       },
+      mbtiViewMode: "onboardingNext", // onboardingType | onboardingNext
+      mbtiViews: [
+        { key: "onboardingType", step: "1-1", title: "온보딩 자기보고 MBTI", shortLabel: "온보딩 유형" },
+        { key: "onboardingNext", step: "1-2/1-4", title: "일반 MBTI 분석 화면", shortLabel: "통합 비교" } 
+      ],
       mbtiData: {
-        type: "INFP",
-        confidence: 72,
-        period: "최근 30일 대화 기반",
-        axes: [
-          { label: "I", pair: "I / E", score: 68 },
-          { label: "N", pair: "N / S", score: 61 },
-          { label: "F", pair: "F / T", score: 57 },
-          { label: "P", pair: "P / J", score: 64 }
-        ],
+        onboarding: {
+          type: "ENFP",
+          period: "온보딩 시점 기준 (가입 직후 사용자 입력)",
+          description: "ENFP는 일반적으로 새로운 가능성을 빠르게 떠올리고, 사람·관계·아이디어를 연결하며, 정해진 절차보다 유연한 탐색을 선호하는 경향으로 설명됩니다.",
+          report: [
+            "초기 자기보고 MBTI이므로 설문 점수나 대화 기반 추정 근거를 붙이지 않습니다.",
+            "가입 직후 사용자가 직접 입력한 유형을 기준으로, 이후 월간 분석 결과와 비교할 시작점 역할만 합니다.",
+            "허전함을 줄이기 위해 근거 리포트 영역에는 유형 설명과 표시 기준 안내만 제공합니다."
+          ]
+        },
+        previous: {
+          type: "ENFP",
+          monthLabel: "전전달(4월) 기준"
+        },
+        current: {
+          type: "INFP",
+          monthLabel: "전달(5월) 기준",
+          axes: [
+            { label: "I", pair: "I / E", score: 68 },
+            { label: "N", pair: "N / S", score: 61 },
+            { label: "F", pair: "F / T", score: 57 },
+            { label: "P", pair: "P / J", score: 64 }
+          ]
+        },
         report: [
-          "혼자 정리한 뒤 대화에 참여할 때 표현의 밀도가 높아집니다.",
-          "미래 가능성, 의미 연결, 상상 기반 표현이 반복적으로 나타납니다.",
-          "결정 근거에서 관계의 분위기와 상대 감정을 자주 고려합니다.",
-          "계획을 고정하기보다 선택지를 열어두고 상황에 맞춰 조정합니다."
+          "[MBTI 변화 경향 현황] 전전달(4월) 추정 MBTI인 ENFP와 비교해, 전달(5월)에는 I 선호 지표가 새로 우세해져 INFP로 변화 경향이 나타났다.",
+          "[MBTI 추정 및 경향분석 근거] 전달(5월) 추정에 영향을 준 실제 답변과 근거 문장을 바탕으로, 어떤 표현이 어느 선호 지표·방향을 뒷받침했는지 설명한다.",
+          "[현재 MBTI에 대한 간단한 설명] 전달(5월) 기준 추정된 INFP 유형이 일반적으로 어떤 경향으로 설명되는지 간단히 안내하며, 성격을 확정하는 것이 아니라 그 달 관찰된 경향으로 해석함을 안내한다."
         ]
       },
       taste: {
@@ -337,7 +476,7 @@ export default {
         period: "최근 30일",
         messageCount: 128,
         conversationCount: 18,
-        threshold: "5회 이상",
+        threshold: "최근 30일 기준 5회 이상",
         keywords: [
           { text: "로파이 음악", kind: "최근 관심사", count: 14, source: "휴식, 집중 관련 대화", lastSeen: "06.22" },
           { text: "감정 기록", kind: "간접 취향 신호", count: 11, source: "하루 정리, 메모 관련 대화", lastSeen: "06.21" },
@@ -347,8 +486,9 @@ export default {
           { text: "선택지 줄이기", kind: "대화 선호", count: 5, source: "추천 방식 관련 대화", lastSeen: "06.16" }
         ],
         notices: [
-          "저장된 대화 로그의 맥락에서 일정 기준 이상 반복된 키워드만 표시합니다.",
-          "직접 말한 취향이 아니어도 반복 맥락이 충분한 경우 간접 취향 신호로 분류합니다."
+          "최근 30일 대화 로그에서 같은 맥락이 일정 기준 이상 반복된 키워드만 표시합니다.",
+          "직접 취향이라고 말하지 않았더라도 반복 맥락이 충분하면 간접 취향 신호로 분류합니다.",
+          "성격을 판단하는 분석이 아니라, 최근 대화에서 자주 나타난 관심사 현황을 보여주는 집계입니다."
         ]
       },
       account: {
@@ -370,15 +510,18 @@ export default {
     t() {
       return i18n[this.settings.language];
     },
+    currentMbtiView() {
+      return this.mbtiViews.find(view => view.key === this.mbtiViewMode) || this.mbtiViews[0];
+    },
     currentPanelTitle() {
       if (!this.activePanel) return "";
       return this.t[this.activePanel];
     },
     currentPanelDescription() {
       const descriptions = {
-        profile: "프로필 정보를 조회하고 필요할 때만 수정합니다.",
-        mbti: "최근 대화 더미 데이터를 기준으로 4축 성향과 근거 리포트를 보여줍니다.",
-        taste: "저장된 대화 로그의 반복 맥락에서 나타난 최근 관심사와 간접 취향 키워드를 표시합니다.",
+        profile: "사전 정보 입력 화면에서 설정한 기본 정보와 관심분야 키워드를 조회하고, 필요할 때만 수정합니다.",
+        mbti: "지난 한 달간 저장된 MBTI 질문·답변을 바탕으로 이번 달 추정 MBTI, 4개 선호 지표 비율, 전월 대비 변화 경향과 근거 리포트를 보여줍니다. 공식 성격 검사가 아닌 보조 분석 결과입니다.",
+        taste: "최근 30일 대화 로그에서 반복적으로 나타난 관심사·취향 키워드를 집계해 보여줍니다. 일정 횟수 이상 등장한 키워드만 대시보드에 표시됩니다.",
         settings: "계정 기본 정보와 언어, 접근성 설정을 관리합니다."
       };
       return descriptions[this.activePanel] || "";
@@ -424,39 +567,44 @@ export default {
       }
       this.profileEdit = !this.profileEdit;
     },
+    toggleInterestKeyword(keyword) {
+      if (!this.profileEdit) return;
+      if (this.profile.interests.includes(keyword)) {
+        this.profile.interests = this.profile.interests.filter(item => item !== keyword);
+        return;
+      }
+      this.profile.interests = [...this.profile.interests, keyword];
+    },
     chooseCharacter(id) {
       this.selectedCharacter = id;
       this.showCharacterPicker = false;
       this.showToast("대화 대상 캐릭터가 교체되었습니다.");
     },
-    randomizeMbti() {
-      const variants = [
-        { type: "INFP", axes: [68, 61, 57, 64], confidence: 72 },
-        { type: "ENFP", axes: [59, 66, 62, 70], confidence: 76 },
-        { type: "INFJ", axes: [72, 64, 58, 54], confidence: 69 }
-      ];
-      const next = variants[Math.floor(Math.random() * variants.length)];
-      this.mbtiData.type = next.type;
-      this.mbtiData.confidence = next.confidence;
-      this.mbtiData.axes = this.mbtiData.axes.map((axis, index) => ({ ...axis, score: next.axes[index], label: next.type[index] }));
-      this.showToast("MBTI 분석 더미 데이터가 갱신되었습니다.");
+    setMbtiView(viewKey) {
+      this.mbtiViewMode = viewKey;
+      this.showToast(`예시 화면: ${this.currentMbtiView.title} 화면으로 전환했습니다.`);
     },
-    refreshTaste() {
-      this.taste.updated = new Date().toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-      this.taste.keywords = this.taste.keywords.map(item => ({
-        ...item,
-        count: Math.max(1, item.count + Math.round(Math.random() * 2 - 1))
-      })).sort((a, b) => b.count - a.count);
-      this.showToast("저장된 대화 로그에서 키워드를 다시 추출했습니다.");
+    isMbtiTypeLetterChanged(letter, index) {
+      return this.mbtiData.previous.type[index] !== letter;
     },
-    resetSettings() {
-      this.settings = {
-        language: "ko",
-        fontScale: 1,
-        highContrast: false
-      };
-      this.showToast("설정이 기본값으로 복원되었습니다.");
-    },
+    // 취향 분석 탭 비활성화로 호출부 없음. 탭 재활성화 시 주석 해제.
+    // refreshTaste() {
+    //   this.taste.updated = new Date().toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    //   this.taste.keywords = this.taste.keywords.map(item => ({
+    //     ...item,
+    //     count: Math.max(1, item.count + Math.round(Math.random() * 2 - 1))
+    //   })).sort((a, b) => b.count - a.count);
+    //   this.showToast("저장된 대화 로그에서 키워드를 다시 추출했습니다.");
+    // },
+    // 설정 탭 비활성화로 호출부 없음. 탭 재활성화 시 주석 해제.
+    // resetSettings() {
+    //   this.settings = {
+    //     language: "ko",
+    //     fontScale: 1,
+    //     highContrast: false
+    //   };
+    //   this.showToast("설정이 기본값으로 복원되었습니다.");
+    // },
     applySettings() {
       document.documentElement.dataset.contrast = String(this.settings.highContrast);
       document.documentElement.style.setProperty("--font-scale", this.settings.fontScale);
@@ -1099,6 +1247,55 @@ export default {
   resize: vertical;
 }
 
+.interest-keyword-field {
+  gap: 8px;
+}
+
+.interest-keyword-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.interest-keyword-head strong {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.interest-keyword-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.interest-chip {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #171044;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.interest-chip.active {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+
+.interest-chip:disabled {
+  cursor: default;
+}
+
+.interest-chip:not(:disabled):hover {
+  border-color: rgba(215, 183, 255, 0.82);
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -1352,6 +1549,202 @@ export default {
   gap: 12px;
 }
 
+.mbti-dashboard-single {
+  grid-template-columns: minmax(230px, 0.72fr) minmax(0, 1.28fr);
+  align-items: stretch;
+}
+
+.mbti-combined-card {
+  display: grid;
+  padding: 14px;
+}
+
+.mbti-combined-grid {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.34fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.mbti-type-stack {
+  display: grid;
+  grid-template-rows: 2fr 1fr;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mbti-type-panel {
+  display: grid;
+  align-content: center;
+  min-height: 86px;
+  padding: 12px;
+  border: 1px solid rgba(178, 149, 255, 0.28);
+  border-radius: 8px;
+  background: rgba(32, 41, 105, 0.46);
+}
+
+.mbti-type-panel.current {
+  min-height: 164px;
+  background: linear-gradient(180deg, rgba(42, 26, 98, 0.72), rgba(32, 41, 105, 0.46));
+}
+
+.mbti-type-panel.previous {
+  min-height: 82px;
+}
+
+.mbti-type-panel > span,
+.mbti-type-panel > small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.mbti-type-panel strong {
+  margin: 8px 0 5px;
+  color: var(--primary);
+  font-size: 42px;
+  line-height: 1;
+}
+
+.mbti-type-panel.previous strong {
+  margin: 5px 0 3px;
+  color: var(--teal);
+  font-size: 26px;
+}
+
+.mbti-letter-row {
+  display: inline-block;
+}
+
+.mbti-type-letter {
+  display: inline;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+}
+
+.mbti-type-letter.changed {
+  color: var(--amber);
+}
+
+.mbti-current-graph {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(178, 149, 255, 0.24);
+  border-radius: 8px;
+  background: rgba(15, 10, 49, 0.28);
+}
+
+.mbti-combined-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  margin-bottom: 14px;
+}
+
+.mbti-combined-head h3,
+.mbti-evidence-report h3 {
+  margin-bottom: 4px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.mbti-combined-head p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.mbti-combined-head .mbti-type {
+  font-size: 28px;
+}
+
+.mbti-evidence-report {
+  grid-column: 1 / -1;
+  padding: 12px;
+  border: 1px solid rgba(178, 149, 255, 0.22);
+  border-radius: 8px;
+  background: rgba(32, 41, 105, 0.34);
+}
+
+.mbti-onboarding-board {
+  min-height: 220px;
+}
+
+.mbti-kicker {
+  display: inline-flex;
+  margin-bottom: 10px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(32, 41, 105, 0.72);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.mbti-type-description {
+  margin-top: 0;
+}
+
+.mbti-type-description p {
+  margin: 0 0 10px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.compact-report {
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.graph-only-list .axis-head span:first-child {
+  color: var(--muted);
+}
+
+.graph-axis-head {
+  gap: 8px;
+}
+
+.graph-axis-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.graph-axis-label strong {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.graph-axis-label small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.mbti-switch-actions {
+  justify-content: center;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(178, 149, 255, 0.22);
+}
+
+.mbti-switch-actions .secondary-button.active {
+  border-color: var(--primary);
+  background: linear-gradient(135deg, var(--pur), var(--blue));
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(156, 91, 255, 0.3);
+}
+
 .mbti-result-board {
   display: grid;
   place-items: center;
@@ -1418,6 +1811,21 @@ export default {
   color: var(--text);
   line-height: 1.75;
   font-size: 14px;
+}
+
+.example-flag {
+  margin: 0 0 12px;
+  padding: 7px 11px;
+  border: 1px dashed rgba(178, 149, 255, 0.4);
+  border-radius: 8px;
+  background: rgba(32, 41, 105, 0.55);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.mbti-type-current {
+  color: var(--primary);
 }
 
 .notice {
@@ -1623,6 +2031,7 @@ export default {
   .account-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grid-2,
   .mbti-dashboard,
+  .mbti-combined-grid,
   .taste-layout,
   .taste-main { grid-template-columns: 1fr; }
   .taste-keyword-layout .taste-wide { grid-column: 1 / -1; }

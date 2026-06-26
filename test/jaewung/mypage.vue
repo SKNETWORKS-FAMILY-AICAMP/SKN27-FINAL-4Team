@@ -1,43 +1,23 @@
 <template>
     <main class="app-shell">
-      <header class="topbar">
-        <div class="brand">
-          <div class="brand-mark">M</div>
-          <div>
-            <h1>MindRoom</h1>
-            <p>{{ t.subtitle }}</p>
-          </div>
-        </div>
-        <div class="user-chip" aria-label="현재 사용자">
-          <span class="mini-avatar"></span>
-          <strong>{{ t.user }}</strong>
-        </div>
-      </header>
-
       <section class="room-stage">
-        <div class="room-toolbar">
-          <strong>{{ t.roomTitle }}</strong>
-          <span class="status-text">{{ t.hint }}</span>
-        </div>
-        <div class="room-canvas">
-          <img class="room-image" src="../docs/UI 신버전4.png" alt="야간 톤 MindRoom 방 일러스트" />
-          <button class="hotspot profile" type="button" :aria-label="t.profile" @click="openPanel('profile')"></button>
-          <button class="hotspot mbti" type="button" :aria-label="t.mbti" @click="openPanel('mbti')"></button>
-          <button class="hotspot taste" type="button" :aria-label="t.taste" @click="openPanel('taste')"></button>
-          <button class="hotspot reports" type="button" :aria-label="t.reports" @click="openPanel('reports')"></button>
-          <button class="hotspot settings" type="button" :aria-label="t.settings" @click="openPanel('settings')"></button>
-        </div>
         <nav class="legend" aria-label="기능 바로가기">
           <button type="button" @click="openPanel('profile')">{{ t.profile }}</button>
           <button type="button" @click="openPanel('mbti')">{{ t.mbti }}</button>
           <button type="button" @click="openPanel('taste')">{{ t.taste }}</button>
-          <button type="button" @click="openPanel('reports')">{{ t.reports }}</button>
           <button type="button" @click="openPanel('settings')">{{ t.settings }}</button>
         </nav>
+        <div class="room-canvas">
+          <img class="room-image" src="../../assets/UI 신버전4.png" alt="야간 톤 MindRoom 방 일러스트" />
+          <button class="hotspot profile" type="button" :aria-label="t.profile" @click="openPanel('profile')"></button>
+          <button class="hotspot mbti" type="button" :aria-label="t.mbti" @click="openPanel('mbti')"></button>
+          <button class="hotspot taste" type="button" :aria-label="t.taste" @click="openPanel('taste')"></button>
+          <button class="hotspot settings" type="button" :aria-label="t.settings" @click="openPanel('settings')"></button>
+        </div>
 
         <transition name="fade">
           <section v-if="activePanel" class="modal-backdrop" @click.self="closePanel">
-            <article class="modal" :class="activePanel + '-modal'" role="dial og" aria-modal="true" :aria-label="currentPanelTitle">
+            <article class="modal" :class="activePanel + '-modal'" role="dialog" aria-modal="true" :aria-label="currentPanelTitle">
               <header class="modal-header">
                 <div class="modal-title">
                   <h2>{{ currentPanelTitle }}</h2>
@@ -95,22 +75,22 @@
                         <input id="profile-age" type="number" min="14" max="99" v-model.number="profile.age" :readonly="!profileEdit" />
                       </div>
                     </div>
-                <div class="form-grid" style="margin-top:8px">
-                      <div class="field">
-                        <label for="profile-status">현재 상태</label>
-                        <textarea id="profile-status" v-model="profile.status" :readonly="!profileEdit"></textarea>
-                      </div>
+                    <div class="form-grid profile-extra-grid">
                       <div class="field">
                         <label for="profile-keywords">키워드</label>
                         <input id="profile-keywords" v-model="profile.keywords" :readonly="!profileEdit" />
                       </div>
                       <div class="field">
                         <label for="profile-interests">관심 분야</label>
-                        <input id="profile-interests" v-model="profile.interests" :readonly="!profileEdit" />
+                        <select id="profile-interests" class="pretty-select" v-model="profile.interests" :disabled="!profileEdit">
+                          <option v-for="option in profileOptions.interests" :key="option" :value="option">{{ option }}</option>
+                        </select>
                       </div>
                       <div class="field">
                         <label for="profile-hobbies">취미</label>
-                        <input id="profile-hobbies" v-model="profile.hobbies" :readonly="!profileEdit" />
+                        <select id="profile-hobbies" class="pretty-select" v-model="profile.hobbies" :disabled="!profileEdit">
+                          <option v-for="option in profileOptions.hobbies" :key="option" :value="option">{{ option }}</option>
+                        </select>
                       </div>
                     </div>
                     <div class="actions">
@@ -146,11 +126,11 @@
                   <section class="mbti-result-board">
                     <div>
                       <div class="mbti-type">{{ mbtiData.type }}</div>
-                      <div class="mbti-confidence">신뢰도 {{ mbtiData.confidence }}% · {{ mbtiData.period }}</div>
+                      <div class="mbti-confidence">MBTI 경향분석을 통한 추정 MBTI 유형이다. · {{ mbtiData.period }}</div>
                     </div>
                   </section>
                   <section class="card">
-                    <h3>MBTI 4축 점수그래프</h3>
+                    <h3>MBTI 선호지표 점수그래프</h3>
                     <div class="axis-list">
                       <div class="axis-item" v-for="axis in mbtiData.axes" :key="axis.pair">
                         <div class="axis-head">
@@ -224,25 +204,8 @@
                 </div>
               </div>
 
-              <div class="panel-body" v-if="activePanel === 'reports'">
-                <section class="card">
-                  <h3>리포트 보관함 더미</h3>
-                  <div class="insight-list">
-                    <article class="insight" v-for="report in reports" :key="report.title">
-                      <div class="insight-icon">R</div>
-                      <div>
-                        <strong>{{ report.title }}</strong>
-                        <span>{{ report.date }} · 마음리포트 모듈 연결 예정</span>
-                      </div>
-                      <div class="trend">{{ report.state }}</div>
-                    </article>
-                  </div>
-                  <p class="notice">이 영역은 별도 담당 모듈과 연결될 진입 화면만 표현했습니다.</p>
-                </section>
-              </div>
-
               <div class="panel-body" v-if="activePanel === 'settings'">
-                <section class="card">
+                <section class="card settings-card">
                   <h3>계정 기본 정보</h3>
                   <div class="account-grid">
                     <div class="account-item"><span>이메일</span><strong>{{ account.email }}</strong></div>
@@ -253,26 +216,16 @@
                     <div class="account-item"><span>이용 상태</span><strong>{{ account.plan }}</strong></div>
                   </div>
                 </section>
-                <section class="card settings-grid" style="margin-top:10px">
+                <section class="card settings-card mypage-settings-list">
                   <h3>화면 설정</h3>
                   <div class="setting-row">
                     <div>
                       <strong>언어</strong>
                       <p>서비스 주요 문구의 표시 언어를 전환합니다.</p>
                     </div>
-                    <select v-model="settings.language">
+                    <select class="pretty-select setting-control" v-model="settings.language">
                       <option value="ko">한국어</option>
                       <option value="en">English</option>
-                    </select>
-                  </div>
-                  <div class="setting-row">
-                    <div>
-                      <strong data-disabled-theme-setting-label></strong>
-                      <p>밝은 화면과 어두운 화면을 즉시 적용합니다.</p>
-                    </div>
-                    <select data-disabled-theme-setting>
-                      <option value="light">라이트</option>
-                      <option value="dark">다크</option>
                     </select>
                   </div>
                   <div class="setting-row">
@@ -280,7 +233,7 @@
                       <strong>글자 크기</strong>
                       <p>전체 화면의 기본 글자 크기를 조정합니다.</p>
                     </div>
-                    <input class="range" type="range" min="0.9" max="1.18" step="0.02" v-model.number="settings.fontScale" />
+                    <input class="range setting-control" type="range" min="0.9" max="1.18" step="0.02" v-model.number="settings.fontScale" />
                   </div>
                   <div class="setting-row">
                     <div>
@@ -319,7 +272,6 @@ const i18n = {
     profile: "프로필 조회",
     mbti: "MBTI 분석",
     taste: "취향 분석",
-    reports: "리포트 보관함",
     settings: "설정"
   },
   en: {
@@ -330,7 +282,6 @@ const i18n = {
     profile: "Profile",
     mbti: "MBTI Analysis",
     taste: "Taste Analysis",
-    reports: "Report Archive",
     settings: "Settings"
   }
 };
@@ -356,10 +307,13 @@ export default {
         mbti: "INFP",
         gender: "여성",
         age: 24,
-        status: "요즘은 차분한 루틴을 다시 세우는 중",
         keywords: "공감형, 느린 집중, 감성 기록, 안정 선호",
-        interests: "음악, 산책, 기록, 작은 식물",
-        hobbies: "플레이리스트 만들기, 짧은 에세이 읽기, 방 정리"
+        interests: "음악",
+        hobbies: "플레이리스트 만들기"
+      },
+      profileOptions: {
+        interests: ["음악", "산책", "기록", "작은 식물", "심리", "카페 탐방", "차 추천"],
+        hobbies: ["플레이리스트 만들기", "짧은 에세이 읽기", "방 정리", "필사", "가벼운 요가", "사진 찍기", "드라마 보기"]
       },
       mbtiData: {
         type: "INFP",
@@ -372,10 +326,9 @@ export default {
           { label: "P", pair: "P / J", score: 64 }
         ],
         report: [
-          "혼자 정리한 뒤 대화에 참여할 때 표현의 밀도가 높아집니다.",
-          "미래 가능성, 의미 연결, 상상 기반 표현이 반복적으로 나타납니다.",
-          "결정 근거에서 관계의 분위기와 상대 감정을 자주 고려합니다.",
-          "계획을 고정하기보다 선택지를 열어두고 상황에 맞춰 조정합니다."
+          "1.전달 MBTI 유형 기준으로 현재 MBTI 유횽과의 변화 경향 현황을 나타낸다. ",
+          "2.MBTI 추정과 그 최근 경향의 분석의 근거를 나타낸다.",
+          "3.현재 추정되는 MBTI 유형에 대한 간단한 설명을 나타낸다. ",
         ]
       },
       taste: {
@@ -397,11 +350,6 @@ export default {
           "직접 말한 취향이 아니어도 반복 맥락이 충분한 경우 간접 취향 신호로 분류합니다."
         ]
       },
-      reports: [
-        { title: "이번 주 마음 요약", date: "2026.06.21", state: "더미" },
-        { title: "대화 기반 성향 카드", date: "2026.06.18", state: "더미" },
-        { title: "회복 루틴 제안", date: "2026.06.12", state: "더미" }
-      ],
       account: {
         email: "maeum@example.com",
         provider: "Kakao",
@@ -428,9 +376,8 @@ export default {
     currentPanelDescription() {
       const descriptions = {
         profile: "프로필 정보를 조회하고 필요할 때만 수정합니다.",
-        mbti: "최근 대화 더미 데이터를 기준으로 4축 성향과 근거 리포트를 보여줍니다.",
+        mbti: "최근 30일 MBTI 관련 질문-응답 쌍의 MBTI 선호지표 분석을 통해 30일 기준 MBTI 유형 추정과 그 경향정도, 근거리포트를 보여준다. ",
         taste: "저장된 대화 로그의 반복 맥락에서 나타난 최근 관심사와 간접 취향 키워드를 표시합니다.",
-        reports: "다른 모듈에서 연결될 영역이라 임시 목록만 표시합니다.",
         settings: "계정 기본 정보와 언어, 접근성 설정을 관리합니다."
       };
       return descriptions[this.activePanel] || "";
@@ -525,8 +472,8 @@ export default {
 };
 </script>
 
-<style>
-:root {
+<style scoped>
+.app-shell {
   --ink: #f4efff;
   --mut: #b9acd8;
   --bd: #4d3a82;
@@ -559,37 +506,26 @@ export default {
   --font-scale: 1;
 }
 
-[data-contrast="true"] {
+.app-shell[data-contrast="true"] {
   --primary: #d7b7ff;
   --accent: #8fa0ff;
   --line: #d7b7ff;
 }
 
-* { box-sizing: border-box; }
-
-html,
-body {
-  height: 100%;
-  overflow: auto;
-}
-
-body {
-  margin: 0;
-  min-height: 100vh;
-  background: var(--canvas);
-  color: var(--text);
-  font-family: Pretendard, "Noto Sans KR", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: calc(16px * var(--font-scale));
-}
-
-button, input, select, textarea { font: inherit; }
-button { cursor: pointer; }
+.app-shell button, .app-shell input, .app-shell select, .app-shell textarea { font: inherit; }
+.app-shell button { cursor: pointer; }
 
 .app-shell {
   min-height: 100vh;
-  padding: 12px;
+  padding: 8px;
   overflow: auto;
+  background: transparent;
+  color: var(--text);
+  font-family: Pretendard, "Noto Sans KR", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: calc(16px * var(--font-scale));
+  box-sizing: border-box;
 }
+.app-shell *, .app-shell *::before, .app-shell *::after { box-sizing: border-box; }
 
 .topbar {
   display: flex;
@@ -660,7 +596,7 @@ button { cursor: pointer; }
 
 .room-stage {
   position: relative;
-  width: min(1280px, 100%, calc((100vh - 138px) * 16 / 9));
+  width: min(1560px, 100%, calc((100vh - 132px) * 16 / 9));
   height: auto;
   margin: 0 auto;
   border: 1px solid var(--line);
@@ -761,20 +697,19 @@ button { cursor: pointer; }
 .hotspot.profile { left: 13.56%; top: 39.96%; width: 17.34%; height: 55.79%; border-radius: 10px; }
 .hotspot.mbti { left: 71.30%; top: 6.10%; width: 14.54%; height: 25.13%; }
 .hotspot.taste { left: 34.44%; top: 46.31%; width: 21.41%; height: 49.20%; border-radius: 10px; }
-.hotspot.reports { left: 54.66%; top: 4.35%; width: 13.76%; height: 32.09%; }
 .hotspot.settings { left: 58.35%; top: 39.70%; width: 26.50%; height: 33.79%; }
 
 .legend {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
-  padding: 10px 16px;
-  border-top: 1px solid var(--line);
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
   background: rgba(23, 16, 68, 0.98);
 }
 
 .legend button {
-  min-height: 36px;
+  min-height: 32px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: linear-gradient(180deg, #2a1a62, #202969);
@@ -794,21 +729,24 @@ button { cursor: pointer; }
   inset: 0;
   z-index: 20;
   display: grid;
-  place-items: start center;
-  padding: 10px;
-  background: rgba(44, 44, 42, 0.48);
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 50% 20%, rgba(156, 91, 255, 0.18), transparent 42%),
+    rgba(8, 10, 34, 0.68);
+  backdrop-filter: blur(4px);
 }
 
 .modal {
   width: min(1040px, 100%);
-  max-height: none;
-  overflow: visible;
+  max-height: calc(100% - 16px);
+  overflow: auto;
   transform: scale(var(--modal-fit-scale, 0.88));
-  transform-origin: top center;
+  transform-origin: center;
   border-radius: 8px;
-  background: rgba(23, 16, 68, 0.98);
-  box-shadow: var(--shadow);
-  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(31, 22, 86, 0.98), rgba(18, 16, 55, 0.98));
+  box-shadow: 0 24px 70px rgba(4, 7, 28, 0.54), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(178, 149, 255, 0.34);
 }
 
 .modal.profile-modal,
@@ -828,7 +766,7 @@ button { cursor: pointer; }
   min-height: 56px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--line);
-  background: #151142;
+  background: linear-gradient(180deg, rgba(28, 22, 78, 0.98), rgba(21, 17, 66, 0.98));
 }
 
 .modal-title h2 {
@@ -1103,6 +1041,11 @@ button { cursor: pointer; }
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.profile-extra-grid {
+  margin-top: 10px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .field {
   display: grid;
   gap: 4px;
@@ -1124,6 +1067,22 @@ button { cursor: pointer; }
   padding: 6px 9px;
   background: #171044;
   color: var(--text);
+}
+
+.pretty-select {
+  appearance: none;
+  padding-right: 34px;
+  background:
+    linear-gradient(45deg, transparent 50%, #d7b7ff 50%) calc(100% - 17px) 50% / 7px 7px no-repeat,
+    linear-gradient(135deg, #21165a, #171044);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.pretty-select:enabled:hover,
+.pretty-select:enabled:focus {
+  border-color: rgba(215, 183, 255, 0.82);
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(156, 91, 255, 0.2);
 }
 
 .field input[readonly],
@@ -1515,22 +1474,29 @@ button { cursor: pointer; }
 
 .trend.down { color: var(--danger); }
 
-.settings-grid {
+.mypage-settings-list {
   display: grid;
-  gap: 8px;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.settings-card {
+  background: linear-gradient(180deg, rgba(33, 22, 90, 0.96), rgba(23, 16, 68, 0.96));
+  border-color: rgba(178, 149, 255, 0.26);
 }
 
 .account-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .account-item {
-  padding: 8px 10px;
-  border: 1px solid var(--line);
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid rgba(178, 149, 255, 0.24);
   border-radius: 8px;
-  background: #21165a;
+  background: rgba(24, 20, 72, 0.82);
 }
 
 .account-item span {
@@ -1541,27 +1507,44 @@ button { cursor: pointer; }
   font-weight: 800;
 }
 
-.account-item strong { font-size: 13px; }
+.account-item strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
 
 .setting-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--line);
+  gap: 14px;
+  padding: 11px 12px;
+  border: 1px solid rgba(178, 149, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(20, 18, 67, 0.72);
 }
 
-.setting-row:has(select[data-disabled-theme-setting]) {
-  display: none;
-}
+.setting-row:last-child { border-bottom: 1px solid rgba(178, 149, 255, 0.18); }
 
-.setting-row:last-child { border-bottom: 0; }
+.setting-row strong {
+  color: #f4efff;
+  font-size: 13px;
+}
 
 .setting-row p {
   margin: 4px 0 0;
   color: var(--muted);
   font-size: 12px;
+  line-height: 1.45;
+}
+
+.setting-control {
+  width: 100%;
+  min-height: 34px;
+}
+
+.setting-row .switch {
+  justify-self: end;
 }
 
 .switch {
@@ -1642,7 +1625,7 @@ button { cursor: pointer; }
   .taste-layout,
   .taste-main { grid-template-columns: 1fr; }
   .taste-keyword-layout .taste-wide { grid-column: 1 / -1; }
-  .modal-backdrop { padding: 10px; }
+  .modal-backdrop { padding: 16px; }
   .panel-body,
   .modal-header { padding: 16px; }
 }
@@ -1668,8 +1651,16 @@ button { cursor: pointer; }
     grid-column: 1 / -1;
   }
   .setting-row {
+    grid-template-columns: 1fr;
     align-items: flex-start;
-    flex-direction: column;
+  }
+
+  .setting-control {
+    max-width: none;
+  }
+
+  .setting-row .switch {
+    justify-self: start;
   }
 }
 </style>
