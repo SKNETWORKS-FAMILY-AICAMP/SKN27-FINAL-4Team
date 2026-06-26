@@ -213,12 +213,11 @@ watch(selectedMonth, () => {
   selectedReportId.value = filteredReports.value[0]?.id
 })
 
-const negativeEmotionIcons = new Set(['😣', '😮‍💨', '😔'])
-const positiveEmotionIcons = new Set(['🙂', '😌', '😄', '😊', '🥲'])
-
 const emotionToneClass = (day) => {
-  if (negativeEmotionIcons.has(day.icon)) return 'emotion-day--low'
-  if (positiveEmotionIcons.has(day.icon)) return 'emotion-day--good'
+  if (['😣', '😔'].includes(day.icon)) return 'emotion-day--very-low'
+  if (['😮‍💨', '😳'].includes(day.icon)) return 'emotion-day--low'
+  if (['😄', '😊'].includes(day.icon)) return 'emotion-day--very-good'
+  if (['🙂', '😌', '🥲'].includes(day.icon)) return 'emotion-day--good'
   return 'emotion-day--neutral'
 }
 </script>
@@ -344,10 +343,32 @@ const emotionToneClass = (day) => {
 }
 
 .month-filter {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 7px;
+  max-height: 128px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   margin-bottom: 10px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 8px;
+  background: rgba(8, 3, 25, 0.22);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(94, 234, 212, 0.48) rgba(255, 255, 255, 0.06);
+}
+
+.month-filter::-webkit-scrollbar {
+  width: 7px;
+}
+
+.month-filter::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.month-filter::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(94, 234, 212, 0.48);
 }
 
 .month-chip {
@@ -404,28 +425,40 @@ const emotionToneClass = (day) => {
   gap: 4px;
   min-width: 0;
   padding: 7px 3px;
-  border: 1px solid rgba(255, 255, 255, 0.13);
+  border: 1px solid rgba(0, 0, 0, 0.72);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.08);
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.emotion-day--very-low {
+  border-color: rgba(0, 0, 0, 0.78);
+  background: linear-gradient(180deg, rgba(255, 73, 105, 0.78), rgba(122, 20, 45, 0.74));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 8px 16px rgba(255, 58, 90, 0.2);
 }
 
 .emotion-day--low {
-  border: 2px solid rgba(255, 64, 98, 0.92);
-  background: rgba(255, 64, 98, 0.09);
-  box-shadow: 0 0 12px rgba(255, 64, 98, 0.48), inset 0 0 10px rgba(255, 64, 98, 0.12);
+  border-color: rgba(0, 0, 0, 0.78);
+  background: linear-gradient(180deg, rgba(255, 114, 134, 0.48), rgba(112, 44, 62, 0.5));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .emotion-day--neutral {
-  border: 2px solid rgba(169, 176, 190, 0.72);
-  background: rgba(169, 176, 190, 0.07);
-  box-shadow: 0 0 8px rgba(169, 176, 190, 0.18);
+  border-color: rgba(0, 0, 0, 0.78);
+  background: linear-gradient(180deg, rgba(170, 177, 190, 0.34), rgba(77, 82, 96, 0.42));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .emotion-day--good {
-  border: 2px solid rgba(75, 255, 162, 0.82);
-  background: rgba(75, 255, 162, 0.08);
-  box-shadow: 0 0 12px rgba(75, 255, 162, 0.36), inset 0 0 10px rgba(75, 255, 162, 0.1);
+  border-color: rgba(0, 0, 0, 0.78);
+  background: linear-gradient(180deg, rgba(76, 221, 155, 0.46), rgba(26, 108, 83, 0.48));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.emotion-day--very-good {
+  border-color: rgba(0, 0, 0, 0.78);
+  background: linear-gradient(180deg, rgba(76, 255, 168, 0.76), rgba(12, 132, 91, 0.72));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 8px 16px rgba(52, 211, 153, 0.18);
 }
 
 .mood {
