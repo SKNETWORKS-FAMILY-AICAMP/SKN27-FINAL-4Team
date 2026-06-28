@@ -118,7 +118,7 @@
 
 <div class="doc-title">화면설계서 (통합) · 웹 · 빈틈사이 4team — 김한솔 · 한재웅 · 박송원</div>
 
-<div class="sec">담당: 김한솔 — 챗봇 대화 (SCR-003 대화방 · SCR-003-S 시크릿챗 · SCR-004 이너 카운슬)</div>
+<div class="sec">담당: 김한솔 — 챗봇 대화 (SCR-003 대화방 · SCR-003-S 시크릿챗)</div>
 
 <!-- 1) SCR-003 대화방 -->
 <div class="sheet">
@@ -138,7 +138,7 @@
             <div class="recbtns row"><span class="m" style="left:-26px;top:14px">3</span><span class="rbtn">🍵 힐링 차 추천</span><span class="rbtn">🎵 BGM 추천</span></div>
             <div class="ctrls row"><span class="m" style="left:-26px;top:18px">4</span>
               <div class="fr">♥ 친밀도 <span class="bar"><i></i></span></div>
-              <div class="btns"><span class="btn tg">🔒 시크릿챗</span><span class="btn">👥 이너 카운슬</span></div>
+              <div class="btns"><span class="btn tg">🔒 시크릿챗</span><span class="btn">대화 저장</span></div>
             </div>
           </div>
           <div class="right row"><span class="m" style="right:-12px;top:8px">5</span>
@@ -158,7 +158,7 @@
         <li><span class="n">①</span> <b>글로벌 내비게이션</b> — 로고 + 홈·대화·마음 리포트·마이페이지·설정 탭</li>
         <li><span class="n">②</span> <b>대표 캐릭터 영역</b> — 큰 일러스트 + 표정 4분기, 진입 시 메모리 있으면 안부·없으면 운세/날씨 opener</li>
         <li><span class="n">③</span> <b>차·BGM 추천 버튼</b> — 사용자가 직접 눌러 정서 매핑 힐링 차 / 유튜브 BGM 추천을 요청 (4대 공감 출력 시 자동으로도 카드 표시). 차 추천 시 카페인·알레르기 필터를 거침</li>
-        <li><span class="n">④</span> <b>친밀도·세션 컨트롤</b> — 친밀도 게이지(톤 변화), 시크릿챗 토글, 이너 카운슬 시작</li>
+        <li><span class="n">④</span> <b>친밀도·세션 컨트롤</b> — 친밀도 게이지(톤 변화), 시크릿챗 토글, 대화 저장 상태 표시</li>
         <li><span class="n">⑤</span> <b>대화 스레드 (공감 4모드)</b> — 4턴 이후 감정분석 결과로 응원·속상·화남·계획 중 하나로 <b>자동 분기</b>, 모드마다 표정·말투·행동이 달라짐. 1~3턴은 '같이 찾아주는 질문', 위기 시 외부연결 없이 위로만</li>
         <li><span class="n">⑥</span> <b>추천 질문</b> — 입력 전에 탭할 수 있는 상황별 추천 질문 3개. RAG가 대화 맥락에 따라 갱신 (상황 칩 대신)</li>
         <li><span class="n">⑦</span> <b>입력바</b> — 최대 300자, STT 마이크, 계획 모드(웹검색), 전송</li>
@@ -180,7 +180,7 @@
 <div class="sheet">
   <table class="meta">
     <tr><td class="l">Page Title</td><td>시크릿챗 모드 (Secret Chat)</td><td class="l">Screen ID</td><td>SCR-003-S</td><td class="l">Author</td><td>김한솔</td><td class="l">Date</td><td>2026.06.21</td></tr>
-    <tr><td class="l">Screen Path</td><td colspan="7">2 홈 &gt; 2.1 캐릭터 대화 (시크릿 토글 ON) &nbsp;|&nbsp; REQ-CHAT-012 · 비저장 세션 (대화방과 동일 레이아웃, 친밀도·시크릿챗·이너카운슬 제외)</td></tr>
+    <tr><td class="l">Screen Path</td><td colspan="7">2 홈 &gt; 2.1 캐릭터 대화 (시크릿 토글 ON) &nbsp;|&nbsp; REQ-CHAT-012 · 비저장 세션 (대화방과 동일 레이아웃, 친밀도·저장 컨트롤 제외)</td></tr>
   </table>
   <div class="grid">
     <div class="canvas">
@@ -193,7 +193,7 @@
             <div class="char">◠‿◠</div><div class="cname">해온이</div><div class="faces">표정 4분기 : 응원·속상·화남·계획</div>
             <div class="opener">여긴 아무 기록도 안 남아. 편하게 다 털어놔도 돼.<small>opener · 비저장 안내</small></div>
             <div class="recbtns row"><span class="m" style="left:-26px;top:14px">3</span><span class="rbtn">🍵 힐링 차 추천</span><span class="rbtn">🎵 BGM 추천</span></div>
-            <div class="scnote">🔒 비저장 모드 — 친밀도·메모리 적립 정지<br>(시크릿챗·이너 카운슬 비활성)</div>
+            <div class="scnote">🔒 비저장 모드 — 친밀도·메모리 적립 정지<br>(저장·개인화 컨트롤 비활성)</div>
           </div>
           <div class="right row"><span class="m" style="right:-12px;top:8px">4</span>
             <div class="bub b-user">아무한테도 말 못한 얘긴데…</div>
@@ -208,7 +208,7 @@
     <div class="panel">
       <div class="ph">Description</div>
       <ol class="desc">
-        <li><span class="n">①</span> <b>시크릿챗 ON 표시</b> — 토글을 켜면 비저장 세션으로 분기 (대화방과 동일 레이아웃, 단 <b>친밀도·시크릿챗·이너카운슬 컨트롤 제거</b>)</li>
+        <li><span class="n">①</span> <b>시크릿챗 ON 표시</b> — 토글을 켜면 비저장 세션으로 분기 (대화방과 동일 레이아웃, 단 <b>친밀도·저장 컨트롤 제거</b>)</li>
         <li><span class="n">②</span> <b>비저장 경고 배너</b> — 저장 안 됨·종료 시 카드/리포트 미생성 명시</li>
         <li><span class="n">③</span> <b>차·BGM 추천</b> — 대화방과 동일 제공 (비저장이라 기록만 안 남음)</li>
         <li><span class="n">④</span> <b>대화 스레드</b> — 일반 대화와 동일. 대화·분석 큐 DB 미기록. 단 <b>위기 탐지는 익명으로 100% 작동</b></li>
@@ -220,44 +220,6 @@
     </div>
   </div>
 </div>
-
-<!-- 3) SCR-004 이너 카운슬 -->
-<div class="sheet">
-  <table class="meta">
-    <tr><td class="l">Page Title</td><td>이너 카운슬 (Inner Counsel)</td><td class="l">Screen ID</td><td>SCR-004</td><td class="l">Author</td><td>김한솔</td><td class="l">Date</td><td>2026.06.21</td></tr>
-    <tr><td class="l">Screen Path</td><td colspan="7">2 홈 &gt; 2.1 대화 &gt; 2.1.1 이너 카운슬 (SCR-004) &nbsp;|&nbsp; REQ-CHAT-008 · LangGraph 다중에이전트</td></tr>
-  </table>
-  <div class="grid">
-    <div class="canvas">
-      <div class="browser">
-        <div class="bbar"><span class="dot" style="background:#ec6a5e"></span><span class="dot" style="background:#f3bf4f"></span><span class="dot" style="background:#61c454"></span><span class="url">binteumsai.app / chat / council</span></div>
-        <div class="nav"><span class="logo">빈틈사이</span><a>홈</a><a class="on">대화</a><a>마음 리포트</a><a>마이페이지</a><a>설정</a><span class="me">○ 사용자</span></div>
-        <div class="ic-hd row"><span class="m" style="left:-12px;top:9px">1</span>💭 이너 카운슬 — 캐릭터들이 당신에 대해 이야기하는 중</div>
-        <div class="stage row"><span class="m" style="left:-12px;top:14px">2</span>
-          <div class="agent"><div class="face" style="background:var(--tealbg);color:var(--teal)">◠‿◠</div><div class="rn">해온</div><div class="role">위로·내러티브</div><div class="talk" style="background:var(--tealbg);color:var(--teal)">오늘 직장에서 많이 주눅 든 것 같아.</div></div>
-          <div class="agent"><div class="face" style="background:var(--corbg);color:var(--cor)">◣_◢</div><div class="rn">그릉</div><div class="role">직면·CBT</div><div class="talk" style="background:var(--corbg);color:var(--cor)">근데 3일 연속 회피 패턴인 건 짚어야 해.</div></div>
-          <div class="agent"><div class="face" style="background:var(--purbg);color:var(--pur)">◕‿◕</div><div class="rn">달콩</div><div class="role">코치·ACT</div><div class="talk" style="background:var(--purbg);color:var(--pur)">그럼 오늘 밤 10분 따뜻한 샤워 어때?</div></div>
-        </div>
-        <div class="thread"><div class="sum row"><span class="m" style="left:-12px;top:12px">4</span>📋 합의 요약 — "오늘은 자책 대신 몸을 먼저 쉬게 해주기로 했어요. 작은 한 걸음이면 충분해."</div></div>
-        <div class="ctrlbar row"><span class="m" style="left:-12px;top:16px">3</span><div class="in">나도 한마디 개입하기… ("너무 잔소리하지 마")</div><span class="b1">개입</span><span class="b2">지켜보기</span></div>
-        <div class="note row"><span class="m" style="left:-12px;top:4px">5</span>백엔드 가드: 최대 3턴 · 합산 1,200토큰 상한, 위기 감지 시 즉시 종료 (수동 발동만)</div>
-      </div>
-    </div>
-    <div class="panel">
-      <div class="ph">Description</div>
-      <ol class="desc">
-        <li><span class="n">①</span> <b>이너 카운슬 헤더</b> — '이너 카운슬 시작' 버튼을 <b>수동 클릭</b>할 때만 오버레이 시작 (자동 발동 없음)</li>
-        <li><span class="n">②</span> <b>3캐릭터 회의 영역</b> — 해온(위로)·그릉(직면)·달콩(코치)의 관점 차이를 살린 토론</li>
-        <li><span class="n">③</span> <b>개입·지켜보기</b> — [개입] 입력은 LangGraph Context에 주입해 다음 발화에 반영, [지켜보기]는 관전</li>
-        <li><span class="n">④</span> <b>합의 위로 요약 카드</b> — 조율 에이전트가 논의를 하나의 위로 요약으로 정리 (리포트·메모리 반영)</li>
-        <li><span class="n">⑤</span> <b>백엔드 가드</b> — 최대 3턴·1,200토큰 도달 시 강제 종료, 위기 감지 시 즉시 중단</li>
-      </ol>
-      <div class="ph">Check Point</div>
-      <ul class="cp"><li>수동 발동만 (자동·백그라운드 없음)</li><li>토큰 상한 도달 시 요약 출력 후 종료</li><li>요약은 일일 마음 리포트·메모리에 축적</li></ul>
-    </div>
-  </div>
-</div>
-
 
 </body>
 </html>
