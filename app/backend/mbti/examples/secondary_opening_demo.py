@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime
 import importlib.util
 import os
 from pathlib import Path
@@ -12,196 +10,161 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-
-def _load_backend_env() -> None:
-    env_path = BACKEND_DIR / '.env'
-    try:
-        from dotenv import load_dotenv
-    except ImportError:
-        if not env_path.exists():
-            return
-        for line in env_path.read_text(encoding='utf-8').splitlines():
-            stripped = line.strip()
-            if not stripped or stripped.startswith('#') or '=' not in stripped:
-                continue
-            key, value = stripped.split('=', 1)
-            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
-        return
-
-    load_dotenv(env_path)
-
-
-_load_backend_env()
-
-from mbti.services.monthly_questions import (  # noqa: E402
-    build_monthly_question_batch,
-    resolve_month_period,
+from mbti.examples.demo_data import (  # noqa: E402
+    build_demo_monthly_question_batch,
+    load_backend_env,
 )
+from mbti.examples.monthly_demo_payload import (  # noqa: E402
+    DEMO_PAYLOAD_PATH,
+    build_changed_axis_display_text,
+    write_demo_payload,
+)
+from mbti.services.baseline_sources import UserBaselineSnapshot  # noqa: E402
 from mbti.services.llm_config import build_scoring_llm_config  # noqa: E402
-from mbti.services.opening_rules import (  # noqa: E402
-    evaluate_primary_opening_from_batch,
-    evaluate_secondary_opening,
-)
-from mbti.services.response_scoring import score_primary_open_axes  # noqa: E402
+from mbti.services.monthly_pipeline import run_monthly_mbti_pipeline  # noqa: E402
+from mbti.services.reports import ReportSection  # noqa: E402
 
 
-@dataclass(frozen=True)
-class SampleQuestionResponse:
-    id: int
-    question_text: str
-    answer_text: str
-    target_axis: str
-    answered_at: datetime
+class DemoScoringClient:
+    def score_axis_responses(self, *, axis, responses, config):
+        score_by_axis = {
+            'IE': [-1.0, -0.5, -0.5, 0.5, 0.0],
+            'SN': [1.0, 0.5, 0.5, -0.5, 1.0],
+            'TF': [1.0, 0.5, 1.0, 0.0, 0.5],
+        }
+        return {
+            'scores': [
+                {
+                    'response_id': response.id,
+                    'score': score,
+                    'coding_status': 'coded',
+                    'reason': f'demo fallback score for {axis}',
+                }
+                for response, score in zip(responses, score_by_axis.get(axis, []), strict=False)
+            ]
+        }
 
 
-def _sample_responses() -> list[SampleQuestionResponse]:
-    return [
-        SampleQuestionResponse(
-            1,
-            'When do you recover energy after a tiring day?',
-            'I usually want to be alone, read quietly, and avoid extra plans.',
-            'IE',
-            datetime(2026, 6, 1, 9, 0),
-        ),
-        SampleQuestionResponse(
-            2,
-            'How do you prefer to spend an open weekend?',
-            'I like meeting a few close friends, but I get tired if the group is large.',
-            'IE',
-            datetime(2026, 6, 2, 9, 0),
-        ),
-        SampleQuestionResponse(
-            3,
-            'What kind of conversation feels comfortable?',
-            'A long one-on-one conversation feels better than jumping between many people.',
-            'IE',
-            datetime(2026, 6, 3, 9, 0),
-        ),
-        SampleQuestionResponse(
-            4,
-            'How do you act in a new group?',
-            'I watch the mood first and join after I understand the people.',
-            'IE',
-            datetime(2026, 6, 4, 9, 0),
-        ),
-        SampleQuestionResponse(
-            5,
-            'What makes you feel most drained?',
-            'Back-to-back social events drain me, even when I enjoy the people.',
-            'IE',
-            datetime(2026, 6, 5, 9, 0),
-        ),
-        SampleQuestionResponse(
-            6,
-            'When making an important choice, what do you check first?',
-            'I compare the objective pros and cons before considering how people may feel.',
-            'TF',
-            datetime(2026, 6, 6, 9, 0),
-        ),
-        SampleQuestionResponse(
-            7,
-            'How do you give feedback?',
-            'I try to be clear about the problem, even if I soften the wording later.',
-            'TF',
-            datetime(2026, 6, 7, 9, 0),
-        ),
-        SampleQuestionResponse(
-            8,
-            'What matters in a team conflict?',
-            'Finding a fair standard matters most, then we can repair the mood.',
-            'TF',
-            datetime(2026, 6, 8, 9, 0),
-        ),
-        SampleQuestionResponse(
-            9,
-            'How do you react to criticism?',
-            'I first ask whether the criticism is accurate and useful.',
-            'TF',
-            datetime(2026, 6, 9, 9, 0),
-        ),
-        SampleQuestionResponse(
-            10,
-            'What persuades you?',
-            'Specific reasons and evidence persuade me more than emotional appeal.',
-            'TF',
-            datetime(2026, 6, 10, 9, 0),
-        ),
-        SampleQuestionResponse(
-            11,
-            'How do you understand new information?',
-            'I start from concrete examples and details.',
-            'SN',
-            datetime(2026, 6, 11, 9, 0),
-        ),
-        SampleQuestionResponse(
-            12,
-            'What kind of explanation do you prefer?',
-            'A practical example helps me understand quickly.',
-            'SN',
-            datetime(2026, 6, 12, 9, 0),
-        ),
-        SampleQuestionResponse(
-            13,
-            'How do you approach an unfamiliar task?',
-            'I look for previous cases first.',
-            'SN',
-            datetime(2026, 6, 13, 9, 0),
-        ),
-        SampleQuestionResponse(
-            14,
-            'What do you notice first?',
-            'I notice visible facts before interpreting hidden meanings.',
-            'SN',
-            datetime(2026, 6, 14, 9, 0),
-        ),
-    ]
-
-
-def _require_real_openai_demo() -> None:
-    if not os.getenv('OPENAI_API_KEY'):
-        raise RuntimeError(
-            'OPENAI_API_KEY is required because this demo performs a real LangChain OpenAI call.'
+class DemoReportClient:
+    def generate_sections(self, *, monthly_result, axis_results, evidence_items):
+        change_text = build_changed_axis_display_text(
+            monthly_result=monthly_result,
+            axis_results=axis_results,
         )
-    if importlib.util.find_spec('langchain_openai') is None:
-        raise RuntimeError(
-            'The langchain-openai package is required. Install app/backend/requirements.txt first.'
+        top_evidence = evidence_items[0] if evidence_items else None
+        if top_evidence:
+            evidence_text = (
+                f'{top_evidence.axis}축 응답 {top_evidence.question_response_id} '
+                f'(score={top_evidence.score}, '
+                f'delta_contribution={top_evidence.score_delta_contribution}, '
+                f'impact={top_evidence.impact_score:.2f}, '
+                f'answer="{top_evidence.answer_text}")'
+            )
+        else:
+            evidence_text = '없음'
+
+        return (
+            ReportSection(
+                title='이번 달 축 변화 요약',
+                content=(
+                    f'{monthly_result.period_key} 월간 MBTI는 '
+                    f'{monthly_result.estimated_mbti_type}입니다. '
+                    f'{change_text}'
+                ),
+            ),
+            ReportSection(
+                title='점수 변화에 영향을 준 대표 응답',
+                content=f'이번 달 점수와 경향 선택에 가장 크게 반영된 대표 근거는 {evidence_text}입니다.',
+            ),
+            ReportSection(
+                title='월간 MBTI 유형 설명',
+                content=(
+                    f'{monthly_result.estimated_mbti_type} 유형 설명은 실제 운영에서는 '
+                    '리포트 LLM이 최종 유형 자체에 대해서만 짧게 생성합니다.'
+                ),
+            ),
         )
+
+
+def _can_run_real_llm_demo() -> bool:
+    return bool(os.getenv('OPENAI_API_KEY')) and (
+        importlib.util.find_spec('langchain_openai') is not None
+    )
+
+
+def _format_ratios(axis_ratios: dict[str, float]) -> str:
+    return ' / '.join(
+        f'{letter} {ratio:.0%}'
+        for letter, ratio in axis_ratios.items()
+    )
 
 
 def main() -> None:
-    _require_real_openai_demo()
-    period_key, period_start, period_end = resolve_month_period(period_key='2026-06')
-    batch = build_monthly_question_batch(
-        user_id=1,
-        period_key=period_key,
-        period_start=period_start,
-        period_end=period_end,
-        responses=_sample_responses(),
-    )
-    primary = evaluate_primary_opening_from_batch(batch)
+    _, batch = build_demo_monthly_question_batch()
     llm_config = build_scoring_llm_config()
-    scores = score_primary_open_axes(
-        batch=batch,
-        primary_opening=primary,
-        config=llm_config,
+    real_llm_mode = _can_run_real_llm_demo()
+    baseline_snapshot = UserBaselineSnapshot(
+        user_id=batch.user_id,
+        previous_axis_letters={
+            'IE': 'I',
+            'SN': 'N',
+            'TF': 'F',
+        },
+        previous_axis_period_keys={
+            'IE': '2026-05',
+            'SN': '2026-05',
+            'TF': '2026-05',
+        },
+        previous_axis_avgs={
+            'IE': -0.35,
+            'SN': -0.30,
+            'TF': -0.45,
+        },
+        previous_axis_ratios={
+            'IE': {'I': 0.68, 'E': 0.32},
+            'SN': {'N': 0.65, 'S': 0.35},
+            'TF': {'F': 0.72, 'T': 0.28},
+        },
+        previous_period_key='2026-05',
+        previous_estimated_mbti_type='INFP',
+        onboarding_mbti_type='INFP',
     )
-    secondary = evaluate_secondary_opening(primary, scores)
 
-    print('[INPUT: B]')
+    print('[INPUT: A -> B]')
+    print(f'user_id: {batch.user_id}')
+    print(f'period_key: {batch.period_key}')
+    print(f'period_start: {batch.period_start.isoformat()}')
+    print(f'period_end: {batch.period_end.isoformat()}')
     print(f'axis_counts: {batch.axis_counts}')
 
-    print('\n[OUTPUT: C -> D/G]')
-    print(f'primary scoring_axes: {primary.scoring_axes}')
-    print(f'primary baseline_axes: {primary.baseline_axes}')
-
-    print('\n[CONFIG: D]')
-    print('LLM runtime: langchain-openai ChatOpenAI')
+    print('\n[CONFIG: D/K]')
+    print('pipeline: demo_data -> monthly_pipeline')
     print(f'LLM provider: {llm_config.provider}')
-    print(f'LLM scoring model: {llm_config.model}')
+    print(f'LLM model: {llm_config.model}')
     print(f'temperature: {llm_config.temperature}')
+    if real_llm_mode:
+        print('demo_mode: real LangChain OpenAI scoring/report')
+        scoring_client = None
+        report_client = None
+    else:
+        print('demo_mode: local deterministic fallback scoring/report')
+        scoring_client = DemoScoringClient()
+        report_client = DemoReportClient()
+
+    result = run_monthly_mbti_pipeline(
+        batch=batch,
+        baseline_snapshot=baseline_snapshot,
+        scoring_client=scoring_client,
+        scoring_config=llm_config,
+        report_client=report_client,
+    )
+
+    print('\n[OUTPUT: C -> D/G]')
+    print(f'primary scoring_axes: {result.primary_opening.scoring_axes}')
+    print(f'primary baseline_axes: {result.primary_opening.baseline_axes}')
 
     print('\n[OUTPUT: D]')
-    for score in scores:
+    for score in result.response_scores:
         print(
             f'- response_id={score.response_id}, axis={score.axis}, '
             f'score={score.score}, coding_status={score.coding_status}, '
@@ -209,24 +172,66 @@ def main() -> None:
         )
 
     print('\n[OUTPUT: E -> F/G]')
-    for axis, result in secondary.axis_results.items():
-        branch = 'F: calculate graph display score' if result.secondary_open else 'G: apply baseline letter'
+    for axis, axis_result in result.secondary_opening.axis_results.items():
+        branch = 'F: calculate graph display score' if axis_result.secondary_open else 'G: apply baseline letter'
         print(
-            f'{axis}: primary_open={result.primary_open}, '
-            f'scored_count={result.scored_count}, '
-            f'required={result.required_scored_count}, '
-            f'secondary_open={result.secondary_open}, '
+            f'{axis}: primary_open={axis_result.primary_open}, '
+            f'scored_count={axis_result.scored_count}, '
+            f'required={axis_result.required_scored_count}, '
+            f'secondary_open={axis_result.secondary_open}, '
             f'next={branch}, '
-            f'data_status={result.data_status}'
+            f'data_status={axis_result.data_status}'
+        )
+    print(f'graph_score_axes: {result.secondary_opening.graph_score_axes}')
+    print(f'baseline_axes: {result.secondary_opening.baseline_axes}')
+
+    print('\n[OUTPUT: F -> H -> I/G]')
+    for axis, graph_axis in result.graph_result.axis_results.items():
+        if graph_axis.axis_avg is None:
+            print(f'{axis}: no graph score, next=G, data_status={graph_axis.data_status}')
+            continue
+        selected = graph_axis.selected_letter or 'baseline'
+        print(
+            f'{axis}: axis_avg={graph_axis.axis_avg:.3f}, '
+            f'ratios={_format_ratios(graph_axis.axis_ratios)}, '
+            f'selected_letter={selected}, '
+            f'next={graph_axis.next_step}, '
+            f'data_status={graph_axis.data_status}'
         )
 
-    print(f'\ngraph_score_axes: {secondary.graph_score_axes}')
-    print(f'baseline_axes: {secondary.baseline_axes}')
+    print('\n[OUTPUT: M -> J -> K -> L]')
+    for axis, axis_result in result.final_axis_results.items():
+        score_delta = (
+            axis_result.axis_avg - axis_result.previous_axis_avg
+            if axis_result.data_status == 'current_month'
+            and axis_result.axis_avg is not None
+            and axis_result.previous_axis_avg is not None
+            else None
+        )
+        print(
+            f'{axis}: selected_letter={axis_result.selected_letter}, '
+            f'axis_avg={axis_result.axis_avg}, '
+            f'previous_axis_avg={axis_result.previous_axis_avg}, '
+            f'score_delta={score_delta}, '
+            f'data_status={axis_result.data_status}, '
+            f'baseline_source={axis_result.baseline_source}'
+        )
+    print(f'estimated_mbti_type: {result.monthly_result.estimated_mbti_type}')
+    print(f'changed_axes: {result.monthly_result.changed_axes}')
+    print(f'status: {result.monthly_result.status}')
+    print(f'evidence_count: {len(result.evidence_items)}')
+    print(f'report_section_count: {len(result.report.report_sections)}')
+    print(f'payload estimated_mbti_type: {result.mypage_payload["estimated_mbti_type"]}')
+
+    frontend_payload = write_demo_payload(result)
+    print(f'frontend_payload_path: {DEMO_PAYLOAD_PATH}')
+    print(f'frontend_payload_source: {frontend_payload["source"]}')
+
+    print('\n[REPORT SECTIONS]')
+    for section in result.report.report_sections:
+        print(f'- {section.title}: {section.content}')
 
 
 if __name__ == '__main__':
-    try:
-        main()
-    except RuntimeError as exc:
-        print(f'[DEMO NOT RUN] {exc}')
-        raise SystemExit(2)
+    load_backend_env()
+    main()

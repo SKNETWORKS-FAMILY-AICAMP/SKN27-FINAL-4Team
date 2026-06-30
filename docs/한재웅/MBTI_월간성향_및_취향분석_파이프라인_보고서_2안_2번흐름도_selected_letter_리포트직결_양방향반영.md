@@ -5,6 +5,22 @@
 MBTI 월간 분석 프로세스는 **단순화된 파이프라인 흐름도**로 확정한다. 이 흐름도는 IE, SN, TF, JP 네 선호지표 축을 각각 독립적으로 판단하되, 같은 로직을 4번 반복해서 그리지 않고 공통 처리 흐름으로 표현한다.
 
 저장 단계는 흐름도 박스로 표시하지 않는다. 점수화 결과, 월간 대표 결과, 선호지표 축별 결과, 리포트 결과는 각 산출물이 만들어진 직후 저장 구조에 따라 저장한다.
+아니오
+예
+아니오동률
+월간 분석 시작분석 대상 월 확정
+월간 MBTI 질문 응답 조회(mbti_question_responses)IE/SN/TF/JP 축 별 응답 집계
+IE/SN/TF/JP 축의 원본 질문 응답이5개 이상인가?
+통과한 IE/SN/TF/JP 축응답의 점수화(LLM이 답변별 점수 산정)
+해당 IE/SN/TF/JP 축은기준 선호 경향 적용
+null이 아닌 응답 점수가1개 이상인 IE/SN/TF/JP 축의 점수인가?
+월간 그래프 표시 점수 계산
+그래프 표시점수가한쪽 선호 경향이 더 높은가?
+이번 달 그래프 표시 점수가 높은 방향으로선호 경향 결정
+근거 리포트 생성(변화 근거 + 이번 달 MBTI 결과 설명)
+이번 달 사용할 최종 선호경향 확정(계산값 또는 기준값 유지)
+월간 MBTI 조합(
+
 
 ```mermaid
 flowchart TD
@@ -35,6 +51,110 @@ flowchart TD
     K --> L
 ```
 
+## 점수 산정 안정성 보강 흐름도
+
+아래 흐름도는 기존 확정 MBTI 프로세스 흐름도를 대체하지 않는다. 기존 흐름도의 `D. 통과한 IE/SN/TF/JP 축 응답의 점수화` 단계를 더 안정적으로 구현하기 위한 내부 보강 흐름이다. 목적은 LLM이 같은 문장을 보고 점수와 판단 근거를 매번 다르게 산출하는 문제를 줄이고, 검증 통과 점수만 월간 그래프 표시 점수 계산에 사용하도록 하는 것이다.
+
+```mermaid
+flowchart TD
+    A["월간 분석 시작<br/>분석 대상 월 확정"]
+    B["월간 MBTI 질문 응답 조회<br/>(mbti_question_responses)<br/>IE/SN/TF/JP 축 별 응답 집계"]
+
+    C{"IE/SN/TF/JP 축의<br/>원본 질문 응답이<br/>5개 이상인가?"}
+
+    G["해당 IE/SN/TF/JP 축은<br/>기준 선호 경향 적용<br/>(전 달 또는 온보딩)"]
+
+    D["통과한 축의 응답을<br/>LLM 근거 코딩 대상으로 선정"]
+
+    D1["LLM 1차 근거 코딩<br/>축 관련성: clear / weak / none<br/>근거 방향: + / - / mixed / none<br/>근거 강도: strong / weak / mixed / none<br/>근거 원문 요약"]
+
+    D2{"축 관련성이<br/>clear인가?"}
+    D3{"근거 방향이<br/>한쪽으로 명확한가?"}
+    D4{"근거 강도가<br/>strong 또는 weak인가?"}
+
+    D5["코드 기반 점수 변환<br/>+ strong = +1.0<br/>+ weak = +0.5<br/>mixed = 0<br/>- weak = -0.5<br/>- strong = -1.0"]
+
+    D6["점수-근거 일관성 검증<br/>축 부호 규칙<br/>방향-강도-점수 매핑<br/>허용 점수값<br/>JSON 필드 검증"]
+
+    D7{"검증 통과?"}
+
+    D8["불안정 응답 표시<br/>insufficient_context 또는 failed<br/>월간 점수 계산에서 제외"]
+
+    D9{"추가 검증 대상인가?<br/>축 변화에 큰 영향<br/>confidence 낮음<br/>강한 점수<br/>축 내 응답 충돌<br/>JP처럼 불안정 축"}
+
+    D10["검증 LLM 또는 재판정<br/>판정 결과:<br/>valid / invalid / uncertain"]
+
+    D11{"검증 결과가<br/>valid인가?"}
+
+    E{"null이 아닌<br/>검증 통과 점수가<br/>1개 이상인가?"}
+
+    F["월간 그래프 표시 점수 계산<br/>검증 통과 점수만 사용"]
+
+    H{"그래프 표시점수가<br/>한쪽 선호 경향이 더 높은가?"}
+
+    I["이번 달 그래프 표시 점수가<br/>높은 방향으로 선호 경향 결정"]
+
+    M["이번 달 사용할<br/>최종 선호경향 확정<br/>(계산값 또는 기준값 유지)"]
+
+    J["월간 MBTI 조합<br/>(IE/SN/TF/JP 축 최종반영값 구성)"]
+
+    K["근거 리포트 생성<br/>실제 바뀐 축 요약<br/>표시점수 변화<br/>영향 큰 응답 원문<br/>이번 달 MBTI 설명"]
+
+    L["마이페이지 제공<br/>월간 MBTI<br/>선호경향별 표시점수<br/>근거 리포트"]
+
+    A --> B
+    B --> C
+
+    C -->|"예"| D
+    C -->|"아니오"| G
+
+    D --> D1
+    D1 --> D2
+
+    D2 -->|"아니오<br/>weak / none"| D8
+    D2 -->|"예"| D3
+
+    D3 -->|"아니오<br/>mixed / none"| D8
+    D3 -->|"예"| D4
+
+    D4 -->|"아니오"| D8
+    D4 -->|"예"| D5
+
+    D5 --> D6
+    D6 --> D7
+
+    D7 -->|"실패"| D8
+    D7 -->|"통과"| D9
+
+    D9 -->|"아니오"| E
+    D9 -->|"예"| D10
+
+    D10 --> D11
+    D11 -->|"invalid / uncertain"| D8
+    D11 -->|"valid"| E
+
+    D8 --> E
+
+    E -->|"예"| F
+    E -->|"아니오"| G
+
+    F --> H
+    H -->|"예"| I
+    H -->|"아니오<br/>동률"| G
+
+    I --> M
+    G --> M
+
+    M --> J
+    J --> K
+    J --> L
+    K --> L
+```
+
+이 보강 흐름의 핵심은 LLM에게 최종 점수를 바로 맡기지 않는 것이다. LLM은 먼저 해당 축과의 관련성, 근거 방향, 근거 강도를 구조화하고, 서버 코드는 그 결과를 고정 매핑 규칙에 따라 점수로 변환한다. 이후 방향-강도-점수 조합이 맞는지 검증하고, 축 변화에 큰 영향을 주는 응답이나 JP처럼 흔들림이 큰 축은 추가 검증을 거친다.
+
+
+
 ※ 근거 리포트 생성은 두 입력을 함께 사용한다.
 
 - 이번 달 표시 점수가 높은 방향으로 선호 경향이 결정된 축: 변화 근거를 실제 응답에서 선별한다.
@@ -42,6 +162,8 @@ flowchart TD
 - MVP+에서는 Graph RAG를 사용해 확정된 월간 MBTI 성격 유형의 간단 설명을 리포트에 보강할 수 있다. 이 설명은 `score`, `axis_avg`, `selected_letter`를 바꾸지 않으며, 리포트 문장 생성에만 사용한다.
 
 ---
+
+
 
 ## 0. 목적
 
@@ -60,6 +182,8 @@ flowchart TD
 이 기능은 공식 MBTI 검사가 아니다. 저장된 MBTI 관련 답변을 바탕으로 "이번 달에는 어떤 성향이 더 많이 관찰되었는지"를 보여주는 보조 분석 기능이다.
 
 ---
+
+
 
 ## 0.1 용어 기준
 
@@ -190,39 +314,45 @@ MBTI Q&A 테이블에는 이미 분석 대상 질문/답변만 저장되므로, 
 
 아래 표는 확정 흐름도의 각 노드를 개발자가 구현 단위로 옮길 때의 기준이다. 구현에서는 한 번의 월간 분석 실행을 `user_id + period_key` 단위로 처리하고, IE/SN/TF/JP는 같은 로직을 축별로 반복한다.
 
-| 단계 | 입력 | 출력 | 구현 맥락 |
-| --- | --- | --- | --- |
-| 1. 월간 분석 시작, 분석 대상 월 확정 | `user_id`, 실행일 또는 요청 월 | `period_key`, 조회 기간 시작/종료 | 배치 실행 시 KST 기준 월을 확정한다. 재실행 가능성을 고려해 같은 `user_id + period_key`는 upsert 대상으로 본다. |
-| 2. 월간 MBTI Q&A 조회 및 축별 집계 | `period_key`, `mbti_question_responses` | 축별 Q&A 목록, `qna_count` | `target_axis IN (IE,SN,TF,JP)`만 축별 그룹으로 묶는다. 이 단계에서는 Q&A를 새로 만들거나 일반 대화를 다시 판별하지 않는다. |
-| 3. 원본 질문 응답 5개 이상 여부 판단 | 축별 Q&A 목록 | `primary_open`, `primary_closed` 축 목록 | 축마다 독립 판단한다. 5개 미만인 축은 점수화하지 않고 기준 선호 경향 적용 단계로 보낸다. |
-| 4. 통과 축 응답 점수화 | 1차 개시 축의 Q&A, 기존 score row | `mbti_response_scores` | 이미 점수화된 Q&A는 재사용하고, 없는 Q&A만 LLM 점수화를 요청한다. Q&A 1개당 score row 1개를 만든다. |
-| 5. null이 아닌 점수 1개 이상 여부 판단 | 축별 score row | `secondary_open`, `secondary_closed` 축 목록 | `coding_status=coded`이고 `score IS NOT NULL`인 row만 평균 계산에 사용한다. 하나도 없으면 기준 선호 경향 적용 단계로 보낸다. |
-| 6. 월간 그래프 표시 점수 계산 | 2차 개시 축의 coded score row | `axis_avg`, `axis_ratios`, 표시 점수 | 평균 점수를 계산한 뒤 화면 표시용 양쪽 비율로 변환한다. 표시 점수 계산식은 한 곳의 공통 함수로 둔다. |
-| 7. 표시 점수 우세 여부 판단 | `axis_ratios` 또는 표시 점수 | 우세 방향 또는 `tie_carried` | 평균 원점수가 아니라 화면에 보여줄 표시 점수 기준으로 판단한다. 양쪽 표시 점수가 같으면 동률로 본다. |
-| 8. 이번 달 선호 경향 결정 | 우세 방향, 축별 부호 매핑 | 이번 달 계산 기반 `selected_letter` | IE/SN/TF/JP별 `+/-` 방향 매핑을 사용한다. 예: IE에서 `+`는 E, `-`는 I다. |
-| 9. 최종 선호 경향 확정 | 이번 달 계산값 또는 기준 선호 경향 후보 | 축별 최종 `selected_letter`, `data_status` | 계산값이 있으면 `current_month`, 없으면 기준값 출처에 따라 `carried_from_previous`, `carried_from_onboarding`, `insufficient_axis_data`를 기록한다. |
-| 10. 월간 MBTI 조합 | IE/SN/TF/JP 최종 `selected_letter` | `estimated_mbti_type` 또는 산출 불가 상태 | 네 축이 모두 확정되면 4글자 MBTI를 만든다. 하나라도 산출 불가면 대표 결과는 `insufficient_data`로 둔다. |
-| 11. 근거 리포트 생성 | 월간 대표 결과, 축별 결과, score row | `report_sections_json`, `evidence_items_json` | 변경 축과 이번 달 반영 축을 중심으로 실제 계산에 사용된 답변 근거를 선별한다. 기준 유지 축은 유지 사유만 설명한다. |
-| 12. 근거 리포트 생성 입력 병합 | `selected_letter` 결정 결과, 월간 MBTI 조합 결과 | 리포트 생성용 컨텍스트 | 흐름도상 리포트 노드는 계산값 결정과 월간 MBTI 조합에서 모두 입력을 받는다. 구현에서는 두 결과가 준비된 뒤 리포트를 한 번만 생성한다. |
-| 13. 기준 선호 경향 적용 | 기준 미충족 축, 과거 월간 결과, 온보딩 MBTI | 기준 `selected_letter` 또는 산출 불가 | 현재 월 이전의 최신 축별 결과를 먼저 찾고, 없으면 온보딩 MBTI에서 해당 축의 글자를 가져온다. 둘 다 없으면 해당 축은 산출 불가다. |
+
+| 단계                         | 입력                                      | 출력                                            | 구현 맥락                                                                                                                        |
+| -------------------------- | --------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 1. 월간 분석 시작, 분석 대상 월 확정    | `user_id`, 실행일 또는 요청 월                  | `period_key`, 조회 기간 시작/종료                     | 배치 실행 시 KST 기준 월을 확정한다. 재실행 가능성을 고려해 같은 `user_id + period_key`는 upsert 대상으로 본다.                                              |
+| 2. 월간 MBTI Q&A 조회 및 축별 집계  | `period_key`, `mbti_question_responses` | 축별 Q&A 목록, `qna_count`                        | `target_axis IN (IE,SN,TF,JP)`만 축별 그룹으로 묶는다. 이 단계에서는 Q&A를 새로 만들거나 일반 대화를 다시 판별하지 않는다.                                        |
+| 3. 원본 질문 응답 5개 이상 여부 판단    | 축별 Q&A 목록                               | `primary_open`, `primary_closed` 축 목록         | 축마다 독립 판단한다. 5개 미만인 축은 점수화하지 않고 기준 선호 경향 적용 단계로 보낸다.                                                                         |
+| 4. 통과 축 응답 점수화             | 1차 개시 축의 Q&A, 기존 score row              | `mbti_response_scores`                        | 이미 점수화된 Q&A는 재사용하고, 없는 Q&A만 LLM 점수화를 요청한다. Q&A 1개당 score row 1개를 만든다.                                                        |
+| 5. null이 아닌 점수 1개 이상 여부 판단 | 축별 score row                            | `secondary_open`, `secondary_closed` 축 목록     | `coding_status=coded`이고 `score IS NOT NULL`인 row만 평균 계산에 사용한다. 하나도 없으면 기준 선호 경향 적용 단계로 보낸다.                                  |
+| 6. 월간 그래프 표시 점수 계산         | 2차 개시 축의 coded score row                | `axis_avg`, `axis_ratios`, 표시 점수              | 평균 점수를 계산한 뒤 화면 표시용 양쪽 비율로 변환한다. 표시 점수 계산식은 한 곳의 공통 함수로 둔다.                                                                  |
+| 7. 표시 점수 우세 여부 판단          | `axis_ratios` 또는 표시 점수                  | 우세 방향 또는 `tie_carried`                        | 평균 원점수가 아니라 화면에 보여줄 표시 점수 기준으로 판단한다. 양쪽 표시 점수가 같으면 동률로 본다.                                                                   |
+| 8. 이번 달 선호 경향 결정           | 우세 방향, 축별 부호 매핑                         | 이번 달 계산 기반 `selected_letter`                  | IE/SN/TF/JP별 `+/-` 방향 매핑을 사용한다. 예: IE에서 `+`는 E, `-`는 I다.                                                                     |
+| 9. 최종 선호 경향 확정             | 이번 달 계산값 또는 기준 선호 경향 후보                 | 축별 최종 `selected_letter`, `data_status`        | 계산값이 있으면 `current_month`, 없으면 기준값 출처에 따라 `carried_from_previous`, `carried_from_onboarding`, `insufficient_axis_data`를 기록한다. |
+| 10. 월간 MBTI 조합             | IE/SN/TF/JP 최종 `selected_letter`        | `estimated_mbti_type` 또는 산출 불가 상태             | 네 축이 모두 확정되면 4글자 MBTI를 만든다. 하나라도 산출 불가면 대표 결과는 `insufficient_data`로 둔다.                                                      |
+| 11. 근거 리포트 생성              | 월간 대표 결과, 축별 결과, score row              | `report_sections_json`, `evidence_items_json` | 변경 축과 이번 달 반영 축을 중심으로 실제 계산에 사용된 답변 근거를 선별한다. 기준 유지 축은 유지 사유만 설명한다.                                                          |
+| 12. 근거 리포트 생성 입력 병합        | `selected_letter` 결정 결과, 월간 MBTI 조합 결과  | 리포트 생성용 컨텍스트                                  | 흐름도상 리포트 노드는 계산값 결정과 월간 MBTI 조합에서 모두 입력을 받는다. 구현에서는 두 결과가 준비된 뒤 리포트를 한 번만 생성한다.                                              |
+| 13. 기준 선호 경향 적용            | 기준 미충족 축, 과거 월간 결과, 온보딩 MBTI            | 기준 `selected_letter` 또는 산출 불가                 | 현재 월 이전의 최신 축별 결과를 먼저 찾고, 없으면 온보딩 MBTI에서 해당 축의 글자를 가져온다. 둘 다 없으면 해당 축은 산출 불가다.                                               |
+
+
+
 
 ### 3.2 테스트 전략
 
 테스트는 축별 분기와 최종 조합이 의도대로 동작하는지를 검증하는 방향으로 구성한다. 실제 LLM 호출은 단위 테스트에서 고정 응답으로 대체하고, LLM 프롬프트 자체는 별도 샘플셋으로 평가한다.
 
-| 테스트 대상 | 테스트 데이터 | 기대 결과 |
-| --- | --- | --- |
-| 분석 대상 월 확정 | 실행일 `2026-06-28`, 요청 월 없음 | `period_key=2026-06` |
-| 1차 개시 통과 | IE Q&A 5개, SN Q&A 4개 | IE는 `primary_open=true`, SN은 `primary_closed` |
-| 2차 개시 통과 | IE score 5개 중 coded 1개, TF score 5개 모두 null | IE는 `secondary_open=true`, TF는 `secondary_closed` |
-| 표시 점수 우세 | TF 평균 점수 `0.2` | TF의 `selected_letter=T` |
-| 표시 점수 동률 | IE 표시 점수 `I 50% / E 50%` | 새 방향 확정 없이 기준값 유지, `tie_carried` |
-| 기준값 적용 | SN 이번 달 Q&A 2개, 과거 월간 SN=`N` | SN `selected_letter=N`, 기준 출처는 과거 월간 결과 |
-| 온보딩 fallback | JP 과거 월간 결과 없음, 온보딩 MBTI=`INFP` | JP `selected_letter=P`, 기준 출처는 온보딩 |
-| 산출 불가 | 특정 축 계산값 없음, 과거 결과 없음, 온보딩 없음 | 해당 축 `insufficient_axis_data`, 대표 결과는 `insufficient_data` |
-| 월간 MBTI 조합 | I, N, T, P 확정 | `estimated_mbti_type=INTP` |
-| 리포트 근거 선별 | TF selected_letter=T, score `1.0`, `0.5`, `-0.5` | T 방향 양수 score 중 절댓값 큰 답변이 대표 근거 우선 |
-| 재실행/upsert | 같은 `user_id + period_key`로 두 번 실행 | 월간 대표 결과와 축별 결과가 중복 insert되지 않고 갱신 |
+
+| 테스트 대상       | 테스트 데이터                                          | 기대 결과                                                     |
+| ------------ | ------------------------------------------------ | --------------------------------------------------------- |
+| 분석 대상 월 확정   | 실행일 `2026-06-28`, 요청 월 없음                        | `period_key=2026-06`                                      |
+| 1차 개시 통과     | IE Q&A 5개, SN Q&A 4개                             | IE는 `primary_open=true`, SN은 `primary_closed`             |
+| 2차 개시 통과     | IE score 5개 중 coded 1개, TF score 5개 모두 null      | IE는 `secondary_open=true`, TF는 `secondary_closed`         |
+| 표시 점수 우세     | TF 평균 점수 `0.2`                                   | TF의 `selected_letter=T`                                   |
+| 표시 점수 동률     | IE 표시 점수 `I 50% / E 50%`                         | 새 방향 확정 없이 기준값 유지, `tie_carried`                          |
+| 기준값 적용       | SN 이번 달 Q&A 2개, 과거 월간 SN=`N`                     | SN `selected_letter=N`, 기준 출처는 과거 월간 결과                   |
+| 온보딩 fallback | JP 과거 월간 결과 없음, 온보딩 MBTI=`INFP`                  | JP `selected_letter=P`, 기준 출처는 온보딩                        |
+| 산출 불가        | 특정 축 계산값 없음, 과거 결과 없음, 온보딩 없음                    | 해당 축 `insufficient_axis_data`, 대표 결과는 `insufficient_data` |
+| 월간 MBTI 조합   | I, N, T, P 확정                                    | `estimated_mbti_type=INTP`                                |
+| 리포트 근거 선별    | TF selected_letter=T, score `1.0`, `0.5`, `-0.5` | T 방향 양수 score 중 절댓값 큰 답변이 대표 근거 우선                        |
+| 재실행/upsert   | 같은 `user_id + period_key`로 두 번 실행                | 월간 대표 결과와 축별 결과가 중복 insert되지 않고 갱신                        |
+
 
 통합 테스트용 최소 데이터는 한 사용자에 대해 `2026-05` 기존 월간 결과 `INFP`, `2026-06` Q&A를 축별로 다르게 구성한다. 예를 들어 IE는 5개 coded로 I 유지, TF는 6개 coded로 T 변경, SN은 2개라 기준값 유지, JP는 0개라 온보딩 값 유지로 만들면 부분 갱신, 변화 축, fallback, 리포트 생성을 한 번에 검증할 수 있다.
 
@@ -266,13 +396,13 @@ normalized_score = (raw_likert_score - 3) / 2
 음수 점수는 오류가 아니다. `-1.0 ~ +1.0`은 양쪽 선호 경향을 0 기준으로 표현하기 위한 내부 계산값이다. 예를 들어 IE에서 `+`는 E, `-`는 I를 뜻한다. 화면에는 음수를 그대로 보여주지 않고, 아래 월간 계산 단계에서 비율로 변환한다.
 
 
-| 점수   | 의미               |
-| ---- | ---------------- |
-| +1.0 | + 방향 성향이 뚜렷함     |
-| +0.5 | + 방향 성향이 약하게 우세함 |
-| 0    | 중립 또는 양쪽 혼합      |
-| -0.5 | - 방향 성향이 약하게 우세함 |
-| -1.0 | - 방향 성향이 뚜렷함     |
+| 점수   | 의미               |              |
+| ---- | ---------------- | ------------ |
+| +1.0 |                  | + 방향 성향이 뚜렷함 |
+| +0.5 | + 방향 성향이 약하게 우세함 |              |
+| 0    | 중립 또는 양쪽 혼합      |              |
+| -0.5 | - 방향 성향이 약하게 우세함 |              |
+| -1.0 | - 방향 성향이 뚜렷함     |              |
 
 
 실제 적용 예시는 다음과 같다.
@@ -419,14 +549,16 @@ MVP의 점수화 결과 저장 기준은 아래 정도로 제한한다.
 
 LLM 점수화의 정확성은 아래 방식으로 관리한다.
 
-| 관리 지점 | 전략 | 구현 기준 |
-| --- | --- | --- |
-| 축 고정 | 프롬프트에 `target_axis` 하나만 전달하고, 다른 축은 판단하지 말라고 명시한다. | 반환 `axis`가 원본 `target_axis`와 다르면 저장하지 않고 `failed` 처리한다. |
-| 점수 범위 제한 | 허용 점수를 `-1.0, -0.5, 0, 0.5, 1.0, null`로 고정한다. | 허용값 밖의 점수는 `failed` 처리한다. |
-| 상태-점수 일관성 | `coded`일 때만 숫자 점수를 허용한다. | `coded + null`, `insufficient_context + 숫자` 조합은 저장하지 않는다. |
-| 근거 문장 | `evidence_span`은 답변 안의 표현을 사용하도록 지시한다. | MVP에서는 프롬프트 제약을 우선하고, 고도화 시 문자열 포함 검증을 추가한다. |
-| 중립과 불충분 구분 | 양쪽 성향이 섞인 답변은 `score=0`, 판단 자체가 어려운 답변은 `score=null`로 구분한다. | `score=0`은 월간 평균에 포함하고, `score=null`은 제외한다. |
-| 샘플셋 평가 | 축별 대표 답변 샘플과 기대 점수를 만들어 프롬프트 변경 때마다 비교한다. | IE/SN/TF/JP별로 강한 +, 약한 +, 중립, 약한 -, 강한 -, 불충분 샘플을 최소 1개씩 둔다. |
+
+| 관리 지점      | 전략                                                          | 구현 기준                                                        |
+| ---------- | ----------------------------------------------------------- | ------------------------------------------------------------ |
+| 축 고정       | 프롬프트에 `target_axis` 하나만 전달하고, 다른 축은 판단하지 말라고 명시한다.          | 반환 `axis`가 원본 `target_axis`와 다르면 저장하지 않고 `failed` 처리한다.      |
+| 점수 범위 제한   | 허용 점수를 `-1.0, -0.5, 0, 0.5, 1.0, null`로 고정한다.               | 허용값 밖의 점수는 `failed` 처리한다.                                    |
+| 상태-점수 일관성  | `coded`일 때만 숫자 점수를 허용한다.                                    | `coded + null`, `insufficient_context + 숫자` 조합은 저장하지 않는다.    |
+| 근거 문장      | `evidence_span`은 답변 안의 표현을 사용하도록 지시한다.                      | MVP에서는 프롬프트 제약을 우선하고, 고도화 시 문자열 포함 검증을 추가한다.                 |
+| 중립과 불충분 구분 | 양쪽 성향이 섞인 답변은 `score=0`, 판단 자체가 어려운 답변은 `score=null`로 구분한다. | `score=0`은 월간 평균에 포함하고, `score=null`은 제외한다.                  |
+| 샘플셋 평가     | 축별 대표 답변 샘플과 기대 점수를 만들어 프롬프트 변경 때마다 비교한다.                   | IE/SN/TF/JP별로 강한 +, 약한 +, 중립, 약한 -, 강한 -, 불충분 샘플을 최소 1개씩 둔다. |
+
 
 샘플셋 평가는 운영 코드의 단위 테스트와 분리한다. 단위 테스트는 LLM 응답을 고정해 저장/집계 로직을 검증하고, 샘플셋 평가는 실제 LLM 프롬프트가 기대 JSON과 충분히 일치하는지 확인한다. 프롬프트를 바꿀 때는 최소한 아래 항목을 확인한다.
 
@@ -451,7 +583,7 @@ LLM 점수화의 정확성은 아래 방식으로 관리한다.
 
 ### 5.1 1차 개시: DB 저장 Q&A 수 기준
 
-월간 배치는 먼저 해당 월의 MBTI Q&A 원본 레코드를 조회하고, `target_axis` 기준으로 저장 건수를 계산한다. 여기서 1차 개시 조건은 `mbti_response_scores`의 `coding_status=coded` 개수가 아니라, **`mbti_question_responses`에 저장된 Q&A 원본 레코드 수**다.
+월간 배치는 먼저 해당 월의 MBTI Q&A 원본 레코드를 조회하고, `target_axis` 기준으로 저장 건수를 계산한다. 여기서 1차 개시 조건은 `mbti_response_scores`의 `coding_status=coded` 개수가 아니라, `mbti_question_responses`**에 저장된 Q&A 원본 레코드 수**다.
 
 ```text
 axis_qna_count = 해당 월 mbti_question_responses에서 target_axis별 저장 건수
@@ -850,11 +982,13 @@ IE.secondary_open = false
 
 각 항목의 작성 기준은 다음과 같다.
 
-| 항목 | 작성 내용 | 사용 데이터 |
-| --- | --- | --- |
-| MBTI 변화 경향 현황 | 이전 기준 MBTI와 이번 달 MBTI를 비교하고, 어떤 축이 새로 반영되었는지와 어떤 축이 기준값을 유지했는지 설명한다. | `previous_estimated_mbti_type`, `estimated_mbti_type`, `axis_results` |
-| MBTI 추정 및 경향분석 근거 | 이번 달 계산에 실제 사용된 답변 중 대표 근거를 골라 왜 해당 선호 경향이 선택되었는지 설명한다. | `mbti_response_scores`, `evidence_span`, `reason`, 원본 Q&A |
-| 현재 MBTI 성격 유형 간단 설명 | 최종 월간 MBTI 성격 유형을 짧게 설명한다. MVP+에서는 Graph RAG로 유형 설명 문장을 보강할 수 있다. | `estimated_mbti_type`, Graph RAG 설명 후보 |
+
+| 항목                  | 작성 내용                                                                | 사용 데이터                                                                |
+| ------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| MBTI 변화 경향 현황       | 이전 기준 MBTI와 이번 달 MBTI를 비교하고, 어떤 축이 새로 반영되었는지와 어떤 축이 기준값을 유지했는지 설명한다. | `previous_estimated_mbti_type`, `estimated_mbti_type`, `axis_results` |
+| MBTI 추정 및 경향분석 근거   | 이번 달 계산에 실제 사용된 답변 중 대표 근거를 골라 왜 해당 선호 경향이 선택되었는지 설명한다.              | `mbti_response_scores`, `evidence_span`, `reason`, 원본 Q&A             |
+| 현재 MBTI 성격 유형 간단 설명 | 최종 월간 MBTI 성격 유형을 짧게 설명한다. MVP+에서는 Graph RAG로 유형 설명 문장을 보강할 수 있다.    | `estimated_mbti_type`, Graph RAG 설명 후보                                |
+
 
 변화 비교의 기준은 현재 월 이전에 저장된 가장 최근 월간 추정 MBTI 성격 유형이다. 직전 월 결과가 없으면 더 이전 월간 결과를 찾고, 월간 결과가 전혀 없을 때만 온보딩 MBTI 성격 유형을 기준값으로 사용한다.
 
@@ -916,6 +1050,8 @@ carried_from_previous / carried_from_onboarding: 기준값 출처
    - 3번 섹션은 확정된 월간 MBTI 유형을 짧게 설명한다.
 ```
 
+
+
 ### 8.2 리포트 대상 축 선정
 
 근거 리포트는 모든 축에 같은 강도로 근거를 만들지 않는다. 아래 축을 우선한다.
@@ -927,6 +1063,8 @@ carried_from_previous / carried_from_onboarding: 기준값 출처
 | 이번 달 반영 선호지표 축 | 우선     | `secondary_open=true`, `data_status=current_month`인 축                                 |
 | 경계 선호지표 축      | 선택     | 비율 차이가 작거나 `axis_avg`가 0에 가까운 축                                                       |
 | 기준값 유지 선호지표 축  | 제한적 설명 | `primary_closed`, `secondary_closed`, `carried_from_previous`는 새 성향 근거가 아니라 유지 사유를 설명 |
+
+
 
 
 ### 8.3 SQL 조회 예시
@@ -965,6 +1103,8 @@ ORDER BY
   CASE WHEN s.evidence_span IS NOT NULL THEN 0 ELSE 1 END,
   q.answered_at DESC;
 ```
+
+
 
 ### 8.4 대표 근거 선별 기준
 
@@ -1030,7 +1170,7 @@ INTP는 보통 가능성을 탐색하고 논리적으로 구조화해 이해하�
 
 저장 구조는 월간 MBTI 성격 유형 분석 결과를 서비스 화면에서 안정적으로 조회하고, 다음 월 분석에서 이전 기준값을 다시 사용할 수 있도록 구성한다. 기본 ERD는 분석 과정의 모든 로그를 남기는 구조가 아니라, 실제 운영에서 계속 조회·계산·표시되는 데이터만 중심으로 둔다.
 
-핵심 저장 단위는 아래 5개다.
+핵심 저장 단위는 아래 6개다.
 
 ```text
 1. mbti_question_responses     : MBTI Q&A 원본
@@ -1038,9 +1178,12 @@ INTP는 보통 가능성을 탐색하고 논리적으로 구조화해 이해하�
 3. mbti_monthly_results        : 월간 대표 MBTI 성격 유형 결과
 4. mbti_monthly_axis_results   : IE/SN/TF/JP별 계산 결과
 5. mbti_monthly_reports        : 마이페이지 리포트 본문과 대표 근거
+6. mbti_monthly_analysis_jobs  : 월간 분석 비동기 실행 상태
 ```
 
 이 구조에서 월간 대표 결과와 4개 선호지표 축별 결과는 분리한다. 월간 대표 결과는 사용자가 보는 최종 MBTI 성격 유형을 담고, 선호지표 축별 결과는 IE, SN, TF, JP 각각의 개시 여부, 평균 점수, 비율, 선택된 선호 경향, 기준값 유지 여부를 담는다. 이렇게 분리해야 “이번 달 INTP”라는 대표값뿐 아니라 “TF는 이번 달 계산값으로 T가 되었고, SN은 기준값을 유지했다”는 설명이 가능하다.
+
+운영상 월초에 모든 사용자를 동시에 분석하지 않는다. 월초 스케줄러는 분석 대상 후보를 선별해 `mbti_monthly_analysis_jobs`에 작업을 만들고, MBTI Analysis Worker가 동시 실행 수와 LLM 호출량을 제한하면서 순차 처리한다. 마이페이지는 분석 엔진을 직접 실행하지 않고 저장된 월간 결과를 우선 조회하며, 결과가 없고 분석 가능성이 있으면 job을 예약한 뒤 `analysis_pending` 또는 `analysis_running` 상태를 반환한다.
 
 ### 9.1 기간 식별 기준: `period_key`
 
@@ -1128,7 +1271,24 @@ erDiagram
         datetime generated_at
     }
 
+    mbti_monthly_analysis_jobs {
+        bigint id PK
+        bigint user_id
+        string period_key
+        string status
+        string trigger_source
+        string input_hash
+        string scoring_model
+        string prompt_version
+        int retry_count
+        datetime scheduled_at
+        datetime started_at
+        datetime finished_at
+        text error_message
+    }
+
     mbti_question_responses ||--o| mbti_response_scores : "scored as"
+    mbti_monthly_analysis_jobs ||--o| mbti_monthly_results : "produces latest result"
     mbti_monthly_results ||--o{ mbti_monthly_axis_results : "has axis results"
     mbti_monthly_results ||--o| mbti_monthly_reports : "has report"
 ```
@@ -1140,13 +1300,14 @@ erDiagram
 ### 9.3 테이블별 역할
 
 
-| 테이블                         | 역할                        | 운영상 의미                                                                     |
-| --------------------------- | ------------------------- | -------------------------------------------------------------------------- |
-| `mbti_question_responses`   | MBTI 분석 대상으로 저장된 질문/답변 원본 | 월간 분석의 입력 데이터다. 1차 개시 조건은 이 테이블의 월별·선호지표 축별 저장 건수로 판단한다.                   |
-| `mbti_response_scores`      | Q&A 1개에 대한 점수화 결과         | 월간 평균 점수와 리포트 근거 선별의 기준 데이터다. `coding_status=coded`인 점수만 월간 계산에 포함한다.      |
-| `mbti_monthly_results`      | 특정 사용자·특정 월의 대표 MBTI 결과   | 마이페이지에서 “이번 달 MBTI 성격 유형”, “이전 기준 MBTI 성격 유형”, “변화 선호지표 축”을 보여주는 기준 테이블이다. |
-| `mbti_monthly_axis_results` | IE/SN/TF/JP별 계산 결과        | 4개 선호지표 축을 독립적으로 판단한 결과다. 각 선호지표 축이 이번 달 계산값인지, 기준값 유지인지, 데이터 부족인지 설명한다.   |
-| `mbti_monthly_reports`      | 월간 결과를 설명하는 리포트 본문과 대표 근거 | 사용자에게 보여줄 문장형 설명과 그 설명에 사용된 대표 답변 근거를 저장한다.                                |
+| 테이블                          | 역할                        | 운영상 의미                                                                                |
+| ---------------------------- | ------------------------- | ------------------------------------------------------------------------------------- |
+| `mbti_question_responses`    | MBTI 분석 대상으로 저장된 질문/답변 원본 | 월간 분석의 입력 데이터다. 1차 개시 조건은 이 테이블의 월별·선호지표 축별 저장 건수로 판단한다.                              |
+| `mbti_response_scores`       | Q&A 1개에 대한 점수화 결과         | 월간 평균 점수와 리포트 근거 선별의 기준 데이터다. `coding_status=coded`인 점수만 월간 계산에 포함한다.                 |
+| `mbti_monthly_results`       | 특정 사용자·특정 월의 대표 MBTI 결과   | 마이페이지에서 “이번 달 MBTI 성격 유형”, “이전 기준 MBTI 성격 유형”, “변화 선호지표 축”을 보여주는 기준 테이블이다.            |
+| `mbti_monthly_axis_results`  | IE/SN/TF/JP별 계산 결과        | 4개 선호지표 축을 독립적으로 판단한 결과다. 각 선호지표 축이 이번 달 계산값인지, 기준값 유지인지, 데이터 부족인지 설명한다.              |
+| `mbti_monthly_reports`       | 월간 결과를 설명하는 리포트 본문과 대표 근거 | 사용자에게 보여줄 문장형 설명과 그 설명에 사용된 대표 답변 근거를 저장한다.                                           |
+| `mbti_monthly_analysis_jobs` | 월간 분석 실행 상태와 재시도 관리       | 월초 또는 마이페이지 조회 시 생성되는 비동기 작업이다. 많은 사용자를 한 번에 LLM 호출하지 않도록 작업 상태, 재시도 횟수, 입력 해시를 관리한다. |
 
 
 
@@ -1276,6 +1437,30 @@ mbti_response_scores.axis = mbti_question_responses.target_axis
 
 
 
+#### 9.4.6 `mbti_monthly_analysis_jobs`
+
+`mbti_monthly_analysis_jobs`는 월간 MBTI 분석을 실제로 실행하기 전후의 운영 상태를 저장한다. 분석 엔진의 계산 결과 자체는 `mbti_monthly_results`, `mbti_monthly_axis_results`, `mbti_monthly_reports`에 저장하고, job 테이블은 많은 사용자를 대상으로 분석을 안전하게 분산 실행하기 위한 큐 상태를 담당한다.
+
+
+| 컬럼               | 설명                                                                        |
+| ---------------- | ------------------------------------------------------------------------- |
+| `id`             | 분석 job의 식별자다.                                                             |
+| `user_id`        | 분석 대상 사용자 식별자다.                                                           |
+| `period_key`     | 분석 대상 월이다. 예: `2026-06`.                                                  |
+| `status`         | job 상태다. 예: `pending`, `running`, `completed`, `failed`, `skipped`.       |
+| `trigger_source` | job 생성 경로다. 예: `monthly_scheduler`, `dashboard_on_demand`, `admin_retry`. |
+| `input_hash`     | 분석 입력의 해시값이다. 같은 사용자·월·입력·모델·프롬프트 버전이면 중복 LLM 호출을 피하는 기준으로 사용한다.          |
+| `scoring_model`  | 점수화에 사용한 모델명이다. 예: `gpt-5.4-mini`.                                        |
+| `prompt_version` | 점수화 및 리포트 프롬프트 버전이다. 프롬프트가 바뀐 경우 기존 캐시를 재사용할지 판단하는 기준이다.                  |
+| `retry_count`    | 실패 후 재시도 횟수다. 운영에서는 상한을 두어 무한 재시도를 막는다.                                   |
+| `scheduled_at`   | job이 예약된 시각이다.                                                            |
+| `started_at`     | worker가 job을 실행하기 시작한 시각이다.                                               |
+| `finished_at`    | job이 완료, 실패, 스킵으로 종료된 시각이다.                                               |
+| `error_message`  | 실패 사유다. API 장애, JSON 파싱 실패, 입력 데이터 부족 등 운영 확인에 필요한 짧은 메시지를 저장한다.          |
+
+
+`status=skipped`는 오류가 아니라 분석할 필요가 없음을 뜻한다. 예를 들어 해당 월에 새 MBTI Q&A가 없고 이미 같은 `input_hash`의 월간 결과가 저장되어 있으면 job은 LLM 호출 없이 `skipped`로 종료할 수 있다. `status=failed`가 되더라도 마이페이지는 기존 최신 월간 결과를 계속 보여주고, 이번 달 분석 상태만 별도 안내로 표시한다.
+
 ### 9.5 운영 조회 흐름
 
 마이페이지에서 특정 월 결과를 보여줄 때는 `mbti_monthly_results`를 기준으로 조회한다.
@@ -1336,14 +1521,15 @@ erDiagram
 배치나 이벤트가 중복 실행되어도 같은 월 결과가 의도치 않게 여러 개 생기지 않도록 `user_id + period_key`를 기본 저장 기준으로 둔다. 최신 결과만 서비스 화면에 보여주는 MVP에서는 같은 월 결과를 갱신하는 방식이 단순하다.
 
 
-| 저장 대상                       | 기준 키                       | 저장 정책                                                               |
-| --------------------------- | -------------------------- | ------------------------------------------------------------------- |
-| `mbti_question_responses`   | `id`                       | 챗봇 담당 시스템이 저장한 Q&A 원본이다. `answered_at` 기준으로 `period_key`를 확정해 저장한다. |
-| `mbti_response_scores`      | `question_response_id`     | 같은 Q&A의 점수화 결과는 1개만 유지한다. 재점수화 시 갱신한다.                              |
-| `mbti_monthly_results`      | `user_id + period_key`     | 해당 월 대표 결과는 1개만 유지한다. 재분석 시 같은 row를 갱신한다.                           |
-| `mbti_monthly_axis_results` | `monthly_result_id + axis` | 하나의 월간 결과 아래 IE/SN/TF/JP별 결과를 최대 4개 유지한다.                           |
-| `mbti_monthly_reports`      | `monthly_result_id`        | 하나의 월간 결과에 리포트 1개를 유지한다. 대표 근거는 `evidence_items_json`에 함께 저장한다.     |
-| `mbti_evidence_embeddings`  | `response_score_id`        | Graph RAG MVP+ 확장을 적용할 때만 사용한다. 같은 score row에 대한 embedding 참조는 1개만 유지한다. |
+| 저장 대상                        | 기준 키                                                 | 저장 정책                                                                    |
+| ---------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------ |
+| `mbti_question_responses`    | `id`                                                 | 챗봇 담당 시스템이 저장한 Q&A 원본이다. `answered_at` 기준으로 `period_key`를 확정해 저장한다.      |
+| `mbti_response_scores`       | `question_response_id`                               | 같은 Q&A의 점수화 결과는 1개만 유지한다. 재점수화 시 갱신한다.                                   |
+| `mbti_monthly_results`       | `user_id + period_key`                               | 해당 월 대표 결과는 1개만 유지한다. 재분석 시 같은 row를 갱신한다.                                |
+| `mbti_monthly_axis_results`  | `monthly_result_id + axis`                           | 하나의 월간 결과 아래 IE/SN/TF/JP별 결과를 최대 4개 유지한다.                                |
+| `mbti_monthly_reports`       | `monthly_result_id`                                  | 하나의 월간 결과에 리포트 1개를 유지한다. 대표 근거는 `evidence_items_json`에 함께 저장한다.          |
+| `mbti_monthly_analysis_jobs` | `user_id + period_key + input_hash + prompt_version` | 같은 입력과 같은 프롬프트 버전의 분석 job은 중복 생성하지 않는다. 실행 중이면 기존 job 상태를 반환한다.          |
+| `mbti_evidence_embeddings`   | `response_score_id`                                  | Graph RAG MVP+ 확장을 적용할 때만 사용한다. 같은 score row에 대한 embedding 참조는 1개만 유지한다. |
 
 
 재분석이 발생하면 아래처럼 처리한다.
@@ -1358,17 +1544,48 @@ erDiagram
 
 이 저장 정책은 “현재 서비스 화면에 보여줄 최신 월간 결과”에 집중한다. 과거 실행 이력 전체가 서비스 기능으로 필요해지는 경우에는 실행 이력 테이블을 별도로 둘 수 있다.
 
+### 9.8 대량 사용자 운영 정책
+
+월초에 전체 사용자의 MBTI 분석을 즉시 실행하면 LLM 호출량, 토큰 비용, 처리 시간, 실패 재시도 문제가 커진다. 따라서 운영 구조는 **분석 대상 선별 → job 예약 → 제한된 worker 처리 → 저장 결과 조회**를 기본으로 한다.
+
+월초 스케줄러는 모든 사용자를 즉시 분석하지 않고 아래 조건을 기준으로 job 후보를 줄인다.
+
+```text
+- 해당 월 또는 직전 월에 MBTI Q&A가 새로 저장된 사용자
+- 선호지표 축 중 하나 이상이 1차 개시 조건에 근접하거나 충족한 사용자
+- 최근 로그인했거나 마이페이지를 실제로 조회한 사용자
+- 아직 해당 period_key의 월간 결과가 없거나 input_hash가 달라진 사용자
+```
+
+마이페이지 조회 시점에도 같은 원칙을 적용한다. 이미 `mbti_monthly_results`와 `mbti_monthly_reports`가 있으면 저장된 결과를 즉시 반환한다. 결과가 없고 분석 가능성이 있으면 API가 직접 LLM을 호출하지 않고 `dashboard_on_demand` job을 만든 뒤 `analysis_pending` 또는 `analysis_running` 상태를 반환한다. 결과가 없고 분석 조건도 부족하면 job을 만들지 않고 기존 기준값 또는 데이터 부족 상태를 반환한다.
+
+LLM 호출은 아래 기준으로 최소화한다.
+
+```text
+- 1차 개시를 통과하지 못한 축은 점수화하지 않는다.
+- 이미 점수화된 question_response_id는 같은 prompt_version과 scoring_model이면 재사용한다.
+- user_id + period_key + input_hash + scoring_model + prompt_version이 같으면 월간 결과와 리포트를 재사용한다.
+- 리포트 생성은 월간 결과가 바뀌었거나 대표 근거 입력이 바뀐 경우에만 다시 수행한다.
+- API 장애나 JSON 파싱 실패가 발생하면 retry_count 상한 안에서만 재시도하고, 기존 최신 결과를 유지한다.
+```
+
+운영 상태는 `pending`, `running`, `completed`, `failed`, `skipped` 정도로 충분하다. 대시보드는 `completed` 결과를 읽는 것이 기본이며, `pending/running` 상태에서는 “이번 달 분석 준비 중” 안내와 함께 직전 완료 결과를 보여줄 수 있다. 이 정책은 사용자 수가 늘어나도 월초 순간 부하와 토큰 비용이 한꺼번에 폭증하지 않도록 하기 위한 것이다.
+
 ## 10. 전체 프로세스 흐름도
 
 확정 흐름도는 문서 서두에 둔 단순화된 파이프라인을 기준으로 한다. 이 장에서는 흐름도를 반복하지 않고, 각 분기와 저장 시점만 정리한다.
 
 ### 10.1 분기 판단 기준
 
-| 흐름도 분기 | 판단 기준 | 결과 |
-| --- | --- | --- |
-| 원본 질문 응답이 5개 이상인가? | 해당 월에 저장된 MBTI Q&A 중 같은 선호지표 축의 원본 Q&A가 5개 이상인지 확인한다. | 5개 이상이면 점수화로 진행하고, 5개 미만이면 기준 선호 경향을 적용한다. |
-| null이 아닌 응답 점수가 1개 이상인가? | 점수화 결과 중 월간 평균 계산에 사용할 수 있는 `coded` 숫자 점수가 1개 이상인지 확인한다. | 1개 이상이면 표시 점수를 계산하고, 없으면 기준 선호 경향을 적용한다. |
-| 그래프 표시 점수가 한쪽 선호 경향이 더 높은가? | 양쪽 선호 경향의 표시 점수를 비교한다. | 한쪽이 더 높으면 이번 달 값으로 반영하고, 동률이면 기준 선호 경향을 적용한다. |
+
+| 흐름도 분기                      | 판단 기준                                                    | 결과                                            |
+| --------------------------- | -------------------------------------------------------- | --------------------------------------------- |
+| 원본 질문 응답이 5개 이상인가?          | 해당 월에 저장된 MBTI Q&A 중 같은 선호지표 축의 원본 Q&A가 5개 이상인지 확인한다.    | 5개 이상이면 점수화로 진행하고, 5개 미만이면 기준 선호 경향을 적용한다.    |
+| null이 아닌 응답 점수가 1개 이상인가?    | 점수화 결과 중 월간 평균 계산에 사용할 수 있는 `coded` 숫자 점수가 1개 이상인지 확인한다. | 1개 이상이면 표시 점수를 계산하고, 없으면 기준 선호 경향을 적용한다.      |
+| 그래프 표시 점수가 한쪽 선호 경향이 더 높은가? | 양쪽 선호 경향의 표시 점수를 비교한다.                                   | 한쪽이 더 높으면 이번 달 값으로 반영하고, 동률이면 기준 선호 경향을 적용한다. |
+
+
+
 
 ### 10.2 기준 선호 경향 적용
 
@@ -1386,12 +1603,17 @@ erDiagram
 
 저장은 흐름도 박스로 표시하지 않고 각 산출물 생성 직후 수행한다.
 
-| 저장 시점 | 저장 위치 | 저장 내용 |
-| --- | --- | --- |
-| 응답 점수화 직후 | `mbti_response_scores` | Q&A별 선호지표 축, 점수, 점수화 상태, 근거 표현, 판단 사유 |
-| 월간 MBTI 조합 직후 | `mbti_monthly_results` | 해당 월의 대표 MBTI 성격 유형, 이전 기준 MBTI, 변화 축, 결과 상태 |
-| 월간 MBTI 조합 직후 | `mbti_monthly_axis_results` | IE/SN/TF/JP별 Q&A 수, 숫자 점수 수, 평균 점수, 표시 점수, 최종 선호 경향, 기준값 출처 |
-| 근거 리포트 생성 직후 | `mbti_monthly_reports` | 리포트 본문, 대표 근거 답변 목록 |
+
+| 저장 시점          | 저장 위치                        | 저장 내용                                                       |
+| -------------- | ---------------------------- | ----------------------------------------------------------- |
+| 분석 예약/실행 상태 변경 | `mbti_monthly_analysis_jobs` | 분석 대상 사용자, 월, 입력 해시, job 상태, 재시도 횟수, 오류 메시지                 |
+| 응답 점수화 직후      | `mbti_response_scores`       | Q&A별 선호지표 축, 점수, 점수화 상태, 근거 표현, 판단 사유                       |
+| 월간 MBTI 조합 직후  | `mbti_monthly_results`       | 해당 월의 대표 MBTI 성격 유형, 이전 기준 MBTI, 변화 축, 결과 상태                |
+| 월간 MBTI 조합 직후  | `mbti_monthly_axis_results`  | IE/SN/TF/JP별 Q&A 수, 숫자 점수 수, 평균 점수, 표시 점수, 최종 선호 경향, 기준값 출처 |
+| 근거 리포트 생성 직후   | `mbti_monthly_reports`       | 리포트 본문, 대표 근거 답변 목록                                         |
+
+
+
 
 ### 10.4 화면 응답
 
@@ -1542,6 +1764,110 @@ sequenceDiagram
 
 마이페이지의 결과창은 `estimated_mbti_type`만 단독으로 보여주지 않는다. 사용자가 이번 달 결과가 어떻게 만들어졌는지 확인할 수 있도록 전달 MBTI 성격 유형과 IE/SN/TF/JP 네 선호지표 축의 점수와 표시 점수, 반영 상태, 근거 리포트를 함께 제공한다.
 
+### 11.5 가입 첫달/다음달 이후 MBTI 화면 분기
+
+프론트엔드 화면 설계는 `app/frontend/src/views/mypage/mypage.vue`의 MBTI 패널을 기준으로 맞춘다. 현재 화면에는 두 가지 표시 모드가 이미 분리되어 있다.
+
+
+| 화면 모드             | 프론트 상태값                         | 표시 대상                                | 표시 내용                                                      | 숨기는 내용                                     |
+| ----------------- | ------------------------------- | ------------------------------------ | ---------------------------------------------------------- | ------------------------------------------ |
+| 가입 첫달 온보딩 MBTI 화면 | `mbtiViewMode = onboardingType` | 가입 후 첫 월, 아직 전달 월간 분석 데이터가 없는 사용자    | 온보딩에서 사용자가 직접 입력한 MBTI 유형, 온보딩 MBTI 기준 유형 설명, 간단한 안내 리포트   | 월간 점수 그래프, 전월 대비 변화, 실제 Q&A 근거 리포트         |
+| 다음달 이후 월간 분석 화면   | `mbtiViewMode = onboardingNext` | 가입 다음달부터, 전달 또는 이전 월간 분석 기준값이 있는 사용자 | 현재 기준 MBTI, 전 MBTI, IE/SN/TF/JP 선호지표 그래프, 실제 Q&A 기반 근거 리포트 | 없음. 단, 부족한 축은 `data_status`로 기준값 유지 사유를 표시 |
+
+
+이 분기는 단순한 프론트 예시 스위치가 아니라 실제 API 응답 설계에 포함되어야 한다. Dashboard API는 MBTI 패널 조회 응답에 `view_mode`를 내려주고, 프론트는 이 값으로 위 두 화면 중 하나를 렌더링한다.
+
+```text
+view_mode = onboarding_type
+→ 프론트 `onboardingType` 화면
+→ 온보딩 자기보고 MBTI만 보여준다.
+→ 리포트 영역에는 유형 설명과 "가입 첫달이라 월간 대화 기반 분석은 다음달부터 제공된다"는 안내만 둔다.
+→ `axis_results`, `previous_estimated_mbti_type`, 근거 기반 `report_sections`는 비워도 된다.
+
+view_mode = monthly_analysis
+→ 프론트 `onboardingNext` 화면
+→ 전달까지 쌓인 데이터와 이번 월간 분석 결과를 함께 보여준다.
+→ 현재/전 MBTI, 축별 그래프, 변경 글자 강조, 근거 리포트를 모두 표시한다.
+```
+
+가입 첫달 여부는 `user.joined_at` 또는 온보딩 완료일을 KST 기준 월 단위로 자른 값과 조회 대상 `period_key`를 비교해 판단한다. 예를 들어 `joined_at=2026-06-15`이고 조회 대상이 `period_key=2026-06`이면 `view_mode=onboarding_type`이다. `period_key=2026-07`부터는 2026년 6월에 쌓인 데이터가 월간 분석 입력이 될 수 있으므로 `view_mode=monthly_analysis`를 우선 시도한다.
+
+첫달 화면에서는 온보딩 MBTI가 분석 결과처럼 보이면 안 된다. 따라서 API 응답도 `status=onboarding_only`처럼 별도 상태를 두고, `estimated_mbti_type` 대신 `onboarding_mbti_type`을 대표 표시값으로 사용한다. 리포트는 근거 리포트가 아니라 `type_description_sections` 또는 `report_sections` 안의 `source=onboarding_description` 항목으로 구분한다. 이때 문구는 "직접 입력한 MBTI 기준의 간단 설명"이며, 실제 대화 데이터 근거를 인용하지 않는다.
+
+다음달 이후 화면에서는 현재 문서의 월간 분석 파이프라인을 그대로 사용한다. 다만 월간 데이터가 일부 축에서 부족하면 화면 자체를 첫달 화면으로 되돌리지 않고, `axis_results.data_status`로 `primary_closed`, `secondary_closed`, `carried_from_onboarding`, `carried_from_previous` 등을 내려준다. 프론트는 그래프를 유지하되 부족 축은 기준값 유지로 설명하고, 근거 리포트에는 실제로 갱신된 축과 유지된 축을 구분해서 작성한다.
+
+### 11.6 화면 분기 시퀀스
+
+```mermaid
+sequenceDiagram
+    participant PAGE as mypage.vue
+    participant API as Dashboard API
+    participant DB as DB
+
+    PAGE->>API: MBTI 패널 조회 요청
+    API->>DB: 사용자 가입월, 온보딩 MBTI 조회
+    DB-->>API: joined_month, onboarding_mbti_type
+    API->>API: joined_month == period_key 여부 판단
+
+    alt 가입 첫달
+        API-->>PAGE: view_mode=onboarding_type, status=onboarding_only, onboarding_mbti_type, type_description_sections
+        PAGE->>PAGE: onboardingType 화면 렌더링
+    else 가입 다음달 이후
+        API->>DB: 최신 monthly result, axis results, monthly report 조회
+        DB-->>API: estimated_mbti_type, previous_estimated_mbti_type, axis_results, report_sections
+        API-->>PAGE: view_mode=monthly_analysis, status=ready/no_current_updates/insufficient_data, 월간 분석 응답
+        PAGE->>PAGE: onboardingNext 화면 렌더링
+    end
+```
+
+
+
+
+
+### 11.7 월초 대량 분석 운영 시퀀스
+
+월초 스케줄러는 모든 사용자의 분석을 즉시 실행하지 않는다. 먼저 분석 후보를 선별해 job을 만들고, worker가 동시 실행 수와 LLM 호출량을 제한하면서 처리한다. 대시보드는 저장된 완료 결과를 우선 조회하며, 결과가 없을 때만 온디맨드 job을 예약한다.
+
+```mermaid
+sequenceDiagram
+    participant SCH as Monthly Scheduler
+    participant API as Dashboard API
+    participant JOB as Analysis Job Table
+    participant WORKER as MBTI Analysis Worker
+    participant DB as DB
+    participant LLM as LLM
+
+    SCH->>DB: period_key 기준 분석 후보 사용자 조회
+    DB-->>SCH: 최근 Q&A/활성 사용자/미분석 사용자 목록
+    SCH->>JOB: user_id+period_key+input_hash 기준 pending job upsert
+
+    WORKER->>JOB: pending job을 제한된 개수만 가져와 running 처리
+    WORKER->>DB: 기존 월간 결과, score row, Q&A 조회
+
+    alt 같은 input_hash 결과가 이미 있음
+        WORKER->>JOB: skipped 또는 completed 처리
+    else 점수화 또는 리포트 생성 필요
+        WORKER->>LLM: 필요한 축의 미점수화 Q&A 또는 리포트만 요청
+        LLM-->>WORKER: score/report JSON
+        WORKER->>DB: response_scores, monthly_results, axis_results, reports upsert
+        WORKER->>JOB: completed 처리
+    else 실패
+        WORKER->>JOB: retry_count 증가, failed 또는 pending 재예약
+    end
+
+    API->>DB: user_id+period_key 월간 결과 조회
+    alt 완료 결과 있음
+        DB-->>API: monthly result, axis results, report
+    else 결과 없고 분석 가능
+        API->>JOB: dashboard_on_demand job upsert
+        API-->>API: analysis_pending 또는 analysis_running 응답 구성
+    else 분석 조건 부족
+        API-->>API: no_current_updates 또는 insufficient_data 응답 구성
+    end
+```
+
+
+
 ---
 
 
@@ -1550,12 +1876,46 @@ sequenceDiagram
 
 
 
-### 12.1 분석 완료
+### 12.1 가입 첫달 온보딩 MBTI만 표시
+
+가입 첫달에는 전달에 쌓인 월간 데이터가 없으므로 월간 분석 결과처럼 보이게 만들지 않는다. API는 `view_mode=onboarding_type`, `status=onboarding_only`를 반환하고, 프론트는 `mypage.vue`의 `onboardingType` 화면처럼 온보딩에서 직접 입력한 MBTI와 간단한 유형 설명만 표시한다.
+
+```json
+{
+  "view_mode": "onboarding_type",
+  "status": "onboarding_only",
+  "period_type": "monthly",
+  "period_key": "2026-06",
+  "joined_month": "2026-06",
+  "onboarding_mbti_type": "INFP",
+  "estimated_mbti_type": null,
+  "previous_estimated_mbti_type": null,
+  "axis_results": [],
+  "report_sections": [
+    {
+      "source": "onboarding_description",
+      "title": "온보딩 MBTI 기준 유형 설명",
+      "content": "INFP는 보통 개인의 가치와 감정의 흐름을 중요하게 여기고, 자신에게 의미 있는 일에 깊게 몰입하는 경향으로 설명됩니다. 이 설명은 가입 시 직접 입력한 MBTI를 바탕으로 한 간단 안내입니다."
+    },
+    {
+      "source": "onboarding_description",
+      "title": "월간 분석 안내",
+      "content": "가입 첫달에는 전달에 쌓인 MBTI 질문·답변 데이터가 없으므로 점수 그래프와 실제 근거 리포트를 표시하지 않습니다. 가입 다음달부터 전달 데이터가 충분히 쌓이면 월간 분석 화면으로 전환됩니다."
+    }
+  ],
+  "message": "가입 첫달에는 온보딩에서 입력한 MBTI 유형과 간단한 설명만 제공합니다."
+}
+```
+
+
+
+### 12.2 분석 완료
 
 DB는 선호지표 축별 결과를 독립 레코드로 저장하지만, API는 마이페이지 결과창 렌더링이 편하도록 이번 달 MBTI 성격 유형, 전달 MBTI 성격 유형, 4개 선호지표 축 선호지표 점수, 근거 리포트를 한 응답으로 조립해 내려준다. 축별 정보는 `axis_results` 배열로 제공한다.
 
 ```json
 {
+  "view_mode": "monthly_analysis",
   "status": "ready",
   "period_type": "monthly",
   "period_key": "2026-06",
@@ -1663,10 +2023,11 @@ DB는 선호지표 축별 결과를 독립 레코드로 저장하지만, API는 
 
 
 
-### 12.2 이번 달 갱신 없음
+### 12.3 이번 달 갱신 없음
 
 ```json
 {
+  "view_mode": "monthly_analysis",
   "status": "no_current_updates",
   "period_type": "monthly",
   "period_key": "2026-06",
@@ -1701,10 +2062,11 @@ DB는 선호지표 축별 결과를 독립 레코드로 저장하지만, API는 
 
 
 
-### 12.3 데이터 부족
+### 12.4 데이터 부족
 
 ```json
 {
+  "view_mode": "monthly_analysis",
   "status": "insufficient_data",
   "period_type": "monthly",
   "period_key": "2026-06",
@@ -1731,6 +2093,32 @@ DB는 선호지표 축별 결과를 독립 레코드로 저장하지만, API는 
     }
   ],
   "message": "2026년 6월에는 새로 계산 가능한 선호지표 축도 없고 유지할 기준 MBTI 성격 유형도 없어 월간 추정 MBTI 성격 유형을 산출할 수 없습니다."
+}
+```
+
+
+
+### 12.5 분석 대기 또는 진행 중
+
+월초 대량 분석이나 마이페이지 온디맨드 요청으로 job이 생성되었지만 아직 완료되지 않은 경우다. 이때 API는 LLM 분석을 동기 실행하지 않고, 기존 완료 결과가 있으면 함께 내려준다. 프론트는 기존 결과를 보여주면서 이번 달 분석이 준비 중임을 안내할 수 있다.
+
+```json
+{
+  "view_mode": "monthly_analysis",
+  "status": "analysis_pending",
+  "period_type": "monthly",
+  "period_key": "2026-07",
+  "analysis_job": {
+    "status": "pending",
+    "trigger_source": "dashboard_on_demand",
+    "scheduled_at": "2026-07-01T09:03:00+09:00"
+  },
+  "latest_completed_result": {
+    "period_key": "2026-06",
+    "estimated_mbti_type": "INTP",
+    "previous_estimated_mbti_type": "INFP"
+  },
+  "message": "이번 달 MBTI 분석이 예약되었습니다. 완료 전까지는 가장 최근 완료된 월간 결과를 표시합니다."
 }
 ```
 
@@ -1927,14 +2315,16 @@ erDiagram
 ## 14. 책임 분리
 
 
-| 영역                    | 책임                                                                                                   |
-| --------------------- | ---------------------------------------------------------------------------------------------------- |
-| 챗봇 담당 영역              | MBTI 질문/답변 Q&A 선별 및 저장                                                                               |
-| MBTI Analysis Worker  | 저장된 MBTI Q&A 점수화, 선호지표 축별 1차·2차 개시 판단, 축별 평균/비율 계산, 월간 대표 결과와 선호지표 축별 결과 저장, 이전 최신 월간 결과 대비 변화 지표 확인 |
-| Taste Analysis Worker | 일반 대화 로그에서 취향 근거 추출, 키워드 정규화, 최근 30일 집계                                                              |
-| Evidence Selector     | 계산 사용 score row를 SQL로 조회하고 점수 기준으로 대표 evidence_span 선별                                               |
-| Report LLM            | 선별된 근거와 현재 추정 MBTI 성격 유형 설명을 바탕으로 3개 섹션 리포트 생성                                                       |
-| Dashboard API         | `mypage.vue`가 바로 렌더링할 수 있는 응답 반환                                                                     |
+| 영역                    | 책임                                                                                                                                     |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 챗봇 담당 영역              | MBTI 질문/답변 Q&A 선별 및 저장                                                                                                                 |
+| Monthly Scheduler     | 월초에 분석 대상 후보를 선별하고 `mbti_monthly_analysis_jobs`를 예약한다. 전체 사용자를 즉시 분석하지 않고 입력 변화와 활성도를 기준으로 작업량을 제한한다.                                  |
+| MBTI Analysis Worker  | `pending` job을 제한된 개수만 가져와 저장된 MBTI Q&A 점수화, 선호지표 축별 1차·2차 개시 판단, 축별 평균/비율 계산, 월간 대표 결과와 선호지표 축별 결과 저장, 이전 최신 월간 결과 대비 변화 지표 확인을 수행한다. |
+| Analysis Job Table    | 사용자·월·입력 해시·모델·프롬프트 버전 기준으로 중복 실행을 막고, `pending/running/completed/failed/skipped` 상태와 재시도 횟수를 관리한다.                                    |
+| Taste Analysis Worker | 일반 대화 로그에서 취향 근거 추출, 키워드 정규화, 최근 30일 집계                                                                                                |
+| Evidence Selector     | 계산 사용 score row를 SQL로 조회하고 점수 기준으로 대표 evidence_span 선별                                                                                 |
+| Report LLM            | 선별된 근거와 현재 추정 MBTI 성격 유형 설명을 바탕으로 3개 섹션 리포트 생성                                                                                         |
+| Dashboard API         | 저장된 월간 결과를 우선 조회해 `mypage.vue`가 바로 렌더링할 수 있는 응답을 반환한다. 결과가 없고 분석 가능성이 있으면 직접 LLM을 호출하지 않고 온디맨드 job을 예약한다.                              |
 
 
 ---
@@ -1947,18 +2337,21 @@ MBTI 분석은 **4개 선호지표 축을 매월 모두 새로 판정하는 구�
 
 ```text
 MBTI Q&A 저장
+→ 월초 또는 마이페이지 조회 시 분석 대상 후보 선별
+→ user_id + period_key + input_hash 기준 월간 분석 job 예약
+→ worker가 동시 실행 수와 LLM 호출량을 제한하며 pending job 처리
 → 월간 MBTI Q&A 조회 및 IE/SN/TF/JP별 응답 수 집계
 → 원본 Q&A가 5개 이상인 축만 1차 개시
-→ 1차 개시 축의 답변을 LLM으로 점수화하고 mbti_response_scores 저장
+→ 1차 개시 축의 답변 중 미점수화 Q&A만 LLM으로 점수화하고 mbti_response_scores 저장
 → coded 숫자 점수가 1개 이상인 축만 2차 개시
 → 2차 개시 축의 평균 점수와 그래프 표시 점수 계산
 → 표시 점수가 높은 방향을 이번 달 selected_letter로 반영
 → 기준 미충족 또는 동률 축은 과거 월간 결과, 없으면 온보딩 값으로 유지
 → IE/SN/TF/JP 최종 선호 경향을 조합해 월간 추정 MBTI 성격 유형 산출
 → 월간 대표 결과와 축별 결과 저장
-→ 계산에 사용된 score row에서 대표 근거 답변을 선별해 3개 섹션 리포트 생성
+→ 월간 결과 또는 대표 근거 입력이 바뀐 경우에만 3개 섹션 리포트 생성
 → MVP+에서는 Graph RAG로 확정 MBTI 유형의 간단 설명을 보강
-→ 마이페이지에 월간 MBTI, 이전 기준 MBTI, 축별 점수, 근거 리포트 제공
+→ 마이페이지는 저장된 월간 MBTI, 이전 기준 MBTI, 축별 점수, 근거 리포트를 조회해 제공
 ```
 
 이 흐름에서 `5개 미만`은 데이터 자체가 무효라는 뜻이 아니다. 해당 Q&A row는 DB에 남지만, 그 선호지표 축이 이번 달 1차 개시를 통과하지 못했으므로 이번 달 점수화와 변화 반영에서 제외한다는 의미다.
@@ -1967,6 +2360,7 @@ MBTI Q&A 저장
 
 선호지표 축별 상태는 `current_month`, `primary_closed`, `secondary_closed`, `tie_carried`, `carried_from_previous`, `carried_from_onboarding`, `insufficient_axis_data`로 구분한다. 이 상태값은 마이페이지와 리포트에서 “이번 달 새로 반영된 축”과 “기준값을 유지한 축”을 구분하는 기준이 된다.
 
+운영 관점에서는 대시보드 요청이 분석 엔진을 직접 실행하지 않는 것이 중요하다. 대시보드는 저장된 완료 결과를 읽고, 결과가 없을 때만 온디맨드 job을 예약한다. job이 `pending` 또는 `running`이면 “분석 준비 중” 상태와 직전 완료 결과를 함께 보여줄 수 있고, job이 실패해도 기존 결과를 유지해 화면을 깨지 않게 한다.
 
 취향 분석:
 

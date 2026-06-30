@@ -27,7 +27,8 @@ INSTALLED_APPS = [
     'user',
     'chat',
     'wellness',
-    'mbti'
+    'mbti',
+    'myprofile'
 ]
 
 MIDDLEWARE = [
