@@ -5,9 +5,14 @@ from django.urls import include, path
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/user/', include('user.urls')),      # 로그인/온보딩
-    path('api/mypage/', include('wellness.urls')), # 마이페이지
-    path('api/', include('chat.urls')),            # 챗봇 (전체 목록: chat/views.py 참조)
+    path('api/user/', include('user.urls')),
+    path('api/mypage/', include('wellness.urls')),
+    path('api/', include('chat.urls')),            # 챗봇: /api/session/, /api/chat/, /api/tts/, /api/mbti/
+    path('api/myprofile/', include('myprofile.urls')),
+    path('api/mbti/', include('mbti.urls')),
+    path('api/characters/', include('character.urls')),
+    path('api/calendar/', include('calendar_api.urls')),
+    path('api/tarot/', include('game.tarot_api.urls')),
 ]
 
 # TTS mp3 등 미디어 파일 서빙 (개발용 — 운영은 웹서버가 담당)

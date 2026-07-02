@@ -1,0 +1,6 @@
+"""
+기능: Django 관리자 페이지(Admin)에서 마음 리포트 DB 데이터를 시각적으로 조회, 수정, 삭제할 수 있도록 관리자 화면 설정을 정의하는 파일입니다.
+"""
+from django.contrib import admin
+
+# Register your models here.

@@ -1,7 +1,7 @@
 from pathlib import Path
 import os
 import sys
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 
 # 프로젝트 루트 기준으로 .env 로드 (config/ → backend/ → app/ → 루트)
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -12,6 +12,15 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = BASE_DIR.parent.parent
+
+# app/backend/.env 가 있으면 추가 로드 (OAuth 시크릿 등 로컬 전용 키)
+load_dotenv(BASE_DIR / '.env')
+
+backend_env = dotenv_values(BASE_DIR / '.env')
+for key in ('KAKAO_CLIENT_SECRET', 'NAVER_CLIENT_SECRET', 'GOOGLE_CLIENT_SECRET'):
+    if not os.environ.get(key) and backend_env.get(key):
+        os.environ[key] = backend_env[key]
 
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-af7tf^s)+euab4fl@0w!@fi%rgw_gi7dxh)cm8236d^9_h5@f9')
 
@@ -33,6 +42,13 @@ INSTALLED_APPS = [
     'user',
     'chat',
     'wellness',
+    'mbti',
+    'myprofile',
+    'taste',
+    'character',
+    'calendar_api',
+    'game.tarot_api',
+    'mindreport',
 ]
 
 MIDDLEWARE = [
@@ -91,6 +107,43 @@ CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',  # Vue dev server
     'http://127.0.0.1:5173',
 ]
+
+FRONTEND_BASE_URL = os.environ.get('FRONTEND_BASE_URL', 'http://localhost:5173').rstrip('/')
+
+SOCIAL_LOGIN = {
+    'providers': {
+        'kakao': {
+            'client_id': os.environ.get('KAKAO_CLIENT_ID', ''),
+            'client_secret': os.environ.get('KAKAO_CLIENT_SECRET', ''),
+            'redirect_uri': os.environ.get('KAKAO_REDIRECT_URI', f'{FRONTEND_BASE_URL}/login/callback/kakao'),
+            'authorization_url': 'https://kauth.kakao.com/oauth/authorize',
+            'token_url': 'https://kauth.kakao.com/oauth/token',
+            'profile_url': 'https://kapi.kakao.com/v2/user/me',
+            'scope': os.environ.get('KAKAO_SCOPE', 'profile_nickname account_email'),
+        },
+        'naver': {
+            'client_id': os.environ.get('NAVER_CLIENT_ID', ''),
+            'client_secret': os.environ.get('NAVER_CLIENT_SECRET', ''),
+            'redirect_uri': os.environ.get('NAVER_REDIRECT_URI', f'{FRONTEND_BASE_URL}/login/callback/naver'),
+            'authorization_url': 'https://nid.naver.com/oauth2.0/authorize',
+            'token_url': 'https://nid.naver.com/oauth2.0/token',
+            'profile_url': 'https://openapi.naver.com/v1/nid/me',
+            'scope': os.environ.get('NAVER_SCOPE', ''),
+            'authorization_params': {
+                'locale': os.environ.get('NAVER_LOCALE', 'ko_KR'),
+            },
+        },
+        'google': {
+            'client_id': os.environ.get('GOOGLE_CLIENT_ID', ''),
+            'client_secret': os.environ.get('GOOGLE_CLIENT_SECRET', ''),
+            'redirect_uri': os.environ.get('GOOGLE_REDIRECT_URI', f'{FRONTEND_BASE_URL}/login/callback/google'),
+            'authorization_url': 'https://accounts.google.com/o/oauth2/v2/auth',
+            'token_url': 'https://oauth2.googleapis.com/token',
+            'profile_url': 'https://www.googleapis.com/oauth2/v3/userinfo',
+            'scope': os.environ.get('GOOGLE_SCOPE', 'openid email profile'),
+        },
+    },
+}
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},

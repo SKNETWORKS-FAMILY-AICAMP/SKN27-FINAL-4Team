@@ -54,11 +54,15 @@
     <div class="chat-layout">
       <!-- ===== 왼쪽 패널: 캐릭터 영역 ===== -->
       <aside class="left-panel">
-        <div class="char-face" :style="{ background: CHARACTER_META[character].bg, color: CHARACTER_META[character].color }">
-          {{ CHARACTER_META[character].faces[currentEmotion] }}
+        <div class="char-face character-image-frame" :style="{ background: displayCharacter.bg, color: displayCharacter.color }">
+          <img
+            :src="displayCharacterImage"
+            :alt="`${displayCharacter.name} ${displayExpressionLabel}`"
+            :class="displayAnimationClass"
+          />
         </div>
-        <div class="char-name">{{ CHARACTER_META[character].name }}</div>
-        <div class="char-faces">표정 4분기 : 기쁨 · 슬픔 · 분노 · 일반</div>
+        <div class="char-name">{{ displayCharacter.name }}</div>
+        <div class="char-faces">현재 표정 : {{ displayExpressionLabel }}</div>
 
         <div class="opener-bubble">
           {{ openerText }}
@@ -204,9 +208,78 @@ const EMOTION_LABELS = {
   normal:  '✦ 일반 모드',
 }
 
-const character      = ref(
-  CHARACTER_META[route.query.character] ? route.query.character : 'pori'
-)
+const DISPLAY_CHARACTER_META = {
+  otter: {
+    name: '수달',
+    color: '#C4B5FD',
+    bg: 'rgba(196,181,253,0.16)',
+    backendCharacter: 'haeon',
+  },
+  cat: {
+    name: '고양이',
+    color: '#A78BFA',
+    bg: 'rgba(30,27,75,0.34)',
+    backendCharacter: 'greung',
+  },
+  redpanda: {
+    name: '레서판다',
+    color: '#FDBA74',
+    bg: 'rgba(251,146,60,0.16)',
+    backendCharacter: 'dalkong',
+  },
+  bird: {
+    name: '뱁새',
+    color: '#BFDBFE',
+    bg: 'rgba(191,219,254,0.14)',
+    backendCharacter: 'haeon',
+  },
+}
+
+const EXPRESSION_LABELS = {
+  joy: '기쁨',
+  anger: '화남',
+  sadness: '슬픔',
+  anxiety: '불안',
+  hurt: '상처',
+  panic: '당황',
+}
+
+const EMOTION_TO_EXPRESSION = {
+  default: null,
+  encourage: 'joy',
+  sad: 'sadness',
+  angry: 'anger',
+  plan: 'anxiety',
+}
+
+const EXPRESSION_ANIMATION = {
+  joy: 'anim-joy',
+  anger: 'anim-anger',
+  sadness: 'anim-sadness',
+  anxiety: 'anim-anxiety',
+  hurt: 'anim-hurt',
+  panic: 'anim-panic',
+}
+
+function readStoredCharacter() {
+  try {
+    return JSON.parse(localStorage.getItem('binteumsaiCharacter') || '{}')
+  } catch {
+    return {}
+  }
+}
+
+function normalizeCharacterId(id) {
+  if (DISPLAY_CHARACTER_META[id]) return id
+  if (id === 'haeon') return 'otter'
+  if (id === 'greung' || id === 'geureung') return 'cat'
+  if (id === 'dalkong') return 'redpanda'
+  return 'otter'
+}
+
+const storedCharacter = readStoredCharacter()
+const displayCharacterId = ref(normalizeCharacterId(route.query.character || storedCharacter.characterId))
+const selectedExpression = ref(EXPRESSION_LABELS[storedCharacter.expressionId] ? storedCharacter.expressionId : 'joy')
 const { secret: isSecret, setSecret } = useSecret()
 const { playTask, stop: ttsStop } = useTts()
 const sessionId      = ref(null)
@@ -224,55 +297,17 @@ const currentEmotion = ref('default')
 const threadRef = ref(null)
 const inputRef  = ref(null)
 
-const weatherInfo = ref(null)
+const displayCharacter = computed(() => DISPLAY_CHARACTER_META[displayCharacterId.value] || DISPLAY_CHARACTER_META.otter)
+const backendCharacter = computed(() => displayCharacter.value.backendCharacter)
+const character = backendCharacter  // initSession 하위호환
+const displayExpressionId = computed(() => EMOTION_TO_EXPRESSION[currentEmotion.value] || selectedExpression.value)
+const displayExpressionLabel = computed(() => EXPRESSION_LABELS[displayExpressionId.value] || '기쁨')
+const displayCharacterImage = computed(() => `/characters/${displayCharacterId.value}/${displayExpressionId.value}.png`)
+const displayAnimationClass = computed(() => EXPRESSION_ANIMATION[displayExpressionId.value] || 'anim-joy')
 
-const openerText = computed(() => {
-  if (isSecret.value) {
-    return '여긴 아무 기록도 안 남아. 편하게 다 털어놔도 돼.'
-  }
-  return weatherInfo.value?.opener || '오늘 어떤 하루였어?'
-})
-
-async function fetchWeatherOpener() {
-  if (isSecret.value) return
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const { latitude, longitude } = position.coords
-          const data = await chatApi.getWeatherOpener(latitude, longitude)
-          weatherInfo.value = data
-        } catch (err) {
-          console.error("Failed to fetch weather opener with location:", err)
-          fallbackWeatherOpener()
-        }
-      },
-      async (err) => {
-        console.warn("Geolocation access denied or failed:", err)
-        fallbackWeatherOpener()
-      }
-    )
-  } else {
-    fallbackWeatherOpener()
-  }
-}
-
-async function fallbackWeatherOpener() {
-  try {
-    const data = await chatApi.getWeatherOpener()
-    weatherInfo.value = data
-  } catch (err) {
-    console.error("Failed to fetch fallback weather opener:", err)
-  }
-}
-
-watch(isSecret, (newVal) => {
-  if (!newVal) {
-    fetchWeatherOpener()
-  } else {
-    weatherInfo.value = null
-  }
-})
+const openerText = computed(() =>
+  isSecret.value ? '여긴 아무 기록도 안 남아. 편하게 다 털어놔도 돼.' : '오늘 어떤 하루였어?'
+)
 
 const showJoyCelebration = ref(false)
 
@@ -288,7 +323,7 @@ function playFanfare() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)()
     const now = ctx.currentTime
-    const notes = [261.63, 329.63, 392.00, 523.25] // C4, E4, G4, C5
+    const notes = [261.63, 329.63, 392.00, 523.25]
     notes.forEach((freq, idx) => {
       const osc = ctx.createOscillator()
       const gain = ctx.createGain()
@@ -430,7 +465,6 @@ async function initSession() {
 }
 
 onMounted(async () => {
-  fetchWeatherOpener()
   await initSession()
 })
 
@@ -527,7 +561,7 @@ async function toggleSecret() {
   messages.value = []
   coldStartDone.value = false
   await initSession()
-  router.replace({ query: { character: character.value, secret: isSecret.value ? 'on' : undefined } })
+  router.replace({ query: { character: displayCharacterId.value, secret: isSecret.value ? 'on' : undefined } })
 }
 
 async function confirmExitSecret() {
@@ -545,7 +579,7 @@ async function confirmExitSecret() {
   messages.value = []
   coldStartDone.value = false
   await initSession()
-  router.replace({ query: { character: character.value } })
+  router.replace({ query: { character: displayCharacterId.value } })
 }
 
 function fillInput(text) { inputText.value = text; inputRef.value?.focus() }
@@ -831,6 +865,18 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   border: 1px solid rgba(192,132,252,0.3);
   margin-top: 8px;
   box-shadow: 0 0 44px rgba(192,132,252,0.18);
+}
+
+.character-image-frame {
+  overflow: visible;
+}
+
+.character-image-frame img {
+  width: 104%;
+  height: 104%;
+  object-fit: contain;
+  transform-origin: center bottom;
+  filter: drop-shadow(0 18px 24px rgba(0,0,0,0.28));
 }
 
 .char-name {

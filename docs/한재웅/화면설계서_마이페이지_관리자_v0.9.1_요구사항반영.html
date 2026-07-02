@@ -1,0 +1,1587 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>마이페이지/관리자 페이지 화면설계서</title>
+  <style>
+    :root {
+      --ink: #24323a;
+      --muted: #65757d;
+      --line: #d9e1df;
+      --paper: #fbfaf7;
+      --panel: #ffffff;
+      --teal: #2c7f74;
+      --mint: #9fd8ca;
+      --coral: #e98976;
+      --amber: #f1c879;
+      --sky: #8eb7df;
+      --violet: #a99ad8;
+      --rose: #f5c3bb;
+      --green-soft: #e9f6f2;
+      --amber-soft: #fff5dd;
+      --coral-soft: #fff0ec;
+      --sky-soft: #edf6ff;
+      --shadow: 0 18px 44px rgba(39, 50, 56, .14);
+      font-family: "Noto Sans KR", "Malgun Gothic", "Segoe UI", Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(135deg, rgba(159, 216, 202, .18), transparent 36%),
+        linear-gradient(315deg, rgba(142, 183, 223, .16), transparent 34%),
+        #f4f0e8;
+    }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      min-height: 66px;
+      padding: 10px 28px;
+      background: rgba(251, 250, 247, .94);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(14px);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 250px;
+      font-weight: 900;
+    }
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 9px;
+      background: conic-gradient(from 180deg, var(--mint), var(--sky), var(--amber), var(--coral), var(--mint));
+      border: 2px solid var(--ink);
+      box-shadow: 3px 3px 0 rgba(36, 50, 58, .18);
+    }
+    .topbar nav {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-left: auto;
+    }
+    .nav-link {
+      display: inline-flex;
+      align-items: center;
+      min-height: 36px;
+      padding: 0 13px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 800;
+    }
+    .nav-link:hover, .nav-link.is-active {
+      color: var(--teal);
+      background: var(--green-soft);
+      border-color: #b9ddd2;
+    }
+
+    main { padding: 28px; }
+    .page {
+      max-width: 1440px;
+      margin: 0 auto 42px;
+      border: 1px solid rgba(217, 225, 223, .9);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, .68);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .section-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 24px 28px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, .78);
+    }
+    .eyebrow {
+      margin: 0 0 6px;
+      color: var(--teal);
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { margin-bottom: 8px; font-size: clamp(26px, 3vw, 42px); }
+    h2 { margin-bottom: 8px; font-size: clamp(23px, 2.3vw, 34px); }
+    h3 { margin-bottom: 10px; font-size: 18px; }
+    .lead {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.65;
+      max-width: 900px;
+    }
+    .pills { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 4px 9px;
+      border: 1px solid #cfd9d5;
+      border-radius: 6px;
+      background: #fff;
+      color: #405259;
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .pill.strong { color: #8b3d2f; background: var(--coral-soft); border-color: #efc6bc; }
+
+    .doc-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      padding: 22px 24px 26px;
+    }
+    .doc-card, .card, .mini-card, .setting-block, .wire-card, .ops-item, .metric {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 8px 18px rgba(36, 50, 58, .07);
+    }
+    .doc-card { padding: 16px; }
+    .doc-card strong { display: block; margin-bottom: 8px; }
+    .doc-card p, .mini-card p, .ops-item p { margin: 0; color: var(--muted); line-height: 1.55; font-size: 13px; }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(720px, 1.58fr) minmax(350px, .9fr);
+      gap: 24px;
+      padding: 24px;
+    }
+    .room-shell {
+      position: relative;
+      min-height: 720px;
+      border: 1px solid #cad8d4;
+      border-radius: 10px;
+      background: linear-gradient(#f0c992 0 54%, #e6d0aa 54% 100%);
+      overflow: hidden;
+      perspective: 1100px;
+    }
+    .room-shell::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(circle at 44% 58%, rgba(255,255,255,.36), transparent 38%);
+    }
+    .room-title {
+      position: absolute;
+      top: 18px;
+      left: 24px;
+      z-index: 12;
+      max-width: 350px;
+      padding: 12px 14px;
+      border: 1px solid rgba(36, 50, 58, .12);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .88);
+      box-shadow: 0 8px 22px rgba(36, 50, 58, .1);
+    }
+    .room-title strong { display: block; font-size: 16px; }
+    .room-title span { display: block; margin-top: 5px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .room {
+      position: absolute;
+      left: 5%;
+      right: 5%;
+      top: 7%;
+      bottom: 4%;
+      transform-style: preserve-3d;
+    }
+    .back-wall {
+      position: absolute;
+      left: 18%;
+      top: 6%;
+      width: 64%;
+      height: 48%;
+      border: 2px solid rgba(36, 50, 58, .34);
+      border-bottom: 0;
+      background:
+        linear-gradient(90deg, transparent 49.7%, rgba(36, 50, 58, .2) 50%, transparent 50.3%),
+        linear-gradient(180deg, #f3b6aa, #e89b90);
+      box-shadow: inset 0 -38px 60px rgba(116, 65, 60, .12);
+    }
+    .left-wall, .right-wall {
+      position: absolute;
+      top: 6%;
+      width: 24%;
+      height: 48%;
+      border: 2px solid rgba(36, 50, 58, .32);
+      background: linear-gradient(180deg, #f6c4ba, #eaa49b);
+      transform-origin: top center;
+    }
+    .left-wall { left: 0; transform: skewY(-35deg); border-right: 0; }
+    .right-wall { right: 0; transform: skewY(35deg); border-left: 0; }
+    .floor {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 4%;
+      height: 43%;
+      clip-path: polygon(18% 0, 82% 0, 100% 100%, 0 100%);
+      border: 2px solid rgba(36, 50, 58, .35);
+      background:
+        linear-gradient(90deg, rgba(36, 50, 58, .10) 1px, transparent 1px) 0 0 / 64px 100%,
+        linear-gradient(135deg, #f7efe5, #e6d6c2);
+      box-shadow: inset 0 28px 45px rgba(95, 67, 40, .12);
+    }
+    .rug {
+      position: absolute;
+      left: 35%;
+      bottom: 14%;
+      width: 30%;
+      height: 18%;
+      border-radius: 50%;
+      background: #e9b65e;
+      transform: skewX(-18deg);
+      box-shadow: 0 12px 20px rgba(70, 48, 30, .12);
+    }
+    .deco { position: absolute; z-index: 5; }
+    .window {
+      left: 29%;
+      top: 12%;
+      width: 70px;
+      height: 86px;
+      border: 5px solid #fff7ef;
+      background: linear-gradient(135deg, #d8f2ff, #fff);
+      box-shadow: inset 0 0 0 2px rgba(36, 50, 58, .12);
+    }
+    .desk {
+      right: 24%;
+      top: 37%;
+      width: 126px;
+      height: 34px;
+      border-radius: 4px;
+      background: #bf7f5c;
+      box-shadow: 0 34px 0 #9b6449, -18px 34px 0 #774938, 18px 34px 0 #774938;
+    }
+    .lamp {
+      right: 17%;
+      top: 29%;
+      width: 18px;
+      height: 110px;
+      background: #7d665a;
+      border-radius: 10px;
+    }
+    .lamp::before {
+      content: "";
+      position: absolute;
+      left: -18px;
+      top: -34px;
+      width: 56px;
+      height: 42px;
+      border-radius: 28px 28px 8px 8px;
+      background: #f5d786;
+      border: 2px solid rgba(36, 50, 58, .24);
+    }
+    .sofa {
+      left: 20%;
+      bottom: 25%;
+      width: 138px;
+      height: 64px;
+      border-radius: 14px 14px 8px 8px;
+      background: #f2ddd4;
+      box-shadow: 0 22px 0 #d6b9aa, 0 30px 18px rgba(36, 50, 58, .16);
+    }
+    .tea-table {
+      left: 44%;
+      bottom: 29%;
+      width: 92px;
+      height: 40px;
+      border-radius: 50%;
+      background: #fff9f2;
+      border: 2px solid #d8bea0;
+      box-shadow: 0 24px 0 #bd8c68;
+    }
+    .plant {
+      right: 10%;
+      bottom: 15%;
+      width: 42px;
+      height: 58px;
+      background: #d08a61;
+      clip-path: polygon(18% 30%, 82% 30%, 68% 100%, 32% 100%);
+    }
+    .plant::before {
+      content: "";
+      position: absolute;
+      left: -8px;
+      top: -36px;
+      width: 58px;
+      height: 52px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 70%, #4f9b68 0 28%, transparent 29%), radial-gradient(circle at 62% 62%, #6abf81 0 28%, transparent 29%), radial-gradient(circle at 50% 30%, #4f9b68 0 28%, transparent 29%);
+    }
+    .loose-books {
+      left: 58%;
+      bottom: 22%;
+      display: flex;
+      gap: 4px;
+      transform: skewY(-12deg);
+    }
+    .loose-books span { display: block; width: 13px; height: 44px; border-radius: 3px; background: var(--sky); }
+    .loose-books span:nth-child(2) { height: 36px; background: var(--coral); }
+    .loose-books span:nth-child(3) { height: 48px; background: var(--amber); }
+
+    .artifact {
+      position: absolute;
+      z-index: 10;
+      border: 0;
+      background: transparent;
+      color: var(--ink);
+      transition: transform .18s ease, filter .18s ease;
+    }
+    .artifact:hover { transform: translateY(-5px); filter: drop-shadow(0 12px 12px rgba(36, 50, 58, .2)); }
+    .artifact:focus-visible { outline: 3px solid var(--teal); outline-offset: 6px; border-radius: 8px; }
+    .artifact .label {
+      position: absolute;
+      left: 50%;
+      top: calc(100% + 8px);
+      transform: translateX(-50%);
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      min-height: 28px;
+      padding: 5px 9px;
+      border: 1px solid rgba(36, 50, 58, .18);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, .94);
+      box-shadow: 0 8px 18px rgba(36, 50, 58, .1);
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .hot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--coral);
+      box-shadow: 0 0 0 4px rgba(233, 137, 118, .18);
+    }
+    .avatar-mirror { left: 20%; top: 24%; width: 72px; height: 120px; }
+    .mirror-shape {
+      display: block;
+      width: 72px;
+      height: 112px;
+      border: 9px solid #cf927c;
+      border-radius: 38px 38px 10px 10px;
+      background: linear-gradient(135deg, #eaf7ff, #fff);
+      box-shadow: inset -10px -12px 0 rgba(142,183,223,.22), 0 12px 0 #9e634e;
+    }
+    .mbti-orb { left: 46%; top: 19%; width: 94px; height: 94px; }
+    .orb-shape {
+      display: block;
+      width: 86px;
+      height: 86px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 32% 28%, #fff, #a99ad8 34%, #6271b9 72%);
+      border: 4px solid rgba(255,255,255,.9);
+      box-shadow: 0 16px 0 rgba(71, 77, 140, .32), 0 20px 30px rgba(36, 50, 58, .2);
+    }
+    .taste-shelf { left: 60%; top: 37%; width: 150px; height: 92px; }
+    .shelf-shape {
+      display: block;
+      position: relative;
+      width: 148px;
+      height: 80px;
+      border-radius: 6px;
+      background: #b87856;
+      box-shadow: 0 20px 0 #8e573f, 0 24px 20px rgba(36,50,58,.16);
+    }
+    .book-row { position: absolute; left: 12px; top: 14px; display: flex; gap: 5px; align-items: flex-end; }
+    .book { width: 15px; border-radius: 2px; background: var(--sky); }
+    .b1 { height: 42px; } .b2 { height: 34px; background: var(--amber); } .b3 { height: 50px; background: var(--coral); }
+    .b4 { height: 38px; background: var(--mint); } .b5 { height: 46px; background: var(--violet); }
+    .plant-pot {
+      position: absolute;
+      right: 14px;
+      bottom: 12px;
+      width: 30px;
+      height: 24px;
+      background: #df9a68;
+      clip-path: polygon(10% 0, 90% 0, 76% 100%, 24% 100%);
+    }
+    .plant-pot::before {
+      content: "";
+      position: absolute;
+      left: -7px;
+      top: -24px;
+      width: 44px;
+      height: 30px;
+      border-radius: 50%;
+      background: #5da977;
+    }
+    .settings-console { right: 21%; bottom: 20%; width: 120px; height: 84px; }
+    .console-shape {
+      display: block;
+      position: relative;
+      width: 116px;
+      height: 70px;
+      border-radius: 8px;
+      background: linear-gradient(180deg, #f9fbfb, #dfe8e6);
+      border: 3px solid #6f7c80;
+      box-shadow: 0 18px 0 #9aa6a6, 0 24px 20px rgba(36,50,58,.16);
+    }
+    .knobs { position: absolute; left: 14px; right: 14px; bottom: 14px; display: flex; justify-content: space-between; }
+    .knobs span { width: 17px; height: 17px; border-radius: 50%; background: var(--teal); box-shadow: inset 3px 3px 0 rgba(255,255,255,.35); }
+
+    .spec-panel { display: grid; gap: 16px; align-content: start; }
+    .card, .mini-card { padding: 16px; }
+    .card ul, .mini-card ul { margin: 0; padding-left: 18px; color: var(--muted); line-height: 1.65; font-size: 13px; }
+    .flow { display: grid; gap: 10px; }
+    .flow-step {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfefd;
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .flow-step span {
+      display: grid;
+      place-items: center;
+      flex: 0 0 28px;
+      height: 28px;
+      border-radius: 50%;
+      color: #fff;
+      background: var(--teal);
+    }
+    .feature-map, .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .feature-map th, .feature-map td, .data-table th, .data-table td {
+      padding: 10px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+    .feature-map th, .data-table th {
+      background: #f3f7f6;
+      color: #3a4c52;
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .subsection { padding: 24px; }
+    .screen-grid {
+      display: grid;
+      grid-template-columns: minmax(700px, 1.35fr) minmax(330px, .65fr);
+      gap: 20px;
+    }
+    .mock-screen {
+      overflow: hidden;
+      border: 1px solid #cdd9d6;
+      border-radius: 10px;
+      background: #f9fbfa;
+    }
+    .app-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      min-height: 72px;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--line);
+      background: #fff;
+    }
+    .app-title { font-size: 20px; font-weight: 900; }
+    .app-header small { color: var(--muted); }
+    .app-body { padding: 18px; }
+    .settings-layout {
+      display: grid;
+      grid-template-columns: 230px minmax(0, 1fr);
+      gap: 18px;
+    }
+    .settings-menu {
+      display: grid;
+      gap: 7px;
+      align-content: start;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+    .settings-menu a {
+      padding: 10px 11px;
+      border-radius: 6px;
+      color: var(--ink);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 900;
+    }
+    .settings-menu a:first-child, .settings-menu a:hover { background: var(--green-soft); color: var(--teal); }
+    .settings-content { display: grid; gap: 14px; }
+    .setting-block { padding: 15px; }
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 12px 0;
+      border-top: 1px solid #edf1f0;
+    }
+    .setting-row:first-of-type { border-top: 0; padding-top: 0; }
+    .setting-row strong { display: block; margin-bottom: 4px; }
+    .setting-row small, .note { color: var(--muted); line-height: 1.5; font-size: 12px; }
+    .toggle {
+      position: relative;
+      flex: 0 0 46px;
+      height: 26px;
+      border-radius: 999px;
+      background: #c5cfcc;
+    }
+    .toggle::after {
+      content: "";
+      position: absolute;
+      left: 4px;
+      top: 4px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,.18);
+    }
+    .toggle.on { background: var(--teal); }
+    .toggle.on::after { left: 24px; }
+    .chip-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+    .choice {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 6px 10px;
+      border: 1px solid #d6dfdc;
+      border-radius: 6px;
+      background: #fff;
+      color: #526268;
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .choice.selected { color: #fff; border-color: var(--teal); background: var(--teal); }
+    .danger-box {
+      padding: 15px;
+      border: 1px solid #e9b5aa;
+      border-radius: 8px;
+      background: var(--coral-soft);
+    }
+    .primary-btn {
+      min-height: 36px;
+      padding: 0 14px;
+      border: 1px solid #1e6c62;
+      border-radius: 6px;
+      color: #fff;
+      background: var(--teal);
+      font-weight: 900;
+    }
+    .secondary-btn {
+      min-height: 34px;
+      padding: 0 12px;
+      border: 1px solid #cfd9d5;
+      border-radius: 6px;
+      background: #fff;
+      color: var(--ink);
+      font-weight: 900;
+    }
+
+    .admin-shell {
+      display: grid;
+      grid-template-columns: 248px minmax(0, 1fr);
+      min-height: 760px;
+      background: #eef3f2;
+    }
+    .admin-nav {
+      padding: 18px 14px;
+      background: #24323a;
+      color: #fff;
+    }
+    .admin-nav .logo { margin: 3px 8px 18px; font-size: 18px; font-weight: 900; }
+    .admin-nav a {
+      display: block;
+      padding: 11px 12px;
+      border-radius: 6px;
+      color: rgba(255,255,255,.78);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .admin-nav a.active, .admin-nav a:hover { background: rgba(255,255,255,.12); color: #fff; }
+    .admin-main { padding: 20px; }
+    .admin-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+    .searchbar {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) 160px 160px 160px auto;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .searchbar input, .searchbar select {
+      min-height: 38px;
+      border: 1px solid #cfd9d5;
+      border-radius: 6px;
+      background: #fff;
+      color: var(--ink);
+      padding: 0 10px;
+    }
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .metric { padding: 14px; }
+    .metric span { display: block; color: var(--muted); font-size: 12px; font-weight: 900; }
+    .metric strong { display: block; margin: 5px 0; font-size: 24px; }
+    .metric small { color: var(--teal); font-weight: 800; }
+    .admin-grid {
+      display: grid;
+      grid-template-columns: minmax(560px, 1fr) 360px;
+      gap: 16px;
+      margin-top: 16px;
+    }
+    .status {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .status.good { color: #17695f; background: #ddf4ee; }
+    .status.warn { color: #8b5a16; background: #fff0c9; }
+    .status.bad { color: #9a3a2d; background: #ffe2dc; }
+    .ops-list { display: grid; gap: 12px; }
+    .ops-item { padding: 14px; }
+    .ops-item strong { display: block; margin-bottom: 6px; }
+
+    .wire-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      padding: 24px;
+    }
+    .wire-card { padding: 16px; }
+    .wireframe {
+      display: grid;
+      gap: 8px;
+      min-height: 210px;
+      margin-top: 12px;
+      padding: 12px;
+      border: 1px dashed #b8c6c2;
+      border-radius: 8px;
+      background: #fbfefd;
+    }
+    .wire-line, .wire-box, .wire-btn {
+      border-radius: 5px;
+      background: #dfe9e6;
+    }
+    .wire-line { height: 16px; }
+    .wire-box { min-height: 54px; }
+    .wire-btn { width: 96px; height: 30px; background: var(--teal); }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .table-wrap { overflow-x: auto; padding: 24px; }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 90;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: rgba(30, 41, 47, .52);
+    }
+    .modal-backdrop.is-open { display: flex; }
+    .modal {
+      width: min(1080px, 100%);
+      max-height: min(820px, 92vh);
+      overflow: hidden;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 28px 70px rgba(0,0,0,.32);
+    }
+    .modal-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+    }
+    .modal-head h3 { margin-bottom: 4px; }
+    .close-btn {
+      width: 34px;
+      height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      font-weight: 900;
+    }
+    .modal-tabs {
+      display: flex;
+      gap: 8px;
+      padding: 12px 16px;
+      overflow-x: auto;
+      border-bottom: 1px solid var(--line);
+      background: #f8fbfa;
+    }
+    .tab-btn {
+      min-height: 34px;
+      padding: 0 12px;
+      border: 1px solid #cfd9d5;
+      border-radius: 6px;
+      background: #fff;
+      color: var(--muted);
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .tab-btn.is-active { color: #fff; border-color: var(--teal); background: var(--teal); }
+    .modal-body {
+      max-height: 620px;
+      overflow: auto;
+      padding: 18px;
+    }
+    .tab-panel { display: none; }
+    .tab-panel.is-active { display: block; }
+    .panel-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .profile-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .profile-field {
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfefd;
+    }
+    .profile-field span { display: block; margin-bottom: 5px; color: var(--muted); font-size: 12px; font-weight: 800; }
+    .profile-field strong { display: block; }
+    .axis-chart {
+      display: grid;
+      gap: 10px;
+    }
+    .bar {
+      display: grid;
+      grid-template-columns: 90px minmax(0, 1fr) 54px;
+      gap: 9px;
+      align-items: center;
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .bar span:nth-child(2) {
+      position: relative;
+      height: 12px;
+      border-radius: 999px;
+      background: #e5ece9;
+      overflow: hidden;
+    }
+    .bar span:nth-child(2)::after {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: var(--w);
+      background: linear-gradient(90deg, var(--teal), var(--sky));
+    }
+    .timeline { display: grid; gap: 10px; }
+    .timeline-item {
+      display: grid;
+      grid-template-columns: 104px 1fr;
+      gap: 10px;
+      padding: 11px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfefd;
+      font-size: 13px;
+    }
+    .timeline-item span { color: var(--teal); font-weight: 900; }
+
+    @media (max-width: 1120px) {
+      .workspace, .screen-grid, .admin-grid, .wire-grid { grid-template-columns: 1fr; }
+      .doc-grid, .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .room-shell { min-height: 650px; }
+      .searchbar { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 760px) {
+      main { padding: 14px; }
+      .topbar { position: static; align-items: flex-start; flex-direction: column; padding: 14px; }
+      .topbar nav { margin-left: 0; }
+      .section-head { display: block; padding: 20px; }
+      .pills { justify-content: flex-start; margin-top: 14px; }
+      .workspace, .subsection, .wire-grid, .table-wrap { padding: 14px; }
+      .doc-grid, .settings-layout, .panel-grid, .profile-list, .metric-grid, .admin-shell, .searchbar { grid-template-columns: 1fr; }
+      .admin-nav { min-height: auto; }
+      .room-shell { min-height: 560px; }
+      .room-title { max-width: 270px; }
+      .artifact .label { font-size: 11px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>마음 웰니스 화면설계서</span>
+    </div>
+    <nav aria-label="화면설계서 목차">
+      <a class="nav-link is-active" href="#overview">문서 개요</a>
+      <a class="nav-link" href="#mypage">마이페이지</a>
+      <a class="nav-link" href="#settings">설정</a>
+      <a class="nav-link" href="#admin">관리자</a>
+      <a class="nav-link" href="#spec">설계 원칙</a>
+      <a class="nav-link" href="#trace">요구사항 추적</a>
+    </nav>
+  </header>
+
+  <main>
+    <section id="overview" class="page">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">UI Specification</p>
+          <h1>마이페이지와 관리자 페이지 분리형 HTML 화면설계서</h1>
+          <p class="lead">제공된 요구사항 정의서의 추가설명을 기준으로 마이페이지 메인, 기능 팝업, 일반 사이트형 설정 화면, 관리자 콘솔을 분리 설계했다. 기존 화면설계서 PDF의 원칙에 맞춰 와이어프레임, 디스크립션, 수정 이력, 메뉴 트리, 스크린 리스트, 플로우, 정책, 권한, 검증 항목을 함께 포함한다.</p>
+        </div>
+        <div class="pills">
+          <span class="pill strong">v1.0</span>
+          <span class="pill">2026-06-18</span>
+          <span class="pill">HTML Prototype</span>
+        </div>
+      </div>
+      <div class="doc-grid">
+        <div class="doc-card">
+          <strong>1. 와이어프레임</strong>
+          <p>마이룸, 설정, 관리자 콘솔의 화면 배치와 주요 인터랙션 영역을 시각화한다.</p>
+        </div>
+        <div class="doc-card">
+          <strong>2. 디스크립션</strong>
+          <p>각 화면의 버튼, 탭, 필터, 정책 안내, 오류 상태를 구현 단위로 설명한다.</p>
+        </div>
+        <div class="doc-card">
+          <strong>3. 정책/권한</strong>
+          <p>시크릿챗 비저장, 비의료 문구, 관리자 RBAC, 개인정보 마스킹을 명시한다.</p>
+        </div>
+        <div class="doc-card">
+          <strong>4. 검증</strong>
+          <p>팝업 접근성, 설정 즉시 반영, 관리자 감사 로그 등 QA 기준을 추적한다.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="mypage" class="page">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">MY PAGE MAIN</p>
+          <h2>3D 마이룸 기반 마이페이지 메인</h2>
+          <p class="lead">마이페이지의 첫 화면은 아이소매트릭 방 스타일의 직사각형 3D 공간이다. 일부 아티팩트만 기능 진입점으로 동작하며, 내정보·MBTI분석·취향분석은 팝업 탭으로, 사용자설정은 별도 설정 화면으로 이동한다.</p>
+        </div>
+        <div class="pills">
+          <span class="pill">F-MY-001</span>
+          <span class="pill">F-MY-002</span>
+          <span class="pill">F-MY-003</span>
+          <span class="pill strong">NF-MY-001~002</span>
+        </div>
+      </div>
+
+      <div class="workspace">
+        <div class="room-shell" aria-label="클릭 가능한 3D 마이룸 화면">
+          <div class="room-title">
+            <strong>사용자 마이룸</strong>
+            <span>붉은 점이 있는 오브젝트만 기능과 연결된다. 나머지 가구, 책, 식물, 창문은 방 꾸미기와 공간감을 위한 요소다.</span>
+          </div>
+          <div class="room">
+            <div class="left-wall"></div>
+            <div class="right-wall"></div>
+            <div class="back-wall"></div>
+            <div class="floor"></div>
+            <div class="deco window"></div>
+            <div class="deco desk"></div>
+            <div class="deco sofa"></div>
+            <div class="deco tea-table"></div>
+            <div class="deco rug"></div>
+            <div class="deco lamp"></div>
+            <div class="deco plant"></div>
+            <div class="deco loose-books"><span></span><span></span><span></span></div>
+
+            <button class="artifact avatar-mirror" data-modal="profile" aria-label="내정보 팝업 열기">
+              <span class="mirror-shape" aria-hidden="true"></span>
+              <span class="label"><span class="hot"></span>내정보 거울</span>
+            </button>
+
+            <button class="artifact mbti-orb" data-modal="mbti" aria-label="MBTI 분석 팝업 열기">
+              <span class="orb-shape" aria-hidden="true"></span>
+              <span class="label"><span class="hot"></span>MBTI 별구슬</span>
+            </button>
+
+            <button class="artifact taste-shelf" data-modal="taste" aria-label="취향 분석 팝업 열기">
+              <span class="shelf-shape" aria-hidden="true">
+                <span class="book-row"><span class="book b1"></span><span class="book b2"></span><span class="book b3"></span><span class="book b4"></span><span class="book b5"></span></span>
+                <span class="plant-pot"></span>
+              </span>
+              <span class="label"><span class="hot"></span>취향 책장</span>
+            </button>
+
+            <button class="artifact settings-console" data-jump="#settings" aria-label="사용자 설정 화면으로 이동">
+              <span class="console-shape" aria-hidden="true"><span class="knobs"><span></span><span></span><span></span></span></span>
+              <span class="label"><span class="hot"></span>설정 콘솔</span>
+            </button>
+          </div>
+        </div>
+
+        <aside class="spec-panel">
+          <div class="card">
+            <h3>사용 흐름</h3>
+            <div class="flow">
+              <div class="flow-step"><span>1</span>마이페이지 메인 화면 진입</div>
+              <div class="flow-step"><span>2</span>클릭 가능한 아티팩트 선택</div>
+              <div class="flow-step"><span>3</span>팝업 탭 또는 설정 화면 진입</div>
+              <div class="flow-step"><span>4</span>조회, 분석 확인, 수정, 저장 수행</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>아티팩트와 기능 매핑</h3>
+            <table class="feature-map">
+              <thead>
+                <tr><th>아티팩트</th><th>연결 기능</th><th>설계 의도</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>내정보 거울</td><td>내정보 팝업</td><td>사용자의 프로필을 비추고 항목별 수정으로 이어지는 은유.</td></tr>
+                <tr><td>MBTI 별구슬</td><td>MBTI 분석 팝업</td><td>대화기록에서 관찰된 성향과 변화 경향을 한눈에 보는 분석 오브젝트.</td></tr>
+                <tr><td>취향 책장</td><td>취향 분석 팝업</td><td>관심 주제, 선호 표현, 콘텐츠 취향을 개인 아카이브처럼 표현.</td></tr>
+                <tr><td>설정 콘솔</td><td>설정 화면 이동</td><td>알림, 시크릿챗, 공유 범위, 언어/테마를 제어하는 콘솔.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <h3>마이룸 정책</h3>
+            <ul>
+              <li>기능 아티팩트는 붉은 점, 라벨, 포커스 윤곽선으로 구분한다.</li>
+              <li>모든 분석 문구는 자기이해, 감정 인식, 생활 제안 중심으로 작성한다.</li>
+              <li>진단명, 질병명, 위험 등급, 임상 점수처럼 의료적 오해를 줄 표현은 노출하지 않는다.</li>
+              <li>시크릿챗은 저장되지 않으며, 일반챗 전환 시 저장 범위와 반영 시점을 재확인한다.</li>
+            </ul>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="settings" class="page">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">USER SETTINGS</p>
+          <h2>일반 사이트형 사용자 설정 화면</h2>
+          <p class="lead">설정은 대시보드가 아닌 일반적인 사이트 설정 IA로 구성한다. 좌측 메뉴와 우측 상세 설정 영역을 사용하며, 변경사항은 새로고침 없이 즉시 반영되고 성공 토스트 또는 오류 안내를 제공한다.</p>
+        </div>
+        <div class="pills">
+          <span class="pill">F-SET-001~005</span>
+          <span class="pill strong">NF-SET-001</span>
+        </div>
+      </div>
+
+      <div class="subsection">
+        <div class="screen-grid">
+          <div class="mock-screen">
+            <div class="app-header">
+              <div>
+                <div class="app-title">설정</div>
+                <small>알림, 저장 정책, 공유 범위, 접근성, 계정 데이터를 한 곳에서 관리</small>
+              </div>
+              <button class="primary-btn">변경사항 저장</button>
+            </div>
+            <div class="app-body settings-layout">
+              <nav class="settings-menu" aria-label="설정 메뉴">
+                <a href="#settings">프로필과 캐릭터</a>
+                <a href="#settings">알림</a>
+                <a href="#settings">시크릿챗</a>
+                <a href="#settings">공유 범위</a>
+                <a href="#settings">언어와 테마</a>
+                <a href="#settings">계정과 데이터</a>
+              </nav>
+
+              <div class="settings-content">
+                <div class="setting-block">
+                  <h3>프로필과 대화 개인화</h3>
+                  <div class="setting-row">
+                    <div>
+                      <strong>대표 캐릭터</strong>
+                      <small>새 대화 시작 시 기본 캐릭터로 적용하며 기존 대화방은 유지한다.</small>
+                    </div>
+                    <div class="chip-row">
+                      <span class="choice selected">루루</span>
+                      <span class="choice">모아</span>
+                      <span class="choice">나린</span>
+                    </div>
+                  </div>
+                  <div class="setting-row">
+                    <div>
+                      <strong>개인화 정보 반영</strong>
+                      <small>온보딩에서 입력한 MBTI, 관심사, 선호 색상을 대화 추천에 반영한다.</small>
+                    </div>
+                    <span class="toggle on" aria-hidden="true"></span>
+                  </div>
+                </div>
+
+                <div class="setting-block">
+                  <h3>알림 수신 설정</h3>
+                  <div class="setting-row">
+                    <div><strong>마음 알람</strong><small>21:00 수신, 매일 반복, 방해금지 시간 적용</small></div>
+                    <span class="toggle on" aria-hidden="true"></span>
+                  </div>
+                  <div class="setting-row">
+                    <div><strong>운세와 주간 카드</strong><small>오전 8시 운세, 일요일 저녁 주간 카드 알림</small></div>
+                    <span class="toggle" aria-hidden="true"></span>
+                  </div>
+                  <div class="setting-row">
+                    <div><strong>서비스 공지</strong><small>정책 변경, 점검, 장애 안내 등 필수 공지는 별도 표시</small></div>
+                    <span class="toggle on" aria-hidden="true"></span>
+                  </div>
+                </div>
+
+                <div class="setting-block">
+                  <h3>시크릿챗 기본 설정</h3>
+                  <div class="setting-row">
+                    <div>
+                      <strong>신규 대화를 비저장 모드로 시작</strong>
+                      <small>일반 저장 모드로 전환할 때 저장 범위와 반영 시점을 다시 안내한다.</small>
+                    </div>
+                    <span class="toggle on" aria-hidden="true"></span>
+                  </div>
+                  <div class="note">시크릿챗은 분석 파이프라인과 마이페이지 기록에 포함되지 않는다. 일반챗 전환 이후의 대화만 저장 대상으로 안내한다.</div>
+                </div>
+
+                <div class="setting-block">
+                  <h3>결과카드 공개 범위</h3>
+                  <div class="chip-row">
+                    <span class="choice selected">닉네임 숨김</span>
+                    <span class="choice selected">생성일 표시</span>
+                    <span class="choice">캐릭터명 표시</span>
+                    <span class="choice selected">요약만 표시</span>
+                    <span class="choice">상세 문구 포함</span>
+                  </div>
+                  <div class="note">선택 내용은 공유 이미지와 공유 링크 미리보기에 동일하게 적용한다.</div>
+                </div>
+
+                <div class="setting-block">
+                  <h3>언어와 테마</h3>
+                  <div class="setting-row">
+                    <div><strong>인터페이스 언어</strong><small>로그인 상태에서 기기 재접속 후에도 유지한다.</small></div>
+                    <div class="chip-row"><span class="choice selected">한국어</span><span class="choice">English</span></div>
+                  </div>
+                  <div class="setting-row">
+                    <div><strong>화면 테마</strong><small>텍스트 대비와 주요 버튼 가독성을 보장한다.</small></div>
+                    <div class="chip-row"><span class="choice selected">라이트</span><span class="choice">다크</span></div>
+                  </div>
+                </div>
+
+                <div class="danger-box">
+                  <h3>계정 탈퇴와 데이터 삭제</h3>
+                  <p>탈퇴 전 대화기록, 결과카드, 메모리, 개인화 설정, 알림 설정의 삭제 범위와 복구 불가 여부를 안내한다. 최종 확인 후 삭제 완료 화면과 이메일 확인 안내를 제공한다.</p>
+                  <button class="primary-btn" style="background:#a54235;border-color:#873226;">탈퇴 절차 시작</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <aside class="spec-panel">
+            <div class="card">
+              <h3>설정 디스크립션</h3>
+              <ul>
+                <li>저장 성공 시 상단 토스트로 “변경사항이 반영되었습니다”를 표시한다.</li>
+                <li>저장 실패, 네트워크 오류, 권한 오류는 원인과 재시도 버튼을 함께 제공한다.</li>
+                <li>설정 변경은 현재 화면과 관련 기능에 즉시 반영되어야 한다.</li>
+                <li>계정 삭제는 삭제 범위 확인, 최종 확인, 완료 화면의 3단계로 구성한다.</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>설정 항목 매핑</h3>
+              <table class="feature-map">
+                <thead><tr><th>요구사항</th><th>화면 요소</th></tr></thead>
+                <tbody>
+                  <tr><td>F-SET-001</td><td>알림 유형별 토글, 수신 시간, 반복 주기, 방해금지</td></tr>
+                  <tr><td>F-SET-002</td><td>시크릿챗 기본값 토글, 저장 정책 안내</td></tr>
+                  <tr><td>F-SET-003</td><td>결과카드 공개 범위 칩 선택, 공유 미리보기 반영</td></tr>
+                  <tr><td>F-SET-004</td><td>탈퇴·데이터 삭제 단계형 확인 플로우</td></tr>
+                  <tr><td>F-SET-005</td><td>언어·테마 세그먼트 선택, 접근성 기준 안내</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <section id="admin" class="page">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">ADMIN PAGE</p>
+          <h2>관리자 페이지 분리 설계</h2>
+          <p class="lead">관리자 페이지는 마이룸 경험과 완전히 분리된 운영 콘솔이다. 회원·안전 관리, 콘텐츠 관리, 모델 모니터링, 공지·배너, 서비스 지표, 감사 로그를 역할 기반 권한에 따라 노출한다.</p>
+        </div>
+        <div class="pills">
+          <span class="pill">F-ADM-001~009</span>
+          <span class="pill strong">NF-ADM-001</span>
+        </div>
+      </div>
+
+      <div class="admin-shell">
+        <aside class="admin-nav" aria-label="관리자 메뉴">
+          <div class="logo">Admin Console</div>
+          <a class="active" href="#admin">회원·안전 관리</a>
+          <a href="#admin">결과카드 템플릿</a>
+          <a href="#admin">캐릭터 프롬프트</a>
+          <a href="#admin">운세 콘텐츠</a>
+          <a href="#admin">모델 모니터링</a>
+          <a href="#admin">공지·배너</a>
+          <a href="#admin">서비스 지표</a>
+          <a href="#admin">시스템 점검</a>
+          <a href="#admin">감사 로그</a>
+        </aside>
+
+        <div class="admin-main">
+          <div class="admin-toolbar">
+            <div>
+              <h3 style="margin-bottom:4px;">회원·안전 관리</h3>
+              <p style="margin:0;color:var(--muted);font-size:13px;">권한 수준에 따라 개인정보를 마스킹하고 모든 조회·변경 행위를 감사 로그로 기록한다.</p>
+            </div>
+            <button class="primary-btn">운영 리포트 CSV</button>
+          </div>
+
+          <div class="searchbar" aria-label="회원 검색 필터">
+            <input value="닉네임, 이메일, 회원 ID" aria-label="검색어" />
+            <select aria-label="계정 상태"><option>전체 상태</option><option>활성</option><option>일시 정지</option><option>삭제 요청</option></select>
+            <select aria-label="가입일"><option>가입일 전체</option><option>최근 7일</option><option>최근 30일</option></select>
+            <select aria-label="최근 접속일"><option>최근 접속일 전체</option><option>30일 이상 미접속</option></select>
+            <button class="primary-btn">검색</button>
+          </div>
+
+          <div class="metric-grid">
+            <div class="metric"><span>DAU</span><strong>18,420</strong><small>전일 대비 6.4%</small></div>
+            <div class="metric"><span>결과카드 생성</span><strong>7,832</strong><small>저장률 42.1%</small></div>
+            <div class="metric"><span>안전 케이스</span><strong>23</strong><small style="color:#9b3d2e;">검토중 5건</small></div>
+            <div class="metric"><span>모델 드리프트</span><strong>0.18</strong><small>임계치 이하</small></div>
+          </div>
+
+          <div class="admin-grid">
+            <div>
+              <table class="data-table" aria-label="회원 목록">
+                <thead>
+                  <tr>
+                    <th>회원 ID</th>
+                    <th>닉네임</th>
+                    <th>이메일</th>
+                    <th>최근 접속</th>
+                    <th>상태</th>
+                    <th>작업</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td>U-10392</td><td>하늘빛</td><td>ha***@mail.com</td><td>2026-06-18</td><td><span class="status good">활성</span></td><td>상세</td></tr>
+                  <tr><td>U-10391</td><td>민트노트</td><td>mi***@mail.com</td><td>2026-06-17</td><td><span class="status warn">검토</span></td><td>상세</td></tr>
+                  <tr><td>U-10377</td><td>봄잠</td><td>bo***@mail.com</td><td>2026-06-12</td><td><span class="status bad">일시 정지</span></td><td>사유 보기</td></tr>
+                  <tr><td>U-10360</td><td>라이트</td><td>li***@mail.com</td><td>2026-06-01</td><td><span class="status good">활성</span></td><td>상세</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <aside class="ops-list">
+              <div class="ops-item">
+                <strong>회원 상태 변경 패널</strong>
+                <p>활성, 일시 정지, 영구 정지, 삭제 요청으로 변경 가능하며 처리 사유, 담당자, 처리 일시를 필수 기록한다.</p>
+              </div>
+              <div class="ops-item">
+                <strong>결과카드 콘텐츠 관리</strong>
+                <p>카테고리, 캐릭터, 노출 조건별 템플릿을 등록하고 미리보기에서 줄바꿈과 금칙어를 확인한다.</p>
+              </div>
+              <div class="ops-item">
+                <strong>프롬프트와 RAG 버전</strong>
+                <p>캐릭터별 시스템 프롬프트, 말투 가이드, 금칙어 정책, 참조 소스를 버전별 관리하고 롤백한다.</p>
+              </div>
+              <div class="ops-item">
+                <strong>운세·공지 운영</strong>
+                <p>날짜, 언어, 발행 상태, 대상 그룹, 노출 위치, 우선순위, 점검 1시간 전 알림을 관리한다.</p>
+              </div>
+              <div class="ops-item">
+                <strong>모델 모니터링</strong>
+                <p>주간 추정 분포, 이상치 비율, 입력 데이터 편향, 드리프트 지표를 조회하고 점검 상태로 기록한다.</p>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="spec" class="page">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Wireframe & Description</p>
+          <h2>화면설계서 구성 원칙 반영</h2>
+          <p class="lead">기존 화면설계서 PDF의 항목을 HTML 문서에 맞춰 재구성했다. 각 화면은 와이어프레임, 기능 설명, 플로우, 정책, 권한, 검증 기준을 함께 가진다.</p>
+        </div>
+      </div>
+
+      <div class="wire-grid">
+        <div class="wire-card">
+          <h3>마이페이지 메인 와이어프레임</h3>
+          <p class="lead" style="font-size:13px;">상단 내비게이션, 3D 방, 우측 설명 패널, 기능 팝업 진입점으로 구성.</p>
+          <div class="wireframe">
+            <div class="wire-line" style="width:55%;"></div>
+            <div class="two-col">
+              <div class="wire-box" style="min-height:142px;"></div>
+              <div class="wire-box"></div>
+            </div>
+            <div class="wire-btn"></div>
+          </div>
+        </div>
+        <div class="wire-card">
+          <h3>기능 팝업 와이어프레임</h3>
+          <p class="lead" style="font-size:13px;">팝업 헤더, 탭, 본문 카드, 안내 문구와 오류 상태를 포함.</p>
+          <div class="wireframe">
+            <div class="wire-line" style="width:70%;"></div>
+            <div class="two-col"><div class="wire-btn"></div><div class="wire-btn" style="background:#dfe9e6;"></div></div>
+            <div class="two-col"><div class="wire-box"></div><div class="wire-box"></div></div>
+            <div class="wire-line" style="width:85%;"></div>
+          </div>
+        </div>
+        <div class="wire-card">
+          <h3>관리자 콘솔 와이어프레임</h3>
+          <p class="lead" style="font-size:13px;">좌측 운영 메뉴, 검색 필터, 지표 카드, 목록 테이블, 작업 패널로 구성.</p>
+          <div class="wireframe">
+            <div class="two-col" style="grid-template-columns:80px 1fr;">
+              <div class="wire-box" style="min-height:170px;"></div>
+              <div style="display:grid;gap:8px;">
+                <div class="wire-line"></div>
+                <div class="wire-box"></div>
+                <div class="wire-box"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>문서 항목</th><th>반영 내용</th><th>검증 포인트</th></tr></thead>
+          <tbody>
+            <tr><td>수정 이력</td><td>v1.0, 2026-06-18, 요구사항 추가설명 기반 신규 HTML 설계</td><td>버전, 날짜, 변경 범위, 작성자 기록</td></tr>
+            <tr><td>메뉴 트리</td><td>마이페이지 메인 > 내정보/MBTI/취향 팝업, 설정 화면, 관리자 페이지</td><td>사용자와 관리자 메뉴가 명확히 분리되는지 확인</td></tr>
+            <tr><td>스크린 리스트</td><td>MY-001 마이룸, MY-002 내정보 팝업, MY-003 MBTI 팝업, MY-004 취향 팝업, SET-001 설정, ADM-001 관리자</td><td>신규·수정 화면의 범위 누락 여부 확인</td></tr>
+            <tr><td>프로세스 플로우</td><td>마이룸 진입 > 아티팩트 클릭 > 팝업 탭 또는 설정 이동 > 기능 수행</td><td>모달 닫기, 탭 전환, 키보드 접근성 확인</td></tr>
+            <tr><td>정책</td><td>비의료 표현, 시크릿챗 비저장, 결과카드 공개 범위, 계정 삭제 복구 불가 안내</td><td>민감 문구와 저장 정책 안내가 화면에 노출되는지 확인</td></tr>
+            <tr><td>권한</td><td>관리자 RBAC, 개인정보 마스킹, 조회·변경 감사 로그</td><td>역할별 메뉴와 작업 권한 분리 확인</td></tr>
+            <tr><td>검증</td><td>설정 즉시 반영, 관리자 필터, CSV 다운로드, 오류·성공 토스트</td><td>성공/실패/권한 오류 상태별 메시지 확인</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="trace" class="page">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Requirement Trace</p>
+          <h2>요구사항 반영 요약</h2>
+          <p class="lead">요구사항 정의서의 추가설명 항목을 화면 단위와 인터랙션 단위로 추적 가능하게 정리했다.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>요구사항 ID</th><th>대상 화면</th><th>반영 설계</th></tr></thead>
+          <tbody>
+            <tr><td>F-MY-001</td><td>내정보 팝업</td><td>온보딩 프로필 항목 조회, 항목별 수정, 저장 후 마이페이지와 대화 개인화 즉시 반영.</td></tr>
+            <tr><td>F-MY-002</td><td>MBTI 분석 팝업</td><td>일반 자유형 대화기록 기반 최근 MBTI 유사 성향, 변화 경향, 근거 리포트, 축별 그래프 제공.</td></tr>
+            <tr><td>F-MY-003</td><td>취향 분석 팝업</td><td>최근 관심사, 선호 경향, 감정 반응, 콘텐츠 취향, 변화 추이를 탭으로 구분.</td></tr>
+            <tr><td>NF-MY-001</td><td>마이룸/설정/팝업</td><td>시크릿챗은 비저장임을 안내하고 일반챗 전환 시 저장 정책 변경을 재확인.</td></tr>
+            <tr><td>NF-MY-002</td><td>분석 팝업 전체</td><td>임상 점수, 진단명, 질병명, 위험 등급 비노출. 자기이해와 생활 제안 중심 문구 사용.</td></tr>
+            <tr><td>F-SET-001~005</td><td>설정 화면</td><td>알림, 시크릿챗 기본값, 결과카드 공개 범위, 계정 탈퇴·데이터 삭제, 언어·테마를 일반 설정 IA로 설계.</td></tr>
+            <tr><td>NF-SET-001</td><td>설정 화면</td><td>변경 즉시 반영, 성공 토스트, 저장 실패·네트워크 오류·권한 오류의 원인과 재시도 방법 안내.</td></tr>
+            <tr><td>F-ADM-001~002</td><td>관리자 회원·안전</td><td>회원 목록 검색·필터·정렬, 개인정보 마스킹, 회원 상태 변경과 감사 로그 기록.</td></tr>
+            <tr><td>F-ADM-003~005</td><td>관리자 콘텐츠</td><td>결과카드 템플릿, 캐릭터 프롬프트/RAG, 운세 콘텐츠 등록·검수·예약 발행.</td></tr>
+            <tr><td>F-ADM-006~009</td><td>관리자 운영·지표</td><td>모델 모니터링, 공지·배너, 서비스 지표, 시스템 점검 등록과 사용자 안내.</td></tr>
+            <tr><td>NF-ADM-001</td><td>관리자 전체</td><td>역할 기반 접근 제어, 권한 없는 접근 차단, 모든 로그인·조회·수정·삭제 감사 로그 기록.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div class="modal-backdrop" id="featureModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="modalTitle">기능 팝업</h3>
+          <p id="modalDesc" style="margin:4px 0 0;color:var(--muted);font-size:13px;"></p>
+        </div>
+        <button class="close-btn" type="button" aria-label="팝업 닫기">X</button>
+      </div>
+      <div class="modal-tabs" id="modalTabs"></div>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
+
+  <template id="profileTemplate">
+    <section class="tab-panel" data-tab="summary">
+      <div class="panel-grid">
+        <div class="mini-card">
+          <h4>기본 프로필 조회</h4>
+          <div class="profile-list">
+            <div class="profile-field"><span>대표 캐릭터</span><strong>루루</strong></div>
+            <div class="profile-field"><span>온보딩 MBTI</span><strong>INFP</strong></div>
+            <div class="profile-field"><span>성별</span><strong>미공개</strong></div>
+            <div class="profile-field"><span>연령대</span><strong>20대</strong></div>
+            <div class="profile-field"><span>선호 색상</span><strong>민트, 하늘색</strong></div>
+            <div class="profile-field"><span>관심사·취미</span><strong>독서, 산책, 음악</strong></div>
+          </div>
+        </div>
+        <div class="mini-card">
+          <h4>수정 인터랙션</h4>
+          <ul>
+            <li>항목별 편집 버튼을 제공하고 수정 중에는 저장/취소 상태를 표시한다.</li>
+            <li>저장 완료 시 마이룸 라벨, 대표 캐릭터, 대화 개인화 설정에 즉시 반영한다.</li>
+            <li>민감 정보는 선택 입력으로 유지하고 공개 여부를 별도 표시한다.</li>
+          </ul>
+          <div class="note">저장 실패 시 기존 값으로 되돌릴 수 있도록 오류 메시지와 재시도 버튼을 제공한다.</div>
+        </div>
+      </div>
+    </section>
+    <section class="tab-panel" data-tab="edit">
+      <div class="panel-grid">
+        <div class="mini-card">
+          <h4>프로필 수정 화면 구성</h4>
+          <table class="feature-map">
+            <tbody>
+              <tr><td>캐릭터</td><td>카드 선택</td><td>대표 캐릭터 변경 안내</td></tr>
+              <tr><td>MBTI</td><td>선택 입력</td><td>온보딩 입력값과 분석 추정값을 구분</td></tr>
+              <tr><td>관심사</td><td>태그 입력</td><td>최대 개수, 중복 방지, 추천 태그</td></tr>
+              <tr><td>선호 색상</td><td>색상 칩</td><td>마이룸 포인트 컬러 미리보기</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="mini-card">
+          <h4>저장 후 반영 영역</h4>
+          <ul>
+            <li>마이페이지 기본 정보 카드</li>
+            <li>대화 캐릭터 추천과 말투 개인화</li>
+            <li>결과카드 공유 미리보기</li>
+            <li>설정 화면의 프로필과 캐릭터 메뉴</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </template>
+
+  <template id="mbtiTemplate">
+    <section class="tab-panel" data-tab="result">
+      <div class="panel-grid">
+        <div class="mini-card">
+          <h4>최근 대화 기반 성향 요약</h4>
+          <p>최근 일반 자유형 대화에서 관찰된 표현 방식을 바탕으로 “차분하게 정리하며 공감 표현을 자주 쓰는 편”처럼 비진단적 문장으로 설명한다.</p>
+          <div class="note" style="margin-top:12px;">이 결과는 자기이해를 돕는 참고 정보이며 성격 유형을 확정하거나 진단하지 않는다.</div>
+        </div>
+        <div class="mini-card">
+          <h4>MBTI 축별 추정 그래프</h4>
+          <div class="axis-chart">
+            <div class="bar" style="--w:62%"><span>I - E</span><span></span><strong>I 경향</strong></div>
+            <div class="bar" style="--w:58%"><span>N - S</span><span></span><strong>N 경향</strong></div>
+            <div class="bar" style="--w:54%"><span>F - T</span><span></span><strong>F 경향</strong></div>
+            <div class="bar" style="--w:49%"><span>P - J</span><span></span><strong>균형</strong></div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="tab-panel" data-tab="evidence">
+      <div class="panel-grid">
+        <div class="mini-card">
+          <h4>추정 근거 리포트</h4>
+          <ul>
+            <li>감정 표현 뒤에 이유와 맥락을 덧붙이는 문장이 반복됨.</li>
+            <li>결론보다 상황 정리와 관계 조율을 먼저 시도하는 대화 패턴이 관찰됨.</li>
+            <li>선택지를 강하게 단정하기보다 가능성을 열어두는 표현을 자주 사용함.</li>
+          </ul>
+        </div>
+        <div class="mini-card">
+          <h4>데이터 제외 정책</h4>
+          <ul>
+            <li>시크릿챗은 분석 대상에서 제외한다.</li>
+            <li>의료적 척도 점수나 위험 등급은 노출하지 않는다.</li>
+            <li>분석 근거는 원문 전체가 아니라 요약된 패턴으로 제공한다.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+    <section class="tab-panel" data-tab="trend">
+      <div class="mini-card">
+        <h4>변화 경향</h4>
+        <div class="timeline">
+          <div class="timeline-item"><span>지난달</span><div>새로운 일을 시작하기 전 충분히 준비하려는 표현이 많았다.</div></div>
+          <div class="timeline-item"><span>최근 2주</span><div>감정을 정리한 뒤 작은 실행 계획으로 옮기려는 문장이 늘었다.</div></div>
+          <div class="timeline-item"><span>이번 주</span><div>혼자 정리하는 시간과 사람에게 도움을 요청하는 균형이 좋아졌다.</div></div>
+        </div>
+      </div>
+    </section>
+  </template>
+
+  <template id="tasteTemplate">
+    <section class="tab-panel" data-tab="interests">
+      <div class="panel-grid">
+        <div class="mini-card">
+          <h4>최근 관심사</h4>
+          <div class="chip-row" style="justify-content:flex-start;">
+            <span class="choice selected">수면 루틴</span>
+            <span class="choice selected">산책</span>
+            <span class="choice selected">정리 습관</span>
+            <span class="choice selected">잔잔한 음악</span>
+            <span class="choice selected">작은 성취</span>
+          </div>
+        </div>
+        <div class="mini-card">
+          <h4>감정 반응 패턴</h4>
+          <div class="axis-chart">
+            <div class="bar" style="--w:72%"><span>편안함</span><span></span><strong>높음</strong></div>
+            <div class="bar" style="--w:63%"><span>몰입감</span><span></span><strong>중상</strong></div>
+            <div class="bar" style="--w:41%"><span>긴장감</span><span></span><strong>낮음</strong></div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="tab-panel" data-tab="preference">
+      <div class="panel-grid">
+        <div class="mini-card">
+          <h4>선호 경향</h4>
+          <ul>
+            <li>직접 조언보다 상황을 먼저 정리해주는 답변을 선호.</li>
+            <li>강한 확신보다 부드러운 선택지 제안을 선호.</li>
+            <li>긴 문장보다 키워드와 짧은 요약을 선호.</li>
+          </ul>
+        </div>
+        <div class="mini-card">
+          <h4>콘텐츠 취향</h4>
+          <table class="feature-map">
+            <tbody>
+              <tr><td>텍스트 톤</td><td>차분함, 다정함</td><td>대화 응답 기본 톤 추천</td></tr>
+              <tr><td>이미지 분위기</td><td>밝은 방, 자연 소재</td><td>결과카드 스타일 추천</td></tr>
+              <tr><td>활동 제안</td><td>실내 정리, 산책, 음악</td><td>생활 제안 후보</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+    <section class="tab-panel" data-tab="trend">
+      <div class="mini-card">
+        <h4>변화 추이</h4>
+        <div class="timeline">
+          <div class="timeline-item"><span>지난달</span><div>업무 효율과 시간 관리 관련 주제가 많았다.</div></div>
+          <div class="timeline-item"><span>최근 2주</span><div>수면, 회복, 관계 거리 조절 주제가 증가했다.</div></div>
+          <div class="timeline-item"><span>이번 주</span><div>가벼운 농담과 감정 기록에 대한 관심이 높아졌다.</div></div>
+        </div>
+        <div class="note" style="margin-top:12px;">취향 분석은 사용자의 관심사를 확정하지 않고, 대화에서 관찰된 반복 패턴으로만 표현한다.</div>
+      </div>
+    </section>
+  </template>
+
+  <script>
+    const modalInfo = {
+      profile: {
+        title: "내정보 팝업 탭",
+        desc: "온보딩에서 입력한 기본 프로필을 조회하고 항목별로 수정한다.",
+        tabs: [["summary", "프로필 조회"], ["edit", "수정 설계"]],
+        template: "profileTemplate"
+      },
+      mbti: {
+        title: "MBTI 분석 팝업 탭",
+        desc: "일반 자유형 대화기록 기반 MBTI 유사 성향과 변화 경향을 비진단적으로 제공한다.",
+        tabs: [["result", "추정 결과"], ["evidence", "근거 리포트"], ["trend", "변화 경향"]],
+        template: "mbtiTemplate"
+      },
+      taste: {
+        title: "취향 분석 팝업 탭",
+        desc: "대화에서 반복적으로 나타나는 최근 관심사, 선호 경향, 변화 추이를 구분해 제공한다.",
+        tabs: [["interests", "최근 관심사"], ["preference", "선호 경향"], ["trend", "변화 추이"]],
+        template: "tasteTemplate"
+      }
+    };
+
+    const modal = document.getElementById("featureModal");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalDesc = document.getElementById("modalDesc");
+    const modalTabs = document.getElementById("modalTabs");
+    const modalBody = document.getElementById("modalBody");
+
+    function activateTab(tabId) {
+      modalTabs.querySelectorAll(".tab-btn").forEach((btn) => {
+        btn.classList.toggle("is-active", btn.dataset.tab === tabId);
+      });
+      modalBody.querySelectorAll(".tab-panel").forEach((panel) => {
+        panel.classList.toggle("is-active", panel.dataset.tab === tabId);
+      });
+    }
+
+    function openModal(type) {
+      const info = modalInfo[type];
+      if (!info) return;
+      modalTitle.textContent = info.title;
+      modalDesc.textContent = info.desc;
+      modalTabs.innerHTML = "";
+      modalBody.innerHTML = "";
+      info.tabs.forEach(([id, label], index) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "tab-btn" + (index === 0 ? " is-active" : "");
+        btn.dataset.tab = id;
+        btn.textContent = label;
+        btn.addEventListener("click", () => activateTab(id));
+        modalTabs.appendChild(btn);
+      });
+      const template = document.getElementById(info.template);
+      modalBody.appendChild(template.content.cloneNode(true));
+      activateTab(info.tabs[0][0]);
+      modal.classList.add("is-open");
+    }
+
+    document.querySelectorAll("[data-modal]").forEach((btn) => {
+      btn.addEventListener("click", () => openModal(btn.dataset.modal));
+    });
+    document.querySelectorAll("[data-jump]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelector(btn.dataset.jump).scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+    document.querySelector(".close-btn").addEventListener("click", () => modal.classList.remove("is-open"));
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) modal.classList.remove("is-open");
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") modal.classList.remove("is-open");
+    });
+  </script>
+</body>
+</html>
