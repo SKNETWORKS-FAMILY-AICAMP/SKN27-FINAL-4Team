@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     'character',
     'calendar_api',
     'game.tarot_api',
+    'mindreport',
 ]
 
 MIDDLEWARE = [
