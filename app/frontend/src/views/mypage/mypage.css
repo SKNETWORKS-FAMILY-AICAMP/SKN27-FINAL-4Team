@@ -952,6 +952,33 @@
   padding: 10px;
 }
 
+.mbti-combined-card.is-preparing {
+  border-color: rgba(243, 168, 107, 0.62);
+  background: linear-gradient(180deg, rgba(58, 36, 64, 0.82), rgba(23, 16, 68, 0.96));
+}
+
+.mbti-preparing-banner {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(243, 168, 107, 0.55);
+  border-radius: 8px;
+  background: rgba(58, 36, 64, 0.82);
+  color: var(--text);
+}
+
+.mbti-preparing-banner strong {
+  color: #ffd28a;
+  font-size: 14px;
+}
+
+.mbti-preparing-banner span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .mbti-combined-grid {
   display: grid;
   grid-template-columns: minmax(160px, 0.34fr) minmax(0, 1fr);

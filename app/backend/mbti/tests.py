@@ -11,6 +11,7 @@ from mbti.services.baseline_sources import (
     build_user_baseline_snapshot,
     extract_axis_letters_from_mbti_type,
 )
+from mbti.services.dashboard_payload import build_frontend_preparing_payload
 from mbti.services.graph_scores import (
     calculate_axis_graph_score,
     calculate_monthly_graph_scores,
@@ -225,6 +226,18 @@ class SecondaryOpeningTests(TestCase):
         self.assertFalse(result.axis_results['TF'].secondary_open)
         self.assertEqual(result.axis_results['TF'].data_status, 'secondary_closed')
         self.assertEqual(result.axis_results['SN'].data_status, 'primary_closed')
+
+
+class DashboardPayloadTests(TestCase):
+    def test_preparing_payload_keeps_monthly_analysis_screen_available(self):
+        payload = build_frontend_preparing_payload(user_id=7, period_key='2026-06')
+
+        self.assertEqual(payload['status'], 'preparing')
+        self.assertFalse(payload['has_monthly_analysis'])
+        self.assertEqual(payload['mbti_view_mode'], 'onboardingNext')
+        self.assertEqual(payload['mbti_data']['current']['type'], '----')
+        self.assertEqual(len(payload['mbti_data']['current']['axes']), 4)
+        self.assertIn('분석 준비 중', payload['mbti_data']['report'][0])
 
 
 class ResponseScoringTests(TestCase):

@@ -5,22 +5,6 @@
 MBTI 월간 분석 프로세스는 **단순화된 파이프라인 흐름도**로 확정한다. 이 흐름도는 IE, SN, TF, JP 네 선호지표 축을 각각 독립적으로 판단하되, 같은 로직을 4번 반복해서 그리지 않고 공통 처리 흐름으로 표현한다.
 
 저장 단계는 흐름도 박스로 표시하지 않는다. 점수화 결과, 월간 대표 결과, 선호지표 축별 결과, 리포트 결과는 각 산출물이 만들어진 직후 저장 구조에 따라 저장한다.
-아니오
-예
-아니오동률
-월간 분석 시작분석 대상 월 확정
-월간 MBTI 질문 응답 조회(mbti_question_responses)IE/SN/TF/JP 축 별 응답 집계
-IE/SN/TF/JP 축의 원본 질문 응답이5개 이상인가?
-통과한 IE/SN/TF/JP 축응답의 점수화(LLM이 답변별 점수 산정)
-해당 IE/SN/TF/JP 축은기준 선호 경향 적용
-null이 아닌 응답 점수가1개 이상인 IE/SN/TF/JP 축의 점수인가?
-월간 그래프 표시 점수 계산
-그래프 표시점수가한쪽 선호 경향이 더 높은가?
-이번 달 그래프 표시 점수가 높은 방향으로선호 경향 결정
-근거 리포트 생성(변화 근거 + 이번 달 MBTI 결과 설명)
-이번 달 사용할 최종 선호경향 확정(계산값 또는 기준값 유지)
-월간 MBTI 조합(
-
 
 ```mermaid
 flowchart TD
@@ -53,105 +37,101 @@ flowchart TD
 
 ## 점수 산정 안정성 보강 흐름도
 
-아래 흐름도는 기존 확정 MBTI 프로세스 흐름도를 대체하지 않는다. 기존 흐름도의 `D. 통과한 IE/SN/TF/JP 축 응답의 점수화` 단계를 더 안정적으로 구현하기 위한 내부 보강 흐름이다. 목적은 LLM이 같은 문장을 보고 점수와 판단 근거를 매번 다르게 산출하는 문제를 줄이고, 검증 통과 점수만 월간 그래프 표시 점수 계산에 사용하도록 하는 것이다.
+아래 흐름도는 기존 확정 MBTI 프로세스 흐름도를 대체하지 않는다. 기존 흐름도의 `D. 통과한 IE/SN/TF/JP 축 응답의 점수화` 단계를 더 안정적으로 구현하기 위한 내부 보강 흐름이다. 목적은 LLM이 같은 자유서술형 답변을 보고 개별 응답 점수를 미세하게 다르게 산출하는 문제를 줄이고, 최소 검증을 통과한 점수만 월간 그래프 표시 점수 계산에 사용하도록 하는 것이다.
+
+이 프로젝트의 MBTI Q&A는 **질문은 고정되어 있고 답변은 자유서술형**이라고 전제한다. 따라서 LLM에게 점수를 직접 산정하게 하지 않고, `target_axis`별로 미리 정의한 Big Five 기반 루브릭 코드 목록 안에서 답변을 분류하게 한다. 점수 규칙은 사람이 정의한 Big Five 5단계 성향 루브릭과 서버 매핑에 고정하고, LLM은 자유서술형 답변을 가장 적절한 `rubric_code`에 매칭하는 역할만 수행한다.
+
+점수 안정화 로직의 핵심은 다음 세 가지다.
+
+```text
+1. IE/SN/TF/JP 표시 축에 대응하는 Big Five 성향 루브릭을 사람이 정의한다.
+2. LLM은 자유서술형 답변을 해당 target_axis의 rubric_code 중 하나에 매칭한다.
+3. 서버는 rubric_code를 5단계 점수로 변환하고, 최소 검증을 통과한 점수만 월간 계산에 사용한다.
+```
 
 ```mermaid
 flowchart TD
-    A["월간 분석 시작<br/>분석 대상 월 확정"]
-    B["월간 MBTI 질문 응답 조회<br/>(mbti_question_responses)<br/>IE/SN/TF/JP 축 별 응답 집계"]
+    A["월간 분석 시작<br/>분석 대상 월 확정"] --> B["월간 MBTI 질문 응답 조회<br/>(mbti_question_responses)<br/>IE/SN/TF/JP 축 별 응답 집계"]
 
-    C{"IE/SN/TF/JP 축의<br/>원본 질문 응답이<br/>5개 이상인가?"}
+    B --> C{"IE/SN/TF/JP 축의 원본 질문 응답이<br/>5개 이상인가?"}
 
-    G["해당 IE/SN/TF/JP 축은<br/>기준 선호 경향 적용<br/>(전 달 또는 온보딩)"]
+    C -->|"아니오"| G["해당 IE/SN/TF/JP 축은<br/>기준 선호 경향 적용"]
+    C -->|"예"| D1["점수화 대상 응답 선정<br/>5개 이상 쌓인 축의 답변만<br/>이번 달 점수화 대상으로 사용"]
 
-    D["통과한 축의 응답을<br/>LLM 근거 코딩 대상으로 선정"]
+    D1 --> D2["루브릭 버전 파일 로드<br/>DB 테이블이 아니라<br/>배포 파일의 코드/점수 매핑을 사용"]
+    D2 --> D3["LLM rubric_code 매칭<br/>자유서술형 답변을 읽고<br/>허용된 코드 중 하나로 분류"]
+    D3 --> D4{"rubric_code 유형<br/>점수 코드인가<br/>제외 코드인가?"}
 
-    D1["LLM 1차 근거 코딩<br/>축 관련성: clear / weak / none<br/>근거 방향: + / - / mixed / none<br/>근거 강도: strong / weak / mixed / none<br/>근거 원문 요약"]
+    D4 -->|"EXCLUDE_*"| D5["score=null 제외 결과 저장<br/>성향 근거가 부족한 답변은<br/>월간 평균 계산에서 제외"]
+    D4 -->|"점수 코드"| D6["서버 점수 변환<br/>LLM 점수를 쓰지 않고<br/>rubric_code를 고정 점수로 변환"]
 
-    D2{"축 관련성이<br/>clear인가?"}
-    D3{"근거 방향이<br/>한쪽으로 명확한가?"}
-    D4{"근거 강도가<br/>strong 또는 weak인가?"}
+    D6 --> D7["서버 최소 검증<br/>코드 존재 여부와<br/>target_axis 허용 여부만 확인"]
+    D7 --> D8{"최소 검증 통과?"}
 
-    D5["코드 기반 점수 변환<br/>+ strong = +1.0<br/>+ weak = +0.5<br/>mixed = 0<br/>- weak = -0.5<br/>- strong = -1.0"]
+    D8 -->|"실패"| D5
+    D8 -->|"통과"| D9["mbti_response_scores 저장<br/>rubric_code, rubric_version,<br/>score, evidence_span 저장"]
 
-    D6["점수-근거 일관성 검증<br/>축 부호 규칙<br/>방향-강도-점수 매핑<br/>허용 점수값<br/>JSON 필드 검증"]
+    D5 --> E{"null이 아닌 응답 점수가<br/>1개 이상인 IE/SN/TF/JP 축의 점수인가?"}
+    D9 --> E
 
-    D7{"검증 통과?"}
-
-    D8["불안정 응답 표시<br/>insufficient_context 또는 failed<br/>월간 점수 계산에서 제외"]
-
-    D9{"추가 검증 대상인가?<br/>축 변화에 큰 영향<br/>confidence 낮음<br/>강한 점수<br/>축 내 응답 충돌<br/>JP처럼 불안정 축"}
-
-    D10["검증 LLM 또는 재판정<br/>판정 결과:<br/>valid / invalid / uncertain"]
-
-    D11{"검증 결과가<br/>valid인가?"}
-
-    E{"null이 아닌<br/>검증 통과 점수가<br/>1개 이상인가?"}
-
-    F["월간 그래프 표시 점수 계산<br/>검증 통과 점수만 사용"]
-
-    H{"그래프 표시점수가<br/>한쪽 선호 경향이 더 높은가?"}
-
-    I["이번 달 그래프 표시 점수가<br/>높은 방향으로 선호 경향 결정"]
-
-    M["이번 달 사용할<br/>최종 선호경향 확정<br/>(계산값 또는 기준값 유지)"]
-
-    J["월간 MBTI 조합<br/>(IE/SN/TF/JP 축 최종반영값 구성)"]
-
-    K["근거 리포트 생성<br/>실제 바뀐 축 요약<br/>표시점수 변화<br/>영향 큰 응답 원문<br/>이번 달 MBTI 설명"]
-
-    L["마이페이지 제공<br/>월간 MBTI<br/>선호경향별 표시점수<br/>근거 리포트"]
-
-    A --> B
-    B --> C
-
-    C -->|"예"| D
-    C -->|"아니오"| G
-
-    D --> D1
-    D1 --> D2
-
-    D2 -->|"아니오<br/>weak / none"| D8
-    D2 -->|"예"| D3
-
-    D3 -->|"아니오<br/>mixed / none"| D8
-    D3 -->|"예"| D4
-
-    D4 -->|"아니오"| D8
-    D4 -->|"예"| D5
-
-    D5 --> D6
-    D6 --> D7
-
-    D7 -->|"실패"| D8
-    D7 -->|"통과"| D9
-
-    D9 -->|"아니오"| E
-    D9 -->|"예"| D10
-
-    D10 --> D11
-    D11 -->|"invalid / uncertain"| D8
-    D11 -->|"valid"| E
-
-    D8 --> E
-
-    E -->|"예"| F
+    E -->|"예"| F["월간 그래프 표시 점수 계산"]
     E -->|"아니오"| G
 
-    F --> H
-    H -->|"예"| I
+    F --> H{"그래프 표시점수가<br/>한쪽 선호 경향이 더 높은가?"}
+    H -->|"예"| I["이번 달 그래프 표시 점수가 높은 방향으로<br/>선호 경향 결정"]
     H -->|"아니오<br/>동률"| G
 
-    I --> M
+    I --> K["근거 리포트 생성<br/>(변화 근거 + 이번 달 MBTI 결과 설명)"]
+    I --> M["이번 달 사용할 최종 선호경향 확정<br/>(계산값 또는 기준값 유지)"]
     G --> M
 
-    M --> J
+    M --> J["월간 MBTI 조합<br/>(IE/SN/TF/JP 축 최종반영값 구성)"]
+
     J --> K
-    J --> L
+    J --> L["마이페이지 제공<br/>월간 MBTI, 선호경향별 점수, 근거 리포트"]
     K --> L
 ```
 
-이 보강 흐름의 핵심은 LLM에게 최종 점수를 바로 맡기지 않는 것이다. LLM은 먼저 해당 축과의 관련성, 근거 방향, 근거 강도를 구조화하고, 서버 코드는 그 결과를 고정 매핑 규칙에 따라 점수로 변환한다. 이후 방향-강도-점수 조합이 맞는지 검증하고, 축 변화에 큰 영향을 주는 응답이나 JP처럼 흔들림이 큰 축은 추가 검증을 거친다.
+이 보강 흐름의 핵심은 원래 흐름도처럼 월간 분석의 전체 흐름을 유지하되, 점수화 내부를 **선호경향별 루브릭 기반 채점**으로 바꾸는 것이다. 질문은 이미 `target_axis`를 갖고 있으므로 LLM은 어떤 축을 판단할지 새로 정하지 않는다. 대신 해당 축에 연결된 선호경향 루브릭 목록 안에서 자유서술형 답변이 어느 코드에 가장 가까운지 고른다.
+
+위 흐름도에서 추가된 부분은 `점수화 대상 응답 선정`부터 `mbti_response_scores 저장`까지다. 이 구간만 기존 `통과한 IE/SN/TF/JP 축 응답의 점수화` 단계를 내부적으로 풀어쓴 것이며, 그 뒤의 월간 그래프 표시 점수 계산, 선호 경향 결정, 월간 MBTI 조합, 리포트 생성 흐름은 기존 확정 흐름도와 동일하게 유지한다.
+
+각 추가 노드의 의미는 아래와 같다.
+
+| 노드 | 의미 |
+| --- | --- |
+| 루브릭 버전 파일 로드 | 서버가 `mbti_scoring_rubrics.v1.json` 같은 배포 파일을 읽는다. 루브릭 정의를 DB 테이블에서 조회하지 않는다. |
+| LLM `rubric_code` 매칭 | LLM은 점수를 직접 산정하지 않고, 자유서술형 답변을 허용된 `rubric_code` 중 하나로 분류한다. |
+| 서버 점수 변환 | 서버가 루브릭 파일의 고정 매핑에 따라 `rubric_code`를 `score`로 변환한다. |
+| 서버 최소 검증 | `rubric_code` 존재 여부와 `target_axis` 허용 여부만 확인한다. |
+| `mbti_response_scores` 저장 | 루브릭 원본은 저장하지 않고, `rubric_code`, `rubric_version`, `score`, `evidence_span`을 저장한다. |
+
+예를 들어 `target_axis=IE`인 질문이라면, IE 축 공통 선호경향 루브릭은 다음처럼 구성할 수 있다.
+
+```text
+IE_E_STRONG        → +1.0
+IE_E_WEAK          → +0.5
+IE_MIXED_BALANCED  →  0.0
+IE_I_WEAK          → -0.5
+IE_I_STRONG        → -1.0
+IE_EXCLUDE_CONTEXTUAL     → null
+IE_EXCLUDE_INSUFFICIENT   → null
+```
+
+LLM 출력은 숫자 점수가 아니라 아래처럼 제한한다.
+
+```json
+{
+  "target_axis": "IE",
+  "rubric_code": "IE_I_WEAK",
+  "evidence_span": "완전히 낯선 곳에서는 조용합니다",
+  "reason": "낯선 환경에서 먼저 말하기 어렵다는 약한 I 근거"
+}
+```
+
+서버는 `rubric_code`를 기준으로만 점수를 변환한다. 이때 서버 최소 검증은 `rubric_code`가 실제 루브릭 파일에 존재하는지, 원본 Q&A의 `target_axis`에 허용된 코드인지, 점수가 LLM 출력값이 아니라 서버 매핑으로만 계산되는지를 확인하는 정도로 제한한다. `EXCLUDE_*` 코드는 점수 계산에서 제외하고, `MIXED_BALANCED`는 실제로 양쪽 근거가 비슷한 무게로 함께 나타난 경우에만 `0.0`으로 사용한다. `evidence_span`은 리포트 근거로 저장하되, MVP에서는 실제 답변 포함 여부를 엄격한 서버 검증 조건으로 두지 않는다.
+
+반복 실행 안정성을 위해 같은 응답을 다시 점수화해야 할 때는 기존 `mbti_response_scores`에 저장된 `rubric_code`, `score`, `evidence_span`을 우선 재사용한다. 프롬프트, 모델, 루브릭 정의, 점수 매핑 규칙이 바뀌는 경우에만 버전을 올려 새 점수화 결과와 기존 결과를 구분한다. 이 방식은 "LLM이 MBTI 점수를 직접 매긴다"가 아니라, **선호경향별 루브릭 채점 시스템에 LLM을 자유서술형 답변 해석기로 붙인 구조**로 설명할 수 있다.
 
 
 
@@ -285,9 +265,9 @@ MBTI에서 일반적으로 말하는 네 구분은 `preference pairs`, `dichotom
    - 5개 미만이면 이번 달 새 계산을 하지 않고 기준 선호 경향을 적용한다.
 
 3. 답변 점수화
-   - 1차 개시를 통과한 축의 Q&A만 LLM이 점수화한다.
-   - Q&A 1개는 `target_axis` 1개와 `score` 1개만 만든다.
-   - 점수화 결과는 `mbti_response_scores`에 저장한다.
+   - 1차 개시를 통과한 축의 Q&A만 선호경향별 루브릭 매칭 대상으로 본다.
+   - LLM은 자유서술형 답변을 원본 Q&A의 `target_axis`에 연결된 `rubric_code` 중 하나로 분류한다.
+   - 서버는 `rubric_code`를 고정 점수로 변환하고, 결과를 `mbti_response_scores`에 저장한다.
 
 4. 2차 개시 판단
    - null이 아닌 숫자 점수(`coding_status=coded`)가 1개 이상이면 평균 계산 대상으로 본다.
@@ -1174,7 +1154,7 @@ INTP는 보통 가능성을 탐색하고 논리적으로 구조화해 이해하�
 
 ```text
 1. mbti_question_responses     : MBTI Q&A 원본
-2. mbti_response_scores        : Q&A별 점수화 결과
+2. mbti_response_scores        : Q&A별 루브릭 매칭 및 점수화 결과
 3. mbti_monthly_results        : 월간 대표 MBTI 성격 유형 결과
 4. mbti_monthly_axis_results   : IE/SN/TF/JP별 계산 결과
 5. mbti_monthly_reports        : 마이페이지 리포트 본문과 대표 근거
@@ -1217,6 +1197,7 @@ erDiagram
     mbti_question_responses {
         bigint id PK
         bigint user_id
+        string question_id
         string period_key
         string target_axis
         text question_text
@@ -1228,10 +1209,14 @@ erDiagram
         bigint id PK
         bigint question_response_id FK
         string axis
+        string rubric_code
         float score
         string coding_status
         text evidence_span
         text reason
+        string scoring_model
+        string prompt_version
+        string rubric_version
         datetime scored_at
     }
 
@@ -1303,7 +1288,7 @@ erDiagram
 | 테이블                          | 역할                        | 운영상 의미                                                                                |
 | ---------------------------- | ------------------------- | ------------------------------------------------------------------------------------- |
 | `mbti_question_responses`    | MBTI 분석 대상으로 저장된 질문/답변 원본 | 월간 분석의 입력 데이터다. 1차 개시 조건은 이 테이블의 월별·선호지표 축별 저장 건수로 판단한다.                              |
-| `mbti_response_scores`       | Q&A 1개에 대한 점수화 결과         | 월간 평균 점수와 리포트 근거 선별의 기준 데이터다. `coding_status=coded`인 점수만 월간 계산에 포함한다.                 |
+| `mbti_response_scores`       | Q&A 1개에 대한 루브릭 매칭 및 점수화 결과 | 월간 평균 점수와 리포트 근거 선별의 기준 데이터다. 선택된 `rubric_code`와 서버 변환 점수를 함께 저장한다. `coding_status=coded`인 점수만 월간 계산에 포함한다. |
 | `mbti_monthly_results`       | 특정 사용자·특정 월의 대표 MBTI 결과   | 마이페이지에서 “이번 달 MBTI 성격 유형”, “이전 기준 MBTI 성격 유형”, “변화 선호지표 축”을 보여주는 기준 테이블이다.            |
 | `mbti_monthly_axis_results`  | IE/SN/TF/JP별 계산 결과        | 4개 선호지표 축을 독립적으로 판단한 결과다. 각 선호지표 축이 이번 달 계산값인지, 기준값 유지인지, 데이터 부족인지 설명한다.              |
 | `mbti_monthly_reports`       | 월간 결과를 설명하는 리포트 본문과 대표 근거 | 사용자에게 보여줄 문장형 설명과 그 설명에 사용된 대표 답변 근거를 저장한다.                                           |
@@ -1325,6 +1310,7 @@ erDiagram
 | --------------- | -------------------------------------------------------- |
 | `id`            | Q&A 원본 레코드의 식별자다. 점수화 결과와 리포트 근거가 이 값을 통해 원본 답변으로 연결된다.  |
 | `user_id`       | 분석 대상 사용자 식별자다. 월간 결과와 마이페이지 조회의 기본 조건이다.                |
+| `question_id`   | 챗봇 담당 시스템이 사용한 고정 MBTI 질문 식별자다. 운영 추적과 질문별 품질 분석에 사용한다. |
 | `period_key`    | 답변이 속하는 분석 대상 월이다. `answered_at`을 서비스 기준 타임존으로 변환해 산출한다. |
 | `target_axis`   | 이 Q&A가 측정하는 선호지표 축이다. 허용값은 `IE`, `SN`, `TF`, `JP`다.      |
 | `question_text` | 사용자에게 제시된 MBTI 관련 질문이다. 관리자 확인이나 근거 표시에서 사용한다.           |
@@ -1332,11 +1318,41 @@ erDiagram
 | `answered_at`   | 사용자가 답변한 시각이다. 월간 묶음 산정, 최신성 판단, 근거 정렬에 사용할 수 있다.        |
 
 
-`target_axis`는 4개 선호지표 축 독립 판단의 출발점이다. IE 질문은 IE 점수만 만들고, TF 질문은 TF 점수만 만든다. 하나의 Q&A가 여러 축 점수를 동시에 만들지 않는다는 점을 명확히 하기 위해 원본 Q&A에 `target_axis`를 둔다.
+`target_axis`는 4개 선호지표 축 독립 판단의 출발점이다. IE 질문은 IE 루브릭 안에서만 분류하고, TF 질문은 TF 루브릭 안에서만 분류한다. 하나의 Q&A가 여러 축 점수를 동시에 만들지 않는다는 점을 명확히 하기 위해 원본 Q&A에 `target_axis`를 둔다. `question_id`는 루브릭 선택의 기본 기준이 아니라, 어떤 고정 질문에서 나온 응답인지 추적하고 질문별 품질을 점검하기 위한 값이다.
 
-#### 9.4.2 `mbti_response_scores`
+#### 9.4.2 루브릭 파일 관리
 
-`mbti_response_scores`는 Q&A 1개에 대해 생성된 점수화 결과다. 점수는 원본 Q&A의 `target_axis`와 같은 선호지표 축에 대해서만 생성된다.
+MVP에서는 선호경향별 루브릭 정의를 DB에 저장하지 않고, 버전이 붙은 JSON 파일로 관리한다. 실제 v1 루브릭 파일은 `docs/한재웅/datasets/mbti_scoring_rubrics.v1.json`에 둔다. 점수화 서버는 이 파일을 로드해 LLM 프롬프트와 서버 점수 변환에 사용하고, DB에는 루브릭 원본 전체를 저장하지 않는다. DB에는 점수화 결과에 사용된 `rubric_code`와 `rubric_version`만 남긴다.
+
+루브릭 파일은 "모범 답안"이 아니라 **Big Five 기반 성향 신호 정의**다. 이 구조에서는 Big Five 계열 검사의 성향 축을 1차 기준으로 삼고, 월간 결과를 사용자에게 설명하기 위해 IE/SN/TF/JP 형태의 MBTI식 선호 라벨로 변환한다. 즉, MBTI 공식 설명은 최종 라벨의 이름과 해석을 확인하는 보조 참고이고, 개별 응답 채점의 1차 기준은 Big Five 성향 축이다.
+
+Big Five 기반 채점 축은 아래처럼 사용한다.
+
+| 표시 선호지표 축 | Big Five 1차 기준 | 채점 관점 |
+| --- | --- | --- |
+| IE | Extraversion | 외부 상호작용·사회적 에너지 쪽 근거가 높으면 E, 낮거나 혼자 반성·회복하는 근거가 강하면 I로 본다. |
+| SN | Openness | 구체적 사실·익숙한 경험·실용성 근거가 강하면 S, 추상적 연결·가능성·새로움 근거가 강하면 N으로 본다. |
+| TF | Agreeableness | 객관 기준·비개인적 분석·비판적 검토 근거가 강하면 T, 공감·관계·조화 근거가 강하면 F로 본다. |
+| JP | Conscientiousness | 계획·정리·마감·완료 근거가 강하면 J, 유연성·선택지 유지·상황 적응 근거가 강하면 P로 본다. |
+
+이 대응은 Big Five에서 MBTI식 라벨을 도출하기 위한 운영상 매핑이다. 예를 들어 `P`를 무책임함으로 해석하거나, `T`를 배려가 없음으로 해석하지 않는다. 루브릭은 사용자의 답변에 드러난 **성향 신호, 판단 기준, 행동 선호**만 분류한다. 또한 Big Five의 Neuroticism은 일부 성격 모델에서 A/T 같은 정체성 라벨과 연결될 수 있지만, 이 프로젝트의 IE/SN/TF/JP 네 축 점수에는 사용하지 않는다.
+
+루브릭은 축마다 7개 코드만 둔다. 실제 점수는 Big Five 검사처럼 한 축을 5단계 정도로 나누는 방식에 맞춰 `강한 한쪽`, `약한 한쪽`, `균형`, `약한 반대쪽`, `강한 반대쪽`으로 제한한다. 여기에 운영상 판단불가 2종을 추가한다.
+
+| 축 | 코드 구조 |
+| --- | --- |
+| IE | `IE_E_STRONG`, `IE_E_WEAK`, `IE_MIXED_BALANCED`, `IE_I_WEAK`, `IE_I_STRONG`, `IE_EXCLUDE_CONTEXTUAL`, `IE_EXCLUDE_INSUFFICIENT` |
+| SN | `SN_S_STRONG`, `SN_S_WEAK`, `SN_MIXED_BALANCED`, `SN_N_WEAK`, `SN_N_STRONG`, `SN_EXCLUDE_CONTEXTUAL`, `SN_EXCLUDE_INSUFFICIENT` |
+| TF | `TF_T_STRONG`, `TF_T_WEAK`, `TF_MIXED_BALANCED`, `TF_F_WEAK`, `TF_F_STRONG`, `TF_EXCLUDE_CONTEXTUAL`, `TF_EXCLUDE_INSUFFICIENT` |
+| JP | `JP_J_STRONG`, `JP_J_WEAK`, `JP_MIXED_BALANCED`, `JP_P_WEAK`, `JP_P_STRONG`, `JP_EXCLUDE_CONTEXTUAL`, `JP_EXCLUDE_INSUFFICIENT` |
+
+판단불가 코드는 두 가지로 분리한다. `EXCLUDE_CONTEXTUAL`은 사용자가 답변했지만 역할, 일정, 피로, 마감 강제처럼 일시 상황만 설명해 선호경향으로 보기 어려운 경우다. `EXCLUDE_INSUFFICIENT`는 답변 자체가 너무 짧거나 축과 무관해 판단 근거가 부족한 경우다. 두 코드는 모두 `score=null`로 저장하고 월간 평균 계산에서 제외한다.
+
+루브릭의 `signals_ko`는 키워드 매칭용 정답 목록이 아니라 예시 표현이다. 루브릭에 없는 표현이어도 `decision_rule_ko`의 의미와 Big Five 1차 기준에 부합하면 가장 가까운 `STRONG`, `WEAK`, `MIXED_BALANCED` 코드로 분류한다. `EXCLUDE_INSUFFICIENT`는 표현이 낯설어서가 아니라, 해당 Big Five 성향 축을 판단할 근거가 실제로 부족할 때만 사용한다.
+
+#### 9.4.3 `mbti_response_scores`
+
+`mbti_response_scores`는 Q&A 1개에 대해 생성된 루브릭 매칭 및 점수화 결과다. 점수는 원본 Q&A의 `target_axis`와 같은 선호지표 축에 대해서만 생성된다.
 
 
 | 컬럼                     | 설명                                                                            |
@@ -1344,10 +1360,14 @@ erDiagram
 | `id`                   | 점수화 결과 레코드의 식별자다. 리포트 대표 근거에서 특정 score row를 참조할 때 사용한다.                       |
 | `question_response_id` | 원본 Q&A와 연결되는 FK다. 이 값을 통해 `user_id`, `period_key`, 원본 질문/답변을 확인한다.            |
 | `axis`                 | 이 점수가 어느 선호지표 축에 대한 점수인지 나타낸다. 원본 Q&A의 `target_axis`와 같은 값이어야 한다.             |
+| `rubric_code`          | LLM이 선택한 루브릭 코드다. 리포트 근거와 디버깅에서 "왜 이 점수가 나왔는지" 추적하는 핵심 값이다.                 |
 | `score`                | `-1.0`, `-0.5`, `0`, `0.5`, `1.0` 중 하나이거나 판단 불가 시 `null`이다. 월간 평균 계산의 핵심 값이다. |
 | `coding_status`        | 점수화 결과의 사용 가능 상태다. `coded`인 경우만 월간 평균 계산에 포함한다.                               |
 | `evidence_span`        | 해당 점수를 부여한 근거가 되는 답변 내 표현이다. 리포트 대표 근거로 사용할 수 있다.                             |
 | `reason`               | 점수 판단 사유다. 리포트 생성 시 근거 문장을 구성하는 데 사용한다.                                       |
+| `scoring_model`        | 루브릭 매칭에 사용한 LLM 모델이다. 재현성 점검과 재점수화 비교에 사용한다.                                  |
+| `prompt_version`       | 루브릭 매칭 프롬프트 버전이다. 프롬프트가 바뀐 경우 기존 결과와 구분한다.                                  |
+| `rubric_version`       | 점수화에 사용한 루브릭 버전이다. 루브릭 개정 전후 점수를 구분한다.                                       |
 | `scored_at`            | 점수화가 수행된 시각이다. 재점수화 여부나 최신 점수 확인에 사용할 수 있다.                                   |
 
 
@@ -1357,11 +1377,12 @@ erDiagram
 
 ```text
 mbti_response_scores.axis = mbti_question_responses.target_axis
+mbti_response_scores.rubric_code는 mbti_response_scores.axis에 허용된 루브릭 코드여야 한다
 ```
 
-이 검증이 있어야 IE 질문에 TF 점수가 잘못 연결되는 문제를 막을 수 있다.
+이 검증이 있어야 IE 질문에 TF 루브릭 코드가 잘못 연결되는 문제를 막을 수 있다.
 
-#### 9.4.3 `mbti_monthly_results`
+#### 9.4.4 `mbti_monthly_results`
 
 `mbti_monthly_results`는 사용자 1명의 특정 월 대표 결과를 저장한다. 4개 선호지표 축별 결과를 조합해 산출한 월간 추정 MBTI 성격 유형과 이전 기준 MBTI를 함께 보관한다.
 
@@ -1380,7 +1401,7 @@ mbti_response_scores.axis = mbti_question_responses.target_axis
 
 `mbti_monthly_results`는 마이페이지의 대표 카드에 해당한다. 사용자는 이 테이블의 값을 통해 “이번 달 MBTI 성격 유형”, “이전 MBTI 성격 유형”, “변화한 선호지표 축”을 확인한다.
 
-#### 9.4.4 `mbti_monthly_axis_results`
+#### 9.4.5 `mbti_monthly_axis_results`
 
 `mbti_monthly_axis_results`는 월간 대표 결과를 구성하는 4개 선호지표 축별 상세 결과다. 한 `monthly_result_id` 아래에는 IE, SN, TF, JP별로 최대 4개 레코드가 저장된다.
 
@@ -1405,7 +1426,7 @@ mbti_response_scores.axis = mbti_question_responses.target_axis
 
 이 테이블은 확정 흐름도의 “이번 달 계산값으로 selected_letter 결정”과 “직전 기준값 유지”를 모두 담는 핵심 테이블이다. 예를 들어 TF는 이번 달 계산값으로 `T`가 될 수 있고, SN은 이번 달 Q&A가 부족해 과거 기준값 `N`을 유지할 수 있다. 두 경우 모두 최종 선택된 선호 경향은 `selected_letter`에 저장되고, 그 선택 경로는 `data_status`와 `baseline_*` 컬럼으로 설명한다.
 
-#### 9.4.5 `mbti_monthly_reports`
+#### 9.4.6 `mbti_monthly_reports`
 
 `mbti_monthly_reports`는 월간 결과를 사용자에게 설명하는 리포트 본문과 대표 근거 목록을 저장한다.
 
@@ -1437,7 +1458,7 @@ mbti_response_scores.axis = mbti_question_responses.target_axis
 
 
 
-#### 9.4.6 `mbti_monthly_analysis_jobs`
+#### 9.4.7 `mbti_monthly_analysis_jobs`
 
 `mbti_monthly_analysis_jobs`는 월간 MBTI 분석을 실제로 실행하기 전후의 운영 상태를 저장한다. 분석 엔진의 계산 결과 자체는 `mbti_monthly_results`, `mbti_monthly_axis_results`, `mbti_monthly_reports`에 저장하고, job 테이블은 많은 사용자를 대상으로 분석을 안전하게 분산 실행하기 위한 큐 상태를 담당한다.
 
@@ -1524,13 +1545,15 @@ erDiagram
 | 저장 대상                        | 기준 키                                                 | 저장 정책                                                                    |
 | ---------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------ |
 | `mbti_question_responses`    | `id`                                                 | 챗봇 담당 시스템이 저장한 Q&A 원본이다. `answered_at` 기준으로 `period_key`를 확정해 저장한다.      |
-| `mbti_response_scores`       | `question_response_id`                               | 같은 Q&A의 점수화 결과는 1개만 유지한다. 재점수화 시 갱신한다.                                   |
+| `mbti_response_scores`       | `question_response_id + rubric_version + prompt_version` | 같은 Q&A, 같은 루브릭 버전, 같은 프롬프트 버전의 매칭 결과는 재사용한다. 루브릭 또는 프롬프트가 바뀌면 새 결과와 구분한다. |
 | `mbti_monthly_results`       | `user_id + period_key`                               | 해당 월 대표 결과는 1개만 유지한다. 재분석 시 같은 row를 갱신한다.                                |
 | `mbti_monthly_axis_results`  | `monthly_result_id + axis`                           | 하나의 월간 결과 아래 IE/SN/TF/JP별 결과를 최대 4개 유지한다.                                |
 | `mbti_monthly_reports`       | `monthly_result_id`                                  | 하나의 월간 결과에 리포트 1개를 유지한다. 대표 근거는 `evidence_items_json`에 함께 저장한다.          |
 | `mbti_monthly_analysis_jobs` | `user_id + period_key + input_hash + prompt_version` | 같은 입력과 같은 프롬프트 버전의 분석 job은 중복 생성하지 않는다. 실행 중이면 기존 job 상태를 반환한다.          |
 | `mbti_evidence_embeddings`   | `response_score_id`                                  | Graph RAG MVP+ 확장을 적용할 때만 사용한다. 같은 score row에 대한 embedding 참조는 1개만 유지한다. |
 
+
+루브릭 정의와 점수 매핑은 DB 저장 대상에 포함하지 않는다. `mbti_scoring_rubrics.v1.json`처럼 버전이 붙은 배포 파일로 관리하고, DB에는 실제 응답 판정에 사용된 `rubric_code`와 `rubric_version`만 남긴다.
 
 재분석이 발생하면 아래처럼 처리한다.
 
@@ -1607,11 +1630,13 @@ LLM 호출은 아래 기준으로 최소화한다.
 | 저장 시점          | 저장 위치                        | 저장 내용                                                       |
 | -------------- | ---------------------------- | ----------------------------------------------------------- |
 | 분석 예약/실행 상태 변경 | `mbti_monthly_analysis_jobs` | 분석 대상 사용자, 월, 입력 해시, job 상태, 재시도 횟수, 오류 메시지                 |
-| 응답 점수화 직후      | `mbti_response_scores`       | Q&A별 선호지표 축, 점수, 점수화 상태, 근거 표현, 판단 사유                       |
+| 응답 루브릭 매칭 직후  | `mbti_response_scores`       | Q&A별 선택 루브릭 코드, 서버 변환 점수, 점수화 상태, 근거 표현, 판단 사유, 사용한 루브릭 버전 |
 | 월간 MBTI 조합 직후  | `mbti_monthly_results`       | 해당 월의 대표 MBTI 성격 유형, 이전 기준 MBTI, 변화 축, 결과 상태                |
 | 월간 MBTI 조합 직후  | `mbti_monthly_axis_results`  | IE/SN/TF/JP별 Q&A 수, 숫자 점수 수, 평균 점수, 표시 점수, 최종 선호 경향, 기준값 출처 |
 | 근거 리포트 생성 직후   | `mbti_monthly_reports`       | 리포트 본문, 대표 근거 답변 목록                                         |
 
+
+루브릭 파일은 코드/배포 산출물로 관리하므로 런타임 저장 시점에는 포함하지 않는다. 루브릭을 개정할 때는 파일 버전을 올리고, 이후 생성되는 `mbti_response_scores` row에 새 `rubric_version`을 기록한다.
 
 
 
@@ -1643,15 +1668,19 @@ sequenceDiagram
     participant EVT as Event Queue
     participant WORKER as MBTI Analysis Worker
     participant DB as DB
+    participant RUBRIC as Rubric JSON File
     participant LLM as LLM
 
     DB-->>EVT: mbti_question_response.created
     EVT-->>WORKER: scoring job 전달
     WORKER->>DB: 저장된 MBTI Q&A 조회
     DB-->>WORKER: target_axis, question_text, answer_text
+    WORKER->>RUBRIC: rubric_version 기준 선호경향별 루브릭 로드
+    RUBRIC-->>WORKER: target_axis별 허용 rubric_code와 점수 매핑
 
-    WORKER->>LLM: target_axis 기준 점수화 요청
-    LLM-->>WORKER: score, direction, evidence_span, coding_status
+    WORKER->>LLM: target_axis와 허용 rubric_code 기준 매칭 요청
+    LLM-->>WORKER: rubric_code, evidence_span, reason
+    WORKER->>WORKER: rubric_code 존재 여부와 target_axis 허용 여부만 최소 검증
     alt coded
         WORKER->>DB: question_response_id 기준 mbti_response_scores upsert
     else insufficient_context
@@ -1672,6 +1701,7 @@ sequenceDiagram
     participant SCH as Scheduler
     participant WORKER as MBTI Analysis Worker
     participant DB as DB
+    participant RUBRIC as Rubric JSON File
     participant LLM as LLM
     participant CALC as Score Calculator
 
@@ -1684,8 +1714,11 @@ sequenceDiagram
     alt primary_open=true인 선호지표 축이 있음
         WORKER->>DB: primary_open=true인 선호지표 축의 점수 결과 조회
         alt 미점수화 Q&A가 있음
-            WORKER->>LLM: target_axis 기준 점수화 요청
-            LLM-->>WORKER: score, direction, evidence_span, coding_status
+            WORKER->>RUBRIC: rubric_version 기준 루브릭 파일 로드
+            RUBRIC-->>WORKER: target_axis별 허용 rubric_code와 점수 매핑
+            WORKER->>LLM: target_axis와 허용 rubric_code 기준 매칭 요청
+            LLM-->>WORKER: rubric_code, evidence_span, reason
+            WORKER->>WORKER: 서버가 rubric_code를 score로 변환하고 최소 검증
             WORKER->>DB: question_response_id 기준 점수 결과 upsert
         end
         WORKER->>WORKER: 축별 coded 숫자 점수 수 계산
@@ -2342,7 +2375,9 @@ MBTI Q&A 저장
 → worker가 동시 실행 수와 LLM 호출량을 제한하며 pending job 처리
 → 월간 MBTI Q&A 조회 및 IE/SN/TF/JP별 응답 수 집계
 → 원본 Q&A가 5개 이상인 축만 1차 개시
-→ 1차 개시 축의 답변 중 미점수화 Q&A만 LLM으로 점수화하고 mbti_response_scores 저장
+→ 루브릭 버전 파일에서 target_axis별 허용 rubric_code와 점수 매핑 로드
+→ 1차 개시 축의 답변 중 미점수화 Q&A만 LLM으로 rubric_code 매칭
+→ 서버가 rubric_code를 고정 점수로 변환하고 mbti_response_scores 저장
 → coded 숫자 점수가 1개 이상인 축만 2차 개시
 → 2차 개시 축의 평균 점수와 그래프 표시 점수 계산
 → 표시 점수가 높은 방향을 이번 달 selected_letter로 반영

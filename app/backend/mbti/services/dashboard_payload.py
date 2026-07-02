@@ -325,6 +325,58 @@ def build_frontend_payload_from_monthly_record(monthly_result) -> dict[str, Any]
     }
 
 
+def build_frontend_preparing_payload(*, user_id: int, period_key: str | None = None) -> dict[str, Any]:
+    onboarding_payload = _onboarding_payload(user_id)
+    onboarding_type = _valid_mbti_type(onboarding_payload['type'])
+    previous_type = onboarding_type or '----'
+    resolved_period_key = period_key or datetime.now().strftime('%Y-%m')
+
+    return {
+        'view_mode': 'monthly_analysis_preparing',
+        'status': 'preparing',
+        'period_key': resolved_period_key,
+        'source': 'empty_monthly_result',
+        'generated_at': datetime.now().isoformat(timespec='seconds'),
+        'has_monthly_analysis': False,
+        'onboarding_mbti_type': onboarding_payload['type'],
+        'previous_estimated_mbti_type': previous_type,
+        'estimated_mbti_type': '----',
+        'changed_axes': [],
+        'mbti_view_mode': 'onboardingNext',
+        'mbti_data': {
+            'onboarding': onboarding_payload,
+            'previous': {
+                'type': previous_type,
+                'monthLabel': '온보딩 기준' if onboarding_type else '이전 기준 없음',
+            },
+            'current': {
+                'type': '----',
+                'monthLabel': f'{resolved_period_key} 월간 분석 준비 중',
+                'axes': [
+                    {'label': '-', 'pair': 'IE', 'score': 0},
+                    {'label': '-', 'pair': 'SN', 'score': 0},
+                    {'label': '-', 'pair': 'TF', 'score': 0},
+                    {'label': '-', 'pair': 'JP', 'score': 0},
+                ],
+            },
+            'report': [
+                '[분석 준비 중] 아직 MBTI 월간 분석에 필요한 대화 기반 응답이 충분히 저장되지 않았습니다.',
+                '[데이터 기준] 대화가 더 쌓이면 최근 한 달의 선호지표 경향과 이전 기준 대비 변화를 보여드립니다.',
+                '[안내] 지금 화면은 결과가 확정된 분석이 아니라, 월간 리포트가 준비될 위치를 미리 보여주는 상태입니다.',
+            ],
+        },
+        'raw': {
+            'user_id': user_id,
+            'period_key': resolved_period_key,
+            'previous_basis': 'onboarding' if onboarding_type else None,
+            'status': 'preparing',
+            'axis_results': [],
+            'report_sections': [],
+            'evidence_items': [],
+        },
+    }
+
+
 def load_latest_frontend_payload(
     *,
     user_id: int,
@@ -344,6 +396,6 @@ def load_latest_frontend_payload(
 
     monthly_result = queryset.first()
     if monthly_result is None:
-        return None
+        return build_frontend_preparing_payload(user_id=user_id, period_key=period_key)
 
     return build_frontend_payload_from_monthly_record(monthly_result)

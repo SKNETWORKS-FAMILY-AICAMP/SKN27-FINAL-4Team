@@ -44,7 +44,7 @@ def sample_monthly_question_responses() -> list[DemoQuestionResponse]:
         DemoQuestionResponse(
             1,
             '긴 하루가 끝난 뒤 에너지를 어떻게 회복하나요?',
-            '혼자 방에 누워서 일본 애니를 보면 회복됩니다.',
+            '혼자 방에 누워서 OTT를 보면 회복됩니다.',
             'IE',
             datetime(2026, 6, 1, 9, 0),
         ),
@@ -86,7 +86,7 @@ def sample_monthly_question_responses() -> list[DemoQuestionResponse]:
         DemoQuestionResponse(
             7,
             '설명을 들을 때 어떤 방식이 가장 도움이 되나요?',
-            '머리속으로 흐름의 그림을 그리면 설명이 도움이 됩니다..',
+            '머리속으로 흐름의 그림을 그리면 설명이 도움이 됩니다.',
             'SN',
             datetime(2026, 6, 7, 9, 0),
         ),

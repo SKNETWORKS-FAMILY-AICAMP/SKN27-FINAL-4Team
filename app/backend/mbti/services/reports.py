@@ -531,6 +531,165 @@ def select_report_evidence(
     ))
 
 
+def _build_fallback_report_sections(
+    *,
+    monthly_result: MonthlyMbtiResult,
+    axis_results: Mapping[str, FinalAxisPreference],
+    evidence_items: tuple[EvidenceItem, ...],
+    reason: str,
+) -> tuple[ReportSection, ...]:
+    estimated_type = monthly_result.estimated_mbti_type or '산출 대기'
+    changed_display_rows = _build_changed_axis_display_rows(
+        monthly_result=monthly_result,
+        axis_results=axis_results,
+    )
+    if changed_display_rows:
+        change_text = ', '.join(
+            (
+                f'{row["axis"]} {row["previous_letter"]}->{row["selected_letter"]} '
+                f'표시점수 {row["previous_display_score"]}%->{row["current_display_score"]}% '
+                f'({row["display_score_delta"]:+d}%p)'
+            )
+            if row['display_score_delta'] is not None
+            else f'{row["axis"]} {row["previous_letter"]}->{row["selected_letter"]}'
+            for row in changed_display_rows
+        )
+        change_content = (
+            f'{monthly_result.period_key}에는 {change_text} 방향이 새롭게 두드러졌어요. '
+            '이는 좋고 나쁨의 변화라기보다, 이번 달 상황에서 더 자주 표현된 선호 경향으로 볼 수 있습니다.'
+        )
+    else:
+        change_content = (
+            f'{monthly_result.period_key}에는 실제 선호 경향이 바뀐 축이 없었어요. '
+            '기존의 자기이해 기준이 비교적 안정적으로 이어진 달로 볼 수 있습니다.'
+        )
+
+    top_evidence = evidence_items[0] if evidence_items else None
+    if top_evidence and top_evidence.role == 'score_change_driver':
+        evidence_content = (
+            f'이번 달 변화에는 {top_evidence.axis} 축의 "{top_evidence.answer_text}" 응답이 가장 크게 연결되었어요. '
+            '이 응답은 사용자가 최근 어떤 방식으로 에너지를 쓰고 선택을 조율했는지 보여주는 참고 단서입니다.'
+        )
+    elif top_evidence:
+        evidence_content = (
+            '이번 달에는 선호 경향 전환을 만든 대표 응답은 없었어요. '
+            f'다만 "{top_evidence.answer_text}" 응답은 현재 경향을 부드럽게 뒷받침하는 참고 근거로 볼 수 있습니다.'
+        )
+    else:
+        evidence_content = (
+            '이번 달 리포트에 사용할 대표 응답은 충분히 확인되지 않았어요. '
+            '질문 응답이 더 쌓이면 변화의 맥락을 더 따뜻하고 구체적으로 설명할 수 있습니다.'
+        )
+
+    return (
+        ReportSection(
+            title='이번 달 축 변화 요약',
+            content=change_content,
+        ),
+        ReportSection(
+            title='점수 변화에 영향을 준 대표 응답',
+            content=evidence_content,
+        ),
+        ReportSection(
+            title='월간 MBTI 유형 설명',
+            content=(
+                f'{estimated_type} 유형은 이번 달 관찰된 선호 경향을 이해하기 위한 하나의 참고 틀입니다. '
+                '성격을 고정적으로 단정하기보다, 지금의 에너지 사용 방식과 소통 패턴을 살펴보는 데 활용할 수 있습니다.'
+            ),
+        ),
+    )
+
+
+class LangChainMonthlyReportNarrativeClient:
+    def generate_sections(
+        self,
+        *,
+        monthly_result: MonthlyMbtiResult,
+        axis_results: Mapping[str, FinalAxisPreference],
+        evidence_items: tuple[EvidenceItem, ...],
+    ) -> tuple[ReportSection, ...]:
+        from langchain_core.messages import SystemMessage
+        from langchain_core.prompts import ChatPromptTemplate, HumanMessagePromptTemplate
+        from langchain_openai import ChatOpenAI
+
+        config = build_scoring_llm_config(temperature=0.2)
+        prompt = ChatPromptTemplate(
+            messages=[
+                SystemMessage(
+                    content=(
+                        '너는 소통형 웰니스 서비스의 월간 MBTI 리포트를 작성하는 분석가이다. '
+                        '제공된 계산 결과와 근거만 사용하고 사용자의 실제 성격을 단정하지 않는다. '
+                        '리포트는 따뜻하고 긍정적인 톤으로 작성한다. 변화는 문제나 결핍이 아니라 '
+                        '이번 달의 상황 적응, 에너지 사용 방식, 관계 맥락의 변화로 설명한다. '
+                        '강점과 활용 가능성을 먼저 말하고, 주의점은 부드러운 제안으로만 표현한다. '
+                        '부정적 낙인, 평가, 진단, 치료적 조언, 과장된 확신은 피한다. '
+                        '반드시 유효한 JSON 객체만 반환한다. '
+                        '마크다운, 설명 문장, trailing comma를 포함하지 않는다.'
+                    )
+                ),
+                HumanMessagePromptTemplate.from_template(
+                    template=(
+                        '아래 context를 바탕으로 정확히 3개의 짧은 한국어 리포트 섹션을 작성한다.\n'
+                        '공통 톤 규칙:\n'
+                        '- 전체적으로 격려와 자기이해를 돕는 소통형 웰니스 톤을 유지한다.\n'
+                        '- 사용자를 평가하거나 단정하지 말고, "이번 달에는 ... 경향이 보였어요"처럼 관찰형으로 쓴다.\n'
+                        '- 변화가 있는 경우에도 "흔들림", "문제", "부족" 대신 "상황에 맞춰 달라진 선택", "새롭게 두드러진 방향"으로 표현한다.\n'
+                        '- 점수 변화는 좋고 나쁨이 아니라 선호 표현의 강도 변화로 설명한다.\n'
+                        '- 각 섹션 content는 1~3문장으로 간결하게 작성한다.\n\n'
+                        '1번 섹션은 changed_axis_display_changes만 사용해 실제 선호 경향이 바뀐 축만 요약한다. '
+                        '바뀐 축이 없다면 안정적으로 유지된 축이 많다는 긍정적 문장으로 말한다. '
+                        '점수 변화는 원점수 평균이 아니라 표시점수 퍼센트 변화만 사용한다.\n'
+                        '2번 섹션은 evidence_items 중 role이 score_change_driver인 응답을 우선 사용하여, '
+                        '이전 선호 경향과 이번 달 선호 경향이 실제로 바뀐 축에서 어떤 응답이 '
+                        '점수 변화와 경향 선택에 가장 영향을 주었는지 설명한다. '
+                        'score_change_driver가 없다면 선호 경향 전환을 만든 대표 응답은 없다고 말하고, '
+                        'current_direction_evidence는 이번 달 경향을 뒷받침하는 참고 근거로만 다룬다. '
+                        '이때 대표 응답의 answer_text 원문을 반드시 포함한다.\n'
+                        '3번 섹션은 최종 월간 MBTI 성격 유형 자체의 일반적 성향만 긍정적이고 부드럽게 설명한다. '
+                        '3번 섹션에서는 변화, 점수차, 근거 답변을 언급하지 않는다.\n'
+                        '반환 형식은 반드시 다음 JSON shape만 사용한다: '
+                        '{{"sections":[{{"title":"...","content":"..."}},'
+                        '{{"title":"...","content":"..."}},'
+                        '{{"title":"...","content":"..."}}]}}\n'
+                        '{report_context}'
+                    )
+                ),
+            ]
+        )
+        llm = ChatOpenAI(
+            model=config.model,
+            temperature=config.temperature,
+            max_tokens=config.max_output_tokens,
+        )
+        message = (prompt | llm).invoke(
+            {
+                'report_context': json.dumps(
+                    _build_report_context(
+                        monthly_result=monthly_result,
+                        axis_results=axis_results,
+                        evidence_items=evidence_items,
+                    ),
+                    ensure_ascii=False,
+                ),
+            }
+        )
+        content = message.content
+        if isinstance(content, list):
+            content = ''.join(
+                str(item.get('text', item)) if isinstance(item, dict) else str(item)
+                for item in content
+            )
+        try:
+            return _parse_report_sections(_extract_json_object(str(content)))
+        except (json.JSONDecodeError, ValueError) as exc:
+            return _build_fallback_report_sections(
+                monthly_result=monthly_result,
+                axis_results=axis_results,
+                evidence_items=evidence_items,
+                reason=f'LLM report output was invalid JSON: {exc}',
+            )
+
+
 def generate_monthly_report(
     *,
     monthly_result: MonthlyMbtiResult,

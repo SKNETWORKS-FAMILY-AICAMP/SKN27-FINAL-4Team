@@ -2,31 +2,36 @@
   <div class="panel-body">
     <div class="grid-2">
       <section class="card avatar-card" aria-label="캐릭터 미리보기">
-        <div class="character" :data-kind="selectedCharacter" :style="{
-          '--hair': currentCharacter.color === 'lavender' ? '#8b5cf6' : currentCharacter.color === 'night' ? '#1e293b' : currentCharacter.color === 'coral' ? '#f43f5e' : '#fcd34d',
-          '--skin': currentCharacter.color === 'lavender' ? '#f3e8ff' : currentCharacter.color === 'night' ? '#f1f5f9' : currentCharacter.color === 'coral' ? '#ffe4e6' : '#fffbeb',
-          '--cloth': currentCharacter.color === 'lavender' ? '#ddd6fe' : currentCharacter.color === 'night' ? '#94a3b8' : currentCharacter.color === 'coral' ? '#fecdd3' : '#fef3c7',
-          '--cloth-dark': currentCharacter.color === 'lavender' ? '#c4b5fd' : currentCharacter.color === 'night' ? '#64748b' : currentCharacter.color === 'coral' ? '#fda4af' : '#fde68a'
-        }">
-          <span class="hair"></span>
-          <span class="face"></span>
-          <span class="bang one"></span>
-          <span class="bang two"></span>
-          <span class="bang three"></span>
-          <span class="eye left"></span>
-          <span class="eye right"></span>
-          <span class="cheek left"></span>
-          <span class="cheek right"></span>
-          <span class="mouth"></span>
-          <span class="neck"></span>
-          <span class="body"></span>
-          <span class="collar left"></span>
-          <span class="collar right"></span>
+        <div class="character-preview-wrapper" style="display: flex; align-items: center; justify-content: center; gap: 16px;">
+          <button v-if="characterEditMode" type="button" class="nav-arrow" @click="prevCharacter">❮</button>
+          <div class="character" :data-kind="displayCharacter.id" :style="{
+            '--hair': displayCharacter.color === 'lavender' ? '#8b5cf6' : displayCharacter.color === 'night' ? '#1e293b' : displayCharacter.color === 'coral' ? '#f43f5e' : '#fcd34d',
+            '--skin': displayCharacter.color === 'lavender' ? '#f3e8ff' : displayCharacter.color === 'night' ? '#f1f5f9' : displayCharacter.color === 'coral' ? '#ffe4e6' : '#fffbeb',
+            '--cloth': displayCharacter.color === 'lavender' ? '#ddd6fe' : displayCharacter.color === 'night' ? '#94a3b8' : displayCharacter.color === 'coral' ? '#fecdd3' : '#fef3c7',
+            '--cloth-dark': displayCharacter.color === 'lavender' ? '#c4b5fd' : displayCharacter.color === 'night' ? '#64748b' : displayCharacter.color === 'coral' ? '#fda4af' : '#fde68a'
+          }">
+            <span class="hair"></span>
+            <span class="face"></span>
+            <span class="bang one"></span>
+            <span class="bang two"></span>
+            <span class="bang three"></span>
+            <span class="eye left"></span>
+            <span class="eye right"></span>
+            <span class="cheek left"></span>
+            <span class="cheek right"></span>
+            <span class="mouth"></span>
+            <span class="neck"></span>
+            <span class="body"></span>
+            <span class="collar left"></span>
+            <span class="collar right"></span>
+          </div>
+          <button v-if="characterEditMode" type="button" class="nav-arrow" @click="nextCharacter">❯</button>
         </div>
         <div class="character-name">
-          {{ currentCharacter.name }} · {{ currentCharacter.desc }}
+          {{ displayCharacter.name }} · {{ displayCharacter.desc }}
         </div>
-        <button class="secondary-button" type="button" @click="$emit('open-character-picker')">캐릭터 교체</button>
+        <button v-if="!characterEditMode" class="secondary-button" type="button" @click="startCharacterEdit">캐릭터 변경</button>
+        <button v-else class="primary-button" type="button" @click="finishCharacterEdit" style="margin-top: 12px; min-width: 120px;">변경 완료</button>
       </section>
 
       <section class="card">
@@ -144,34 +149,14 @@
             </div>
           </section>
         </div>
-        <div class="actions">
+        <div class="actions" style="justify-content: flex-end;">
           <button class="primary-button" type="button" @click="$emit('toggle-profile-edit')">{{ profileEdit ? '완료' : '수정' }}</button>
         </div>
         <p v-if="profileSavedAt" class="notice">마지막 저장 시각: {{ profileSavedAt }}</p>
       </section>
     </div>
 
-    <transition name="fade">
-      <section v-if="showCharacterPicker" class="character-picker" @click.self="$emit('close-character-picker')">
-        <div class="picker-dialog" role="dialog" aria-modal="true" aria-label="캐릭터 교체">
-          <div class="picker-head">
-            <h3>대화 대상 캐릭터 선택</h3>
-            <button class="close-button" type="button" aria-label="닫기" @click="$emit('close-character-picker')">×</button>
-          </div>
-          <div class="character-options">
-            <button class="character-option" type="button" v-for="character in characters" :key="character.id"
-              :class="{ active: selectedCharacter === character.id }" @click="$emit('choose-character', character.id)">
-              <div class="character-mini" :class="'mini-' + character.id"
-                :style="{ 
-                  '--hair': character.color === 'lavender' ? '#8b5cf6' : character.color === 'night' ? '#1e293b' : character.color === 'coral' ? '#f43f5e' : '#fcd34d',
-                  '--cloth': character.color === 'lavender' ? '#ddd6fe' : character.color === 'night' ? '#94a3b8' : character.color === 'coral' ? '#fecdd3' : '#fef3c7' 
-                }"></div>
-              {{ character.name }}
-            </button>
-          </div>
-        </div>
-      </section>
-    </transition>
+    <!-- Character picker popup removed as it is now inline -->
   </div>
 </template>
 
@@ -257,8 +242,18 @@ export default {
     return {
       activePicker: null,
       hobbyGroups: groupByCategory(parseKeywordCsv(hobbyCsv, "hobby")),
-      interestGroups: groupByCategory(parseKeywordCsv(interestCsv, "interest"))
+      interestGroups: groupByCategory(parseKeywordCsv(interestCsv, "interest")),
+      characterEditMode: false,
+      previewCharacterIndex: 0
     };
+  },
+  computed: {
+    displayCharacter() {
+      if (this.characterEditMode && this.characters && this.characters.length > 0) {
+        return this.characters[this.previewCharacterIndex] || this.currentCharacter;
+      }
+      return this.currentCharacter;
+    }
   },
   methods: {
     togglePicker(type) {
@@ -278,6 +273,24 @@ export default {
         }
         targetArray.push(label);
       }
+    },
+    startCharacterEdit() {
+      this.previewCharacterIndex = this.characters.findIndex(c => c.id === this.selectedCharacter);
+      if (this.previewCharacterIndex === -1) this.previewCharacterIndex = 0;
+      this.characterEditMode = true;
+    },
+    finishCharacterEdit() {
+      this.characterEditMode = false;
+      const chosen = this.characters[this.previewCharacterIndex];
+      if (chosen && chosen.id !== this.selectedCharacter) {
+        this.$emit('choose-character', chosen.id);
+      }
+    },
+    prevCharacter() {
+      this.previewCharacterIndex = (this.previewCharacterIndex - 1 + this.characters.length) % this.characters.length;
+    },
+    nextCharacter() {
+      this.previewCharacterIndex = (this.previewCharacterIndex + 1) % this.characters.length;
     }
   },
   watch: {
@@ -393,5 +406,28 @@ export default {
 }
 .avatar-card :deep(.character-name) {
   margin-top: 12px;
+}
+.nav-arrow {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #e1c5ff;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+.nav-arrow:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: scale(1.1);
+  color: #fff;
+}
+.nav-arrow:active {
+  transform: scale(0.95);
 }
 </style>

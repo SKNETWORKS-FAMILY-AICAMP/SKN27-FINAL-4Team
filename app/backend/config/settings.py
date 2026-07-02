@@ -28,7 +28,8 @@ INSTALLED_APPS = [
     'chat',
     'wellness',
     'mbti',
-    'myprofile'
+    'myprofile',
+    'taste'
 ]
 
 MIDDLEWARE = [
