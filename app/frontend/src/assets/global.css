@@ -1,47 +1,79 @@
+@font-face {
+  font-family: "SUIT Variable";
+  src: url("/fonts/SUIT-Variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Bagel Fat One";
+  src: url("/fonts/BagelFatOne-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Gowun Dodum";
+  src: url("/fonts/GowunDodum-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
+  --font-ui: "SUIT Variable", "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
+  --font-display: "Bagel Fat One", "SUIT Variable", "Pretendard", sans-serif;
+  --font-soft: "Gowun Dodum", "SUIT Variable", "Pretendard", sans-serif;
+  --color-russian-violet: #321849;
+  --color-amaranth-purple: #931672;
+  --color-paradise-pink: #E73E65;
+  --color-sunset-orange: #EE5D5F;
+  --color-middle-red: #E77E6E;
   /* ── 배경 이미지(노을 판타지) 추출 팔레트 ── */
-  --bg-deep:       #0D0520;
-  --bg-mid:        #2A0E6B;
-  --bg-card:       rgba(42, 14, 107, 0.35);
-  --bg-card-hover: rgba(42, 14, 107, 0.55);
-  --card-border:   rgba(192, 132, 252, 0.2);
+  --bg-deep:       #14091f;
+  --bg-mid:        #321849;
+  --bg-card:       rgba(50, 24, 73, 0.4);
+  --bg-card-hover: rgba(50, 24, 73, 0.58);
+  --card-border:   rgba(231, 62, 101, 0.24);
 
   --text-primary:   #ffffff;
   --text-secondary: rgba(255, 255, 255, 0.65);
   --text-muted:     rgba(255, 255, 255, 0.38);
 
   /* 포인트 컬러 — 배경 이미지 직접 추출 */
-  --accent-orange: #FF6335;   /* 노을 오렌지 (지평선) */
-  --accent-gold:   #FFB347;   /* 집 불빛 골드 */
-  --accent-yellow: #FFC566;   /* 태양 코어 */
-  --accent-purple: #C084FC;   /* 라벤더 꽃 */
-  --accent-lavender: #E9CAFF; /* 밝은 라벤더 */
-  --accent-teal:   #5EEAD4;   /* 호환용 유지 */
+  --accent-orange: #E77E6E;
+  --accent-gold:   #EE5D5F;
+  --accent-yellow: #E73E65;
+  --accent-purple: #931672;
+  --accent-lavender: #F0BDDB;
+  --accent-teal:   #E77E6E;
 
   /* 핵심 그라디언트 */
-  --grad-sunset: linear-gradient(135deg, #FF6335, #FFB347);
-  --grad-sky:    linear-gradient(180deg, #2A0E6B, #0D0520);
-  --grad-dusk:   linear-gradient(135deg, #7C3AED, #C084FC);
+  --grad-sunset: linear-gradient(135deg, #E73E65, #EE5D5F 48%, #E77E6E);
+  --grad-sky:    linear-gradient(180deg, #321849, #14091f);
+  --grad-dusk:   linear-gradient(135deg, #321849, #931672);
 
   /* 기존 변수명 유지 (컴포넌트 호환) */
   --ink:    #ffffff;
   --mut:    rgba(255,255,255,0.5);
-  --bd:     rgba(192,132,252,0.2);
+  --bd:     rgba(231,62,101,0.24);
   --gray:   rgba(255,255,255,0.08);
-  --soft:   rgba(42,14,107,0.3);
-  --canvas: #0D0520;
-  --teal:   #5EEAD4;
-  --tealbg: rgba(94, 234, 212, 0.12);
+  --soft:   rgba(50,24,73,0.3);
+  --canvas: #14091f;
+  --teal:   #E77E6E;
+  --tealbg: rgba(231, 126, 110, 0.12);
   --blue:   #93C5FD;
   --bluebg: rgba(147,197,253,0.15);
-  --pur:    #C084FC;
-  --purbg:  rgba(192,132,252,0.15);
-  --cor:    #FCA5A5;
-  --corbg:  rgba(252,165,165,0.12);
-  --amber:  #FFB347;
-  --amberbg:rgba(255,179,71,0.15);
-  --red:    #F87171;
-  --redbg:  rgba(248,113,113,0.12);
+  --pur:    #931672;
+  --purbg:  rgba(147,22,114,0.15);
+  --cor:    #EE5D5F;
+  --corbg:  rgba(238,93,95,0.12);
+  --amber:  #E77E6E;
+  --amberbg:rgba(231,126,110,0.15);
+  --red:    #E73E65;
+  --redbg:  rgba(231,62,101,0.12);
 }
 
 * {
@@ -51,11 +83,11 @@
 }
 
 body {
-  font-family: 'Malgun Gothic', 'Noto Sans KR', system-ui, sans-serif;
+  font-family: var(--font-ui);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
-  background-image: url('@/assets/bg-main.png');
+  background-image: url('./bg-main.png');
   background-size: cover;
   background-position: center;
   background-attachment: fixed;
@@ -67,6 +99,13 @@ button {
   border: none;
   background: none;
   font-family: inherit;
+}
+
+input,
+textarea,
+select,
+label {
+  font-family: var(--font-ui);
 }
 
 ::-webkit-scrollbar { width: 4px; }

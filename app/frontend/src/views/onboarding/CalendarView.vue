@@ -1,106 +1,1040 @@
 <script setup>
-import { ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { getLocalDateString } from "../../api/client.js";
+import { calendarApi } from "../../api/calendar.js";
+import { tarotApi } from "../../api/tarot.js";
+import tarotCardIcon from "../../assets/icons/tarot-card.png";
 
-const selectedDay = ref(23);
-const days = [
-  { day: 1, state: "mood", label: "차분" },
-  { day: 2, state: "empty", label: "" },
-  { day: 3, state: "fortune", label: "운세" },
-  { day: 4, state: "multi", label: "대화" },
-  { day: 5, state: "mood", label: "기쁨" },
-  { day: 6, state: "empty", label: "" },
-  { day: 7, state: "mood", label: "피로" },
-  { day: 8, state: "fortune", label: "운세" },
-  { day: 9, state: "mood", label: "안정" },
-  { day: 10, state: "multi", label: "기록" },
-  { day: 11, state: "empty", label: "" },
-  { day: 12, state: "mood", label: "긴장" },
-  { day: 13, state: "fortune", label: "운세" },
-  { day: 14, state: "mood", label: "회복" },
-  { day: 15, state: "multi", label: "대화" },
-  { day: 16, state: "mood", label: "흐림" },
-  { day: 17, state: "fortune", label: "운세" },
-  { day: 18, state: "empty", label: "" },
-  { day: 19, state: "mood", label: "평온" },
-  { day: 20, state: "multi", label: "기록" },
-  { day: 21, state: "mood", label: "쉼" },
-  { day: 22, state: "fortune", label: "운세" },
-  { day: 23, state: "multi", label: "오늘" },
-  { day: 24, state: "empty", label: "" },
-  { day: 25, state: "mood", label: "기대" },
-  { day: 26, state: "empty", label: "" },
-  { day: 27, state: "mood", label: "몰입" },
-  { day: 28, state: "fortune", label: "운세" },
-  { day: 29, state: "empty", label: "" },
-  { day: 30, state: "mood", label: "정리" }
-];
-const week = [
-  { day: "월", value: 42 },
-  { day: "화", value: 56 },
-  { day: "수", value: 48 },
-  { day: "목", value: 64 },
-  { day: "금", value: 52 },
-  { day: "토", value: 76 },
-  { day: "일", value: 68 }
-];
+const today = new Date();
+const YEAR_PAGE_SIZE = 6;
+const currentYear = ref(today.getFullYear());
+const currentMonth = ref(today.getMonth() + 1);
+const yearPageStart = ref(currentYear.value - 2);
+const selectedDate = ref(toDateString(today));
+const monthFortunes = ref([]);
+const selectedFortune = ref(null);
+const isMonthLoading = ref(false);
+const isDayLoading = ref(false);
+const errorMessage = ref("");
+const isMonthPickerOpen = ref(false);
+
+const CALENDAR_DAILY_MAJOR_CACHE_KEY = "binteumsaiCalendarDailyMajorCard";
+const USER_PROFILE_KEY = "binteumsaiUserProfile";
+const CHARACTER_STORAGE_KEY = "binteumsaiCharacter";
+const VALID_CHARACTER_IDS = new Set(["otter", "cat", "redpanda", "bird"]);
+const VALID_EXPRESSION_IDS = new Set(["joy", "anger", "sadness", "anxiety", "hurt", "panic"]);
+const EMOTION_TO_EXPRESSION = {
+  encourage: "joy",
+  sad: "sadness",
+  angry: "anger",
+  plan: "anxiety",
+};
+const dailyMajor = ref(null);
+const isDailyMajorLoading = ref(false);
+const dailyMajorError = ref("");
+const storedCharacter = ref(readStoredCharacter());
+
+const monthTitle = computed(() => `${currentYear.value}년 ${currentMonth.value}월`);
+const yearOptions = computed(() =>
+  Array.from({ length: YEAR_PAGE_SIZE }, (_, index) => yearPageStart.value + index)
+);
+const selectedDateLabel = computed(() => {
+  const date = new Date(`${selectedDate.value}T00:00:00`);
+  return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일`;
+});
+const selectedMonthHasRecords = computed(() => monthFortunes.value.length > 0);
+const recordCount = computed(() => monthFortunes.value.length);
+const streakCount = computed(() => getCurrentStreak(monthFortunes.value));
+const emotionSummary = computed(() => {
+  if (!monthFortunes.value.length) return "차분한 기록을 기다리는 중";
+  const keyword = monthFortunes.value.find((item) => item.keyword)?.keyword;
+  return keyword ? `${keyword} 흐름이 남아있어요` : "차분한 날이 많았어요";
+});
+
+const selectedCharacterId = computed(() => normalizeCharacterId(storedCharacter.value.characterId));
+const fallbackExpressionId = computed(() => normalizeExpressionId(storedCharacter.value.expressionId));
+const selectedCharacterDefaultUrl = computed(() => getCharacterImageUrl(selectedCharacterId.value, "default"));
+const selectedDetailCharacterUrl = computed(() => {
+  if (!selectedFortune.value) return selectedCharacterDefaultUrl.value;
+  return getCharacterImageUrl(selectedCharacterId.value, getFortuneExpressionId(selectedFortune.value));
+});
+
+const dailyMajorSummary = computed(() => {
+  if (isDailyMajorLoading.value) {
+    return "생년월일을 바탕으로 오늘의 운세 카드를 불러오고 있어요.";
+  }
+
+  if (!dailyMajor.value) {
+    return dailyMajorError.value || "생년월일을 저장하면 오늘의 운세 카드 내용을 확인할 수 있어요.";
+  }
+
+  const cardName = dailyMajor.value.card_name_ko || dailyMajor.value.card_name || "";
+  const cardMeaning =
+    dailyMajor.value.card_defined_meaning ||
+    dailyMajor.value.card_description ||
+    dailyMajor.value.message ||
+    "오늘의 카드가 전하는 메시지를 잠시 후 다시 확인해 주세요.";
+
+  return cardName ? `${cardName} · ${cardMeaning}` : cardMeaning;
+});
+
+const fortuneByDate = computed(() => {
+  return monthFortunes.value.reduce((acc, item) => {
+    acc[item.date] = item;
+    return acc;
+  }, {});
+});
+
+const calendarDays = computed(() => {
+  const firstDate = new Date(currentYear.value, currentMonth.value - 1, 1);
+  const lastDate = new Date(currentYear.value, currentMonth.value, 0);
+  const days = [];
+
+  for (let index = 0; index < firstDate.getDay(); index += 1) {
+    days.push({ key: `blank-${index}`, blank: true });
+  }
+
+  for (let day = 1; day <= lastDate.getDate(); day += 1) {
+    const date = toDateString(new Date(currentYear.value, currentMonth.value - 1, day));
+    const fortune = fortuneByDate.value[date];
+    days.push({
+      key: date,
+      day,
+      date,
+      state: fortune ? "fortune" : "empty",
+      label: fortune?.keyword || (fortune ? "운세" : "기록 없음"),
+      emojiUrl: fortune ? getCharacterImageUrl(selectedCharacterId.value, getFortuneExpressionId(fortune), true) : "",
+      fortune,
+    });
+  }
+
+  return days;
+});
+
+onMounted(() => {
+  refreshStoredCharacter();
+  window.addEventListener("storage", refreshStoredCharacter);
+  loadMonth();
+  loadDailyMajor();
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("storage", refreshStoredCharacter);
+});
+
+watch([currentYear, currentMonth], () => {
+  loadMonth();
+});
+
+watch(currentYear, () => {
+  syncYearPageToCurrentYear();
+});
+
+function readStoredCharacter() {
+  try {
+    return JSON.parse(localStorage.getItem(CHARACTER_STORAGE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function refreshStoredCharacter(event) {
+  if (event?.key && event.key !== CHARACTER_STORAGE_KEY) return;
+  storedCharacter.value = readStoredCharacter();
+}
+
+function normalizeCharacterId(value) {
+  const characterId = String(value || "").trim();
+  if (VALID_CHARACTER_IDS.has(characterId)) return characterId;
+  if (characterId === "haeon") return "otter";
+  if (characterId === "greung" || characterId === "geureung") return "cat";
+  if (characterId === "dalkong") return "redpanda";
+  return "otter";
+}
+
+function normalizeExpressionId(value) {
+  const expressionId = String(value || "").trim();
+  return VALID_EXPRESSION_IDS.has(expressionId) ? expressionId : "joy";
+}
+
+function getFortuneExpressionId(fortune) {
+  const emotionExpression = EMOTION_TO_EXPRESSION[fortune?.emotion_label];
+  if (emotionExpression) return emotionExpression;
+
+  const explicitExpression =
+    fortune?.expression_id ||
+    fortune?.expressionId ||
+    fortune?.expression ||
+    fortune?.emotion_expression ||
+    fortune?.emotionExpression;
+
+  if (VALID_EXPRESSION_IDS.has(explicitExpression)) return explicitExpression;
+  return fallbackExpressionId.value;
+}
+
+function getCharacterImageUrl(characterId, expressionId = "default", faceOnly = false) {
+  const safeCharacterId = normalizeCharacterId(characterId);
+  const safeExpressionId = expressionId === "default" ? "default" : normalizeExpressionId(expressionId);
+  const prefix = faceOnly ? "/characters/faces" : "/characters";
+  return `${prefix}/${safeCharacterId}/${safeExpressionId}.png`;
+}
+
+async function loadDailyMajor() {
+  const todayString = getLocalDateString();
+  const cached = readDailyMajorCache(todayString);
+
+  if (cached?.card) {
+    dailyMajor.value = cached.card;
+    dailyMajorError.value = "";
+    isDailyMajorLoading.value = false;
+    return;
+  }
+
+  isDailyMajorLoading.value = true;
+  dailyMajorError.value = "";
+
+  try {
+    dailyMajor.value = await tarotApi.getDailyMajor(todayString);
+    saveDailyMajorCache(todayString);
+  } catch (error) {
+    dailyMajor.value = null;
+    dailyMajorError.value =
+      error.response?.data?.error || "오늘의 운세 카드를 불러오지 못했어요.";
+  } finally {
+    isDailyMajorLoading.value = false;
+  }
+}
+
+function readDailyMajorCache(date) {
+  const profileSignature = getStoredProfileSignature();
+  if (!profileSignature) return null;
+
+  try {
+    const cached = JSON.parse(localStorage.getItem(CALENDAR_DAILY_MAJOR_CACHE_KEY) || "{}");
+    if (
+      cached.date === date &&
+      cached.profileSignature === profileSignature &&
+      cached.card
+    ) {
+      return cached;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function saveDailyMajorCache(date) {
+  const profileSignature = getStoredProfileSignature();
+  if (!profileSignature || !dailyMajor.value) return;
+
+  localStorage.setItem(
+    CALENDAR_DAILY_MAJOR_CACHE_KEY,
+    JSON.stringify({
+      date,
+      profileSignature,
+      card: dailyMajor.value,
+    })
+  );
+}
+
+function getStoredProfileSignature() {
+  try {
+    const profile = JSON.parse(localStorage.getItem(USER_PROFILE_KEY) || "{}");
+    return String(profile.birth_date || profile.birthDate || profile.birthday || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+async function loadMonth() {
+  isMonthLoading.value = true;
+  errorMessage.value = "";
+
+  try {
+    monthFortunes.value = await calendarApi.getMonth(currentYear.value, currentMonth.value);
+    if (!isSelectedDateInCurrentMonth()) {
+      selectedDate.value = toDateString(new Date(currentYear.value, currentMonth.value - 1, 1));
+    }
+    await loadDay(selectedDate.value);
+  } catch (error) {
+    monthFortunes.value = [];
+    selectedFortune.value = null;
+    errorMessage.value = getErrorMessage(error);
+  } finally {
+    isMonthLoading.value = false;
+  }
+}
+
+async function loadDay(date) {
+  selectedDate.value = date;
+  isDayLoading.value = true;
+  errorMessage.value = "";
+
+  try {
+    const data = await calendarApi.getDay(date);
+    selectedFortune.value = data.fortune;
+  } catch (error) {
+    selectedFortune.value = null;
+    errorMessage.value = getErrorMessage(error);
+  } finally {
+    isDayLoading.value = false;
+  }
+}
+
+function moveMonth(offset) {
+  const next = new Date(currentYear.value, currentMonth.value - 1 + offset, 1);
+  currentYear.value = next.getFullYear();
+  currentMonth.value = next.getMonth() + 1;
+  isMonthPickerOpen.value = false;
+}
+
+function goToday() {
+  currentYear.value = today.getFullYear();
+  currentMonth.value = today.getMonth() + 1;
+  selectedDate.value = toDateString(today);
+  syncYearPageToCurrentYear();
+  isMonthPickerOpen.value = false;
+  loadDay(selectedDate.value);
+}
+
+function toggleMonthPicker() {
+  isMonthPickerOpen.value = !isMonthPickerOpen.value;
+
+  if (isMonthPickerOpen.value) {
+    syncYearPageToCurrentYear();
+  }
+}
+
+function moveYearRange(offset) {
+  yearPageStart.value += offset * YEAR_PAGE_SIZE;
+}
+
+function selectYear(year) {
+  currentYear.value = year;
+}
+
+function selectMonth(month) {
+  currentMonth.value = month;
+  isMonthPickerOpen.value = false;
+}
+
+function syncYearPageToCurrentYear() {
+  const firstYear = yearPageStart.value;
+  const lastYear = yearPageStart.value + YEAR_PAGE_SIZE - 1;
+
+  if (currentYear.value < firstYear || currentYear.value > lastYear) {
+    yearPageStart.value = currentYear.value - 2;
+  }
+}
+
+function isSelectedDateInCurrentMonth() {
+  return selectedDate.value.startsWith(`${currentYear.value}-${String(currentMonth.value).padStart(2, "0")}`);
+}
+
+function getCurrentStreak(records) {
+  if (!records.length) return 0;
+  const dates = new Set(records.map((item) => item.date));
+  let cursor = new Date(`${toDateString(today)}T00:00:00`);
+  let count = 0;
+
+  while (dates.has(toDateString(cursor))) {
+    count += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  return count || Math.min(records.length, 2);
+}
+
+function toDateString(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getErrorMessage(error) {
+  return error.response?.data?.error || "캘린더 기록을 불러오지 못했어요.";
+}
 </script>
 
 <template>
   <section class="view-card calendar-view">
     <article class="glass-panel calendar-board">
-      <div class="content-heading">
+      <header class="calendar-heading">
         <div>
-          <p class="section-kicker">Mind calendar</p>
-          <h2>마음 캘린더</h2>
-          <p>하루 감정, 운세, 대화 기록을 날짜별로 모아보고 회고해요.</p>
+          <h2>마음 캘린더 ✦</h2>
+          <p>Mind calendar</p>
+          <span>날짜별로 저장된 운세 기록을 모아보고, 날짜를 선택하면 자세한 운세 내용을 확인할 수 있어요.</span>
         </div>
+
         <div class="calendar-legend">
-          <span><i class="mood"></i>감정</span>
-          <span><i class="fortune"></i>운세</span>
-          <span><i class="multi"></i>여러 기록</span>
+          <button class="active" type="button"><i class="fortune"></i>운세 기록</button>
+          <button type="button"><i class="empty"></i>기록 없음</button>
+        </div>
+      </header>
+
+      <div class="calendar-toolbar">
+        <div class="month-picker-wrap">
+          <button
+            class="month-title-button"
+            type="button"
+            :aria-expanded="isMonthPickerOpen"
+            @click="toggleMonthPicker"
+          >
+            🗓 {{ monthTitle }}
+          </button>
+
+          <div v-if="isMonthPickerOpen" class="month-popover">
+            <div class="year-picker">
+              <button
+                class="year-nav"
+                type="button"
+                aria-label="이전 연도 범위"
+                @click.stop="moveYearRange(-1)"
+              >
+                ‹
+              </button>
+
+              <div class="year-list">
+                <button
+                  v-for="year in yearOptions"
+                  :key="year"
+                  type="button"
+                  :class="{ active: currentYear === year }"
+                  @click.stop="selectYear(year)"
+                >
+                  {{ year }}년
+                </button>
+              </div>
+
+              <button
+                class="year-nav"
+                type="button"
+                aria-label="다음 연도 범위"
+                @click.stop="moveYearRange(1)"
+              >
+                ›
+              </button>
+            </div>
+
+            <div class="month-grid">
+              <button
+                v-for="month in 12"
+                :key="month"
+                type="button"
+                :class="{ active: currentMonth === month }"
+                @click="selectMonth(month)"
+              >
+                {{ month }}월
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="calendar-nav-buttons">
+          <button class="btn secondary small" type="button" @click="moveMonth(-1)">이전</button>
+          <button class="btn secondary small" type="button" @click="moveMonth(1)">다음</button>
+          <button class="btn secondary small" type="button" @click="goToday">오늘</button>
         </div>
       </div>
 
-      <div class="calendar-grid" aria-label="2026년 6월 마음 기록">
-        <span class="weekday">월</span><span class="weekday">화</span><span class="weekday">수</span><span class="weekday">목</span><span class="weekday">금</span><span class="weekday">토</span><span class="weekday">일</span>
+      <section class="calendar-stats" aria-label="이번 달 기록 요약">
+        <article>
+          <span>▣</span>
+          <div>
+            <strong>{{ recordCount }}일</strong>
+            <p>이번 달 기록</p>
+          </div>
+        </article>
+        <article>
+          <span>🔥</span>
+          <div>
+            <strong>{{ streakCount }}일</strong>
+            <p>현재 연속 기록</p>
+          </div>
+        </article>
+        <article class="wide">
+          <span>↗</span>
+          <div>
+            <strong>{{ emotionSummary }}</strong>
+            <p>이번 달 감정 요약</p>
+          </div>
+          <img :src="selectedCharacterDefaultUrl" alt="" aria-hidden="true">
+        </article>
+      </section>
+
+      <p v-if="errorMessage" class="calendar-error">{{ errorMessage }}</p>
+
+      <div class="calendar-grid" :aria-label="`${monthTitle} 운세 기록`">
+        <span class="weekday">일</span>
+        <span class="weekday">월</span>
+        <span class="weekday">화</span>
+        <span class="weekday">수</span>
+        <span class="weekday">목</span>
+        <span class="weekday">금</span>
+        <span class="weekday">토</span>
+
+        <span v-for="day in calendarDays.filter((item) => item.blank)" :key="day.key" class="calendar-day blank"></span>
+
         <button
-          v-for="day in days"
-          :key="day.day"
+          v-for="day in calendarDays.filter((item) => !item.blank)"
+          :key="day.key"
           type="button"
           class="calendar-day"
-          :class="[day.state, { selected: selectedDay === day.day }]"
-          @click="selectedDay = day.day"
+          :class="[day.state, { selected: selectedDate === day.date }]"
+          @click="loadDay(day.date)"
         >
           <strong>{{ day.day }}</strong>
-          <span>{{ day.label || "기록 없음" }}</span>
+          <span v-if="day.emojiUrl" class="calendar-character-emoji">
+            <img :src="day.emojiUrl" :alt="day.label" draggable="false">
+          </span>
+          <span v-else>{{ day.label }}</span>
         </button>
       </div>
+
+      <p v-if="!isMonthLoading && !selectedMonthHasRecords" class="calendar-empty-note">
+        이번 달에는 아직 저장된 운세가 없어요. 운세 화면에서 타로 결과를 생성하면 오늘 날짜에 자동 저장돼요.
+      </p>
     </article>
 
     <aside class="glass-panel calendar-detail">
-      <h3>{{ selectedDay }}일의 마음 기록</h3>
-      <div class="daily-summary">
+      <h3>{{ selectedDateLabel }} 기록 ✦</h3>
+
+      <div class="calendar-detail-hero">
+        <img :src="selectedDetailCharacterUrl" alt="" aria-hidden="true">
+      </div>
+
+      <div v-if="isDayLoading" class="daily-summary">
         <span class="sticker-icon calendar"></span>
         <div>
-          <strong>감정 한줄평</strong>
-          <p>오늘은 해야 할 일이 많았지만, 저녁에는 조금 안정감을 되찾았어요.</p>
+          <strong>불러오는 중</strong>
+          <p>선택한 날짜의 운세 기록을 확인하고 있어요.</p>
         </div>
       </div>
-      <div class="daily-summary">
-        <span class="sticker-icon fortune"></span>
-        <div>
-          <strong>오늘의 카드 운세</strong>
-          <p>작은 안부가 관계의 온도를 부드럽게 바꿀 수 있어요.</p>
+
+      <template v-else-if="selectedFortune">
+        <div class="daily-summary today-fortune-summary">
+          <img class="daily-summary-icon" :src="tarotCardIcon" alt="" aria-hidden="true">
+          <div>
+            <strong>오늘의 운세</strong>
+            <p>{{ dailyMajorSummary }}</p>
+          </div>
         </div>
+      </template>
+
+      <div v-else class="empty-detail-card">
+        <span>💬</span>
+        <strong>저장된 운세 없음</strong>
+        <p>이 날짜에는 아직 저장된 운세 내용이 없어요.</p>
+        <i></i>
+        <h4>나만의 기록을 남겨보세요</h4>
+        <p>오늘의 마음과 운세를 기록하면, 더 정확한 마음 리포트를 받을 수 있어요.</p>
+        <button class="btn secondary full" type="button">운세 기록하기</button>
       </div>
-      <section class="weekly-card">
-        <h3>일주일 감정 그래프</h3>
-        <div class="mini-week-chart">
-          <span v-for="item in week" :key="item.day" :style="{ '--height': item.value + '%' }">
-            <i></i><b>{{ item.day }}</b>
-          </span>
-        </div>
-      </section>
     </aside>
   </section>
 </template>
+
+<style scoped>
+.calendar-view {
+  width: min(1560px, calc(100% - 64px));
+  min-height: calc(100vh - var(--bt-header-h) - 52px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 430px;
+  gap: 22px;
+  margin: 28px auto 34px;
+}
+
+.calendar-board,
+.calendar-detail {
+  border-radius: 28px;
+  background:
+    linear-gradient(145deg, rgba(62, 25, 76, 0.9), rgba(23, 10, 44, 0.88)),
+    rgba(50, 24, 73, 0.76);
+}
+
+.calendar-board {
+  overflow: visible;
+  padding: clamp(28px, 3vw, 44px);
+}
+
+.calendar-detail {
+  padding: 32px 28px;
+}
+
+.calendar-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 22px;
+  align-items: start;
+}
+
+.calendar-heading h2 {
+  margin: 0;
+  color: #fff1cd;
+  font-size: clamp(40px, 3.8vw, 56px);
+  line-height: 1.08;
+}
+
+.calendar-heading p {
+  margin: 8px 0 10px;
+  color: #ffbd82;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.calendar-heading span {
+  display: block;
+  color: rgba(255, 245, 238, 0.72);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.calendar-legend {
+  display: flex;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.calendar-legend button {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid rgba(255, 143, 164, 0.34);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 245, 238, 0.76);
+  font-weight: 900;
+}
+
+.calendar-legend button.active {
+  color: #fff;
+  background: linear-gradient(135deg, #e73e65, #e77e6e);
+}
+
+.calendar-legend i {
+  width: 8px;
+  height: 8px;
+  display: inline-block;
+  margin-right: 8px;
+  border-radius: 50%;
+}
+
+.calendar-legend .fortune {
+  background: #fff1cd;
+}
+
+.calendar-legend .empty {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.calendar-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+  margin: 26px 0 16px;
+}
+
+.month-picker-wrap {
+  position: relative;
+  z-index: 50;
+}
+
+.month-title-button {
+  min-height: 50px;
+  padding: 0 22px;
+  border: 1px solid rgba(255, 143, 164, 0.44);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff1cd;
+  font-size: 19px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.month-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  z-index: 100;
+  width: min(420px, calc(100vw - 40px));
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(231, 62, 101, 0.42);
+  border-radius: 18px;
+  background: rgba(38, 14, 60, 0.96);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.32);
+}
+
+.year-picker {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 34px;
+  gap: 8px;
+  align-items: center;
+}
+
+.year-list {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.month-popover button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 245, 238, 0.78);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.month-popover .year-nav {
+  min-height: 34px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.year-list button {
+  min-height: 34px;
+  padding: 0 6px;
+  font-size: 13px;
+}
+
+.month-popover button.active {
+  color: #fff;
+  background: linear-gradient(135deg, #e73e65, #e77e6e);
+}
+
+@media (max-width: 560px) {
+  .month-popover {
+    width: min(330px, calc(100vw - 28px));
+  }
+
+  .year-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.calendar-nav-buttons {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.calendar-stats {
+  display: grid;
+  grid-template-columns: 1.1fr 1.1fr 2fr;
+  gap: 0;
+  margin: 12px 0 22px;
+  border: 1px solid rgba(255, 143, 164, 0.24);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.055);
+  overflow: hidden;
+}
+
+.calendar-stats article {
+  min-height: 92px;
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  padding: 18px 22px;
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.calendar-stats article:last-child {
+  border-right: 0;
+}
+
+.calendar-stats span {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 241, 205, 0.14);
+  font-size: 23px;
+}
+
+.calendar-stats strong {
+  color: #fff1cd;
+  font-size: 28px;
+  font-weight: 950;
+}
+
+.calendar-stats p {
+  margin: 4px 0 0;
+  color: rgba(255, 245, 238, 0.68);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.calendar-stats .wide {
+  position: relative;
+  padding-right: 106px;
+}
+
+.calendar-stats .wide strong {
+  font-size: 18px;
+}
+
+.calendar-stats .wide img {
+  position: absolute;
+  right: 18px;
+  bottom: 0;
+  width: 82px;
+  height: 88px;
+  object-fit: contain;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.weekday {
+  display: grid;
+  place-items: center;
+  min-height: 32px;
+  color: rgba(255, 245, 238, 0.78);
+  font-size: 16px;
+  font-weight: 950;
+}
+
+.calendar-day {
+  position: relative;
+  min-height: 86px;
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 143, 164, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.045);
+  color: #fff;
+  cursor: pointer;
+}
+
+.calendar-day.blank {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.calendar-day strong {
+  font-size: 21px;
+  font-weight: 950;
+}
+
+.calendar-day > span:not(.calendar-character-emoji) {
+  color: rgba(255, 245, 238, 0.7);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.calendar-day.fortune {
+  border-color: rgba(255, 143, 164, 0.36);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.calendar-day.selected {
+  border-color: rgba(255, 143, 164, 0.96);
+  background: linear-gradient(135deg, #e73e65, #e77e6e);
+  box-shadow: 0 14px 30px rgba(231, 62, 101, 0.3);
+}
+
+.calendar-character-emoji {
+  position: absolute;
+  right: 9px;
+  bottom: 6px;
+  width: 44px;
+  height: 48px;
+}
+
+.calendar-character-emoji img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.calendar-detail h3 {
+  margin: 0;
+  color: #fff1cd;
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.calendar-detail-hero {
+  min-height: 188px;
+  display: grid;
+  place-items: center;
+}
+
+.calendar-detail-hero img {
+  width: 182px;
+  height: 182px;
+  object-fit: contain;
+  filter: drop-shadow(0 20px 24px rgba(3, 1, 18, 0.42));
+}
+
+.daily-summary,
+.empty-detail-card {
+  border: 1px solid rgba(255, 143, 164, 0.24);
+  border-radius: 20px;
+  background:
+    linear-gradient(145deg, rgba(231, 62, 101, 0.22), rgba(231, 126, 110, 0.1)),
+    rgba(255, 255, 255, 0.045);
+}
+
+.daily-summary {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 14px;
+  padding: 18px;
+  margin-top: 14px;
+}
+
+.daily-summary-icon {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+}
+
+.daily-summary strong {
+  color: #fff;
+  font-size: 17px;
+}
+
+.daily-summary p {
+  margin: 6px 0 0;
+  color: rgba(255, 245, 238, 0.72);
+  line-height: 1.55;
+}
+
+.empty-detail-card {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 28px 22px;
+  text-align: center;
+}
+
+.empty-detail-card > span {
+  width: 74px;
+  height: 74px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 143, 164, 0.28);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 34px;
+}
+
+.empty-detail-card strong,
+.empty-detail-card h4 {
+  margin: 0;
+  color: #fff1cd;
+  font-size: 22px;
+  font-weight: 950;
+}
+
+.empty-detail-card p {
+  margin: 0;
+  color: rgba(255, 245, 238, 0.72);
+  line-height: 1.65;
+}
+
+.empty-detail-card i {
+  width: 70%;
+  height: 1px;
+  margin: 10px 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 143, 164, 0.42), transparent);
+}
+
+.calendar-error,
+.calendar-empty-note {
+  margin: 0 0 14px;
+  color: #ffad9a;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.calendar-empty-note {
+  margin-top: 16px;
+  color: rgba(255, 245, 238, 0.68);
+}
+
+@media (max-width: 1180px) {
+  .calendar-view {
+    grid-template-columns: 1fr;
+    width: min(100% - 28px, 920px);
+  }
+}
+
+@media (max-width: 760px) {
+  .calendar-board,
+  .calendar-detail {
+    padding: 22px;
+  }
+
+  .calendar-heading,
+  .calendar-toolbar {
+    display: grid;
+  }
+
+  .calendar-legend,
+  .calendar-nav-buttons {
+    flex-wrap: wrap;
+  }
+
+  .calendar-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .calendar-stats article {
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  .calendar-grid {
+    gap: 7px;
+  }
+
+  .calendar-day {
+    min-height: 70px;
+    padding: 9px;
+  }
+
+  .calendar-day > span:not(.calendar-character-emoji) {
+    font-size: 11px;
+  }
+}
+
+@media (max-height: 760px) {
+  :global(#app .calendar-view) {
+    height: auto !important;
+    min-height: calc(100dvh - var(--bt-header-h) - 1px) !important;
+    margin-bottom: 36px !important;
+    overflow: visible !important;
+  }
+
+  :global(#app .calendar-board),
+  :global(#app .calendar-detail) {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+}
+</style>

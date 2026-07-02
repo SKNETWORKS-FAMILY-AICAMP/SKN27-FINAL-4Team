@@ -1,0 +1,415 @@
+/*  FortuneView.vue  */
+
+.category-chip-row {
+  font-family: var(--font-ui);
+}
+
+.tarot-draw-header h2,
+.category-section h3,
+.card-spread-section h3,
+.tarot-result-panel h3 {
+  font-family: var(--font-display) !important;
+  font-weight: 400 !important;
+  letter-spacing: 0 !important;
+}
+
+.pick-guide,
+.question-box p,
+.reading-result-card p,
+.result-help,
+.tarot-bottom-note {
+  font-family: var(--font-soft);
+}
+
+.category-pill,
+.category-chip-row span {
+  font-family: var(--font-ui);
+}
+
+.fortune-copy {
+  color: var(--muted);
+  line-height: 1.62;
+}
+
+.fortune-deck {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.fortune-card {
+  position: relative;
+  min-height: 270px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 24px;
+  color: var(--cream);
+  background:
+    radial-gradient(circle at 50% 34%, rgba(255, 241, 205, 0.24), transparent 26%),
+    linear-gradient(160deg, rgba(198, 164, 255, 0.18), rgba(246, 95, 168, 0.12)),
+    rgba(255, 255, 255, 0.07);
+  cursor: pointer;
+}
+
+.fortune-card.selected {
+  border-color: rgba(255, 188, 226, 0.66);
+  transform: translateY(-6px);
+  box-shadow: 0 22px 46px rgba(246, 95, 168, 0.22);
+}
+
+.card-orbit {
+  width: 58px;
+  height: 58px;
+  border: 2px solid rgba(255, 241, 205, 0.7);
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 10px rgba(255, 241, 205, 0.08), 0 0 24px rgba(255, 241, 205, 0.18);
+}
+
+.fortune-result .sticker-icon {
+  margin-bottom: 4px;
+}
+
+@media (max-width: 1180px) {
+
+  .fortune-deck {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+
+  .fortune-deck {
+    grid-template-columns: 1fr;
+  }
+}
+
+.fortune-view {
+  box-sizing: border-box;
+  max-width: var(--bt-page-max);
+  margin-inline: auto;
+}
+
+.tarot-picked-showcase,
+.tarot-question-panel,
+.fortune-result {
+  border: 1px solid var(--bt-line) !important;
+  border-radius: 28px !important;
+  background:
+    radial-gradient(circle at 78% 0%, rgba(231, 62, 101, 0.16), transparent 36%),
+    linear-gradient(145deg, rgba(50, 24, 73, 0.72), rgba(147, 22, 114, 0.22)),
+    var(--bt-panel) !important;
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 245, 238, 0.12) !important;
+  backdrop-filter: blur(18px) saturate(135%);
+  -webkit-backdrop-filter: blur(18px) saturate(135%);
+}
+
+.tarot-steps span.active,
+.category-select-grid button.active {
+  color: #fff !important;
+  border-color: rgba(231, 126, 110, 0.72) !important;
+  background: var(--bt-primary) !important;
+  box-shadow:
+    0 18px 44px rgba(231, 62, 101, 0.3),
+    inset 0 1px 0 rgba(255, 245, 238, 0.32) !important;
+}
+
+.tarot-question-input {
+  border-color: rgba(231, 62, 101, 0.3) !important;
+  background:
+    linear-gradient(145deg, rgba(255, 245, 238, 0.08), rgba(231, 62, 101, 0.05)),
+    rgba(50, 24, 73, 0.48) !important;
+}
+
+.fortune-view h1 {
+  color: #fff2df !important;
+  letter-spacing: 0 !important;
+}
+
+@media (max-width: 1180px) {
+  .fortune-view {
+    width: min(100%, calc(100vw - 32px)) !important;
+  }
+}
+
+.tarot-picked-showcase,
+.tarot-question-panel,
+.fortune-result {
+  border-color: rgba(231, 62, 101, 0.34) !important;
+  background:
+    linear-gradient(145deg, rgba(50, 24, 73, 0.9), rgba(147, 22, 114, 0.34)),
+    rgba(20, 9, 31, 0.68) !important;
+  box-shadow:
+    0 26px 70px rgba(20, 9, 31, 0.34),
+    inset 0 1px 0 rgba(255, 245, 238, 0.12) !important;
+  backdrop-filter: blur(18px) saturate(135%);
+}
+
+.tarot-steps span.active {
+  color: #fff !important;
+  border-color: rgba(231, 126, 110, 0.72) !important;
+  background: linear-gradient(135deg, #e73e65 0%, #ee5d5f 52%, #e77e6e 100%) !important;
+  box-shadow:
+    0 18px 44px rgba(231, 62, 101, 0.3),
+    0 0 30px rgba(238, 93, 95, 0.18),
+    inset 0 1px 0 rgba(255, 245, 238, 0.32) !important;
+}
+
+.tarot-steps span,
+.tarot-question-input {
+  color: rgba(255, 245, 238, 0.92) !important;
+  border-color: rgba(231, 62, 101, 0.3) !important;
+  background:
+    linear-gradient(145deg, rgba(255, 245, 238, 0.08), rgba(231, 62, 101, 0.05)),
+    rgba(50, 24, 73, 0.48) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 245, 238, 0.1) !important;
+}
+
+.fortune-view {
+  background:
+    linear-gradient(90deg, rgba(20, 9, 31, 0.82), rgba(20, 9, 31, 0.24) 54%, rgba(20, 9, 31, 0.46)),
+    transparent;
+}
+
+.fortune-hero h1 {
+  color: #fff2df !important;
+  text-shadow: 0 8px 34px rgba(231, 62, 101, 0.22);
+}
+
+.fortune-hero .section-kicker {
+  color: #ff9f91 !important;
+}
+
+.tarot-picked-card-slot,
+.tarot-pick-card {
+  border-color: rgba(231, 62, 101, 0.24) !important;
+  background:
+    linear-gradient(145deg, rgba(50, 24, 73, 0.62), rgba(147, 22, 114, 0.22)),
+    rgba(20, 9, 31, 0.48) !important;
+}
+
+.tarot-pick-card.is-selected,
+.tarot-picked-card-slot.is-filled {
+  border-color: rgba(238, 93, 95, 0.9) !important;
+  background:
+    linear-gradient(145deg, rgba(231, 62, 101, 0.34), rgba(231, 126, 110, 0.18)),
+    rgba(50, 24, 73, 0.72) !important;
+  box-shadow:
+    0 24px 48px rgba(231, 62, 101, 0.22),
+    inset 0 1px 0 rgba(255, 245, 238, 0.18) !important;
+}
+
+.fortune-view {
+  max-width: var(--bt-page-max) !important;
+  box-sizing: border-box !important;
+  margin-inline: auto !important;
+  overflow-x: hidden !important;
+}
+
+.fortune-view {
+  width: min(var(--bt-page-max), calc(100% - (var(--bt-page-x) * 2))) !important;
+}
+
+@media (max-width: 1180px) {
+  .fortune-view {
+    width: min(100%, calc(100vw - 32px)) !important;
+  }
+}
+
+.fortune-view {
+  width: min(var(--bt-content-max), calc(100% - (var(--bt-stage-x) * 2))) !important;
+  max-width: var(--bt-content-max) !important;
+  margin: var(--bt-stage-y) auto !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.fortune-view {
+  width: min(1520px, calc(100% - (var(--bt-stage-x) * 2))) !important;
+}
+
+@media (max-width: 1180px) {
+  .fortune-view {
+    width: min(100%, calc(100vw - 32px)) !important;
+  }
+}
+
+#app .tarot-picked-showcase,
+#app .tarot-question-panel,
+#app .fortune-result {
+  border: 1px solid var(--bt-panel-border) !important;
+  border-radius: 28px !important;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.035)),
+    var(--bt-panel-bg) !important;
+  box-shadow: var(--bt-panel-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.13) !important;
+  backdrop-filter: blur(18px) saturate(132%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(132%) !important;
+}
+
+#app .fortune-view {
+  width: min(var(--bt-page-max), calc(100% - (var(--bt-page-x) * 2))) !important;
+  max-width: var(--bt-page-max) !important;
+  min-height: calc(100vh - var(--bt-header-h)) !important;
+  margin: 0 auto !important;
+  padding: var(--bt-page-y) 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  overflow-x: hidden !important;
+}
+
+#app .fortune-view {
+  width: min(var(--bt-content-max), calc(100% - (var(--bt-page-x) * 2))) !important;
+}
+
+#app .fortune-view {
+  display: grid !important;
+  gap: 22px !important;
+  align-content: start !important;
+}
+
+#app .fortune-view .content-main-panel {
+  padding: clamp(24px, 3vw, 42px) !important;
+}
+
+#app .tarot-spread-viewport {
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+#app .tarot-spread-area {
+  min-width: min(1080px, 100%) !important;
+  grid-template-columns: repeat(10, minmax(62px, 82px)) !important;
+  grid-template-rows: repeat(2, minmax(104px, 126px)) !important;
+  justify-content: center !important;
+}
+
+#app .tarot-picked-showcase {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+
+@media (max-width: 1439px) {
+
+  #app .fortune-view {
+    width: min(100%, calc(100% - 48px)) !important;
+  }
+}
+
+@media (max-width: 1023px) {
+
+  #app .fortune-view {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 767px) {
+
+  #app .fortune-view {
+    width: min(100%, calc(100% - 24px)) !important;
+    padding: 18px 0 !important;
+  }
+
+  #app .tarot-picked-showcase {
+    grid-template-columns: 1fr !important;
+  }
+
+  #app .fortune-view .content-main-panel {
+    padding: 18px !important;
+  }
+}
+
+#app .tarot-picked-showcase,
+#app .tarot-question-panel,
+#app .fortune-result {
+  border-color: var(--ref-panel-border) !important;
+  border-radius: var(--ref-panel-radius) !important;
+  background:
+    linear-gradient(135deg, rgba(72, 28, 94, 0.48), rgba(28, 11, 54, 0.62)),
+    var(--ref-panel-bg) !important;
+  box-shadow:
+    0 18px 56px rgba(10, 3, 30, 0.24),
+    inset 0 1px 0 rgba(255, 245, 250, 0.12) !important;
+  backdrop-filter: blur(20px) saturate(128%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(128%) !important;
+}
+
+#app .tarot-steps span.active,
+#app .category-select-grid button.active {
+  background: var(--ref-primary) !important;
+  box-shadow: 0 12px 28px rgba(242, 76, 160, 0.24) !important;
+}
+
+#app .fortune-view {
+  width: min(var(--ref-stage-max), calc(100% - (var(--ref-page-x) * 2))) !important;
+  max-width: var(--ref-stage-max) !important;
+  min-height: calc(100dvh - var(--ref-nav-h)) !important;
+  margin: 0 auto !important;
+  padding: var(--ref-page-y) 0 !important;
+  overflow-x: hidden !important;
+}
+
+#app .fortune-view {
+  width: min(1440px, calc(100% - (var(--ref-page-x) * 2))) !important;
+}
+
+#app .fortune-hero h1 {
+  font-size: clamp(42px, 4vw, 64px) !important;
+  line-height: 1.12 !important;
+}
+
+#app .fortune-view {
+  gap: clamp(16px, 2.5dvh, 28px) !important;
+}
+
+#app .fortune-view .content-main-panel {
+  padding: clamp(22px, 3.5dvh, 38px) !important;
+}
+
+#app .tarot-steps span {
+  min-height: clamp(38px, 5dvh, 48px) !important;
+  font-size: clamp(13px, 1vw, 16px) !important;
+}
+
+#app .category-select-grid button {
+  min-height: clamp(36px, 5dvh, 44px) !important;
+}
+
+#app .tarot-spread-area {
+  grid-template-columns: repeat(10, clamp(58px, 5.6vw, 78px)) !important;
+  grid-template-rows: repeat(2, clamp(92px, 13dvh, 118px)) !important;
+  padding: clamp(16px, 3dvh, 28px) clamp(16px, 2.6vw, 34px) !important;
+}
+
+#app .tarot-picked-showcase {
+  min-height: clamp(120px, 22dvh, 180px) !important;
+  padding: clamp(14px, 2.2dvh, 20px) clamp(14px, 3vw, 38px) !important;
+}
+
+@media (max-height: 760px) {
+
+  #app .fortune-view {
+    width: min(1480px, calc(100% - 72px)) !important;
+    padding-block: 18px !important;
+  }
+}
+
+@media (max-height: 760px) {
+
+  #app .category-chip-row {
+    gap: 6px !important;
+  }
+}
+
+@media (max-height: 560px) {
+
+  #app .category-chip-row {
+    display: none !important;
+  }
+}
