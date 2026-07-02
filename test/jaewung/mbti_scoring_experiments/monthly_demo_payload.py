@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from mbti.examples.demo_data import build_demo_monthly_question_batch
+from demo_data import build_demo_monthly_question_batch
 from mbti.services.baseline_sources import UserBaselineSnapshot
 from mbti.services.llm_config import build_scoring_llm_config
 from mbti.services.monthly_pipeline import MonthlyMbtiPipelineResult, run_monthly_mbti_pipeline

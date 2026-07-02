@@ -1,53 +1,63 @@
-from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework import status
+from user.models import UserProfile
+from user.views import CsrfExemptSessionAuthentication
+from .serializers import MyProfileSerializer
+from datetime import datetime
 
-from .models import UserProfile
-from .serializers import UserProfileSerializer
-
-
-def _default_profile_data(user):
-    character_map = {
-        'haeon': 'sol',
-        'greung': 'luna',
-        'dalkong': 'on',
-        'sol': 'sol',
-        'luna': 'luna',
-        'on': 'on',
-        'nari': 'nari',
-    }
-    selected_character = character_map.get(user.character, 'sol')
-
-    return {
-        'name': user.nickname or 'User',
-        'mbti': 'INFP',
-        'gender': 'unspecified',
-        'age': 24,
-        'birthday': '06.23',
-        'job': 'Preparing a project',
-        'status': 'Open to conversation',
-        'keywords': 'empathy, focus, journal',
-        'interests': ['daily', 'music', 'relationship'],
-        'hobbies': 'Making playlists',
-        'selected_character': selected_character,
-    }
-
-
-@api_view(['GET', 'PUT', 'PATCH'])
+@api_view(['GET', 'PUT'])
+@authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([IsAuthenticated])
 def profile_detail(request):
-    profile, _ = UserProfile.objects.get_or_create(
-        user=request.user,
-        defaults=_default_profile_data(request.user),
-    )
+    user = request.user
+
+    profile = UserProfile.objects.filter(user=user).first()
+    if profile is None:
+        return Response(
+            {'detail': 'Onboarding profile not found.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
 
     if request.method == 'GET':
-        return Response(UserProfileSerializer(profile).data)
+        serializer = MyProfileSerializer({'user': user, 'profile': profile})
+        return Response({'profile': serializer.data})
 
-    serializer = UserProfileSerializer(profile, data=request.data)
-    if not serializer.is_valid():
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    elif request.method == 'PUT':
+        serializer = MyProfileSerializer(data=request.data.get('profile', request.data))
+        if serializer.is_valid():
+            data = serializer.validated_data
+            
+            # Update User model
+            if 'name' in data:
+                user.nickname = data['name'][:30]
+            if 'selectedCharacter' in data:
+                user.character = data['selectedCharacter'][:10]
+            user.save(update_fields=['nickname', 'character'])
 
-    serializer.save()
-    return Response(serializer.data)
+            # Update UserProfile model
+            if 'job' in data:
+                profile.job = data['job']
+            if 'gender' in data:
+                profile.gender = data['gender']
+            if 'interests' in data:
+                profile.interests = data['interests']
+            if 'hobbies' in data:
+                profile.hobbies = data['hobbies']
+            if 'birthDate' in data:
+                date_str = data['birthDate'].strip()
+                if date_str:
+                    try:
+                        date_obj = datetime.strptime(date_str, "%Y.%m.%d").date()
+                        profile.birth_date = date_obj
+                    except ValueError:
+                        pass
+                else:
+                    profile.birth_date = None
+            
+            profile.save()
+
+            return Response({'profile': MyProfileSerializer({'user': user, 'profile': profile}).data})
+        
+        return Response(serializer.errors, status=400)

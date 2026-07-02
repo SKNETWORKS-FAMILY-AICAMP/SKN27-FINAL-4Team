@@ -13,13 +13,13 @@ from mbti.services.mbti_question_node import MbtiAxis, build_chatbot_response_pa
 MBTI_AXES: tuple[MbtiAxis, ...] = ("IE", "SN", "TF", "JP")
 
 AXIS_GUIDES: dict[MbtiAxis, str] = {
-    "IE": "에너지가 사람과의 상호작용에서 회복되는지, 혼자만의 시간에서 회복되는지 살핀다.",
-    "SN": "정보를 볼 때 구체적 사실과 경험을 중시하는지, 가능성과 의미를 먼저 보는지 살핀다.",
-    "TF": "판단할 때 논리와 기준을 중시하는지, 감정과 관계 맥락을 중시하는지 살핀다.",
-    "JP": "일을 다룰 때 계획과 마감을 선호하는지, 유연한 대응과 여지를 선호하는지 살핀다.",
+    "IE": "외향-내향 지표는 심리적 에너지와 관심의 방향이 자신의 내부와 외부 중 주로 어느 쪽으로 향하느냐를 보여 주는 지표이다. ",
+    "SN": "감각-직관 지표는 사람이나 사물 등의 대상을 인식하고 지각하는 방식에서 감각과 직관 중 어느 쪽을 주로 더 사용하는지에 관한 지표이다.",
+    "TF": "사고-감정 지표는 수집한 정보를 바탕으로 판단하고 결정을 내릴 때 사고와 감정 중 어떤 것을 더 선호하는지 알려 준다. ",
+    "JP": "판단-인식 지표는 인식 기능과 판단 기능을 바탕으로 실생활에 대처하는 방식에 있어 판단과 인식 중 어느 쪽을 주로 선호하는지에 관한 경향성을 나타내는 지표이다.",
 }
 
-DEFAULT_LLM_QUESTION_MODEL = "gpt-4o-mini"
+DEFAULT_LLM_QUESTION_MODEL = "gpt-5.4-mini"
 DEFAULT_LLM_QUESTION_TEMPERATURE = 0.9
 DEFAULT_LLM_QUESTION_MAX_TOKENS = 120
 MAX_CONTEXT_MESSAGES = 8
@@ -36,11 +36,17 @@ LLM_MBTI_QUESTION_PROMPT = ChatPromptTemplate.from_messages(
 - 질문은 딱 1개만 만든다.
 - 목표 축 하나만 측정한다.
 - MBTI, 성격검사, 유형, I/E, S/N, T/F, J/P 같은 표현을 직접 쓰지 않는다.
-- 사용자가 최근 경험을 자유롭게 말할 수 있게 묻는다.
+- 사용자가 최근 경험을 바탕으로 말할수있게 묻는다.
 - 예/아니오로만 답하게 만들지 않는다.
 - 너무 검사 문항처럼 딱딱하게 쓰지 않는다.
 - 한 문장 또는 두 문장 이내로 작성한다.
 - 따옴표, 번호, 설명, 접두어 없이 질문 문장만 출력한다.
+- 친근한 반말 말투로 질문한다.
+- 16 personalities 같은 big5계열 검사의 질문과 유사한 질문이어야한다.
+- 대답을 분석했을때 정도가 나올수있는 질문을 해야한다.(즉 다시말해서 이분법으로 질문하더라도 단정적인 대답이 나오면 안된다.)
+- 질문이 너무 길어도 않된다. 적당한 길이여야한다.
+- 적절한 길이로 대답할수있어야한다.
+- 너무 심오한 질문말고 일상적인 상황,생각,사고를 기반으로 질문해야한다.
 """,
         ),
         (
@@ -63,7 +69,10 @@ def select_random_mbti_axis(*, seed: int | None = None) -> MbtiAxis:
     return Random(seed).choice(MBTI_AXES)
 
 
-def build_session_context(session: Any, *, limit: int = MAX_CONTEXT_MESSAGES) -> str:
+def build_session_context(session: Any | None, *, limit: int = MAX_CONTEXT_MESSAGES) -> str:
+    if session is None:
+        return "아직 저장된 대화가 없다."
+        
     messages = list(session.messages.order_by("-created_at")[:limit])
     messages.reverse()
 
@@ -107,20 +116,21 @@ def clean_generated_question(text: str) -> str:
 
 
 def generate_random_axis_mbti_question(
-    session: Any,
+    session: Any | None,
     *,
+    axis: MbtiAxis | None = None,
     seed: int | None = None,
     llm: Any | None = None,
 ) -> dict[str, Any]:
-    axis = select_random_mbti_axis(seed=seed)
+    selected_axis = axis or select_random_mbti_axis(seed=seed)
     conversation_context = build_session_context(session)
     question_llm = llm or build_default_question_llm()
     chain = LLM_MBTI_QUESTION_PROMPT | question_llm | StrOutputParser()
 
     text = chain.invoke(
         {
-            "axis": axis,
-            "axis_guide": AXIS_GUIDES[axis],
+            "axis": selected_axis,
+            "axis_guide": AXIS_GUIDES[selected_axis],
             "conversation_context": conversation_context,
         }
     )
@@ -131,7 +141,7 @@ def generate_random_axis_mbti_question(
 
     return {
         "id": None,
-        "axis": axis,
+        "axis": selected_axis,
         "text": question_text,
         "source": "llm_generated",
     }

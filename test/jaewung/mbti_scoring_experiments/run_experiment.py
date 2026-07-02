@@ -624,7 +624,7 @@ def run(
     provider: str | None = None,
     model: str | None = None,
 ) -> None:
-    from mbti.examples.demo_data import build_demo_monthly_question_batch
+    from demo_data import build_demo_monthly_question_batch
     from mbti.examples.monthly_demo_payload import (
         DemoReportClient,
         build_demo_baseline_snapshot,

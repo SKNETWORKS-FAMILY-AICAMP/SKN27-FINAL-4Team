@@ -15,6 +15,7 @@ class MbtiScoringLlmConfig:
     model: str
     temperature: float
     max_output_tokens: int
+    max_retries: int = 0
 
 
 def build_scoring_llm_config(
@@ -34,4 +35,5 @@ def build_scoring_llm_config(
         model=selected_model,
         temperature=temperature,
         max_output_tokens=max_output_tokens,
+        max_retries=0,
     )
