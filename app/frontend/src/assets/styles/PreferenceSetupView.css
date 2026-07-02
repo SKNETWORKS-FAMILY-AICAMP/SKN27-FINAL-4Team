@@ -1,0 +1,33 @@
+/*  PreferenceSetupView.vue  */
+
+.keyword-pill,
+.recommend-card {
+  font-family: var(--font-ui);
+}
+
+.preference-hero h2,
+.preference-panel h3 {
+  font-family: var(--font-display) !important;
+  font-weight: 400 !important;
+  letter-spacing: 0 !important;
+}
+
+.preference-hero p {
+  font-family: var(--font-soft);
+}
+
+.recommend-card {
+  align-self: end;
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.recommend-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
