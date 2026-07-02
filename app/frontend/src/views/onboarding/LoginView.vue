@@ -55,7 +55,7 @@ const trustItems = ["데이터 암호화", "기록 직접 관리", "언제든 �
       <form class="auth-form" @submit.prevent>
         <p class="section-kicker">Create account</p>
         <h2>바로 시작하기</h2>
-        <p class="form-intro">필요한 정보만 가볍게 남기고, 해온이와 첫 대화를 시작해요.</p>
+        <p class="form-intro">필요한 정보만 가볍게 남기고, 마음 동행자와 첫 대화를 시작해요.</p>
         <label class="field">
           <span>닉네임</span>
           <input type="text" placeholder="예: 햇살산책자">

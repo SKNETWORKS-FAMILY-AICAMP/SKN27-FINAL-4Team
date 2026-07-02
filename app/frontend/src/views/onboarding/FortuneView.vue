@@ -65,7 +65,7 @@ function pickCard(card) {
         오늘은 먼저 다가가기보다, 상대의 말 사이에 숨은 피로를 조용히 알아차리는 날이에요.
       </p>
       <div class="advice-box">
-        <strong>해온이의 조언</strong>
+        <strong>오늘의 조언</strong>
         <span>짧은 안부 하나가 오래 남을 수 있어요. 답을 재촉하지 않는 문장으로 시작해봐요.</span>
       </div>
       <button class="btn primary full" type="button">운세 저장하기</button>

@@ -2059,6 +2059,10 @@ button.chip {
   background: linear-gradient(145deg, rgba(198, 164, 255, 0.2), rgba(246, 95, 168, 0.1)), rgba(255, 255, 255, 0.08);
 }
 
+.character-card.sky {
+  background: linear-gradient(145deg, rgba(120, 200, 255, 0.18), rgba(158, 230, 208, 0.1)), rgba(255, 255, 255, 0.08);
+}
+
 .character-avatar {
   position: relative;
   width: 66px;

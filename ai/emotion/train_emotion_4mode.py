@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-빈틈사이 감정분류 — KcELECTRA 임베딩(freeze) → 분류기 (6감정) → 4공감모드
+빈틈사이 감정분류 — KcELECTRA 임베딩(freeze) → 분류기 (4감정: 기쁨/슬픔/분노/일반)
 
 검증된 정석 기법 적용 (한국어 감정분류 베스트 프랙티스 반영):
   - 임베딩: KcELECTRA mean-pooling + (옵션) 마지막 4개 레이어 concat + L2 정규화
   - 전처리: StandardScaler
   - 분류기 3종 비교: LogisticRegression / LinearSVM / XGBoost
             → dense 임베딩엔 선형·SVM이 트리보다 잘 나오는 경우가 많아 함께 비교
-  - 클래스 불균형 가중치, 6감정 + 4모드(KPI) 동시 평가, best 자동 저장
+  - 클래스 불균형 가중치, 4감정 macroF1(KPI) 평가, best 자동 저장
 참고: 실제 최고점은 보통 '파인튜닝'에서 나옴(KoELECTRA NSMC 86.9%, polyglot QLoRA F1 90).
       본 스크립트는 가볍고 빠른 freeze-임베딩 파이프라인의 '최적 버전'이다.
 
@@ -18,13 +18,8 @@
 import argparse, os, json, time
 import numpy as np
 
-EMO6 = ["분노", "슬픔", "불안", "상처", "당황", "기쁨"]
-EMO6_TO_MODE4 = {  # 6감정 → 4공감모드 (필요시 여기만 수정)
-    "분노": "화남", "슬픔": "속상", "불안": "계획",
-    "상처": "응원", "당황": "속상", "기쁨": "응원",
-}
-MODE4 = ["응원", "속상", "화남", "계획"]
-MODE_EN = {"응원": "encourage", "속상": "sad", "화남": "angry", "계획": "plan"}
+EMO4 = ["기쁨", "슬픔", "분노", "일반"]   # v5.3 4감정
+EMO4_EN = {"기쁨": "joy", "슬픔": "sadness", "분노": "anger", "일반": "normal"}
 
 
 def load_data(path, text_col, label_col, sample=0, seed=42):
@@ -39,11 +34,24 @@ def load_data(path, text_col, label_col, sample=0, seed=42):
     df = df[[text_col, label_col]].dropna()
     df.columns = ["text", "label"]
     df["label"] = df["label"].astype(str).str.strip()
-    df = df[df["label"].isin(EMO6)].reset_index(drop=True)
+    
+    # 6감정 -> 4감정 동적 매핑 (불안/상처/당황 포함 데이터 유실 방지)
+    six_to_four = {
+        "기쁨": "기쁨",
+        "슬픔": "슬픔",
+        "상처": "슬픔",
+        "분노": "분노",
+        "불안": "분노",
+        "당황": "일반"
+    }
+    df["label"] = df["label"].map(six_to_four).fillna(df["label"])
+    
+    df = df[df["label"].isin(EMO4)].reset_index(drop=True)
     if sample and sample > 0:  # 감정별 균형 샘플링(빠른 테스트용)
-        df = df.groupby("label", group_keys=False).apply(
-            lambda g: g.sample(min(len(g), sample), random_state=seed)
-        ).reset_index(drop=True)
+        sampled_dfs = []
+        for name, g in df.groupby("label"):
+            sampled_dfs.append(g.sample(min(len(g), sample), random_state=seed))
+        df = pd.concat(sampled_dfs).reset_index(drop=True)
     return df
 
 
@@ -87,10 +95,6 @@ def embed_texts(texts, model_name, batch_size=32, cache=None, last4=True):
     return emb
 
 
-def to_mode4(labels):
-    return np.array([EMO6_TO_MODE4[e] for e in labels])
-
-
 def report(name, y_true, y_pred, labels):
     from sklearn.metrics import accuracy_score, f1_score, classification_report
     acc = accuracy_score(y_true, y_pred)
@@ -123,7 +127,8 @@ def main():
     df = load_data(args.data, args.text_col, args.label_col, args.sample, args.seed)
     print(f"[data] {len(df)}건"); print(df["label"].value_counts())
 
-    X = embed_texts(df["text"].tolist(), args.model, cache=os.path.join(args.out, "emb.npy"))
+    cache_name = f"emb_{args.sample or 'all'}_last4.npy"  # 샘플 수가 바뀌면 캐시도 분리(불일치 방지)
+    X = embed_texts(df["text"].tolist(), args.model, cache=os.path.join(args.out, cache_name))
     y = df["label"].values
     Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=args.test_size, random_state=args.seed, stratify=y)
 
@@ -136,40 +141,70 @@ def main():
     try:
         from xgboost import XGBClassifier
         from sklearn.preprocessing import LabelEncoder
+        # 실제 로딩 가능 여부 테스트
+        _test_model = XGBClassifier()
         candidates["XGBoost"] = ("xgb",)  # 아래서 별도 처리
-    except ImportError:
-        print("[skip] xgboost 미설치")
+    except Exception as e:
+        print(f"[skip] xgboost 로드 실패 (보안 정책 또는 dll 오류): {e}")
 
     results = {}
+    meta_models = {}
     for name, clf in candidates.items():
+        conf = None
         if clf == ("xgb",):
             from xgboost import XGBClassifier
             from sklearn.preprocessing import LabelEncoder
             import pandas as pd
-            le = LabelEncoder().fit(EMO6)
+            le = LabelEncoder().fit(EMO4)
             freq = pd.Series(ytr).value_counts()
-            w = np.array([len(ytr) / (len(EMO6) * freq[c]) for c in ytr])
+            w = np.array([len(ytr) / (len(EMO4) * freq[c]) for c in ytr])
             model = XGBClassifier(n_estimators=600, max_depth=6, learning_rate=0.08,
                     subsample=0.8, colsample_bytree=0.8, tree_method="hist",
-                    objective="multi:softprob", num_class=len(EMO6),
+                    objective="multi:softprob", num_class=len(EMO4),
                     eval_metric="mlogloss", n_jobs=-1, random_state=args.seed)
             model.fit(Xtr, le.transform(ytr), sample_weight=w)
-            pred = le.inverse_transform(model.predict(Xte))
-            joblib.dump(model, os.path.join(args.out, "xgb_emo6.joblib"))
+            proba = model.predict_proba(Xte)
+            pred = le.inverse_transform(proba.argmax(1))
+            conf = float(proba.max(1).mean())  # 평균 top-1 확률 = confidence 참고치
+            model_path = "xgb_emo4.joblib"
+            joblib.dump(model, os.path.join(args.out, model_path))
             joblib.dump(le, os.path.join(args.out, "label_encoder.joblib"))
         else:
             clf.fit(Xtr, ytr); pred = clf.predict(Xte)
-            joblib.dump(clf, os.path.join(args.out, f"{name.lower()}_emo6.joblib"))
-        report(f"{name} · 6감정", yte, pred, EMO6)
-        results[name] = report(f"{name} · 4모드(KPI)", to_mode4(yte), to_mode4(pred), MODE4)
+            if hasattr(clf, "predict_proba"):  # LogReg는 가능, LinearSVM은 없음
+                conf = float(clf.predict_proba(Xte).max(1).mean())
+            model_path = f"{name.lower()}_emo4.joblib"
+            joblib.dump(clf, os.path.join(args.out, model_path))
+        a4, f4 = report(f"{name} · 4감정", yte, pred, EMO4)
+        if conf is not None:
+            print(f"   avg confidence(top-1 proba) = {conf:.3f}")
+        results[name] = (a4, f4)
+        meta_models[name] = {"model_path": model_path,
+            "acc4": round(a4, 4), "f1_4": round(f4, 4),
+            "avg_confidence": (round(conf, 4) if conf is not None else None)}
 
-    print("\n################  요약 (4모드 macroF1 = KPI)  ################")
+    print("\n################  요약 (4감정 macroF1 = KPI)  ################")
     best = max(results, key=lambda k: results[k][1])
     for k, (a, f) in results.items():
         star = " ★ best" if k == best else ""
         print(f"  {k:10s} acc={a:.4f}  macroF1={f:.4f}{star}")
-    print("  매핑:", {k: f"{v}({MODE_EN[v]})" for k, v in EMO6_TO_MODE4.items()})
-    print("  산출물:", os.path.abspath(args.out))
+    print("  라벨:", {k: EMO4_EN[k] for k in EMO4})
+
+    # 백엔드 자동 로드 + 평가지표 실측을 위한 메타/지표 저장
+    meta = {
+        "embedding_model": args.model,
+        "embedding": {"pooling": "mean", "last4_concat": True, "l2_norm": True, "max_length": 128},
+        "emo4": EMO4,
+        "emo4_en": EMO4_EN,
+        "n_total": int(len(df)), "n_test": int(len(yte)),
+        "models": meta_models,
+        "best_model": best,
+        "best_model_path": meta_models[best]["model_path"],
+        "uses_label_encoder": best == "XGBoost",
+    }
+    with open(os.path.join(args.out, "metrics.json"), "w", encoding="utf-8") as fp:
+        json.dump(meta, fp, ensure_ascii=False, indent=2)
+    print("  산출물:", os.path.abspath(args.out), "(metrics.json 포함)")
 
 
 if __name__ == "__main__":

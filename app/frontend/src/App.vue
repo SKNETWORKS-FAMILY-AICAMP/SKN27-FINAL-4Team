@@ -57,7 +57,7 @@ const NAV = {
   balance: '/onboarding/balance', fortune: '/onboarding/fortune',
   info: '/onboarding/info', userinfo: '/onboarding/info',
   character: '/onboarding/character',
-  calendar: '/calendar', council: '/chat/council',
+  calendar: '/calendar',
 }
 function onNavigate(id) {
   if (NAV[id]) router.push(NAV[id])

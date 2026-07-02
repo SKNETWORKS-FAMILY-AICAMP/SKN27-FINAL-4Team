@@ -1,6 +1,11 @@
 <template>
   <div class="chat-page" :class="{ 'is-secret': isSecret }">
 
+    <!-- 🎉 기쁨 감정 축하 폭죽 효과 오버레이 -->
+    <div v-if="showJoyCelebration" class="joy-celebration-overlay">
+      <div v-for="n in 35" :key="n" class="confetti-particle" :style="confettiStyle(n)"></div>
+    </div>
+
     <!-- 배경: 일반=노을 일러스트 / 시크릿=밤하늘+별똥별 -->
     <div
       class="chat-bg"
@@ -22,7 +27,7 @@
     <!-- 시크릿챗 경고 배너 (SCR-003-S ②) -->
     <div v-if="isSecret" class="secret-banner">
       <span>🔒 <strong>시크릿챗</strong> — 이 대화와 분석은 <strong>저장되지 않으며</strong>,
-      종료 시 마음 카드·리포트가 생성되지 않습니다.</span>
+      종료 시 기록이 남지 않습니다.</span>
       <button class="secret-exit-btn" @click="showExitModal = true">✕ 시크릿챗 종료</button>
     </div>
 
@@ -53,33 +58,21 @@
           {{ CHARACTER_META[character].faces[currentEmotion] }}
         </div>
         <div class="char-name">{{ CHARACTER_META[character].name }}</div>
-        <div class="char-faces">표정 4분기 : 응원 · 속상 · 화남 · 계획</div>
+        <div class="char-faces">표정 4분기 : 기쁨 · 슬픔 · 분노 · 일반</div>
 
         <div class="opener-bubble">
           {{ openerText }}
           <small>{{ isSecret ? 'opener · 비저장 안내' : 'opener · 운세/날씨' }}</small>
         </div>
 
-        <div class="rec-btns">
-          <button class="rec-btn" @click="requestTea">🍵 힐링 차 추천</button>
-          <button class="rec-btn" @click="requestBgm">🎵 BGM 추천</button>
-        </div>
-
         <template v-if="!isSecret">
-          <div class="intimacy-row">
-            <span class="intimacy-label">♥ 친밀도</span>
-            <div class="intimacy-bar">
-              <div class="intimacy-fill" style="width:60%"></div>
-            </div>
-          </div>
           <div class="ctrl-btns">
             <button class="ctrl-btn" @click="toggleSecret">🔒 시크릿챗</button>
-            <button class="ctrl-btn" @click="goCouncil">👥 이너 카운슬</button>
           </div>
         </template>
 
         <div v-else class="secret-note">
-          🔒 비저장 모드 — 친밀도·메모리 적립 정지<br>(시크릿챗·이너 카운슬 비활성)
+          🔒 비저장 모드 — 메모리 적립 정지<br>(종료 시 즉시 파기)
         </div>
       </aside>
 
@@ -95,14 +88,23 @@
             {{ EMOTION_LABELS[msg.emotion_label] }}
           </span>
 
-          <div v-if="msg._teaCard" class="tea-card">
-            <strong>🍵 {{ msg._teaCard.name }}</strong>
-            <div class="tea-desc">{{ msg._teaCard.desc }}</div>
-          </div>
-
-          <div v-else class="bubble" :class="msg.role === 'user' ? 'bubble-user' : 'bubble-char'">
+          <div class="bubble" :class="msg.role === 'user' ? 'bubble-user' : 'bubble-char'">
             {{ msg.content }}
           </div>
+
+          <!-- 🔘 선택 버튼 카드 (콜드스타트 감정 선택지 / 시크릿 MBTI 저장 동의) -->
+          <div v-if="msg.role === 'assistant' && msg._choices" class="mbti-options-bar">
+            <button
+              v-for="opt in msg._choices"
+              :key="opt.value"
+              class="mbti-opt-btn"
+              :disabled="!!msg._chosen"
+              @click="handleChoice(msg, opt)"
+            >
+              {{ opt.text }}
+            </button>
+          </div>
+
         </div>
 
         <div v-if="isTyping" class="typing-indicator">
@@ -123,7 +125,6 @@
     <!-- ===== 입력바 ===== -->
     <div class="input-zone">
       <div class="input-bar">
-        <button class="icon-btn" title="음성 입력">🎤</button>
         <textarea
           ref="inputRef"
           v-model="inputText"
@@ -135,7 +136,6 @@
           @input="autoResize"
         />
         <span class="char-count">{{ inputText.length }}/300</span>
-        <button class="icon-btn" title="계획 모드">📋 계획</button>
         <button class="send-btn" :disabled="!inputText.trim() || isTyping" @click="sendMessage">
           전송 ➤
         </button>
@@ -145,184 +145,413 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onMounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { chatApi } from '../../api/chat.js'
 import chatBg from '../../assets/chat-bg.png'
 import { useSecret } from '../../composables/useSecret.js'
+import { useTts } from '../../composables/useTts.js'
 
 const router = useRouter()
 const route  = useRoute()
 
 const CHARACTER_META = {
-  haeon: {
-    name: '해온이', color: '#5EEAD4', bg: 'rgba(94,234,212,0.18)',
+  pori: {   // 레서판다 / 밝음·응원형
+    name: '포리', color: '#5EEAD4', bg: 'rgba(94,234,212,0.18)',
+    faces: {
+      default:   '^‿^',
+      joy:       '◕‿◕✨',
+      sadness:   '；_；',
+      anger:     '＞﹏＜',
+      normal:    '^‿^',
+    }
+  },
+  kkami: {  // 고양이 / 깊음·묵직형
+    name: '까미', color: '#C4B5FD', bg: 'rgba(196,181,253,0.18)',
+    faces: {
+      default:   '•_•',
+      joy:       '•‿•',
+      sadness:   '•︵•',
+      anger:     '•益•',
+      normal:    '•_•',
+    }
+  },
+  toto: {   // 수달 / 장난·환기형
+    name: '토토', color: '#7DD3FC', bg: 'rgba(125,211,252,0.18)',
+    faces: {
+      default:   '◕‿↼',
+      joy:       '(ᵔᴗᵔ)/',
+      sadness:   '；ω；',
+      anger:     '｀皿´',
+      normal:    '◕‿↼',
+    }
+  },
+  yeoul: {  // 뱁새 / 차분·포근형
+    name: '여울', color: '#FBBF77', bg: 'rgba(251,191,119,0.18)',
     faces: {
       default:   '◠‿◠',
-      encourage: '✧◠‿◠✧',
-      sad:       '(╥_╥)',
-      angry:     '(；∀；)',
-      plan:      '(•̀ᴗ•́)و',
-    }
-  },
-  greung: {
-    name: '그릉이', color: '#FCA5A5', bg: 'rgba(252,165,165,0.18)',
-    faces: {
-      default:   '◣_◢',
-      encourage: '◣▽◢',
-      sad:       '◣；◢',
-      angry:     '◣益◢',
-      plan:      '◣ω◢',
-    }
-  },
-  dalkong: {
-    name: '달콩이', color: '#C4B5FD', bg: 'rgba(196,181,253,0.18)',
-    faces: {
-      default:   '◕‿◕',
-      encourage: '◕ᴗ◕✨',
-      sad:       '◕︵◕',
-      angry:     '◕皿◕',
-      plan:      '◕‿↗',
+      joy:       '◠‿◠♡',
+      sadness:   '◠︵◠',
+      anger:     '◠ᗨ◠',
+      normal:    '◠‿◠',
     }
   },
 }
 const EMOTION_LABELS = {
-  encourage: '✦ 응원 모드',
-  sad:       '✦ 속상 모드',
-  angry:     '✦ 화남 모드',
-  plan:      '✦ 계획 모드',
+  joy:     '✦ 기쁨 모드',
+  sadness: '✦ 슬픔 모드',
+  anger:   '✦ 분노 모드',
+  normal:  '✦ 일반 모드',
 }
 
-const character      = ref(route.query.character || 'haeon')
+const character      = ref(
+  CHARACTER_META[route.query.character] ? route.query.character : 'pori'
+)
 const { secret: isSecret, setSecret } = useSecret()
+const { playTask, stop: ttsStop } = useTts()
 const sessionId      = ref(null)
+const coldStartDone  = ref(false)
 const showExitModal  = ref(false)
 const messages       = ref([])
 const inputText      = ref('')
 const isTyping       = ref(false)
 const suggestLoading = ref(false)
 const suggestedQuestions = ref([])
+const suggestionRequestId = ref(0)
+const mbtiQuestionLoading = ref(false)
+const lastMbtiQuestionKey = ref('')
 const currentEmotion = ref('default')
 const threadRef = ref(null)
 const inputRef  = ref(null)
 
-const openerText = computed(() =>
-  isSecret.value ? '여긴 아무 기록도 안 남아. 편하게 다 털어놔도 돼.' : '오늘 어떤 하루였어?'
-)
+const weatherInfo = ref(null)
+
+const openerText = computed(() => {
+  if (isSecret.value) {
+    return '여긴 아무 기록도 안 남아. 편하게 다 털어놔도 돼.'
+  }
+  return weatherInfo.value?.opener || '오늘 어떤 하루였어?'
+})
+
+async function fetchWeatherOpener() {
+  if (isSecret.value) return
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords
+          const data = await chatApi.getWeatherOpener(latitude, longitude)
+          weatherInfo.value = data
+        } catch (err) {
+          console.error("Failed to fetch weather opener with location:", err)
+          fallbackWeatherOpener()
+        }
+      },
+      async (err) => {
+        console.warn("Geolocation access denied or failed:", err)
+        fallbackWeatherOpener()
+      }
+    )
+  } else {
+    fallbackWeatherOpener()
+  }
+}
+
+async function fallbackWeatherOpener() {
+  try {
+    const data = await chatApi.getWeatherOpener()
+    weatherInfo.value = data
+  } catch (err) {
+    console.error("Failed to fetch fallback weather opener:", err)
+  }
+}
+
+watch(isSecret, (newVal) => {
+  if (!newVal) {
+    fetchWeatherOpener()
+  } else {
+    weatherInfo.value = null
+  }
+})
+
+const showJoyCelebration = ref(false)
+
+function triggerJoyCelebration() {
+  showJoyCelebration.value = true
+  playFanfare()
+  setTimeout(() => {
+    showJoyCelebration.value = false
+  }, 3000)
+}
+
+function playFanfare() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    const now = ctx.currentTime
+    const notes = [261.63, 329.63, 392.00, 523.25] // C4, E4, G4, C5
+    notes.forEach((freq, idx) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'triangle'
+      osc.frequency.setValueAtTime(freq, now + idx * 0.08)
+      gain.gain.setValueAtTime(0.12, now + idx * 0.08)
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.08 + 0.5)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start(now + idx * 0.08)
+      osc.stop(now + idx * 0.08 + 0.6)
+    })
+  } catch (e) {
+    console.warn("Web Audio API not supported or blocked:", e)
+  }
+}
+
+function confettiStyle(n) {
+  const colors = ['#FCD34D', '#F472B6', '#38BDF8', '#34D399', '#A78BFA']
+  const left = Math.random() * 100
+  const delay = Math.random() * 0.8
+  const duration = 1.5 + Math.random() * 1.5
+  const size = 6 + Math.random() * 10
+  const color = colors[n % colors.length]
+  return {
+    left: `${left}%`,
+    backgroundColor: color,
+    animationDelay: `${delay}s`,
+    animationDuration: `${duration}s`,
+    width: `${size}px`,
+    height: `${size}px`,
+    transform: `rotate(${Math.random() * 360}deg)`
+  }
+}
 
 async function refreshSuggestions() {
-  if (!sessionId.value || isSecret.value) return
+  if (!sessionId.value || isSecret.value || suggestLoading.value) return
+  const requestId = suggestionRequestId.value + 1
+  suggestionRequestId.value = requestId
   suggestLoading.value = true
   try {
     const result = await chatApi.suggestQuestions(sessionId.value)
-    suggestedQuestions.value = result.questions ?? []
+    if (requestId === suggestionRequestId.value) {
+      suggestedQuestions.value = result.questions ?? []
+    }
   } catch {
-    suggestedQuestions.value = []
+    if (requestId === suggestionRequestId.value) {
+      suggestedQuestions.value = []
+    }
   } finally {
-    suggestLoading.value = false
+    if (requestId === suggestionRequestId.value) {
+      suggestLoading.value = false
+    }
   }
 }
 
 const OPENER_MSG = {
-  haeon:   isSecret => isSecret
-    ? '여긴 아무도 몰라. 뭐든 다 말해도 괜찮아 ◠‿◠'
-    : '안녕! 오늘 하루 어땠어? 좋은 일도 있었어? ◠‿◠',
-  greung:  isSecret => isSecret
-    ? '여기선 솔직하게 말해도 돼. 뭐가 문제야? ◣_◢'
-    : '왔어? 오늘 뭐가 제일 걸렸어? 말해봐 ◣_◢',
-  dalkong: isSecret => isSecret
-    ? '비밀이잖아, 다 괜찮아! 무슨 일이야? ◕‿◕'
-    : '안녕! 오늘 뭔가 좋은 일 있었지? ◕‿◕',
+  pori:   isSecret => isSecret
+    ? '여긴 비밀이니까 마음 편히 다 풀어놔! 무슨 일 있어?'
+    : '안녕! 오늘 작은 좋은 일이라도 있었어? 같이 이야기해봐!',
+  kkami:  isSecret => isSecret
+    ? '여긴 아무것도 안 남아. 천천히 말해도 돼'
+    : '왔구나. 오늘 마음에 제일 걸린 게 뭐였어?',
+  toto:   isSecret => isSecret
+    ? '쉿, 여긴 우리 둘만의 비밀이거든? 뭐든 풀어놔도 돼'
+    : '안녕! 오늘 일진은 좀 어땠어? 무거우면 같이 털어볼래?',
+  yeoul:  isSecret => isSecret
+    ? '여긴 아무 기록도 안 남아. 천천히, 편하게 말해도 괜찮아'
+    : '안녕. 오늘 하루는 어땠어? 천천히 말해줘도 괜찮아',
+}
+
+// ── 유휴 타이머: 턴 종료 후 10초 무입력 → MBTI 질문 (최종_통합_흐름도 §5) ──
+const IDLE_MS = 10000
+let idleTimer = null
+function clearIdleTimer() { if (idleTimer) { clearTimeout(idleTimer); idleTimer = null } }
+function startIdleTimer() { clearIdleTimer(); idleTimer = setTimeout(askMbtiIfIdle, IDLE_MS) }
+
+async function askMbtiIfIdle() {
+  if (isTyping.value || mbtiQuestionLoading.value || !sessionId.value || !coldStartDone.value) return
+  mbtiQuestionLoading.value = true
+  try {
+    const res = await chatApi.mbtiNextQuestion(sessionId.value)
+    if (res.has_question) {
+      const questionKey = res.question_code || res.question_text
+      if (questionKey && questionKey === lastMbtiQuestionKey.value) return
+      lastMbtiQuestionKey.value = questionKey
+      pushAssistant(res.question_text, {
+        tts_task_id: res.tts_task_id,
+        _mbtiQuestionCode: res.question_code,
+      })
+      await scrollToBottom()
+    }
+  } catch {
+    // Optional MBTI prompt failures should not affect chat.
+  } finally {
+    mbtiQuestionLoading.value = false
+  }
+}
+watch(inputText, v => { if (v) clearIdleTimer() })   // 입력 시작하면 눈치껏 대기
+
+// ── 어시스턴트 말풍선 push + TTS 자동 1회 재생 (재생 후 서버에서 파기) ──
+function pushAssistant(text, extra = {}) {
+  const m = { _tempId: Date.now(), role: 'assistant', content: text, ...extra }
+  messages.value.push(m)
+  if (m.tts_task_id) playTask(m.tts_task_id)
+  return m
+}
+
+// ── 세션 초기화: 콜드스타트 게이팅 (감정 선택지 먼저) ──
+async function initSession() {
+  try {
+    const sess = await chatApi.startSession(character.value, isSecret.value)
+    sessionId.value = sess.session_id
+    coldStartDone.value = !!sess.cold_start_done
+    lastMbtiQuestionKey.value = ''
+    suggestionRequestId.value = 0
+
+    if (!coldStartDone.value) {
+      messages.value.push({
+        _tempId: Date.now(), role: 'assistant',
+        content: sess.opening_question || '지금 기분이 어때요?',
+        _choices: (sess.emotion_choices || []).map(c => ({ value: c.code, text: c.label })),
+        _choiceType: 'cold_start',
+      })
+    } else {
+      const openerContent = OPENER_MSG[character.value]?.(isSecret.value)
+        ?? '안녕! 오늘 어떤 하루였어?'
+      messages.value.push({ _tempId: Date.now(), role: 'assistant', content: openerContent })
+      refreshSuggestions()
+    }
+  } catch {
+    // 세션 생성 실패: 옛 세션 ID가 남지 않도록 초기화 + 안내
+    sessionId.value = null
+    messages.value.push({
+      _tempId: Date.now(), role: 'assistant',
+      content: '서버랑 연결이 잠깐 안 되고 있어요. 새로고침 한 번 해줄래요?',
+    })
+  }
 }
 
 onMounted(async () => {
-  const openerContent = OPENER_MSG[character.value]?.(isSecret.value)
-    ?? '안녕! 오늘 어떤 하루였어?'
-  messages.value.push({ _tempId: Date.now(), role: 'assistant', content: openerContent })
-
-  try {
-    const sess = await chatApi.createSession(character.value, isSecret.value)
-    sessionId.value = sess.id
-    refreshSuggestions()
-  } catch { /* 백엔드 미연결 시 무시 */ }
+  fetchWeatherOpener()
+  await initSession()
 })
+
+onUnmounted(() => { clearIdleTimer(); ttsStop() })
+
+// ── 선택 버튼 처리 (콜드스타트 감정 선택 / MBTI 저장 동의) ──
+async function handleChoice(msgObj, opt) {
+  if (msgObj._chosen) return
+  msgObj._chosen = opt.value
+
+  if (msgObj._choiceType === 'cold_start') {
+    messages.value.push({ _tempId: Date.now(), role: 'user', content: opt.text })
+    try {
+      const res = await chatApi.coldStart(sessionId.value, opt.value)
+      coldStartDone.value = true
+      currentEmotion.value = opt.value
+      pushAssistant(res.follow_up_message, { tts_task_id: res.tts_task_id })
+      refreshSuggestions()
+      startIdleTimer()
+    } catch {
+      msgObj._chosen = null
+      messages.value.push({ _tempId: Date.now(), role: 'assistant', content: '앗, 잠깐 연결이 불안정했어요. 다시 골라줄래요?' })
+    }
+  } else if (msgObj._choiceType === 'mbti_consent') {
+    try {
+      const res = await chatApi.mbtiConsent(sessionId.value, opt.value === 'yes')
+      pushAssistant(res.confirm_message, { tts_task_id: res.tts_task_id })
+      startIdleTimer()
+    } catch {
+      msgObj._chosen = null
+    }
+  }
+  await scrollToBottom()
+}
 
 async function sendMessage() {
   const content = inputText.value.trim()
   if (!content || isTyping.value) return
+  if (!sessionId.value) {
+    messages.value.push({ _tempId: Date.now(), role: 'assistant', content: '연결이 끊겨 있어요. 새로고침 해주세요!' })
+    return
+  }
+  // 감정 선택 전에 바로 입력한 경우: '그냥 그래'로 자동 시작하고 대화 계속 진행
+  if (!coldStartDone.value) {
+    try {
+      await chatApi.coldStart(sessionId.value, 'normal')
+      coldStartDone.value = true
+      // 남아있는 선택지 버튼 비활성화
+      messages.value.forEach(m => { if (m._choiceType === 'cold_start' && !m._chosen) m._chosen = 'normal' })
+    } catch {
+      messages.value.push({ _tempId: Date.now(), role: 'assistant', content: '잠깐 연결이 불안정했어요. 위의 기분 버튼을 눌러 시작해줄래요?' })
+      return
+    }
+  }
+  clearIdleTimer()
   messages.value.push({ _tempId: Date.now(), role: 'user', content })
   inputText.value = ''
   isTyping.value = true
   await scrollToBottom()
   try {
-    const reply = await chatApi.sendMessage(sessionId.value, content)
-    messages.value.push(reply)
-    if (reply.emotion_label) currentEmotion.value = reply.emotion_label
+    const res = await chatApi.sendChat(sessionId.value, content, character.value, isSecret.value)
+    const m = pushAssistant(res.message.text, {
+      id: res.message_id ?? undefined,
+      emotion_label: res.emotion_label,
+      tts_task_id: res.tts_task_id,
+    })
+    // 시크릿 모드에서 MBTI 답변 감지 → 저장 동의 버튼 (API_명세서 §5-2)
+    if (res.ui?.show_mbti_save_consent) {
+      m._choices = [
+        { value: 'yes', text: '💾 저장해도 돼요' },
+        { value: 'no',  text: '🙅 이번엔 저장하지 말아요' },
+      ]
+      m._choiceType = 'mbti_consent'
+    }
+    if (res.emotion_label) {
+      currentEmotion.value = res.emotion_label
+      if (res.emotion_label === 'joy') {
+        triggerJoyCelebration()
+      }
+    }
     refreshSuggestions()
   } catch {
     messages.value.push({ _tempId: Date.now(), role: 'assistant', content: '잠시 연결이 끊겼어요. 다시 시도해 줄래요? 🙏' })
   } finally {
     isTyping.value = false
+    startIdleTimer()
     await scrollToBottom()
   }
 }
 
-async function requestTea() {
-  isTyping.value = true
-  await scrollToBottom()
-  try {
-    const tea = await chatApi.recommendTea(sessionId.value)
-    messages.value.push({
-      _tempId: Date.now(), role: 'assistant',
-      content: `${tea.emoji ?? '🍵'} **${tea.name}**\n${tea.reason}\n효능: ${tea.effect}`,
-      _teaCard: { name: tea.name, desc: tea.reason },
-    })
-  } catch {
-    messages.value.push({ _tempId: Date.now(), role: 'assistant', content: '차 추천을 불러오지 못했어요.' })
-  } finally { isTyping.value = false; await scrollToBottom() }
-}
-
-async function requestBgm() {
-  isTyping.value = true
-  await scrollToBottom()
-  try {
-    const bgm = await chatApi.recommendBgm(sessionId.value)
-    messages.value.push({
-      _tempId: Date.now(), role: 'assistant',
-      content: `🎵 **${bgm.title}** — ${bgm.artist}\n${bgm.mood}`,
-    })
-  } catch {
-    messages.value.push({ _tempId: Date.now(), role: 'assistant', content: 'BGM 추천을 불러오지 못했어요.' })
-  } finally { isTyping.value = false; await scrollToBottom() }
-}
-
 async function toggleSecret() {
+  clearIdleTimer()
   setSecret(!isSecret.value)
   messages.value = []
-  try {
-    const sess = await chatApi.createSession(character.value, isSecret.value)
-    sessionId.value = sess.id
-  } catch {}
+  coldStartDone.value = false
+  await initSession()
   router.replace({ query: { character: character.value, secret: isSecret.value ? 'on' : undefined } })
 }
 
 async function confirmExitSecret() {
   showExitModal.value = false
+  clearIdleTimer()
+  if (sessionId.value) {
+    try {
+      // 🔒 시크릿챗 종료 → RAM/세션 캐시 즉시 파기 (API_명세서 v6.0)
+      await chatApi.endSession(sessionId.value)
+    } catch (err) {
+      console.error("Failed to end secret session:", err)
+    }
+  }
   setSecret(false)
   messages.value = []
-  try {
-    const sess = await chatApi.createSession(character.value, false)
-    sessionId.value = sess.id
-  } catch {}
+  coldStartDone.value = false
+  await initSession()
   router.replace({ query: { character: character.value } })
 }
 
-function goCouncil() {
-  router.push({ path: '/chat/council', query: { sessionId: sessionId.value } })
-}
 function fillInput(text) { inputText.value = text; inputRef.value?.focus() }
 function autoResize(e) { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px' }
 async function scrollToBottom() { await nextTick(); if (threadRef.value) threadRef.value.scrollTop = threadRef.value.scrollHeight }
+
 </script>
 
 <style scoped>
@@ -467,8 +696,6 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   background: rgba(120,150,255,0.12);
 }
 .is-secret .q-chip:hover { background: rgba(120,150,255,0.22); }
-.is-secret .rec-btn { color: #bcd2ff; }
-.is-secret .rec-btn:hover { background: rgba(150,180,255,0.14); }
 .is-secret .opener-bubble {
   background: rgba(20,30,72,0.42);
   border-color: rgba(150,180,255,0.24);
@@ -636,41 +863,6 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   margin-top: 4px;
 }
 
-.rec-btns { display: flex; gap: 12px; width: 100%; }
-.rec-btn {
-  flex: 1;
-  font-size: 15.5px;
-  border: 1px solid rgba(255,255,255,0.14);
-  border-radius: 14px;
-  padding: 15px 8px;
-  background: rgba(255,255,255,0.07);
-  color: #FCD34D;
-  transition: background 0.2s;
-}
-.rec-btn:hover { background: rgba(252,211,77,0.12); }
-
-.intimacy-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  font-size: 14px;
-  color: rgba(255,255,255,0.5);
-}
-.intimacy-bar {
-  flex: 1;
-  height: 6px;
-  border-radius: 4px;
-  background: rgba(255,255,255,0.12);
-  position: relative;
-  overflow: hidden;
-}
-.intimacy-fill {
-  height: 100%;
-  border-radius: 4px;
-  background: linear-gradient(90deg, #f472b6, #fb7185);
-}
-
 .ctrl-btns { display: flex; gap: 12px; width: 100%; }
 .ctrl-btn {
   flex: 1;
@@ -740,7 +932,6 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   border: 1px solid rgba(255,255,255,0.14);
   color: rgba(255,255,255,0.92);
 }
-
 .tea-card {
   background: rgba(255,255,255,0.08);
   border: 1px solid rgba(255,255,255,0.15);
@@ -822,16 +1013,6 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
 }
 .input-bar { display: flex; align-items: flex-end; gap: 14px; }
 
-.icon-btn {
-  font-size: 22px;
-  color: rgba(255,255,255,0.45);
-  padding: 12px;
-  border-radius: 14px;
-  flex-shrink: 0;
-  transition: background 0.2s;
-}
-.icon-btn:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.8); }
-
 .msg-input {
   flex: 1;
   background: rgba(255,255,255,0.07);
@@ -868,4 +1049,140 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
 }
 .send-btn:not(:disabled):hover { opacity: 0.88; transform: translateY(-1px); }
 .send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* 🔘 MBTI 선택형 버튼 스타일 */
+.mbti-options-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin-top: 10px;
+}
+.mbti-opt-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(192, 132, 252, 0.4);
+  color: #E9CAFF;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 15px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.mbti-opt-btn:hover:not(:disabled) {
+  background: rgba(192, 132, 252, 0.2);
+  border-color: #C4B5FD;
+}
+.mbti-opt-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 🍵 수락/권유형 추천 카드 스타일 */
+.recommend-consent-bar {
+  margin-top: 12px;
+  width: 100%;
+  border-top: 1px dashed rgba(255, 255, 255, 0.1);
+  padding-top: 10px;
+}
+.consent-question {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13.5px;
+  color: rgba(255, 255, 255, 0.7);
+}
+.consent-btns {
+  display: flex;
+  gap: 10px;
+}
+.consent-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+.consent-btn--yes {
+  background: rgba(252, 211, 77, 0.18);
+  color: #FCD34D;
+  border-color: rgba(252, 211, 77, 0.4);
+}
+.consent-btn--no {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.recommend-cards-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+  animation: fadeIn 0.3s ease-out;
+}
+.recommend-tea-card, .recommend-bgm-card {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 14px 16px;
+  color: rgba(255, 255, 255, 0.9);
+}
+.rec-title { font-size: 14.5px; margin-bottom: 6px; }
+.rec-title strong { color: #FCD34D; }
+.rec-reason { font-size: 12.5px; color: rgba(255, 255, 255, 0.6); margin-bottom: 6px; line-height: 1.5; }
+.rec-effect { font-size: 11px; color: rgba(255, 255, 255, 0.4); font-style: italic; }
+
+.recommend-bgm-card .rec-title strong { color: #38BDF8; }
+.rec-artist { display: block; font-size: 12px; color: rgba(255, 255, 255, 0.5); margin-bottom: 8px; }
+.bgm-play-link {
+  display: inline-block;
+  font-size: 12.5px;
+  color: #38BDF8;
+  text-decoration: none;
+  font-weight: 600;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(56, 189, 248, 0.1);
+  transition: background 0.2s;
+}
+.bgm-play-link:hover {
+  background: rgba(56, 189, 248, 0.22);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 🎉 기쁨 감정 축하 (폭죽/Confetti) 효과 */
+.joy-celebration-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+  overflow: hidden;
+}
+.confetti-particle {
+  position: absolute;
+  top: -20px;
+  border-radius: 3px;
+  opacity: 0.85;
+  animation: fallDown linear forwards;
+}
+@keyframes fallDown {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(110vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+
 </style>
+
+

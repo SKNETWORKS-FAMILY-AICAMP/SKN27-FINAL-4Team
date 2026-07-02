@@ -35,7 +35,7 @@ function choose(option) {
         <div>
           <p class="section-kicker">Balance game</p>
           <h2>심리 밸런스 게임</h2>
-          <p>가벼운 선택으로 오늘의 성향 데이터를 모으고, 해온이가 대화 톤을 더 섬세하게 맞춰요.</p>
+          <p>가벼운 선택으로 오늘의 성향 데이터를 모으고, 동행 캐릭터가 대화 톤을 더 섬세하게 맞춰요.</p>
         </div>
         <button class="btn secondary small" type="button" @click="$emit('navigate', 'home')">홈으로</button>
       </div>

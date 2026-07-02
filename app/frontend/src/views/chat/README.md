@@ -1,8 +1,8 @@
 # chat/ — 챗봇 대화 뷰
 
-> **담당자**: 김한솔 (PM)  
-> **Screen ID**: SCR-003 · SCR-003-S · SCR-004  
-> **관련 요구사항**: REQ-F-001~006, 008, 010~016
+> **담당자**: 김한솔 (PM)
+> **Screen ID**: SCR-003 · SCR-003-S
+> **기준 문서**: docs/최종_통합_흐름도.md · docs/[개별] API_명세서_김한솔.md (v6.0)
 
 ---
 
@@ -11,47 +11,43 @@
 | 파일 | Screen ID | 설명 |
 |---|---|---|
 | `ChatView.vue` | SCR-003 / SCR-003-S | 캐릭터 1:1 대화방 + 시크릿챗 토글 |
-| `InnerCouncilView.vue` | SCR-004 | 3캐릭터 이너 카운슬 오버레이 |
+
+> InnerCouncilView(SCR-004 이너 카운슬)는 스코프 제외로 삭제됨 (`_archive/frontend_removed/` 보관, 2026-07-02)
 
 ---
 
 ## 주요 기능
 
 ### ChatView.vue (SCR-003 대화방)
-- 캐릭터 패널: 해온·그릉·달콩 선택, opener 인사, 표정 4분기
-- 공감 4모드 자동 분기: 4턴 이후 KcELECTRA 감정분석 → 응원·속상·화남·계획
-- 힐링 차 추천 카드 (카페인·알레르기 필터 적용)
-- BGM 추천 (유튜브 링크)
-- 친밀도 게이지 (누적 턴·연속 방문 기반)
-- 추천 질문 칩 (RAG 기반 동적 갱신)
-- 입력바: STT 마이크 · 300자 제한 · 계획 모드 · 전송
+- 캐릭터 패널: 포리(레서판다)·까미(고양이)·토토(수달)·여울(뱁새), 4감정 표정
+- **콜드스타트**: 최초 진입 시 감정 선택지 버튼 → 선택 감정 저장 → "오늘 무슨 일 있었어요?" 후속 질문
+- **감정 분기**: 매 턴 KcELECTRA+XGBoost argmax 분류 → 기쁨·슬픔·분노·일반 에이전트
+- **2단계 응답**: 텍스트 즉시 렌더링 + ElevenLabs TTS 폴링(`tts_task_id`) 재생
+- **MBTI**: 턴 종료 후 10초 무입력 → 질문 push, 시크릿 모드 답변 감지 시 저장 동의 버튼
+- 추천 질문 칩, 👍👎 피드백, 300자 제한 입력바
 
 ### ChatView.vue (SCR-003-S 시크릿챗)
 - 상단 비저장 경고 배너
-- 친밀도·이너카운슬 컨트롤 비활성
-- 세션 종료 시 대화·분석 완전 파기, 홈 리다이렉트
-
-### InnerCouncilView.vue (SCR-004 이너 카운슬)
-- 3에이전트 회의: 해온(위로·내러티브) / 그릉(직면·CBT) / 달콩(코치·ACT)
-- 개입 입력 → LangGraph Context 주입
-- 지켜보기 모드
-- 최대 3턴 / 합산 1,200토큰 상한 가드레일
-- 합의 요약 카드 출력 후 종료
+- 세션 종료 시 `POST /api/session/end/` → RAM 캐시 즉시 파기, 대화 초기화
 
 ---
 
 ## 라우팅
 
 ```js
-{ path: '/chat',         component: ChatView }
-{ path: '/chat/council', component: InnerCouncilView }
+{ path: '/chat', component: ChatView }
 ```
 
-## API 연동
+## API 연동 (v6.0)
 
 ```
-POST /api/chat/sessions/create/          → 세션 생성
-GET  /api/chat/sessions/                 → 세션 목록
-POST /api/chat/sessions/:id/messages/    → 메시지 전송 + AI 응답
-POST /api/chat/sessions/:id/council/     → 이너 카운슬 실행
+POST /api/session/start/        → 세션 시작 (+ 콜드스타트 선택지)
+POST /api/session/cold-start/   → 감정 선택 제출
+POST /api/chat/                 → 대화 턴 (텍스트 즉시 + tts_task_id)
+GET  /api/tts/:taskId/          → TTS 오디오 폴링
+GET  /api/mbti/next-question/   → MBTI 질문 (10초 유휴 시)
+POST /api/mbti/consent/         → MBTI 저장 동의 (시크릿)
+POST /api/session/end/          → 세션 종료 (시크릿 캐시 파기)
 ```
+
+레거시: `GET /api/chat/weather-opener/`(날씨 배너), `POST /api/chat/sessions/:id/questions/`(추천 질문), `POST /api/chat/feedback/`(피드백)

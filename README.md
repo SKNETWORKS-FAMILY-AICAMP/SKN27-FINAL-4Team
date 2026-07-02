@@ -10,7 +10,6 @@
 - **Agent Orchestrator**: LangGraph (Multi-Agent System)
 - **Database**: 
   - **PostgreSQL**: 트랜잭션, 회원, 대화 로그, 척도 채점 이력 보관
-  - **Neo4j**: Causal LTM(인과적 장기 기억) 그래프 및 RAG용 내장 벡터 인덱스
 
 ---
 
@@ -21,14 +20,13 @@ SKN27-FINAL-4Team/
 |-- .env.example                     # 환경 변수 템플릿
 |-- .gitignore                       # Git 제외 파일 설정
 |-- README.md                        # 본 프로젝트 메인 리드미
-|-- docker-compose.yml               # PostgreSQL + Neo4j 컨테이너 인프라 구성
-|-- requirements.txt                 # 프로젝트 전역 의존성 패키지 명세
+|-- docker-compose.yml               # PostgreSQL 컨테이너 인프라 구성
 |-- ai/                              # 🧠 AI 모델 학습 및 가중치 관리 공간
 |   `-- README.md
 |-- app/                             # 💻 Django 웹 서비스 애플리케이션 소스 코드
 |   |-- Dockerfile
 |   |-- README.md
-|   `-- requirements.txt
+|   `-- backend/requirements.txt      # 백엔드 의존성 패키지
 |-- data/                            # 📊 모델 검증 및 안전성 테스트셋 데이터 보관
 |   |-- safety_redteam_set.json      # 극단 신호 탐지용 안전 가드레일 레드팀셋
 |   `-- scale_gold_set.json          # 간접 척도 추정 알고리즘 검증용 골드셋
@@ -43,15 +41,11 @@ SKN27-FINAL-4Team/
 |   `-- 학습 결과서 — 감정분류 (KcELECTRA).md
 |-- etl/                             # 🔄 데이터 전처리 및 초기 마이그레이션(ETL) 스크립트
 |   |-- README.md
-|   |-- load_ltm_sample_to_neo4j.py  # LTM 그래프 관계성 샘플 로더
 |   |-- load_scales_to_postgres.py   # 임상 척도 질문 문항 로더
-|   |-- load_tea_metadata_etl.py     # 64종 힐링 차 텍스트 ETL 가공 스크립트
-|   |-- load_tea_to_neo4j.py         # 차 추천 그래프 매핑 데이터 로더
-|   |-- load_theories_to_vector_db.py# 심리학 이론 RAG 벡터 DB 청크 임베딩 로더
 |   `-- seed_postgres_static_data.py # PostgreSQL 초기 정적 마스터 데이터 적재
 |-- prompts/                         # 📝 캐릭터 에이전트별 시스템 프롬프트 정의
 |   |-- dalkong_prompt.json          # 달콩이 (코치형 / ACT 기반)
-|   |-- greung_prompt.json           # 그릉이 (직면형 / CBT 기반)
+|   |-- greung_prompt.json           # 그릉이 (직면형 / 마음챙김 기반)
 |   `-- haeon_prompt.json            # 해온이 (위로형 / 내러티브 기반)
 |-- storage/                         # 📦 로컬 데이터셋 및 정적 리소스 보관함
 |   |-- README.md
@@ -80,7 +74,7 @@ SKN27-FINAL-4Team/
 - 팀의 협업 프로세스를 관리하기 위한 WBS, PM 산출물(기획안, 요구사항 정의서, 화면설계서 명세) 및 시스템 아키텍처 다이어그램(Master ERD 및 시퀀스 흐름 마블링 마크다운)이 모여 있습니다.
 
 ### 5. `etl/` (Extract-Transform-Load Pipelines)
-- 원천 JSON/CSV 데이터셋을 PostgreSQL 구조적 테이블 및 Neo4j의 그래프 네트워크(`(:Tea)`, `(:TheoryChunk)`)로 정제하여 가공 적재하기 위한 초기 설정용 자동화 스크립트 집합입니다.
+- 원천 JSON/CSV 데이터셋을 PostgreSQL 구조적 테이블로 정제하여 가공 적재하기 위한 초기 설정용 자동화 스크립트 집합입니다.
 
 ### 6. `prompts/` (Persona Prompt Engine)
 - 다중 에이전트(LangGraph)로 구동되는 개별 캐릭터(해온이, 그릉이, 달콩이)의 개성 있는 말투, 특화 심리 이론 개입 규칙을 정의해 둔 System Prompt 파일들입니다.

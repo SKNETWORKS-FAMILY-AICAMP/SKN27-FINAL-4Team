@@ -3,45 +3,55 @@ import { computed, ref } from "vue";
 
 defineEmits(["navigate"]);
 
-const selectedCharacter = ref("haeon");
-const selectedFace = ref("calm");
+const selectedCharacter = ref("pori");
 
+// 캐릭터 = 성격(분위기). 4종이 밝음/깊음/장난/차분에 1:1로 대응한다.
 const characters = [
   {
-    id: "haeon",
-    name: "해온이",
-    role: "위로형 동행자",
-    tone: "다정하고 천천히 묻는 말투",
-    line: "오늘 마음은 내가 옆에서 같이 정리해볼게요.",
-    color: "sunset"
-  },
-  {
-    id: "dalkong",
-    name: "달콩이",
-    role: "코치형 동행자",
-    tone: "가볍게 제안하고 실행을 돕는 말투",
-    line: "작은 행동 하나만 골라서 같이 시작해봐요.",
+    id: "pori",
+    name: "포리",
+    role: "레서판다 · 밝음 · 응원형",
+    face: "bright",
+    faceLabel: "밝음",
+    tone: "작은 빛처럼 곁에서 응원하는 말투",
+    line: "오늘 여기까지 온 것만으로 충분해요! 작은 것부터 같이 해봐요!",
     color: "mint"
   },
   {
-    id: "geureung",
-    name: "그릉이",
-    role: "직면형 동행자",
-    tone: "솔직하지만 안전하게 짚어주는 말투",
-    line: "피하고 싶은 마음까지 천천히 살펴볼까요?",
+    id: "kkami",
+    name: "까미",
+    role: "고양이 · 깊음 · 공감형",
+    face: "deep",
+    faceLabel: "깊음",
+    tone: "긴 말보다 묵직하게 함께 있어주는 말투",
+    line: "그랬구나. 말로 다 못 해도 괜찮아. 여기서 같이 들여다보자.",
     color: "lavender"
+  },
+  {
+    id: "toto",
+    name: "토토",
+    role: "수달 · 장난 · 환기형",
+    face: "playful",
+    faceLabel: "장난",
+    tone: "가벼운 농담으로 부담을 덜어주는 말투",
+    line: "너무 무겁게 안 가도 돼. 일단 나랑 한 숨 돌려볼래?",
+    color: "sky"
+  },
+  {
+    id: "yeoul",
+    name: "여울",
+    role: "뱁새 · 차분 · 포근형",
+    face: "calm",
+    faceLabel: "차분",
+    tone: "느린 호흡으로 곁을 지키는 말투",
+    line: "천천히 숨 한 번 같이 쉬어볼까요. 급하지 않아도 괜찮아요.",
+    color: "sunset"
   }
 ];
 
-const faces = [
-  { id: "calm", label: "차분", desc: "느린 호흡과 안정감" },
-  { id: "bright", label: "밝음", desc: "상냥한 응원과 활기" },
-  { id: "deep", label: "깊음", desc: "긴 문장보다 조용한 공감" },
-  { id: "playful", label: "장난", desc: "부담을 낮추는 작은 농담" }
-];
-
 const selected = computed(() => characters.find((character) => character.id === selectedCharacter.value) || characters[0]);
-const selectedFaceLabel = computed(() => faces.find((face) => face.id === selectedFace.value)?.label || "차분");
+const selectedFace = computed(() => selected.value.face);
+const selectedFaceLabel = computed(() => selected.value.faceLabel);
 </script>
 
 <template>
@@ -58,7 +68,7 @@ const selectedFaceLabel = computed(() => faces.find((face) => face.id === select
         <div>
           <p class="section-kicker">Character persona</p>
           <h2>대화 동행자를 선택해요</h2>
-          <p>사용자와 대화할 마음 동행자의 기본 성격, 표정, 말투를 첫 로그인 때만 설정하는 화면이에요.</p>
+          <p>네 동행자는 각각 차분·밝음·깊음·장난의 성격을 가져요. 첫 로그인 때 한 명을 골라주세요.</p>
         </div>
         <button class="btn secondary small" type="button" @click="$emit('navigate', 'login')">로그인으로</button>
       </div>
@@ -82,21 +92,10 @@ const selectedFaceLabel = computed(() => faces.find((face) => face.id === select
 
       <section class="question-card">
         <div class="question-meta">
-          <span>표정 미리보기</span>
+          <span>선택한 동행자</span>
           <strong>{{ selected.name }} · {{ selectedFaceLabel }}</strong>
         </div>
-        <div class="face-options">
-          <button
-            v-for="face in faces"
-            :key="face.id"
-            type="button"
-            :class="{ selected: selectedFace === face.id }"
-            @click="selectedFace = face.id"
-          >
-            <strong>{{ face.label }}</strong>
-            <small>{{ face.desc }}</small>
-          </button>
-        </div>
+        <p class="character-summary">{{ selected.tone }}</p>
       </section>
     </article>
 
@@ -112,7 +111,7 @@ const selectedFaceLabel = computed(() => faces.find((face) => face.id === select
       </div>
       <div class="advice-box">
         <strong>설정 영향</strong>
-        <span>선택한 캐릭터와 표정은 대화 시작 문장, 위로 톤, 추천 질문 스타일에 반영돼요.</span>
+        <span>선택한 동행자의 성격은 대화 시작 문장, 위로 톤, 추천 질문 스타일에 반영돼요.</span>
       </div>
       <button class="btn primary full" type="button" @click="$emit('navigate', 'userinfo')">다음: 사용자 정보</button>
     </aside>

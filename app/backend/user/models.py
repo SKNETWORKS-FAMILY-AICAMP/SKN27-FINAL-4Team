@@ -20,9 +20,10 @@ class UserManager(BaseUserManager):
 
 class User(AbstractBaseUser, PermissionsMixin):
     CHARACTER_CHOICES = [
-        ('haeon', '해온이'),
-        ('greung', '그릉이'),
-        ('dalkong', '달콩이'),
+        ('pori',  '포리'),   # 레서판다 / 밝음·응원형
+        ('kkami', '까미'),   # 고양이 / 깊음·묵직형
+        ('toto',  '토토'),   # 수달 / 장난·환기형
+        ('yeoul', '여울'),   # 뱁새 / 차분·포근형
     ]
 
     email = models.EmailField(unique=True)

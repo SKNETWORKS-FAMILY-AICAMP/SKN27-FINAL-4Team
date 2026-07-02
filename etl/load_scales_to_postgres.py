@@ -1,9 +1,14 @@
 import os
 import json
 import sys
+from pathlib import Path
 import psycopg2
+from dotenv import load_dotenv
 
 sys.stdout.reconfigure(encoding='utf-8')
+
+_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(_ROOT / '.env')
 
 # DB Connection settings from environment or defaults
 PG_HOST = os.environ.get("PG_HOST", "localhost")
@@ -12,7 +17,7 @@ PG_DB = os.environ.get("PG_DB", "wellness_db")
 PG_USER = os.environ.get("PG_USER", "postgres")
 PG_PASSWORD = os.environ.get("PG_PASSWORD", "password")
 
-SCALES_DIR = r"c:\Users\Playdata\Documents\Obsidian Vault\SKN27기 최종프로젝트 - 웰니스 멘탈케어\데이터\척도"
+SCALES_DIR = _ROOT / 'data' / 'scales'
 
 # Based on user feedback, only load the 6 core scales
 CORE_SCALES = ["PHQ-9", "GAD-7", "PHQ-15", "RSES", "UCLA-3", "SPANE"]

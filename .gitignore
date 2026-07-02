@@ -8,6 +8,15 @@
 *.bin
 *.pt
 *.pth
+*.onnx
+
+# 오디오 파일
+*.wav
+*.mp3
+*.ogg
+
+# TTS 테스트 디렉토리 (대용량 모델·오디오 포함)
+test/hansol/
 
 # 데이터베이스 캐시 및 볼륨 데이터
 postgres_data/
@@ -36,17 +45,29 @@ take_screenshot*
 view_svgs*
 shot_dark*
 
+# 아카이브 (미사용 파일 보관소 — v6.0 정리, _archive/README.md 참조)
+_archive/
+
 # 임시 덤프 및 복사본 파일
 _tmp_*.txt
 _update_*.py
 _write_*.py
 __mount_test.txt
 
-# 데이터셋
+# 데이터셋 (AI Hub 등 원본·파생 데이터는 재배포 금지 → 커밋 제외, AI Hub에서 직접 내려받아 사용)
 *.json
+*.jsonl
+data/raw/
+ai/emotion/artifacts*/
 
 # 개별 문서
 docs/\[개별\]*
+docs/_archive_v5/
+
+# 바이너리 문서
+*.docx
+*.xlsx
+*.pptx
 
 # IDE 설정
 .vscode/

@@ -12,7 +12,7 @@ const features = [
     id: "chat",
     icon: "talk",
     title: "마음 대화",
-    desc: "해온이와 지금 감정을 차분히 나눠요."
+    desc: "마음 동행자와 지금 감정을 차분히 나눠요."
   },
   {
     id: "my",
@@ -53,7 +53,7 @@ const contentActions = [
       </div>
       <h1>노을 아래,<br>마음이 쉬어가는 다락방</h1>
       <p class="hero-copy">
-        하루의 감정을 기록하고, AI 동행자 해온이와 함께 마음의 조각을 천천히 정리해요.
+        하루의 감정을 기록하고, AI 동행자와 함께 마음의 조각을 천천히 정리해요.
       </p>
 
       <div class="hero-actions">

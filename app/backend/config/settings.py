@@ -1,9 +1,15 @@
 from pathlib import Path
 import os
+import sys
 from dotenv import load_dotenv
 
-# manage.py 위치(app/backend/) 기준으로 .env 로드
-load_dotenv(Path(__file__).resolve().parent.parent / '.env')
+# 프로젝트 루트 기준으로 .env 로드 (config/ → backend/ → app/ → 루트)
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+load_dotenv(_PROJECT_ROOT / '.env')
+
+# ai/, etl/ 등 루트 패키지를 import 가능하게
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -100,9 +106,54 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# ── TTS mp3 등 미디어 파일 (API 명세서 v6.0 §3-2) ──
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
-NEO4J_URI = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
-NEO4J_USER = os.environ.get('NEO4J_USER', 'neo4j')
-NEO4J_PASSWORD = os.environ.get('NEO4J_PASSWORD', 'password')
+TAVILY_API_KEY = os.environ.get('TAVILY_API_KEY', '')
+
+# ── ElevenLabs TTS (TTS_음성설정 v2.0) ──
+ELEVENLABS_API_KEY = os.environ.get('ELEVENLABS_API_KEY', '')
+ELEVENLABS_MODEL_ID = os.environ.get('ELEVENLABS_MODEL_ID', 'eleven_v3')   # 감정 연기(오디오 태그) 지원
+# voice_id 4종은 Voice Library에서 팀이 선정 후 .env에 설정 (TODO)
+ELEVENLABS_VOICES = {
+    'pori':  os.environ.get('VOICE_ID_PORI', ''),
+    'kkami': os.environ.get('VOICE_ID_KKAMI', ''),
+    'toto':  os.environ.get('VOICE_ID_TOTO', ''),
+    'yeoul': os.environ.get('VOICE_ID_YEOUL', ''),
+}
+OPENWEATHERMAP_API_KEY = os.environ.get('OPENWEATHERMAP_API_KEY', '')
+
+# ── 캐시 설정 ─────────────────────────────────────────────
+# v6.0: Redis는 2차 확장(ERD v6.0 §3-2) — REDIS_URL이 명시된 경우에만 사용,
+# 기본은 인메모리(LocMem). 시크릿 모드 대화 캐시는 chat/secret_cache.py가 담당.
+import sys
+_REDIS_URL = os.environ.get('REDIS_URL', '')
+if _REDIS_URL and 'test' not in sys.argv:
+    CACHES = {
+        "default": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": _REDIS_URL,
+            "OPTIONS": {
+                "CLIENT_CLASS": "django_redis.client.DefaultClient",
+                "SOCKET_CONNECT_TIMEOUT": 5,
+                "SOCKET_TIMEOUT": 5,
+            }
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "wellness-cache",
+        }
+    }
+
+# ── 테스트는 로컬 sqlite로 실행 (Postgres 불필요: python manage.py test chat) ──
+if 'test' in sys.argv:
+    DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': ':memory:'}}
+
+

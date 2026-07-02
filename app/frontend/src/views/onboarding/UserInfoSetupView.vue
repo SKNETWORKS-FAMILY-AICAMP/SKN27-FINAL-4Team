@@ -90,7 +90,7 @@ function toggleKeyword(keyword) {
       <p class="section-kicker">Personalized</p>
       <h3>저장 전 미리보기</h3>
       <div class="setup-summary-list">
-        <div><span>캐릭터</span><strong>해온이</strong></div>
+        <div><span>캐릭터</span><strong>소담이</strong></div>
         <div><span>대화 톤</span><strong>다정하고 차분하게</strong></div>
         <div><span>관심사</span><strong>{{ selectedKeywords.join(", ") }}</strong></div>
       </div>
