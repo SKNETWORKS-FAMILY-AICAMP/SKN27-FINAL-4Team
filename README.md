@@ -29,9 +29,6 @@ SKN27-FINAL-4Team/
 |   |-- Dockerfile
 |   |-- README.md
 |   `-- requirements.txt
-|-- data/                            # 📊 모델 검증 및 안전성 테스트셋 데이터 보관
-|   |-- safety_redteam_set.json      # 극단 신호 탐지용 안전 가드레일 레드팀셋
-|   `-- scale_gold_set.json          # 간접 척도 추정 알고리즘 검증용 골드셋
 |-- docs/                            # 📑 프로젝트 기획 및 설계 산출물 (정본)
 |   |-- README.md
 |   |-- [기획] WBS_양식_27기_4팀.xlsx
@@ -43,19 +40,10 @@ SKN27-FINAL-4Team/
 |   `-- 학습 결과서 — 감정분류 (KcELECTRA).md
 |-- etl/                             # 🔄 데이터 전처리 및 초기 마이그레이션(ETL) 스크립트
 |   |-- README.md
-|   |-- load_ltm_sample_to_neo4j.py  # LTM 그래프 관계성 샘플 로더
-|   |-- load_scales_to_postgres.py   # 임상 척도 질문 문항 로더
-|   |-- load_tea_metadata_etl.py     # 64종 힐링 차 텍스트 ETL 가공 스크립트
-|   |-- load_tea_to_neo4j.py         # 차 추천 그래프 매핑 데이터 로더
 |   |-- load_theories_to_vector_db.py# 심리학 이론 RAG 벡터 DB 청크 임베딩 로더
 |   `-- seed_postgres_static_data.py # PostgreSQL 초기 정적 마스터 데이터 적재
-|-- prompts/                         # 📝 캐릭터 에이전트별 시스템 프롬프트 정의
-|   |-- dalkong_prompt.json          # 달콩이 (코치형 / ACT 기반)
-|   |-- greung_prompt.json           # 그릉이 (직면형 / CBT 기반)
-|   `-- haeon_prompt.json            # 해온이 (위로형 / 내러티브 기반)
 |-- storage/                         # 📦 로컬 데이터셋 및 정적 리소스 보관함
 |   |-- README.md
-|   `-- 마시는_차_추천_데이터셋.json     # 64종 힐링 차 원천 메타데이터
 `-- test/                            # 🧪 개별 프로토타이핑 및 기능 단위 테스트 공간
     |-- README.md
     `-- 감성대화_토큰나이저.ipynb
