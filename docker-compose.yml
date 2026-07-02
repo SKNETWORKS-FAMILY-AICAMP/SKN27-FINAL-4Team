@@ -19,7 +19,7 @@ services:
 
   web:
     build:
-      context: ./app/backend
+      context: ./app
       dockerfile: Dockerfile
     container_name: wellness_django
     restart: always
