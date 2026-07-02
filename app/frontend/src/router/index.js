@@ -9,11 +9,13 @@ const routes = [
 
   // ── 이성진: 온보딩 / 메인 (ONB-001~008) ──────────────────
   { path: '/login',               component: () => import('../views/onboarding/LoginView.vue') },
+  { path: '/login/callback/:provider', component: () => import('../views/onboarding/SocialLoginCallbackView.vue') },
   { path: '/home',                component: () => import('../views/onboarding/HomeView.vue') },
   { path: '/onboarding/info',      component: () => import('../views/onboarding/UserInfoSetupView.vue') },
   { path: '/onboarding/character', component: () => import('../views/onboarding/CharacterSetupView.vue') },
-  { path: '/onboarding/balance',   component: () => import('../views/onboarding/BalanceGameView.vue') },
-  { path: '/onboarding/fortune',   component: () => import('../views/onboarding/FortuneView.vue') },
+  { path: '/onboarding/preferencesetup',   component: () => import('../views/onboarding/PreferenceSetupView.vue') },
+  { path: '/onboarding/fortune',   component: () => import('../views/onboarding/TarotIntroView.vue') },
+  { path: '/onboarding/fortune/draw', component: () => import('../views/onboarding/FortuneView.vue') },
   { path: '/calendar',            component: () => import('../views/onboarding/CalendarView.vue') },
 
   // ── 한재웅: 마이페이지 (F-MY-001~005) ────────────────────

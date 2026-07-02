@@ -49,11 +49,15 @@
     <div class="chat-layout">
       <!-- ===== 왼쪽 패널: 캐릭터 영역 ===== -->
       <aside class="left-panel">
-        <div class="char-face" :style="{ background: CHARACTER_META[character].bg, color: CHARACTER_META[character].color }">
-          {{ CHARACTER_META[character].faces[currentEmotion] }}
+        <div class="char-face character-image-frame" :style="{ background: displayCharacter.bg, color: displayCharacter.color }">
+          <img
+            :src="displayCharacterImage"
+            :alt="`${displayCharacter.name} ${displayExpressionLabel}`"
+            :class="displayAnimationClass"
+          />
         </div>
-        <div class="char-name">{{ CHARACTER_META[character].name }}</div>
-        <div class="char-faces">표정 4분기 : 응원 · 속상 · 화남 · 계획</div>
+        <div class="char-name">{{ displayCharacter.name }}</div>
+        <div class="char-faces">현재 표정 : {{ displayExpressionLabel }}</div>
 
         <div class="opener-bubble">
           {{ openerText }}
@@ -193,7 +197,78 @@ const EMOTION_LABELS = {
   plan:      '✦ 계획 모드',
 }
 
-const character      = ref(route.query.character || 'haeon')
+const DISPLAY_CHARACTER_META = {
+  otter: {
+    name: '수달',
+    color: '#C4B5FD',
+    bg: 'rgba(196,181,253,0.16)',
+    backendCharacter: 'haeon',
+  },
+  cat: {
+    name: '고양이',
+    color: '#A78BFA',
+    bg: 'rgba(30,27,75,0.34)',
+    backendCharacter: 'greung',
+  },
+  redpanda: {
+    name: '레서판다',
+    color: '#FDBA74',
+    bg: 'rgba(251,146,60,0.16)',
+    backendCharacter: 'dalkong',
+  },
+  bird: {
+    name: '뱁새',
+    color: '#BFDBFE',
+    bg: 'rgba(191,219,254,0.14)',
+    backendCharacter: 'haeon',
+  },
+}
+
+const EXPRESSION_LABELS = {
+  joy: '기쁨',
+  anger: '화남',
+  sadness: '슬픔',
+  anxiety: '불안',
+  hurt: '상처',
+  panic: '당황',
+}
+
+const EMOTION_TO_EXPRESSION = {
+  default: null,
+  encourage: 'joy',
+  sad: 'sadness',
+  angry: 'anger',
+  plan: 'anxiety',
+}
+
+const EXPRESSION_ANIMATION = {
+  joy: 'anim-joy',
+  anger: 'anim-anger',
+  sadness: 'anim-sadness',
+  anxiety: 'anim-anxiety',
+  hurt: 'anim-hurt',
+  panic: 'anim-panic',
+}
+
+function readStoredCharacter() {
+  try {
+    return JSON.parse(localStorage.getItem('binteumsaiCharacter') || '{}')
+  } catch {
+    return {}
+  }
+}
+
+function normalizeCharacterId(id) {
+  if (DISPLAY_CHARACTER_META[id]) return id
+  if (id === 'haeon') return 'otter'
+  if (id === 'greung' || id === 'geureung') return 'cat'
+  if (id === 'dalkong') return 'redpanda'
+  return 'otter'
+}
+
+const storedCharacter = readStoredCharacter()
+const displayCharacterId = ref(normalizeCharacterId(route.query.character || storedCharacter.characterId))
+const selectedExpression = ref(EXPRESSION_LABELS[storedCharacter.expressionId] ? storedCharacter.expressionId : 'joy')
 const { secret: isSecret, setSecret } = useSecret()
 const sessionId      = ref(null)
 const showExitModal  = ref(false)
@@ -205,6 +280,13 @@ const suggestedQuestions = ref([])
 const currentEmotion = ref('default')
 const threadRef = ref(null)
 const inputRef  = ref(null)
+
+const displayCharacter = computed(() => DISPLAY_CHARACTER_META[displayCharacterId.value] || DISPLAY_CHARACTER_META.otter)
+const backendCharacter = computed(() => displayCharacter.value.backendCharacter)
+const displayExpressionId = computed(() => EMOTION_TO_EXPRESSION[currentEmotion.value] || selectedExpression.value)
+const displayExpressionLabel = computed(() => EXPRESSION_LABELS[displayExpressionId.value] || '기쁨')
+const displayCharacterImage = computed(() => `/characters/${displayCharacterId.value}/${displayExpressionId.value}.png`)
+const displayAnimationClass = computed(() => EXPRESSION_ANIMATION[displayExpressionId.value] || 'anim-joy')
 
 const openerText = computed(() =>
   isSecret.value ? '여긴 아무 기록도 안 남아. 편하게 다 털어놔도 돼.' : '오늘 어떤 하루였어?'
@@ -236,12 +318,12 @@ const OPENER_MSG = {
 }
 
 onMounted(async () => {
-  const openerContent = OPENER_MSG[character.value]?.(isSecret.value)
+  const openerContent = OPENER_MSG[backendCharacter.value]?.(isSecret.value)
     ?? '안녕! 오늘 어떤 하루였어?'
   messages.value.push({ _tempId: Date.now(), role: 'assistant', content: openerContent })
 
   try {
-    const sess = await chatApi.createSession(character.value, isSecret.value)
+    const sess = await chatApi.createSession(backendCharacter.value, isSecret.value)
     sessionId.value = sess.id
     refreshSuggestions()
   } catch { /* 백엔드 미연결 시 무시 */ }
@@ -300,10 +382,10 @@ async function toggleSecret() {
   setSecret(!isSecret.value)
   messages.value = []
   try {
-    const sess = await chatApi.createSession(character.value, isSecret.value)
+    const sess = await chatApi.createSession(backendCharacter.value, isSecret.value)
     sessionId.value = sess.id
   } catch {}
-  router.replace({ query: { character: character.value, secret: isSecret.value ? 'on' : undefined } })
+  router.replace({ query: { character: displayCharacterId.value, secret: isSecret.value ? 'on' : undefined } })
 }
 
 async function confirmExitSecret() {
@@ -311,10 +393,10 @@ async function confirmExitSecret() {
   setSecret(false)
   messages.value = []
   try {
-    const sess = await chatApi.createSession(character.value, false)
+    const sess = await chatApi.createSession(backendCharacter.value, false)
     sessionId.value = sess.id
   } catch {}
-  router.replace({ query: { character: character.value } })
+  router.replace({ query: { character: displayCharacterId.value } })
 }
 
 function goCouncil() {
@@ -604,6 +686,18 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   border: 1px solid rgba(192,132,252,0.3);
   margin-top: 8px;
   box-shadow: 0 0 44px rgba(192,132,252,0.18);
+}
+
+.character-image-frame {
+  overflow: visible;
+}
+
+.character-image-frame img {
+  width: 104%;
+  height: 104%;
+  object-fit: contain;
+  transform-origin: center bottom;
+  filter: drop-shadow(0 18px 24px rgba(0,0,0,0.28));
 }
 
 .char-name {

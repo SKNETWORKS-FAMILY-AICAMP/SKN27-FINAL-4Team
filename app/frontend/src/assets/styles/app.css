@@ -1,0 +1,334 @@
+/*  Application shell and navigation styles.  */
+
+.gnav,
+.nav-links {
+  font-family: var(--font-ui);
+}
+
+.brand-name {
+  font-family: var(--font-display) !important;
+  font-weight: 400 !important;
+  letter-spacing: 0 !important;
+}
+
+.topbar {
+  position: relative;
+  z-index: 5;
+  width: min(1460px, 100%);
+  min-height: 76px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(260px, auto) minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  padding: 10px 18px;
+}
+
+.logo-button,
+.profile-chip,
+.nav-menu button {
+  border: 0;
+  cursor: pointer;
+}
+
+.logo-button {
+  display: inline-grid;
+  grid-template-columns: 54px auto;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.logo-button span:last-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.logo-button b {
+  font-size: 17px;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.logo-button small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.logo-mark {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  background: linear-gradient(145deg, rgba(255, 245, 216, 0.28), rgba(255, 127, 152, 0.18));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26);
+}
+
+.logo-mark::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  bottom: 11px;
+  width: 24px;
+  height: 18px;
+  border: 2px solid #ffd8e8;
+  border-radius: 5px;
+}
+
+.logo-mark::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 11px;
+  width: 22px;
+  height: 22px;
+  border-left: 2px solid #ffd8e8;
+  border-top: 2px solid #ffd8e8;
+  border-radius: 5px;
+  transform: rotate(45deg);
+}
+
+.nav-menu {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.nav-menu::-webkit-scrollbar {
+  display: none;
+}
+
+.nav-menu button {
+  min-height: 42px;
+  padding: 0 15px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 800;
+  white-space: nowrap;
+  transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+
+.nav-menu button.active,
+.nav-menu button:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.nav-menu button:hover {
+  transform: translateY(-2px);
+}
+
+.profile-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 0 16px 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.08);
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.profile-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--pink), var(--orange));
+  box-shadow: 0 0 24px rgba(255, 127, 152, 0.5);
+}
+
+.view-shell {
+  position: relative;
+  z-index: 1;
+  width: min(1460px, 100%);
+  min-height: 0;
+  margin: 0 auto;
+}
+
+@media (max-width: 1180px) {
+
+  .view-shell {
+    height: auto;
+    min-height: 720px;
+  }
+
+  .topbar {
+    grid-template-columns: 1fr auto;
+  }
+
+  .nav-menu {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-height: 820px) and (min-width: 1181px) {
+
+  .view-shell {
+    height: auto;
+    min-height: 0;
+  }
+}
+
+@media (max-width: 720px) {
+
+  .topbar {
+    min-height: auto;
+    padding: 12px;
+  }
+
+  .logo-button {
+    grid-template-columns: 44px auto;
+  }
+
+  .logo-mark {
+    width: 42px;
+    height: 42px;
+  }
+
+  .profile-chip {
+    padding: 0 10px;
+  }
+
+  .profile-chip span:last-child {
+    display: none;
+  }
+}
+
+.view-shell {
+  width: 100%;
+  min-height: 0;
+}
+
+.nav-login {
+  color: #fff !important;
+  border-color: rgba(231, 126, 110, 0.72) !important;
+  background: var(--bt-primary) !important;
+  box-shadow:
+    0 18px 44px rgba(231, 62, 101, 0.3),
+    inset 0 1px 0 rgba(255, 245, 238, 0.32) !important;
+}
+
+.nav-login {
+  color: #fff !important;
+  border-color: rgba(231, 126, 110, 0.72) !important;
+  background: linear-gradient(135deg, #e73e65 0%, #ee5d5f 52%, #e77e6e 100%) !important;
+  box-shadow:
+    0 18px 44px rgba(231, 62, 101, 0.3),
+    0 0 30px rgba(238, 93, 95, 0.18),
+    inset 0 1px 0 rgba(255, 245, 238, 0.32) !important;
+}
+
+#app .gnav-inner {
+  width: min(var(--bt-page-max), calc(100% - (var(--bt-page-x) * 2))) !important;
+  height: var(--bt-header-h) !important;
+  gap: clamp(32px, 4vw, 72px) !important;
+  overflow: visible !important;
+}
+
+#app .brand,
+#app .nav-right {
+  flex: 0 0 auto;
+}
+
+#app .nav-links {
+  min-width: 0;
+  justify-content: center;
+  gap: clamp(24px, 3vw, 56px) !important;
+  overflow-x: auto;
+}
+
+#app .nav-links a,
+#app .nav-login {
+  white-space: nowrap;
+}
+
+#app .nav-links a {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1439px) {
+  #app .gnav-inner {
+    gap: clamp(20px, 2.4vw, 40px) !important;
+  }
+}
+
+@media (max-width: 1023px) {
+  #app .gnav-inner {
+    width: min(100%, calc(100% - 32px)) !important;
+    height: auto !important;
+    min-height: 80px;
+    flex-wrap: wrap;
+    padding: 14px 0 !important;
+  }
+
+  #app .nav-links {
+    order: 3;
+    flex-basis: 100%;
+    justify-content: flex-start;
+  }
+}
+
+#app .gnav-inner {
+  width: min(var(--ref-stage-max), calc(100% - (var(--ref-page-x) * 2))) !important;
+  height: var(--ref-nav-h) !important;
+  gap: clamp(28px, 4vw, 64px) !important;
+}
+
+#app .brand-mark {
+  width: clamp(40px, 3.1vw, 48px) !important;
+  height: clamp(40px, 3.1vw, 48px) !important;
+}
+
+#app .brand-name {
+  font-size: clamp(24px, 1.75vw, 30px) !important;
+}
+
+#app .nav-links {
+  gap: clamp(30px, 4.1vw, 66px) !important;
+}
+
+#app .nav-links a {
+  min-height: 44px !important;
+  padding: 0 clamp(18px, 1.5vw, 28px) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  font-size: clamp(15px, 1.05vw, 17px) !important;
+}
+
+#app .nav-login {
+  min-width: clamp(108px, 7.4vw, 132px) !important;
+  min-height: clamp(42px, 4.8dvh, 50px) !important;
+  padding: 0 22px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: clamp(15px, 1.05vw, 17px) !important;
+}
+
+#app .avatar {
+  width: clamp(40px, 3vw, 46px) !important;
+  height: clamp(40px, 3vw, 46px) !important;
+}
+
+#app .nav-login {
+  background: var(--ref-primary) !important;
+  box-shadow: 0 12px 28px rgba(242, 76, 160, 0.24) !important;
+}
+
+@media (max-height: 760px) {
+  #app .gnav-inner {
+    width: min(1480px, calc(100% - 72px)) !important;
+  }
+}

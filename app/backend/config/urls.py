@@ -24,4 +24,7 @@ urlpatterns = [
     path('api/mypage/', include('wellness.urls')),
     path('api/myprofile/', include('myprofile.urls')),
     path('api/mbti/', include('mbti.urls')),
+    path('api/characters/', include('character.urls')),
+    path('api/calendar/', include('calendar_api.urls')),
+    path('api/tarot/', include('game.tarot_api.urls')),
 ]
