@@ -211,27 +211,27 @@ const EMOTION_LABELS = {
 const DISPLAY_CHARACTER_META = {
   otter: {
     name: '수달',
-    color: '#C4B5FD',
-    bg: 'rgba(196,181,253,0.16)',
-    backendCharacter: 'haeon',
+    color: '#7DD3FC',
+    bg: 'rgba(125,211,252,0.18)',
+    backendCharacter: 'toto',
   },
   cat: {
-    name: '고양이',
-    color: '#A78BFA',
-    bg: 'rgba(30,27,75,0.34)',
-    backendCharacter: 'greung',
+    name: '까미',
+    color: '#C4B5FD',
+    bg: 'rgba(196,181,253,0.18)',
+    backendCharacter: 'kkami',
   },
   redpanda: {
-    name: '레서판다',
-    color: '#FDBA74',
-    bg: 'rgba(251,146,60,0.16)',
-    backendCharacter: 'dalkong',
+    name: '포리',
+    color: '#5EEAD4',
+    bg: 'rgba(94,234,212,0.18)',
+    backendCharacter: 'pori',
   },
   bird: {
-    name: '뱁새',
-    color: '#BFDBFE',
-    bg: 'rgba(191,219,254,0.14)',
-    backendCharacter: 'haeon',
+    name: '여울',
+    color: '#FBBF77',
+    bg: 'rgba(251,191,119,0.18)',
+    backendCharacter: 'yeoul',
   },
 }
 
@@ -271,6 +271,12 @@ function readStoredCharacter() {
 
 function normalizeCharacterId(id) {
   if (DISPLAY_CHARACTER_META[id]) return id
+  // 백엔드 캐릭터 ID → 디스플레이 ID
+  if (id === 'toto')  return 'otter'
+  if (id === 'kkami') return 'cat'
+  if (id === 'pori')  return 'redpanda'
+  if (id === 'yeoul') return 'bird'
+  // 이전 dev 버전 하위호환
   if (id === 'haeon') return 'otter'
   if (id === 'greung' || id === 'geureung') return 'cat'
   if (id === 'dalkong') return 'redpanda'
