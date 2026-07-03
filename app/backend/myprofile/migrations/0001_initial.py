@@ -34,7 +34,8 @@ class Migration(migrations.Migration):
                 ('user', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='myprofile', to=settings.AUTH_USER_MODEL)),
             ],
             options={
-                'db_table': 'user_profiles',
+                # user 앱 user_profiles와 충돌 방지 — 임시 분리 (팀 통합 결정 대기)
+                'db_table': 'myprofile_profiles',
             },
         ),
     ]

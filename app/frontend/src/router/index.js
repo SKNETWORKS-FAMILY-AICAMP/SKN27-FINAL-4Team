@@ -5,7 +5,6 @@ const routes = [
 
   // ── 김한솔: 챗봇 (SCR-003, SCR-004) ──────────────────────
   { path: '/chat',         component: () => import('../views/chat/ChatView.vue') },
-  { path: '/chat/council', component: () => import('../views/chat/InnerCouncilView.vue') },
 
   // ── 이성진: 온보딩 / 메인 (ONB-001~008) ──────────────────
   { path: '/login',               component: () => import('../views/onboarding/LoginView.vue') },
