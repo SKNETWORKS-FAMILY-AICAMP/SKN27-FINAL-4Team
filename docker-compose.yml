@@ -35,7 +35,10 @@ services:
       dockerfile: Dockerfile
     container_name: wellness_django
     restart: always
-    command: python manage.py runserver 0.0.0.0:8000 --noreload
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py load_tarot_data &&
+             python manage.py runserver 0.0.0.0:8000 --noreload"
     env_file:
       - ./app/backend/.env
     volumes:
