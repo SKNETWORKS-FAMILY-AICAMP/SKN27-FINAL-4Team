@@ -19,15 +19,17 @@
 ## 주요 기능
 
 ### ChatView.vue (SCR-003 대화방)
-- 캐릭터 패널: 포리(레서판다)·까미(고양이)·토토(수달)·여울(뱁새), 4감정 표정
-- **콜드스타트**: 최초 진입 시 감정 선택지 버튼 → 선택 감정 저장 → "오늘 무슨 일 있었어요?" 후속 질문
-- **감정 분기**: 매 턴 KcELECTRA+XGBoost argmax 분류 → 기쁨·슬픔·분노·일반 에이전트
+- 캐릭터 패널: 포리(레서판다)·까미(고양이)·토토(수달)·여울(뱁새), 4감정 표정 (이미지·목소리만 구분 — 프롬프트 공통)
+- **친구 첫인사**: 진입 즉시 서버 opener 표시 — 기억(재방문) → 날씨 → 시간대 우선순위, 감정 라벨 텍스트 미표시
+- **감정 분기**: 매 턴 KcELECTRA+XGBoost argmax 분류 → 기쁨·슬픔·분노·일반 에이전트 (라벨은 화면에 안 보임)
 - **2단계 응답**: 텍스트 즉시 렌더링 + ElevenLabs TTS 폴링(`tts_task_id`) 재생
-- **MBTI**: 턴 종료 후 10초 무입력 → 질문 push, 시크릿 모드 답변 감지 시 저장 동의 버튼
-- 추천 질문 칩, 👍👎 피드백, 300자 제한 입력바
+- **MBTI**: 턴 종료 후 10초 무입력 → 질문 push (일반 모드 전용)
+- **세션 종료 통지**: pagehide/unmount 시 sendBeacon으로 `/api/session/end/` → 잔여 대화 기억 정리
+- 추천 질문 칩, 300자 제한 입력바
 
-### ChatView.vue (SCR-003-S 시크릿챗)
+### ChatView.vue (SCR-003-S 시크릿챗) — 완전 무저장
 - 상단 비저장 경고 배너
+- 대화는 서버 RAM 캐시만 — 기억 캡처·기억 첫인사·MBTI 질문 모두 제외
 - 세션 종료 시 `POST /api/session/end/` → RAM 캐시 즉시 파기, 대화 초기화
 
 ---
@@ -44,9 +46,8 @@
 POST /api/session/start/        → 세션 시작 (친구 첫인사 opener 반환)
 POST /api/chat/                 → 대화 턴 (텍스트 즉시 + tts_task_id)
 GET  /api/tts/:taskId/          → TTS 오디오 폴링
-GET  /api/mbti/next-question/   → MBTI 질문 (10초 유휴 시)
-POST /api/mbti/consent/         → MBTI 저장 동의 (시크릿)
-POST /api/session/end/          → 세션 종료 (시크릿 캐시 파기)
+GET  /api/mbti/next-question/   → MBTI 질문 (10초 유휴 시 · 일반 모드 전용)
+POST /api/session/end/          → 세션 종료 (시크릿: 캐시 파기 / 일반: 잔여 기억 정리)
 ```
 
 부가: `POST /api/chat/sessions/:id/questions/`(추천 질문)

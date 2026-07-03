@@ -5,8 +5,7 @@
   session_start   POST /api/session/start/        세션 시작 (친구 첫인사)
   chat_turn       POST /api/chat/                 대화 턴 (텍스트 즉시 + tts_task_id)
   tts_status      GET  /api/tts/<task_id>/        TTS 오디오 폴링
-  mbti_next_question GET /api/mbti/next-question/ MBTI 질문 (10초 유휴)
-  mbti_consent    POST /api/mbti/consent/         MBTI 저장 동의 (시크릿)
+  mbti_next_question GET /api/mbti/next-question/ MBTI 질문 (10초 유휴 · 일반 모드 전용)
   plan_support_view POST /api/plan-support/       장소 추천 (Tavily)
   session_end     POST /api/session/end/          세션 종료 (시크릿 캐시 파기)
 
@@ -27,7 +26,7 @@ from rest_framework.response import Response
 from ai.agents import mbti as mbti_svc
 from ai.agents.llm import get_client
 from . import memory, secret_cache, tts_service
-from .models import ChatMessage, ChatSession, MbtiAnswer
+from .models import ChatMessage, ChatSession
 from .plan_service import plan_support
 
 
@@ -108,7 +107,9 @@ def session_start(request):
     lat = request.data.get('lat')
     lon = request.data.get('lon')
     from .opener_service import generate_opener
-    opener = generate_opener(nickname, lat, lon)
+    # 기억 기반 첫인사는 일반 모드 전용 (시크릿에서 지난 대화 언급 금지)
+    memory_uid = user.id if (user and not is_secret) else None
+    opener = generate_opener(nickname, lat, lon, user_id=memory_uid)
 
     # 첫인사도 대화 이력에 남긴다 (다음 턴 컨텍스트 연결)
     if is_secret:
@@ -150,7 +151,18 @@ def chat_turn(request):
     user = _session_user(request, session)
     session_mode = 'secret' if session.is_secret else 'normal'
 
-    # LangGraph 실행: MBTI pending 체크 → 감성분석 → 컨텍스트 → 에이전트 → 응답
+    # 직전 턴 감정 — 초단문 바이패스·저확신 폴백용 (일반 모드만, 시크릿은 감정 미저장)
+    prev_emotion = None
+    if not session.is_secret:
+        prev_emotion = (
+            ChatMessage.objects
+            .filter(session=session, role='assistant', emotion_label__isnull=False)
+            .order_by('-created_at')
+            .values_list('emotion_label', flat=True)
+            .first()
+        )
+
+    # LangGraph 실행: MBTI pending 체크 → 컨텍스트 → 감성분석(확신도 게이트) → 에이전트 → 응답
     from .graph.graph import get_graph
     state = {
         'user_id': user.id if user else None,
@@ -159,6 +171,7 @@ def chat_turn(request):
         'character_id': session.character,
         'user_message': message,
         'selected_emotion': session.selected_emotion,
+        'prev_emotion': prev_emotion,
         'mbti_pending': session.mbti_pending,
         'mbti_question_text': mbti_svc.question_text(session.mbti_last_question_code or ''),
         'mbti_question_code': session.mbti_last_question_code or '',
@@ -169,14 +182,11 @@ def chat_turn(request):
     final_response = _strip_tags(tagged_response)        # 화면/DB용
     emotion_label = result.get('emotion_label')          # MBTI 답변 턴이면 None
     is_mbti_answer = bool(result.get('is_mbti_answer'))
-    show_consent = bool(result.get('mbti_needs_consent'))
 
     # MBTI pending 정리 (답변이든 다른 얘기든 해제)
     if session.mbti_pending:
         session.mbti_pending = False
-        if show_consent:
-            session.mbti_candidate_answer = message      # 동의 시 저장할 답변 보관
-        session.save(update_fields=['mbti_pending', 'mbti_candidate_answer'])
+        session.save(update_fields=['mbti_pending'])
 
     # 저장 — 출력을 막지 않음 (일반: DB+비동기 요약 / 시크릿: RAM 캐시)
     message_id = None
@@ -190,7 +200,9 @@ def chat_turn(request):
             content=final_response, emotion_label=emotion_label,
         )
         message_id = assistant_msg.id
-        memory.update_async(user.id if user else None, session.id)
+        uid = user.id if user else None
+        memory.capture_async(uid, message)        # 중요 정보 즉시 저장
+        memory.update_async(uid, session.id)      # 8턴 경계 압축·정리
 
     # TTS 병렬 생성 (ElevenLabs) — 연기 태그 포함 원문으로 생성, 1회 재생 후 파기
     tts_task_id = tts_service.create_task(
@@ -206,7 +218,6 @@ def chat_turn(request):
             'show_recommendation_button': False,
             'show_plan_result': False,
             'mbti_pending': is_mbti_answer,
-            'show_mbti_save_consent': show_consent,
         },
     })
 
@@ -245,10 +256,13 @@ def tts_audio(request, task_id):
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([AllowAny])
 def mbti_next_question(request):
-    """프론트 10초 유휴 타이머 → 호출. 수집 미완료면 질문 반환 + pending 설정."""
+    """프론트 10초 유휴 타이머 → 호출. 수집 미완료면 질문 반환 + pending 설정.
+    시크릿 모드는 완전 무저장 원칙 — 답을 저장할 수 없으니 질문 자체를 안 한다."""
     session = _get_session(request.GET.get('session_id'))
     if session is None:
         return _err('SESSION_NOT_FOUND', '세션을 찾을 수 없습니다.', status.HTTP_404_NOT_FOUND)
+    if session.is_secret:
+        return _ok({'has_question': False})
 
     user = _session_user(request, session)
     nq = mbti_svc.next_question(user)
@@ -275,33 +289,8 @@ def mbti_next_question(request):
     })
 
 
-@api_view(['POST'])
-@authentication_classes([CsrfExemptSessionAuthentication])
-@permission_classes([AllowAny])
-def mbti_consent(request):
-    """시크릿 모드 전용 — MBTI 답변 저장 동의/거부."""
-    session = _get_session(request.data.get('session_id'))
-    if session is None:
-        return _err('SESSION_NOT_FOUND', '세션을 찾을 수 없습니다.', status.HTTP_404_NOT_FOUND)
-
-    consent = bool(request.data.get('consent', False))
-    user = _session_user(request, session)
-    saved = False
-
-    if consent and user and session.mbti_candidate_answer:
-        MbtiAnswer.objects.create(
-            user=user,
-            question_code=session.mbti_last_question_code or 'unknown',
-            answer_text=session.mbti_candidate_answer,
-        )
-        saved = True
-
-    session.mbti_candidate_answer = None
-    session.save(update_fields=['mbti_candidate_answer'])
-
-    confirm = '고마워! 살짝 기억해둘게 ㅎㅎ' if saved else '알겠어, 이 얘기는 우리끼리만 한 걸로!'
-    tts_task_id = tts_service.create_task(confirm, session.character, 'normal', cacheable=True)
-    return _ok({'saved': saved, 'confirm_message': confirm, 'tts_task_id': tts_task_id})
+# (시크릿 모드 MBTI 저장 동의 플로우는 "시크릿 = 완전 무저장" 원칙으로 제거 — 2026-07-03.
+#  시크릿에서는 MBTI 질문 자체를 하지 않는다.)
 
 
 # ═════════════════════════════════════════════════════════════
@@ -336,11 +325,13 @@ def plan_support_view(request):
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([AllowAny])
 def session_end(request):
-    """세션 종료 — 시크릿 모드 RAM 캐시 + 음성(mp3) 파일 즉시 파기."""
+    """세션 종료 — 시크릿: RAM 캐시 파기 / 일반: 8턴 못 채운 잔여 대화 요약 반영."""
     session = _get_session(request.data.get('session_id'))
     if session is None:
         return _err('SESSION_NOT_FOUND', '세션을 찾을 수 없습니다.', status.HTTP_404_NOT_FOUND)
     secret_cache.purge(session.id)
+    if not session.is_secret and session.user_id:
+        memory.update_async(session.user_id, session.id, force=True)
     return _ok({'ended': True})   # 음성은 애초에 저장 안 함 (1회 재생 후 파기)
 
 

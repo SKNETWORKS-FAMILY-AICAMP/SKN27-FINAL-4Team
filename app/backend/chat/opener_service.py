@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""첫인사(opener) 생성 — 날씨·시간대·닉네임 기반 (강사님 피드백 · 친구 컨셉).
+"""첫인사(opener) 생성 — 기억·날씨·시간대·닉네임 기반 (강사님 피드백 · 친구 컨셉).
 
 감정을 묻지 않고, 친한 친구가 먼저 말 걸듯 자연스럽게 시작한다.
+우선순위: ① 기억 기반(재방문·user_memory 있으면 지난 얘기를 이어감)
+         ② 날씨(좌표 있을 때) ③ 시간대 템플릿
 - 시간대: 아침/점심/오후/저녁/밤
-- 날씨: 흐림(오전=챙김/오후=걱정) / 비 / 눈 / 맑음
 - 닉네임: 로그인 사용자의 nickname, 없으면 '너'
 """
 import datetime
@@ -72,18 +73,56 @@ def _fetch_weather(lat, lon) -> str:
     return 'unknown'
 
 
-def generate_opener(nickname: str | None, lat=None, lon=None) -> str:
-    """친구 컨셉 첫인사 생성. 날씨(있으면 우선) → 없으면 시간대."""
+def _memory_opener(user_id: int, nickname: str) -> str | None:
+    """재방문 유저 — user_memory 요약으로 지난 얘기를 이어가는 첫인사.
+    요약이 없거나 LLM 실패 시 None (템플릿 폴백)."""
+    try:
+        from chat.models import UserMemory
+        summary = (
+            UserMemory.objects
+            .filter(user_id=user_id)
+            .values_list('summary_text', flat=True)
+            .first()
+        )
+        if not summary or not summary.strip():
+            return None
+
+        from ai.agents.llm import get_llm
+        resp = get_llm(temperature=0.8, max_tokens=100).invoke([
+            ('system',
+             "너는 사용자의 진짜 친한 친구다. 아래 [기억 요약]을 보고, "
+             "지난 얘기를 자연스럽게 이어가는 첫인사를 반말 1~2문장으로 만들어라.\n"
+             "- 가장 최근이거나 마음에 걸릴 만한 일 '하나만' 골라 안부를 물어 "
+             "(예: '어제 팀장이랑 그 일은 어떻게 됐어? 계속 생각나던데').\n"
+             "- 요약을 그대로 읊지 말 것. 캐묻는 느낌 금지, 궁금해하는 친구 느낌.\n"
+             "- 반드시 질문으로 끝맺어. 오직 순수 한국어. 목록/이모지 금지.\n"
+             f"- 호칭은 '{nickname}'(없으면 생략 가능)."),
+            ('user', f'[기억 요약]\n{summary}'),
+        ])
+        text = resp.content.strip()
+        return text if 5 <= len(text) <= 120 else None
+    except Exception:
+        return None
+
+
+def generate_opener(nickname: str | None, lat=None, lon=None, user_id=None) -> str:
+    """친구 컨셉 첫인사 생성. 기억(재방문) → 날씨(좌표 있으면) → 시간대."""
     n = (nickname or '').strip() or '너'
     now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9)))  # KST
     hour = now.hour
 
-    # 날씨 우선 (좌표가 있을 때만)
+    # ① 기억 우선 — "얘가 날 기억하네"가 첫 문장부터 (선순환의 입구)
+    if user_id:
+        m = _memory_opener(user_id, n)
+        if m:
+            return m
+
+    # ② 날씨 (좌표가 있을 때만)
     if lat is not None and lon is not None:
         wtype = _fetch_weather(lat, lon)
         w = _weather_opener(wtype, hour)
         if w:
             return w.format(n=n)
 
-    # 날씨 없으면 시간대 기본
+    # ③ 시간대 기본
     return TIME_OPENERS[_time_band(hour)].format(n=n)

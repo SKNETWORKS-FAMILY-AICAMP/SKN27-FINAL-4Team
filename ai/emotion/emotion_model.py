@@ -86,5 +86,26 @@ def predict_emotion(text: str):
         return None
 
 
+def predict_emotion_with_confidence(text: str):
+    """(한글 라벨, 확신도 0~1) 반환. 확신도 게이트용 — 저확신이면 호출부가 LLM 재분류.
+    모델 비활성이면 (None, None), 확률 미지원 분류기면 (라벨, None)."""
+    if not text or not _load():
+        return None, None
+    try:
+        emb = _embed([text])
+        clf = _S['clf']
+        if hasattr(clf, 'predict_proba'):
+            proba = clf.predict_proba(emb)[0]
+            idx = int(proba.argmax())
+            conf = float(proba[idx])
+            if _S['le'] is not None:
+                return _S['le'].inverse_transform([idx])[0], conf
+            return clf.classes_[idx], conf
+        return predict_emotion(text), None
+    except Exception as e:
+        print(f'[emotion_model] 추론 실패(폴백): {e}')
+        return None, None
+
+
 def is_active() -> bool:
     return _load()

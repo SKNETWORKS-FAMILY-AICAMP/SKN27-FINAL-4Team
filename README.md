@@ -27,9 +27,8 @@ SKN27-FINAL-4Team/
 |   |-- Dockerfile
 |   |-- README.md
 |   `-- backend/requirements.txt      # 백엔드 의존성 패키지
-|-- data/                            # 📊 모델 검증 및 안전성 테스트셋 데이터 보관
-|   |-- safety_redteam_set.json      # 극단 신호 탐지용 안전 가드레일 레드팀셋
-|   `-- scale_gold_set.json          # 간접 척도 추정 알고리즘 검증용 골드셋
+|-- data/                            # 📊 학습 데이터셋 (AI Hub 파생물은 repo 미포함 — data/README.md 참조)
+|   `-- README.md                    # 데이터 출처·재생성 안내 (rebuild_clean_dataset.py)
 |-- docs/                            # 📑 프로젝트 기획 및 설계 산출물 (정본)
 |   |-- README.md
 |   |-- [기획] WBS_양식_27기_4팀.xlsx
