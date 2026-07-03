@@ -1,11 +1,13 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import { getLocalDateString } from "../../api/client.js";
 import { calendarApi } from "../../api/calendar.js";
 import { tarotApi } from "../../api/tarot.js";
 import tarotCardIcon from "../../assets/icons/tarot-card.png";
 
 const today = new Date();
+const router = useRouter();
 const YEAR_PAGE_SIZE = 6;
 const currentYear = ref(today.getFullYear());
 const currentMonth = ref(today.getMonth() + 1);
@@ -19,6 +21,7 @@ const errorMessage = ref("");
 const isMonthPickerOpen = ref(false);
 
 const CALENDAR_DAILY_MAJOR_CACHE_KEY = "binteumsaiCalendarDailyMajorCard";
+const DAILY_MAJOR_CACHE_KEY = "binteumsaiDailyMajorCard";
 const USER_PROFILE_KEY = "binteumsaiUserProfile";
 const CHARACTER_STORAGE_KEY = "binteumsaiCharacter";
 const VALID_CHARACTER_IDS = new Set(["otter", "cat", "redpanda", "bird"]);
@@ -41,6 +44,36 @@ const yearOptions = computed(() =>
 const selectedDateLabel = computed(() => {
   const date = new Date(`${selectedDate.value}T00:00:00`);
   return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일`;
+});
+const todayString = computed(() => getLocalDateString());
+const selectedDateState = computed(() => {
+  if (selectedDate.value === todayString.value) return "today";
+  return selectedDate.value < todayString.value ? "past" : "future";
+});
+const selectedDateGuide = computed(() => {
+  if (selectedDateState.value === "past") {
+    return "이미 지나간 시간은 바꿀 수 없지만, \n 지금 이 순간에 최선을 다해 보세요.";
+  }
+
+  if (selectedDateState.value === "future") {
+    return "아직 펼쳐지지 않은 하루예요. \n다가올 시간을 기대하며 기다려볼까요?";
+  }
+
+  if (hasViewedTodayCard.value) {
+    return "오늘의 카드 기록을 차분히 정리하고 있어요.";
+  }
+
+  return "오늘의 운세카드를 아직 확인하지 않았어요.";
+});
+const hasViewedTodayCard = computed(() => {
+  if (selectedFortune.value && selectedDate.value === todayString.value) return true;
+
+  try {
+    const cached = JSON.parse(localStorage.getItem(DAILY_MAJOR_CACHE_KEY) || "{}");
+    return cached.date === todayString.value && cached.revealed === true && Boolean(cached.card);
+  } catch {
+    return false;
+  }
 });
 const selectedMonthHasRecords = computed(() => monthFortunes.value.length > 0);
 const recordCount = computed(() => monthFortunes.value.length);
@@ -299,6 +332,11 @@ function goToday() {
   loadDay(selectedDate.value);
 }
 
+function goTodayFortune() {
+  if (selectedDate.value !== todayString.value || hasViewedTodayCard.value) return;
+  router.push("/onboarding/fortune");
+}
+
 function toggleMonthPicker() {
   isMonthPickerOpen.value = !isMonthPickerOpen.value;
 
@@ -527,11 +565,19 @@ function getErrorMessage(error) {
       <div v-else class="empty-detail-card">
         <span>💬</span>
         <strong>저장된 운세 없음</strong>
-        <p>이 날짜에는 아직 저장된 운세 내용이 없어요.</p>
+        <p class="selected-date-guide">
+          {{ selectedDateGuide }}
+        </p>
         <i></i>
-        <h4>나만의 기록을 남겨보세요</h4>
-        <p>오늘의 마음과 운세를 기록하면, 더 정확한 마음 리포트를 받을 수 있어요.</p>
-        <button class="btn secondary full" type="button">운세 기록하기</button>
+        <template v-if="selectedDateState === 'today' && !hasViewedTodayCard">
+          <h4>오늘의 카드 확인하기</h4>
+          <p>오늘의 운세카드를 확인하면 캘린더에서 다시 돌아볼 수 있어요.</p>
+          <button class="btn secondary full" type="button" @click="goTodayFortune">오늘의 운세카드 보러가기</button>
+        </template>
+        <template v-else>
+          <h4>오늘의 마음을 지켜봐요</h4>
+          <p>날짜에 맞는 기록만 차분히 확인할 수 있어요.</p>
+        </template>
       </div>
     </aside>
   </section>

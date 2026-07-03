@@ -330,10 +330,15 @@ def profile(request):
 
     serializer = UserPersonalProfileSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
+    profile_data = dict(serializer.validated_data)
+    agreements = profile_data.pop('agreements', None)
+
+    if not isinstance(agreements, dict) or agreements.get('termsOfService') is not True or agreements.get('privacyCollection') is not True:
+        return Response({'error': '필수 약관 동의가 필요합니다.'}, status=status.HTTP_400_BAD_REQUEST)
 
     existing_profile = UserProfile.objects.filter(user=profile_user).first()
     previous_birth_date = existing_profile.birth_date if existing_profile else None
-    next_birth_date = serializer.validated_data.get('birth_date')
+    next_birth_date = profile_data.get('birth_date')
 
     if nickname:
         profile_user.nickname = nickname[:30]
@@ -341,10 +346,10 @@ def profile(request):
 
     personal_profile, _ = UserProfile.objects.update_or_create(
         user=profile_user,
-        defaults=serializer.validated_data,
+        defaults=profile_data,
     )
-    _sync_preference_keywords(profile_user, 'hobby', serializer.validated_data.get('hobbies', []))
-    _sync_preference_keywords(profile_user, 'interest', serializer.validated_data.get('interests', []))
+    _sync_preference_keywords(profile_user, 'hobby', profile_data.get('hobbies', []))
+    _sync_preference_keywords(profile_user, 'interest', profile_data.get('interests', []))
 
     if request.user.is_authenticated and not profile_user.onboarding_done:
         profile_user.onboarding_done = True
