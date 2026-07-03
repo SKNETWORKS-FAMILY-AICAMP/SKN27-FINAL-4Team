@@ -23,7 +23,12 @@ services:
       dockerfile: Dockerfile
     container_name: wellness_django
     restart: always
-    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py load_tarot_data &&
+             python manage.py runserver 0.0.0.0:8000 --noreload"
+    env_file:
+      - ./app/backend/.env
     volumes:
       - ./app:/app
       # ai/ 패키지 (에이전트·감정모델 코드) — settings.py가 / 를 sys.path에 추가하므로 /ai 로 마운트
