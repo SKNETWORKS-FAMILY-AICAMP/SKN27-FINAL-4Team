@@ -30,17 +30,48 @@ export function createMypageState() {
     profileEdit: false,
     selectedCharacter: "otter",
     characters: [
-      { id: "otter", name: "토토", desc: "어디로 튈지 모르는 '엉뚱한/4차원' 형", color: "lavender" },
-      { id: "cat", name: "까미", desc: "겉바속촉 '차가운/츤데레' 형", color: "night" },
-      { id: "redpanda", name: "포리", desc: "다정다감 '따뜻한/햇살' 형", color: "coral" },
-      { id: "bird", name: "여울", desc: "두려움을 극복하는 '소심/성장' 형", color: "soft" }
+      {
+        id: "otter",
+        name: "토토",
+        role: "다정한 위로형",
+        tone: "부드럽고 따뜻한 말투",
+        line: "오늘 마음은 제가 옆에서 같이 정리해볼게요.",
+        tags: ["다정함", "포근함"],
+        stats: { empathy: 88, calm: 72, support: 86, careful: 82 },
+      },
+      {
+        id: "cat",
+        name: "까미",
+        role: "시크한 직면형",
+        tone: "무심하지만 핵심을 짚는 말투",
+        line: "피하고 싶은 마음까지 천천히 살펴볼까요?",
+        tags: ["솔직함", "냉철함"],
+        stats: { empathy: 70, calm: 92, support: 76, careful: 84 },
+      },
+      {
+        id: "redpanda",
+        name: "포리",
+        role: "활발한 응원형",
+        tone: "밝고 힘 있게 응원하는 말투",
+        line: "작은 행동 하나만 골라서 같이 시작해봐요.",
+        tags: ["에너지", "긍정적"],
+        stats: { empathy: 82, calm: 68, support: 94, careful: 78 },
+      },
+      {
+        id: "bird",
+        name: "여울",
+        role: "소심한 공감형",
+        tone: "조심스럽고 섬세한 말투",
+        line: "괜찮아요. 천천히 말해도 제가 듣고 있을게요.",
+        tags: ["조심스러움", "섬세함"],
+        stats: { empathy: 92, calm: 85, support: 78, careful: 90 },
+      }
     ],
     profile: {
       name: "서마음",
       mbti: "INFP",
-      gender: "여성",
-      age: 24,
-      birthday: "06.23",
+      gender: "여",
+      birthDate: "1997.06.23",
       job: "프로젝트를 준비 중인 사람",
       status: "교류하고 싶음",
       keywords: "공감형, 느린 집중, 감성 기록, 안정 선호",
@@ -53,8 +84,9 @@ export function createMypageState() {
     },
     mbtiViewMode: "onboardingType",
     mbtiViews: [
-      { key: "onboardingType", step: "1-1", title: "온보딩 MBTI 설명", shortLabel: "온보딩 MBTI", buttonLabel: "온보딩 MBTI 설명" },
-      { key: "onboardingNext", step: "1-2/1-4", title: "월간 MBTI 분석", shortLabel: "월간 MBTI", buttonLabel: "월간 MBTI 분석" }
+      { key: "onboardingType", title: "온보딩 MBTI 설명", shortLabel: "온보딩 MBTI", buttonLabel: "온보딩 MBTI 설명" },
+      { key: "onboardingNext", title: "월간 MBTI 분석", shortLabel: "월간 분석", buttonLabel: "월간 MBTI 분석" },
+      { key: "mockQna", title: "임시 Q&A 입력", shortLabel: "임시 입력", buttonLabel: "임시 Q&A 입력" }
     ],
     mbtiApiStatus: "demo-fallback",
     mbtiData: {

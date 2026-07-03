@@ -177,13 +177,20 @@ def load_onboarding_snapshot(
     *,
     user_id: int,
 ) -> OnboardingSnapshot | None:
-    """Read onboarding MBTI from the onboarding/user-side DB first.
+    from mbti.models import MbtiOnboardingProfile
 
-    The current project does not expose one fixed onboarding MBTI column yet, so
-    this adapter checks likely user/profile JSON fields without changing other
-    apps. The mbti-owned fallback table remains available for local tests and
-    future migration bridges.
-    """
+    profile = (
+        MbtiOnboardingProfile.objects
+        .filter(
+            user_id=user_id,
+            mbti_type__isnull=False,
+        )
+        .order_by('-updated_at', '-id')
+        .first()
+    )
+    if profile is not None:
+        return OnboardingSnapshot(user_id=user_id, mbti_type=profile.mbti_type)
+
     try:
         from django.contrib.auth import get_user_model
 
@@ -205,20 +212,7 @@ def load_onboarding_snapshot(
     if mbti_type:
         return OnboardingSnapshot(user_id=user_id, mbti_type=mbti_type)
 
-    from mbti.models import MbtiOnboardingProfile
-
-    fallback = (
-        MbtiOnboardingProfile.objects
-        .filter(
-            user_id=user_id,
-            mbti_type__isnull=False,
-        )
-        .order_by('-updated_at', '-id')
-        .first()
-    )
-    if fallback is None:
-        return None
-    return OnboardingSnapshot(user_id=user_id, mbti_type=fallback.mbti_type)
+    return None
 
 
 def load_user_baseline_snapshot(

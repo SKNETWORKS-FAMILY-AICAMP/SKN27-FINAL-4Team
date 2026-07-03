@@ -22,8 +22,8 @@
 
 | 단계 | 실제 파일 | 역할 |
 | --- | --- | --- |
-| 데모 월간 Q&A 구성 | `app/backend/mbti/examples/demo_data.py` | 같은 월간 질문/답변 데이터를 만든다. |
-| baseline 구성 | `app/backend/mbti/examples/monthly_demo_payload.py` | 이전 MBTI와 이전 축별 점수 기준값을 만든다. |
+| 데모 월간 Q&A 구성 | `test/jaewung/mbti_scoring_experiments/demo_data.py` | 같은 월간 질문/답변 데이터를 만든다. |
+| baseline 구성 | `test/jaewung/mbti_scoring_experiments/monthly_demo_payload.py` | 이전 MBTI와 이전 축별 점수 기준값을 만든다. |
 | 월간 파이프라인 실행 | `app/backend/mbti/services/monthly_pipeline.py` | 1차 개시, 점수화, 2차 개시, 그래프 점수, 최종 MBTI 조합, 리포트 생성을 수행한다. |
 | 그래프 점수 계산 | `app/backend/mbti/services/graph_scores.py` | 응답별 점수 평균을 화면 표시 점수와 `selected_letter`로 변환한다. |
 | 최종 MBTI 조합 | `app/backend/mbti/services/monthly_results.py` | IE/SN/TF/JP 축별 최종 글자를 조합한다. |
@@ -35,8 +35,8 @@
 ```text
 02_rubric_code/run.py
 → 공통 실행기 run_experiment.py 호출
-→ app/backend/mbti/examples/demo_data.py에서 데모 월간 Q&A 로드
-→ app/backend/mbti/examples/monthly_demo_payload.py에서 baseline snapshot 로드
+→ test/jaewung/mbti_scoring_experiments/demo_data.py에서 데모 월간 Q&A 로드
+→ test/jaewung/mbti_scoring_experiments/monthly_demo_payload.py에서 baseline snapshot 로드
 → app/backend/mbti/services/monthly_pipeline.py의 run_monthly_mbti_pipeline 실행
 → scoring_client 자리에 02_rubric_code/pipeline/response_scoring.py의 RubricCodeScoringClient 주입
 → 각 응답마다 rubric_code 방식으로 score 산출

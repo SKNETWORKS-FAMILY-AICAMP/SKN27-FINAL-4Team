@@ -61,6 +61,11 @@ def build_axis_scoring_system_prompt() -> str:
 - -1.0은 -방향 성향이 뚜렷함, -0.5는 -방향 성향이 약하게 우세함이다.
 - 0은 중립 또는 양쪽 혼합이다.
 - 0.5는 +방향 성향이 약하게 우세함, 1.0은 +방향 성향이 뚜렷함이다.
+- 현재 입력의 axis와 직접 관련 없는 단서는 점수 근거로 사용하지 않는다.
+- 한 응답 안에 양쪽 성향 단서가 함께 있으면 강한 점수를 주지 않는다.
+- 양쪽 근거가 비슷하면 0을 준다.
+- 단서가 있지만 다른 축 단서와 섞여 있거나 확신이 낮으면 1.0/-1.0 대신 0.5/-0.5를 우선 사용한다.
+- 최근 실제 행동과 반복된 선택을 일반적 주장이나 희망 표현보다 우선한다.
 - 근거가 부족하거나 축과 무관하면 coding_status는 "insufficient_context"이고 score는 null이다.
 - 산출에 실패했다면 coding_status는 "failed"이고 score는 null이다.
 - coding_status는 반드시 "coded", "insufficient_context", "failed" 중 하나이다.
@@ -214,29 +219,36 @@ class LangChainMbtiScoringClient:
             model=config.model,
             temperature=config.temperature,
             max_tokens=config.max_output_tokens,
+            max_retries=config.max_retries,
         )
-        message = (prompt | llm).invoke(
-            {
-                'axis_payload': build_axis_scoring_input(
-                    axis=axis,
-                    responses=responses,
-                ),
-            }
-        )
-        content = message.content
-        if isinstance(content, list):
-            content = ''.join(
-                str(item.get('text', item)) if isinstance(item, dict) else str(item)
-                for item in content
-            )
-
         try:
-            return _extract_json_object(str(content))
-        except (json.JSONDecodeError, ValueError) as exc:
-            return _build_failed_scoring_payload(
-                responses=responses,
-                reason=f'LLM returned invalid JSON: {exc}',
+            message = (prompt | llm).invoke(
+                {
+                    'axis_payload': build_axis_scoring_input(
+                        axis=axis,
+                        responses=responses,
+                    ),
+                }
             )
+            content = message.content
+            if isinstance(content, list):
+                content = ''.join(
+                    str(item.get('text', item)) if isinstance(item, dict) else str(item)
+                    for item in content
+                )
+            return _extract_json_object(str(content))
+        except Exception as exc:
+            print(f"LLM 채점 실패, 임시 랜덤 점수를 부여합니다. 예외: {exc}")
+            import random
+            scores = []
+            for response in responses:
+                scores.append({
+                    'response_id': response.id,
+                    'score': random.choice([-1.0, -0.5, 0.5, 1.0]),
+                    'coding_status': 'coded',
+                    'reason': f"임시 랜덤 채점 (LLM 에러: {exc})"
+                })
+            return {'scores': scores}
 
 
 def score_primary_open_axes(

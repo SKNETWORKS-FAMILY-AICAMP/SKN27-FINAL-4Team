@@ -55,12 +55,15 @@ def _stability_label(*, mbti_unique_count: int, mbti_rate: float, max_axis_avg_s
 
 
 def _group_key(row: dict[str, str]) -> str:
+    demo_dataset = row.get("demo_dataset") or "legacy_demo_dataset"
+    run_batch = row.get("run_batch") or "legacy_run_batch"
+    prompt_version = row.get("prompt_version") or "legacy_prompt_version"
     mode = row.get("mode") or "unknown"
     combo = row.get("experiment_combo") or "custom"
     model_label = row.get("model_label") or ""
     judge_models = row.get("judge_models") or ""
     supervisor_model = row.get("supervisor_model") or ""
-    parts = [mode, combo]
+    parts = [demo_dataset, run_batch, prompt_version, mode, combo]
     if model_label:
         parts.append(model_label)
     if judge_models:
@@ -87,6 +90,9 @@ def summarize_rows(
         return {
             "strategy": strategy_name,
             "mode": mode,
+            "demo_dataset": "",
+            "run_batch": "",
+            "prompt_version": "",
             "run_count": 0,
             "stability_label": "데이터없음",
             "final_mbti_mode": "",
@@ -105,6 +111,9 @@ def summarize_rows(
     summary: dict[str, object] = {
         "strategy": strategy_name,
         "mode": mode,
+        "demo_dataset": rows[-1].get("demo_dataset", "") or "legacy_demo_dataset",
+        "run_batch": rows[-1].get("run_batch", "") or "legacy_run_batch",
+        "prompt_version": rows[-1].get("prompt_version", "") or "legacy_prompt_version",
         "experiment_family": rows[-1].get("experiment_family", ""),
         "experiment_group": rows[-1].get("experiment_group", ""),
         "experiment_variable": rows[-1].get("experiment_variable", ""),
@@ -154,6 +163,9 @@ def _summary_fieldnames() -> list[str]:
     fields = [
         "strategy",
         "mode",
+        "demo_dataset",
+        "run_batch",
+        "prompt_version",
         "experiment_family",
         "experiment_group",
         "experiment_variable",
@@ -197,6 +209,24 @@ def _format_rate(value: object) -> str:
 
 def _format_float(value: object) -> str:
     return f"{float(value):.4f}"
+
+
+def _axis_avg_std_judgement(value: object) -> str:
+    std = float(value)
+    if std <= 0.05:
+        return "낮음(안정)"
+    if std <= 0.15:
+        return "보통(주의)"
+    return "높음(불안정)"
+
+
+def _display_score_std_judgement(value: object) -> str:
+    std = float(value)
+    if std <= 3.0:
+        return "낮음(안정)"
+    if std <= 8.0:
+        return "보통(주의)"
+    return "높음(불안정)"
 
 
 def write_strategy_report(path: Path, summaries: list[dict[str, object]]) -> None:
@@ -247,6 +277,26 @@ def write_strategy_report(path: Path, summaries: list[dict[str, object]]) -> Non
                 f"{_format_float(summary.get(f'{axis}_axis_avg_std', 0.0))} |"
             )
         lines.append("")
+        lines.extend(
+            [
+                "#### 표준편차 판정",
+                "",
+                f"- max axis_avg 표준편차: {_format_float(summary['max_axis_avg_std'])} → {_axis_avg_std_judgement(summary['max_axis_avg_std'])}",
+                f"- max 표시점수 표준편차: {_format_float(summary['max_display_score_std'])} → {_display_score_std_judgement(summary['max_display_score_std'])}",
+                "- 해석: 표준편차가 낮을수록 같은 데이터 반복 실행에서 점수 흔들림이 작아 안정적이다.",
+                "",
+                "| 축 | axis_avg 판정 | 표시점수 판정 |",
+                "| --- | --- | --- |",
+            ]
+        )
+        for axis in AXIS_ORDER:
+            lines.append(
+                "| "
+                f"{axis} | "
+                f"{_axis_avg_std_judgement(summary.get(f'{axis}_axis_avg_std', 0.0))} | "
+                f"{_display_score_std_judgement(summary.get(f'{axis}_display_score_std', 0.0))} |"
+            )
+        lines.append("")
 
     lines.extend(
         [
@@ -257,6 +307,17 @@ def write_strategy_report(path: Path, summaries: list[dict[str, object]]) -> Non
             "| 안정 | 최종 MBTI가 1종이고 최대 axis_avg 표준편차가 0.05 이하 |",
             "| 주의 | 최종 MBTI가 2종 이하, 최빈 MBTI 비율 80% 이상, 최대 axis_avg 표준편차 0.15 이하 |",
             "| 불안정 | 위 기준을 벗어남 |",
+        ]
+    )
+    lines.extend(
+        [
+            "",
+            "## 표준편차 해석 기준",
+            "",
+            "| 지표 | 낮음(안정) | 보통(주의) | 높음(불안정) |",
+            "| --- | --- | --- | --- |",
+            "| axis_avg 표준편차 | 0.0500 이하 | 0.1500 이하 | 0.1500 초과 |",
+            "| 표시점수 표준편차 | 3.0000 이하 | 8.0000 이하 | 8.0000 초과 |",
         ]
     )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -307,6 +368,8 @@ def write_dashboard(path: Path, summaries: Iterable[dict[str, object]]) -> None:
         )
     lines.extend(
         [
+            "",
+            "표준편차 판정: axis_avg는 0.05 이하 안정, 0.15 이하 주의, 초과 불안정으로 본다. 표시점수는 3점 이하 안정, 8점 이하 주의, 초과 불안정으로 본다.",
             "",
             "각 방안의 상세 축별 안정성은 해당 폴더의 `results/STABILITY_REPORT.md`에서 확인한다.",
         ]

@@ -128,32 +128,33 @@ class LangChainMonthlyReportNarrativeClient:
             temperature=config.temperature,
             max_tokens=config.max_output_tokens,
         )
-        message = (prompt | llm).invoke(
-            {
-                'report_context': json.dumps(
-                    _build_report_context(
-                        monthly_result=monthly_result,
-                        axis_results=axis_results,
-                        evidence_items=evidence_items,
-                    ),
-                    ensure_ascii=False,
-                ),
-            }
-        )
-        content = message.content
-        if isinstance(content, list):
-            content = ''.join(
-                str(item.get('text', item)) if isinstance(item, dict) else str(item)
-                for item in content
-            )
         try:
+            message = (prompt | llm).invoke(
+                {
+                    'report_context': json.dumps(
+                        _build_report_context(
+                            monthly_result=monthly_result,
+                            axis_results=axis_results,
+                            evidence_items=evidence_items,
+                        ),
+                        ensure_ascii=False,
+                    ),
+                }
+            )
+            content = message.content
+            if isinstance(content, list):
+                content = ''.join(
+                    str(item.get('text', item)) if isinstance(item, dict) else str(item)
+                    for item in content
+                )
             return _parse_report_sections(_extract_json_object(str(content)))
-        except (json.JSONDecodeError, ValueError) as exc:
+        except Exception as exc:
+            print(f"LLM 리포트 생성 실패, 기본 리포트로 대체합니다. 예외: {exc}")
             return _build_fallback_report_sections(
                 monthly_result=monthly_result,
                 axis_results=axis_results,
                 evidence_items=evidence_items,
-                reason=f'LLM report output was invalid JSON: {exc}',
+                reason=f'LLM API 호출 또는 파싱 에러: {exc}',
             )
 
 
@@ -661,32 +662,33 @@ class LangChainMonthlyReportNarrativeClient:
             temperature=config.temperature,
             max_tokens=config.max_output_tokens,
         )
-        message = (prompt | llm).invoke(
-            {
-                'report_context': json.dumps(
-                    _build_report_context(
-                        monthly_result=monthly_result,
-                        axis_results=axis_results,
-                        evidence_items=evidence_items,
-                    ),
-                    ensure_ascii=False,
-                ),
-            }
-        )
-        content = message.content
-        if isinstance(content, list):
-            content = ''.join(
-                str(item.get('text', item)) if isinstance(item, dict) else str(item)
-                for item in content
-            )
         try:
+            message = (prompt | llm).invoke(
+                {
+                    'report_context': json.dumps(
+                        _build_report_context(
+                            monthly_result=monthly_result,
+                            axis_results=axis_results,
+                            evidence_items=evidence_items,
+                        ),
+                        ensure_ascii=False,
+                    ),
+                }
+            )
+            content = message.content
+            if isinstance(content, list):
+                content = ''.join(
+                    str(item.get('text', item)) if isinstance(item, dict) else str(item)
+                    for item in content
+                )
             return _parse_report_sections(_extract_json_object(str(content)))
-        except (json.JSONDecodeError, ValueError) as exc:
+        except Exception as exc:
+            print(f"LLM 리포트 생성 실패, 기본 리포트로 대체합니다. 예외: {exc}")
             return _build_fallback_report_sections(
                 monthly_result=monthly_result,
                 axis_results=axis_results,
                 evidence_items=evidence_items,
-                reason=f'LLM report output was invalid JSON: {exc}',
+                reason=f'LLM API 호출 또는 파싱 에러: {exc}',
             )
 
 

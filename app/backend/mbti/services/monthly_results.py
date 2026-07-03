@@ -193,6 +193,7 @@ def combine_monthly_mbti(
     previous_estimated_mbti_type: str | None = None,
 ) -> MonthlyMbtiResult:
     letters: list[str] = []
+    has_all_required_qna = True
     for axis in MBTI_AXES:
         selected_letter = axis_results[axis].selected_letter
         if selected_letter is None:
@@ -205,7 +206,21 @@ def combine_monthly_mbti(
                 status='insufficient_data',
                 axis_results=dict(axis_results),
             )
+        # 모든 축에서 사용자가 실제로 5개 이상의 답변을 했는지 확인
+        if axis_results[axis].qna_count < 5:
+            has_all_required_qna = False
         letters.append(selected_letter)
+
+    if not has_all_required_qna:
+        return MonthlyMbtiResult(
+            user_id=user_id,
+            period_key=period_key,
+            previous_estimated_mbti_type=previous_estimated_mbti_type,
+            estimated_mbti_type=None,
+            changed_axes=(),
+            status='insufficient_data',
+            axis_results=dict(axis_results),
+        )
 
     estimated_mbti_type = ''.join(letters)
     changed_axes: list[str] = []

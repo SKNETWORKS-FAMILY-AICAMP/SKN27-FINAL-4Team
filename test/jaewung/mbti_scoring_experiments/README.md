@@ -92,9 +92,8 @@ For the first round, test one model at a time. The goal is not to prove one mode
 
 | Rank | Combo | Provider | Model | Why test it first |
 | --- | --- | --- | --- | --- |
-| 1 | `single_1_openai_baseline` | `openai` | `gpt-5.4-mini` | OpenAI is the primary supported provider, so this is the service baseline. |
-| 2 | `single_2_openai_quality` | `openai` | `gpt-5.4` | Higher-quality OpenAI comparison candidate. |
-| 3 | `single_3_groq_qwen` | `groq` | `qwen/qwen3-32b` | Non-OpenAI comparison candidate after excluding Gemini and Groq Llama. |
+| 1 | `single_1_openai_baseline` | `openai` | `gpt-5.4-mini` | OpenAI is the primary supported provider, so this is the current service baseline. |
+| 2 | `single_2_groq_qwen` | `groq` | `qwen/qwen3-32b` | Non-OpenAI comparison candidate after excluding Gemini and Groq Llama. |
 
 Recommended `app/backend/.env` shape:
 
@@ -109,19 +108,15 @@ MBTI_SCORING_MODEL=gpt-5.4-mini
 MBTI_SINGLE_1_PROVIDER=openai
 MBTI_SINGLE_1_MODEL=gpt-5.4-mini
 
-MBTI_SINGLE_2_PROVIDER=openai
-MBTI_SINGLE_2_MODEL=gpt-5.4
-
-MBTI_SINGLE_3_PROVIDER=groq
-MBTI_SINGLE_3_MODEL=qwen/qwen3-32b
+MBTI_SINGLE_2_PROVIDER=groq
+MBTI_SINGLE_2_MODEL=qwen/qwen3-32b
 ```
 
 Example runs:
 
 ```powershell
 python test\jaewung\mbti_scoring_experiments\run_experiment.py --strategy persona_direct --use-persona-llm --combo single_1_openai_baseline
-python test\jaewung\mbti_scoring_experiments\run_experiment.py --strategy persona_direct --use-persona-llm --combo single_2_openai_quality
-python test\jaewung\mbti_scoring_experiments\run_experiment.py --strategy persona_direct --use-persona-llm --combo single_3_groq_qwen
+python test\jaewung\mbti_scoring_experiments\run_experiment.py --strategy persona_direct --use-persona-llm --combo single_2_groq_qwen
 ```
 
 The result CSV records `experiment_combo`, `provider`, `model`, and `model_label`, so repeated runs can be grouped by the exact model used.
@@ -144,10 +139,8 @@ For the first single-LLM round, use this control/experiment matrix.
 | Group | Strategy | Combo | Meaning |
 | --- | --- | --- | --- |
 | control | `persona_direct` | `single_1_openai_baseline` | Current-service-like persona scoring with the OpenAI baseline. |
-| experiment | `persona_direct` | `single_2_openai_quality` | Same scoring method, higher-quality OpenAI model comparison. |
-| experiment | `persona_direct` | `single_3_groq_qwen` | Same scoring method, Groq Qwen model comparison. |
+| experiment | `persona_direct` | `single_2_groq_qwen` | Same scoring method, Groq Qwen model comparison. |
 | experiment | `rubric_code` | `single_1_openai_baseline` | Same OpenAI baseline, rubric-code scoring comparison. |
-| experiment | `rubric_code` | `single_2_openai_quality` | Rubric-code scoring with the higher-quality OpenAI model. |
-| experiment | `rubric_code` | `single_3_groq_qwen` | Rubric-code scoring with Groq Qwen. |
+| experiment | `rubric_code` | `single_2_groq_qwen` | Rubric-code scoring with Groq Qwen. |
 
 The result CSV records `experiment_family`, `experiment_group`, and `experiment_variable` so the control and experiment runs can be filtered directly.

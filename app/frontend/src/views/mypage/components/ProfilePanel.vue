@@ -4,31 +4,13 @@
       <section class="card avatar-card" aria-label="캐릭터 미리보기">
         <div class="character-preview-wrapper" style="display: flex; align-items: center; justify-content: center; gap: 16px;">
           <button v-if="characterEditMode" type="button" class="nav-arrow" @click="prevCharacter">❮</button>
-          <div class="character" :data-kind="displayCharacter.id" :style="{
-            '--hair': displayCharacter.color === 'lavender' ? '#8b5cf6' : displayCharacter.color === 'night' ? '#1e293b' : displayCharacter.color === 'coral' ? '#f43f5e' : '#fcd34d',
-            '--skin': displayCharacter.color === 'lavender' ? '#f3e8ff' : displayCharacter.color === 'night' ? '#f1f5f9' : displayCharacter.color === 'coral' ? '#ffe4e6' : '#fffbeb',
-            '--cloth': displayCharacter.color === 'lavender' ? '#ddd6fe' : displayCharacter.color === 'night' ? '#94a3b8' : displayCharacter.color === 'coral' ? '#fecdd3' : '#fef3c7',
-            '--cloth-dark': displayCharacter.color === 'lavender' ? '#c4b5fd' : displayCharacter.color === 'night' ? '#64748b' : displayCharacter.color === 'coral' ? '#fda4af' : '#fde68a'
-          }">
-            <span class="hair"></span>
-            <span class="face"></span>
-            <span class="bang one"></span>
-            <span class="bang two"></span>
-            <span class="bang three"></span>
-            <span class="eye left"></span>
-            <span class="eye right"></span>
-            <span class="cheek left"></span>
-            <span class="cheek right"></span>
-            <span class="mouth"></span>
-            <span class="neck"></span>
-            <span class="body"></span>
-            <span class="collar left"></span>
-            <span class="collar right"></span>
+          <div class="character-image-wrapper">
+            <img :src="`/characters/${displayCharacter.id}/default.png`" :alt="displayCharacter.name" style="max-width: 100%; height: 215px; object-fit: contain; filter: drop-shadow(0 18px 22px rgba(5, 2, 18, 0.38)); transform-origin: center bottom; transform: scale(1.1);" />
           </div>
           <button v-if="characterEditMode" type="button" class="nav-arrow" @click="nextCharacter">❯</button>
         </div>
         <div class="character-name">
-          {{ displayCharacter.name }} · {{ displayCharacter.desc }}
+          {{ displayCharacter.name }} · {{ displayCharacter.role || displayCharacter.desc }}
         </div>
         <button v-if="!characterEditMode" class="secondary-button" type="button" @click="startCharacterEdit">캐릭터 변경</button>
         <button v-else class="primary-button" type="button" @click="finishCharacterEdit" style="margin-top: 12px; min-width: 120px;">변경 완료</button>
@@ -38,26 +20,32 @@
         <h3>프로필 정보</h3>
         <div class="form-grid two">
           <div class="field">
-            <label for="profile-name">이름</label>
-            <input id="profile-name" v-model="profile.name" :readonly="!profileEdit" />
+            <label for="profile-name">이름 또는 닉네임</label>
+            <input id="profile-name" v-model="profile.name" :readonly="!profileEdit" placeholder="이름 또는 닉네임" />
           </div>
           <div class="field">
-            <label for="profile-gender">성별</label>
-            <select id="profile-gender" v-model="profile.gender" :disabled="!profileEdit">
-              <option>여성</option><option>남성</option><option>선택 안 함</option>
-            </select>
+            <label for="profile-job">직업</label>
+            <input id="profile-job" v-model="profile.job" placeholder="직업을 입력해 주세요" :readonly="!profileEdit" />
           </div>
           <div class="field">
-            <label for="profile-age">나이</label>
-            <input id="profile-age" type="number" min="14" max="99" v-model.number="profile.age" :readonly="!profileEdit" />
+            <label for="profile-birthdate">생년월일</label>
+            <input id="profile-birthdate" v-model="profile.birthDate" placeholder="YYYY.MM.DD" :readonly="!profileEdit" />
           </div>
           <div class="field">
-            <label for="profile-birthday">생일</label>
-            <input id="profile-birthday" v-model="profile.birthday" placeholder="예: 06.23" :readonly="!profileEdit" />
-          </div>
-          <div class="field">
-            <label for="profile-job">직업/상황</label>
-            <input id="profile-job" v-model="profile.job" placeholder="예: 취업 준비, 직장인, 학생" :readonly="!profileEdit" />
+            <label>성별</label>
+            <div class="gender-toggle" role="group" aria-label="성별 선택">
+              <button
+                v-for="gender in ['남', '여', '선택 안 함']"
+                :key="gender"
+                type="button"
+                :class="{ active: profile.gender === gender }"
+                @click="profileEdit && (profile.gender = gender)"
+                :disabled="!profileEdit"
+              >
+                {{ gender }}
+                <i v-if="profile.gender === gender">✓</i>
+              </button>
+            </div>
           </div>
         </div>
         <div class="form-grid profile-extra-grid">
@@ -429,5 +417,166 @@ export default {
 }
 .nav-arrow:active {
   transform: scale(0.95);
+}
+.gender-toggle {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.gender-toggle button {
+  position: relative;
+  min-width: 0;
+  min-height: 48px;
+  border: 1px solid rgba(255, 116, 180, 0.26);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.055);
+  color: rgba(255, 245, 230, 0.78);
+  font-size: 15px;
+  font-weight: 950;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.gender-toggle button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.gender-toggle button.active {
+  color: #fff;
+  border-color: var(--primary);
+  background: linear-gradient(90deg, var(--pur), var(--blue));
+}
+.gender-toggle i {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #ffd37a;
+  font-style: normal;
+}
+
+/* --- Premium UI Overrides --- */
+.grid-2 {
+  gap: 16px !important;
+}
+.card {
+  border: 1px solid rgba(255, 116, 180, 0.22) !important;
+  border-radius: 20px !important;
+  background: rgba(73, 27, 88, 0.3) !important;
+  padding: 20px !important;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.card h3 {
+  font-size: 20px !important;
+  color: #fff7df !important;
+  margin-bottom: 16px !important;
+  font-weight: 850 !important;
+  letter-spacing: -0.02em;
+}
+
+/* Avatar Card Refinements */
+.avatar-card {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  align-items: center !important;
+  background: linear-gradient(160deg, rgba(62, 22, 82, 0.6), rgba(26, 13, 44, 0.8)) !important;
+  padding-top: 16px !important;
+  padding-bottom: 16px !important;
+}
+.character-preview-wrapper {
+  margin-top: 6px;
+}
+.character-name {
+  font-size: 16px !important;
+  color: #fff7df !important;
+  font-weight: 800 !important;
+  margin: 12px 0 16px !important;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  background: rgba(255, 255, 255, 0.1);
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+.nav-arrow {
+  width: 44px !important;
+  height: 44px !important;
+  font-size: 20px !important;
+  background: rgba(255, 255, 255, 0.15) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+}
+
+/* Form Fields Refinements */
+.form-grid.two {
+  gap: 12px 20px !important;
+}
+.field {
+  gap: 6px !important;
+}
+.field label {
+  color: #fff7df !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+}
+.field input {
+  min-height: 48px !important;
+  padding: 0 16px !important;
+  border: 1px solid rgba(255, 116, 180, 0.34) !important;
+  border-radius: 12px !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #fffaf0 !important;
+  font-size: 14px !important;
+  transition: all 0.2s ease;
+}
+.field input:focus {
+  border-color: rgba(255, 129, 150, 0.72) !important;
+  box-shadow: 0 0 0 4px rgba(248, 79, 155, 0.14) !important;
+  outline: none;
+}
+.field input[readonly] {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: rgba(255, 245, 230, 0.6) !important;
+}
+
+/* Interest Keywords */
+.interest-keyword-field {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.15);
+}
+.interest-keyword-head strong {
+  color: #fff;
+  background: var(--primary);
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 850;
+}
+.interest-chip {
+  padding: 8px 16px !important;
+  border-radius: 14px !important;
+  font-size: 14px !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  color: rgba(255, 245, 230, 0.9) !important;
+}
+.interest-chip.active {
+  background: var(--primary) !important;
+  border-color: transparent !important;
+  color: #fff !important;
+  box-shadow: 0 4px 14px rgba(156, 91, 255, 0.35) !important;
+}
+
+/* Button Enhancements */
+.actions {
+  margin-top: 16px !important;
+}
+.secondary-button {
+  border-radius: 12px !important;
+  min-height: 44px !important;
+  padding: 0 24px !important;
+  font-size: 15px !important;
 }
 </style>
