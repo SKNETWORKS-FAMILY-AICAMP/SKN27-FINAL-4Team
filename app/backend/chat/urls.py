@@ -8,8 +8,7 @@ from . import views
 
 urlpatterns = [
     # ── 메인 플로우 (v6.0 · LangGraph) ──
-    path('session/start/',       views.session_start),       # 세션 시작 (+콜드스타트 선택지)
-    path('session/cold-start/',  views.cold_start),          # 감정 선택 제출
+    path('session/start/',       views.session_start),       # 세션 시작 (친구 첫인사)
     path('session/end/',         views.session_end),         # 세션 종료 (시크릿 캐시 파기)
     path('chat/',                views.chat_turn),           # 대화 턴 (텍스트 즉시 + tts_task_id)
     path('tts/<str:task_id>/',       views.tts_status),      # TTS 상태 폴링
@@ -20,5 +19,4 @@ urlpatterns = [
 
     # ── 부가 기능 ──
     path('chat/sessions/<int:session_id>/questions/', views.suggest_questions),  # 이런 말 어때요
-    path('chat/weather-opener/', views.weather_opener),      # 날씨 한줄 배너
 ]

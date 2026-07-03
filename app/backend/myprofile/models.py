@@ -23,7 +23,9 @@ class UserProfile(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = 'user_profiles'
+        # ⚠️ user 앱 UserProfile(user_profiles)과 테이블명 충돌 → 임시로 분리 (2026-07-02)
+        #    두 프로필 모델 통합 여부는 팀 결정 필요 (온보딩 담당 ↔ 마이페이지 담당)
+        db_table = 'myprofile_profiles'
 
     def __str__(self):
         return f'{self.user_id}: {self.name}'

@@ -62,12 +62,7 @@
           />
         </div>
         <div class="char-name">{{ displayCharacter.name }}</div>
-        <div class="char-faces">현재 표정 : {{ displayExpressionLabel }}</div>
-
-        <div class="opener-bubble">
-          {{ openerText }}
-          <small>{{ isSecret ? 'opener · 비저장 안내' : 'opener · 운세/날씨' }}</small>
-        </div>
+        <!-- 감정 라벨 텍스트("현재 표정 : 슬픔")는 표시하지 않음 — 친구 컨셉 (표정 이미지로만 반응) -->
 
         <template v-if="!isSecret">
           <div class="ctrl-btns">
@@ -88,15 +83,12 @@
           class="bubble-wrap"
           :class="msg.role"
         >
-          <span v-if="msg.role === 'assistant' && msg.emotion_label" class="emotion-tag">
-            {{ EMOTION_LABELS[msg.emotion_label] }}
-          </span>
-
+          <!-- 감정 라벨(슬픔 모드 등)은 화면에 표시하지 않음 — 친구 컨셉 (분석은 뒤에서만) -->
           <div class="bubble" :class="msg.role === 'user' ? 'bubble-user' : 'bubble-char'">
             {{ msg.content }}
           </div>
 
-          <!-- 🔘 선택 버튼 카드 (콜드스타트 감정 선택지 / 시크릿 MBTI 저장 동의) -->
+          <!-- 🔘 선택 버튼 카드 (시크릿 모드 MBTI 저장 동의) -->
           <div v-if="msg.role === 'assistant' && msg._choices" class="mbti-options-bar">
             <button
               v-for="opt in msg._choices"
@@ -201,12 +193,7 @@ const CHARACTER_META = {
     }
   },
 }
-const EMOTION_LABELS = {
-  joy:     '✦ 기쁨 모드',
-  sadness: '✦ 슬픔 모드',
-  anger:   '✦ 분노 모드',
-  normal:  '✦ 일반 모드',
-}
+// (감정 라벨은 화면에 표시하지 않음 — 친구 컨셉. 분석은 백엔드에서만)
 
 const DISPLAY_CHARACTER_META = {
   otter: {
@@ -311,10 +298,6 @@ const displayExpressionLabel = computed(() => EXPRESSION_LABELS[displayExpressio
 const displayCharacterImage = computed(() => `/characters/${displayCharacterId.value}/${displayExpressionId.value}.png`)
 const displayAnimationClass = computed(() => EXPRESSION_ANIMATION[displayExpressionId.value] || 'anim-joy')
 
-const openerText = computed(() =>
-  isSecret.value ? '여긴 아무 기록도 안 남아. 편하게 다 털어놔도 돼.' : '오늘 어떤 하루였어?'
-)
-
 const showJoyCelebration = ref(false)
 
 function triggerJoyCelebration() {
@@ -401,11 +384,15 @@ const OPENER_MSG = {
     : '안녕. 오늘 하루는 어땠어? 천천히 말해줘도 괜찮아',
 }
 
-// ── 유휴 타이머: 턴 종료 후 10초 무입력 → MBTI 질문 (최종_통합_흐름도 §5) ──
+// ── 유휴 타이머: 10초 무입력이면 무조건 MBTI 질문 (강사님 확정: "그냥 10초 뒤") ──
 const IDLE_MS = 10000
+const userTurnCount = ref(0)      // (게이미피케이션/통계용 카운트 — MBTI 게이트로는 사용 안 함)
 let idleTimer = null
 function clearIdleTimer() { if (idleTimer) { clearTimeout(idleTimer); idleTimer = null } }
-function startIdleTimer() { clearIdleTimer(); idleTimer = setTimeout(askMbtiIfIdle, IDLE_MS) }
+function startIdleTimer() {
+  clearIdleTimer()
+  idleTimer = setTimeout(askMbtiIfIdle, IDLE_MS)   // 턴 수 조건 없이 10초 무입력이면 트리거
+}
 
 async function askMbtiIfIdle() {
   if (isTyping.value || mbtiQuestionLoading.value || !sessionId.value || !coldStartDone.value) return
@@ -441,27 +428,21 @@ function pushAssistant(text, extra = {}) {
 // ── 세션 초기화: 콜드스타트 게이팅 (감정 선택지 먼저) ──
 async function initSession() {
   try {
-    const sess = await chatApi.startSession(character.value, isSecret.value)
+    // 친구 컨셉: 감정 안 묻고 날씨/시간/닉네임 기반 첫인사로 시작
+    const coords = await getCoordsOrNull()
+    const sess = await chatApi.startSession(character.value, isSecret.value, coords)
     sessionId.value = sess.session_id
-    coldStartDone.value = !!sess.cold_start_done
+    coldStartDone.value = true
     lastMbtiQuestionKey.value = ''
     suggestionRequestId.value = 0
+    userTurnCount.value = 0
 
-    if (!coldStartDone.value) {
-      messages.value.push({
-        _tempId: Date.now(), role: 'assistant',
-        content: sess.opening_question || '지금 기분이 어때요?',
-        _choices: (sess.emotion_choices || []).map(c => ({ value: c.code, text: c.label })),
-        _choiceType: 'cold_start',
-      })
-    } else {
-      const openerContent = OPENER_MSG[character.value]?.(isSecret.value)
-        ?? '안녕! 오늘 어떤 하루였어?'
-      messages.value.push({ _tempId: Date.now(), role: 'assistant', content: openerContent })
-      refreshSuggestions()
-    }
+    // 서버가 만든 친구 첫인사를 바로 표시 (+ 음성 자동 재생)
+    const opener = sess.opener || OPENER_MSG[character.value]?.(isSecret.value) || '안녕! 뭐 하고 있었어?'
+    pushAssistant(opener, { tts_task_id: sess.tts_task_id })
+    refreshSuggestions()
+    startIdleTimer()   // 10초 무입력이면 MBTI (강사님 확정)
   } catch {
-    // 세션 생성 실패: 옛 세션 ID가 남지 않도록 초기화 + 안내
     sessionId.value = null
     messages.value.push({
       _tempId: Date.now(), role: 'assistant',
@@ -470,31 +451,30 @@ async function initSession() {
   }
 }
 
+// 위치 권한이 있으면 좌표 반환(날씨 첫인사용), 없으면 null (거부해도 대화는 정상)
+function getCoordsOrNull() {
+  return new Promise(resolve => {
+    if (!navigator.geolocation) return resolve(null)
+    navigator.geolocation.getCurrentPosition(
+      p => resolve({ lat: p.coords.latitude, lon: p.coords.longitude }),
+      () => resolve(null),
+      { timeout: 3000 },
+    )
+  })
+}
+
 onMounted(async () => {
   await initSession()
 })
 
 onUnmounted(() => { clearIdleTimer(); ttsStop() })
 
-// ── 선택 버튼 처리 (콜드스타트 감정 선택 / MBTI 저장 동의) ──
+// ── 선택 버튼 처리 (시크릿 모드 MBTI 저장 동의) ──
 async function handleChoice(msgObj, opt) {
   if (msgObj._chosen) return
   msgObj._chosen = opt.value
 
-  if (msgObj._choiceType === 'cold_start') {
-    messages.value.push({ _tempId: Date.now(), role: 'user', content: opt.text })
-    try {
-      const res = await chatApi.coldStart(sessionId.value, opt.value)
-      coldStartDone.value = true
-      currentEmotion.value = opt.value
-      pushAssistant(res.follow_up_message, { tts_task_id: res.tts_task_id })
-      refreshSuggestions()
-      startIdleTimer()
-    } catch {
-      msgObj._chosen = null
-      messages.value.push({ _tempId: Date.now(), role: 'assistant', content: '앗, 잠깐 연결이 불안정했어요. 다시 골라줄래요?' })
-    }
-  } else if (msgObj._choiceType === 'mbti_consent') {
+  if (msgObj._choiceType === 'mbti_consent') {
     try {
       const res = await chatApi.mbtiConsent(sessionId.value, opt.value === 'yes')
       pushAssistant(res.confirm_message, { tts_task_id: res.tts_task_id })
@@ -513,19 +493,8 @@ async function sendMessage() {
     messages.value.push({ _tempId: Date.now(), role: 'assistant', content: '연결이 끊겨 있어요. 새로고침 해주세요!' })
     return
   }
-  // 감정 선택 전에 바로 입력한 경우: '그냥 그래'로 자동 시작하고 대화 계속 진행
-  if (!coldStartDone.value) {
-    try {
-      await chatApi.coldStart(sessionId.value, 'normal')
-      coldStartDone.value = true
-      // 남아있는 선택지 버튼 비활성화
-      messages.value.forEach(m => { if (m._choiceType === 'cold_start' && !m._chosen) m._chosen = 'normal' })
-    } catch {
-      messages.value.push({ _tempId: Date.now(), role: 'assistant', content: '잠깐 연결이 불안정했어요. 위의 기분 버튼을 눌러 시작해줄래요?' })
-      return
-    }
-  }
   clearIdleTimer()
+  userTurnCount.value += 1                 // 대화 턴 카운트 (게이미피케이션/통계용)
   messages.value.push({ _tempId: Date.now(), role: 'user', content })
   inputText.value = ''
   isTyping.value = true
@@ -736,11 +705,6 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   background: rgba(120,150,255,0.12);
 }
 .is-secret .q-chip:hover { background: rgba(120,150,255,0.22); }
-.is-secret .opener-bubble {
-  background: rgba(20,30,72,0.42);
-  border-color: rgba(150,180,255,0.24);
-  color: #d4e2ff;
-}
 .is-secret .char-face { box-shadow: 0 0 30px rgba(150,180,255,0.18); }
 .is-secret .msg-input:focus { border-color: rgba(150,180,255,0.6); }
 .is-secret .emotion-tag { background: rgba(150,180,255,0.18); color: #bcd2ff; }
@@ -889,30 +853,6 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   font-weight: 700;
   font-size: 28px;
   color: #fff;
-}
-
-.char-faces {
-  font-size: 14.5px;
-  color: rgba(255,255,255,0.45);
-  text-align: center;
-}
-
-.opener-bubble {
-  background: rgba(42,14,107,0.4);
-  border: 1px solid rgba(192,132,252,0.22);
-  border-radius: 18px;
-  padding: 17px 19px;
-  font-size: 16.5px;
-  color: #E9CAFF;
-  text-align: center;
-  width: 100%;
-  line-height: 1.6;
-}
-.opener-bubble small {
-  display: block;
-  color: rgba(255,255,255,0.38);
-  font-size: 10.5px;
-  margin-top: 4px;
 }
 
 .ctrl-btns { display: flex; gap: 12px; width: 100%; }

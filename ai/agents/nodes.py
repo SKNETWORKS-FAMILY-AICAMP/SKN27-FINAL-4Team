@@ -5,7 +5,7 @@
           joy·sadness·anger·normal_agent / plan_agent(스텁) / resp_prep
 콜드스타트와 TTS·저장(비동기)은 그래프 밖(뷰 레이어)에서 처리한다.
 """
-from ai.agents.personas import CHARACTER_PERSONAS, EMOTION_AGENT_GUIDES, COMMON_RULES
+from ai.agents.personas import EMOTION_AGENT_GUIDES, COMMON_RULES
 from ai.agents.state import ChatState
 
 EMOTION_KO2EN = {'기쁨': 'joy', '슬픔': 'sadness', '분노': 'anger', '일반': 'normal'}
@@ -57,17 +57,16 @@ def mbti_save_node(state: ChatState) -> dict:
         out['mbti_saved'] = True
 
     # LLM 확인 응답 생성 (흐름도 MBTIRESP)
-    persona = CHARACTER_PERSONAS.get(state.get('character_id', 'pori'), CHARACTER_PERSONAS['pori'])
     try:
         resp = _llm(temperature=0.7, max_tokens=100).invoke([
             ('system',
-             f"{persona}\n\n사용자가 방금 성향 질문에 답해줬습니다. "
+             f"{COMMON_RULES}\n\n사용자가 방금 성향 질문에 답해줬습니다. "
              "짧게(1~2문장) 고마움을 표현하고 자연스럽게 대화를 이어가는 확인 응답만 하세요."),
             ('user', state.get('user_message', '')),
         ])
         text = resp.content.strip()
     except Exception:
-        text = '얘기해줘서 고마워요! 덕분에 조금 더 알아가는 기분이에요.'
+        text = '얘기해줘서 고마워! 덕분에 너를 조금 더 알아가는 기분이야 ㅎㅎ'
     out['final_response'] = text
     return out
 
@@ -187,12 +186,11 @@ TTS_ACTING_RULES = (
 
 
 def resp_prep_node(state: ChatState) -> dict:
-    """페르소나 + 감정 지침 + 컨텍스트(요약/최근 N턴) + 검색 결과 종합 → 최종 응답.
-    (흐름도 RESP)"""
-    persona = CHARACTER_PERSONAS.get(state.get('character_id', 'pori'), CHARACTER_PERSONAS['pori'])
+    """감정 지침 + 공통 규칙 + 컨텍스트(요약/최근 N턴) + 검색 결과 종합 → 최종 응답.
+    캐릭터는 이미지·목소리로만 구분 — 프롬프트는 캐릭터 무관 공통. (흐름도 RESP)"""
     guide = state.get('agent_guide', EMOTION_AGENT_GUIDES['normal'])
 
-    system_parts = [persona, guide, COMMON_RULES, TTS_ACTING_RULES]
+    system_parts = [guide, COMMON_RULES, TTS_ACTING_RULES]
     if state.get('memory_summary'):
         system_parts.append(f"[사용자에 대한 기억 요약]\n{state['memory_summary']}")
     if state.get('search_context'):

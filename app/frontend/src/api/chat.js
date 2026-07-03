@@ -1,9 +1,19 @@
 import axios from 'axios'
+import { getCsrfToken, getClientId } from './client.js'
 
 const http = axios.create({
   baseURL: '/api',
   withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
+})
+
+http.interceptors.request.use((config) => {
+  config.headers['X-Binteumsai-Client-Id'] = getClientId()
+  const csrfToken = getCsrfToken()
+  if (csrfToken) {
+    config.headers['X-CSRFToken'] = csrfToken
+  }
+  return config
 })
 
 // v6.0 응답 래퍼 {success, data, error} 해제
@@ -20,21 +30,14 @@ function unwrap(res) {
 export const chatApi = {
   // ═══════════ v6.0 API (API_명세서 v6.0) ═══════════
 
-  /** 세션 시작 — 콜드스타트 미완료면 감정 선택지 반환.
-   *  skipColdStart=true면 감정 선택 생략 (이미 답한 사용자의 새 세션) */
-  async startSession(characterId, isSecret, skipColdStart = false) {
+  /** 세션 시작 — 친구 컨셉: 날씨/시간/닉네임 첫인사(opener) 반환.
+   *  coords={lat,lon} 있으면 날씨 반영 (없어도 시간대 인사로 정상 동작) */
+  async startSession(characterId, isSecret, coords = null) {
     return unwrap(await http.post('/session/start/', {
       character_id: characterId,
       is_secret: isSecret,
-      skip_cold_start: skipColdStart,
-    }))
-  },
-
-  /** 콜드스타트 감정 선택 제출 → 후속 질문 */
-  async coldStart(sessionId, selectedEmotion) {
-    return unwrap(await http.post('/session/cold-start/', {
-      session_id: sessionId,
-      selected_emotion: selectedEmotion,
+      lat: coords?.lat,
+      lon: coords?.lon,
     }))
   },
 
@@ -81,17 +84,10 @@ export const chatApi = {
     return unwrap(await http.post('/session/end/', { session_id: sessionId }))
   },
 
-  // ═══════════ 레거시 v5.x (유지 — 추천질문/날씨/피드백) ═══════════
+  // ═══════════ 부가 기능 ═══════════
 
   async suggestQuestions(sessionId) {
     const { data } = await http.post(`/chat/sessions/${sessionId}/questions/`)
     return data
   },
-
-  async getWeatherOpener(lat = '', lon = '') {
-    const { data } = await http.get('/chat/weather-opener/', {
-      params: { lat, lon }
-    })
-    return data
-  }
 }

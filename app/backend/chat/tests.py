@@ -14,16 +14,7 @@ from .models import ChatMessage, ChatSession
 
 
 class SideApiTests(APITestCase):
-    """부가 기능 — 날씨/추천질문/피드백/감정모델 폴백"""
-
-    def test_weather_opener_fallback(self):
-        """날씨 API — 외부 API 실패 시에도 200 + 기본 opener 반환"""
-        mock_fail = MagicMock()
-        mock_fail.status_code = 500
-        with patch('requests.get', return_value=mock_fail):
-            response = self.client.get('/api/chat/weather-opener/')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('opener', response.data)
+    """부가 기능 — 추천질문/감정모델 폴백"""
 
     @patch('chat.views._client')
     def test_suggest_questions_api(self, mock_client):
@@ -48,41 +39,24 @@ class SideApiTests(APITestCase):
 
 
 class V6FlowTests(APITestCase):
-    """v6.0 메인 플로우 — 세션/콜드스타트/검증 로직 (LLM 호출 없는 경로)"""
+    """v6.0 메인 플로우 — 세션/검증 로직 (LLM 호출 없는 경로 · 친구 컨셉)"""
 
-    def test_session_start_returns_cold_start_choices(self):
+    def test_session_start_returns_friend_opener(self):
+        """친구 첫인사 — 감정 선택지 없이 opener + tts_task_id 반환, cold_start_done=True"""
         resp = self.client.post('/api/session/start/',
                                 {'character_id': 'pori', 'is_secret': False}, format='json')
         self.assertEqual(resp.status_code, 201)
         data = resp.data['data']
-        self.assertFalse(data['cold_start_done'])
-        self.assertEqual(len(data['emotion_choices']), 4)
+        self.assertTrue(data['cold_start_done'])
+        self.assertTrue(data['opener'])
+        self.assertIn('tts_task_id', data)
+        self.assertNotIn('emotion_choices', data)
 
     def test_invalid_character_rejected(self):
         resp = self.client.post('/api/session/start/',
                                 {'character_id': 'sodam', 'is_secret': False}, format='json')
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(resp.data['error']['code'], 'INVALID_CHARACTER')
-
-    def test_chat_requires_cold_start(self):
-        start = self.client.post('/api/session/start/',
-                                 {'character_id': 'toto', 'is_secret': False}, format='json')
-        sid = start.data['data']['session_id']
-        resp = self.client.post('/api/chat/',
-                                {'session_id': sid, 'character_id': 'toto',
-                                 'message': '안녕', 'is_secret': False}, format='json')
-        self.assertEqual(resp.status_code, 400)
-        self.assertEqual(resp.data['error']['code'], 'COLD_START_REQUIRED')
-
-    def test_cold_start_flow(self):
-        start = self.client.post('/api/session/start/',
-                                 {'character_id': 'yeoul', 'is_secret': False}, format='json')
-        sid = start.data['data']['session_id']
-        resp = self.client.post('/api/session/cold-start/',
-                                {'session_id': sid, 'selected_emotion': 'sadness'}, format='json')
-        self.assertEqual(resp.status_code, 200)
-        self.assertTrue(resp.data['data']['cold_start_done'])
-        self.assertIn('tts_task_id', resp.data['data'])
 
     def test_tts_task_not_found(self):
         resp = self.client.get('/api/tts/tts_none/')

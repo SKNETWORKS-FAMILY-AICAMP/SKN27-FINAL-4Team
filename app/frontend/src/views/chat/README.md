@@ -41,8 +41,7 @@
 ## API 연동 (v6.0)
 
 ```
-POST /api/session/start/        → 세션 시작 (+ 콜드스타트 선택지)
-POST /api/session/cold-start/   → 감정 선택 제출
+POST /api/session/start/        → 세션 시작 (친구 첫인사 opener 반환)
 POST /api/chat/                 → 대화 턴 (텍스트 즉시 + tts_task_id)
 GET  /api/tts/:taskId/          → TTS 오디오 폴링
 GET  /api/mbti/next-question/   → MBTI 질문 (10초 유휴 시)
@@ -50,4 +49,5 @@ POST /api/mbti/consent/         → MBTI 저장 동의 (시크릿)
 POST /api/session/end/          → 세션 종료 (시크릿 캐시 파기)
 ```
 
-레거시: `GET /api/chat/weather-opener/`(날씨 배너), `POST /api/chat/sessions/:id/questions/`(추천 질문), `POST /api/chat/feedback/`(피드백)
+부가: `POST /api/chat/sessions/:id/questions/`(추천 질문)
+(구 콜드스타트 감정 선택·날씨 배너·피드백 API는 친구 컨셉 개편으로 제거 — 2026-07-03)

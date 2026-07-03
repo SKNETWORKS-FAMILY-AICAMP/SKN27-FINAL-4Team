@@ -2,8 +2,7 @@
 """챗봇 API — 단일 파일 (v6.0, API_명세서_김한솔.md 기준).
 
 ■ 메인 플로우 (LangGraph)
-  session_start   POST /api/session/start/        세션 시작 (+콜드스타트 선택지)
-  cold_start      POST /api/session/cold-start/   감정 선택 제출
+  session_start   POST /api/session/start/        세션 시작 (친구 첫인사)
   chat_turn       POST /api/chat/                 대화 턴 (텍스트 즉시 + tts_task_id)
   tts_status      GET  /api/tts/<task_id>/        TTS 오디오 폴링
   mbti_next_question GET /api/mbti/next-question/ MBTI 질문 (10초 유휴)
@@ -13,16 +12,15 @@
 
 ■ 부가 기능
   suggest_questions POST /api/chat/sessions/<id>/questions/  이런 말 어때요
-  weather_opener  GET  /api/chat/weather-opener/  날씨 한줄 배너
 
 지원 모듈: graph/(LangGraph), tts_service, mbti, memory, secret_cache, plan_service
 """
 import json
 import re
 
-import requests
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.authentication import SessionAuthentication
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
@@ -32,20 +30,12 @@ from . import memory, secret_cache, tts_service
 from .models import ChatMessage, ChatSession, MbtiAnswer
 from .plan_service import plan_support
 
+
+class CsrfExemptSessionAuthentication(SessionAuthentication):
+    def enforce_csrf(self, request):
+        return
+
 VALID_CHARACTERS = {'pori', 'kkami', 'toto', 'yeoul'}
-EMOTION_CHOICES = [
-    {'code': 'joy', 'label': '기쁨'},
-    {'code': 'sadness', 'label': '슬픔'},
-    {'code': 'anger', 'label': '분노'},
-    {'code': 'normal', 'label': '그냥 그래'},
-]
-COLD_START_QUESTION = '지금 기분이 어때요?'
-FOLLOW_UP_BY_EMOTION = {
-    'joy': '좋은 일이 있었나 봐요! 오늘 무슨 일이 있었는지 들려줄래요?',
-    'sadness': '그랬구나… 괜찮다면 오늘 무슨 일이 있었는지 천천히 얘기해줄래요?',
-    'anger': '뭔가 속상한 일이 있었군요. 오늘 무슨 일이 있었는지 얘기해줄래요?',
-    'normal': '그렇군요. 오늘 하루는 어땠는지 편하게 얘기해줄래요?',
-}
 
 
 # ── 공통 헬퍼 ────────────────────────────────────────────────
@@ -93,61 +83,47 @@ def _strip_tags(text: str) -> str:
 
 
 # ═════════════════════════════════════════════════════════════
-# 1. 콜드스타트
+# 1. 세션 시작 (친구 첫인사)
 # ═════════════════════════════════════════════════════════════
 
 @api_view(['POST'])
+@authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([AllowAny])
 def session_start(request):
-    """세션 시작 — 콜드스타트 미완료면 감정 선택지 반환."""
+    """세션 시작 — 친구 컨셉: 감정 안 묻고 날씨·시간·닉네임으로 먼저 말 건다.
+
+    (구 콜드스타트 감정 선택지는 폐지. cold_start_done은 항상 True로 시작.)"""
     character = request.data.get('character_id', 'pori')
     is_secret = bool(request.data.get('is_secret', False))
     if character not in VALID_CHARACTERS:
         return _err('INVALID_CHARACTER', '유효하지 않은 캐릭터입니다.')
 
     user = request.user if request.user.is_authenticated else None
-    session = ChatSession.objects.create(user=user, character=character, is_secret=is_secret)
+    # 감정 선택 단계가 없어졌으므로 콜드스타트는 바로 완료 상태로 시작
+    session = ChatSession.objects.create(
+        user=user, character=character, is_secret=is_secret, cold_start_done=True)
 
-    # 이미 콜드스타트를 마친 사용자의 새 세션(시크릿 전환/종료 등)은 감정 선택 생략
-    if bool(request.data.get('skip_cold_start', False)):
-        session.cold_start_done = True
-        session.save(update_fields=['cold_start_done'])
+    # 친구 첫인사 생성 (날씨 좌표는 프론트가 선택적으로 전달)
+    nickname = getattr(user, 'nickname', None) if user else None
+    lat = request.data.get('lat')
+    lon = request.data.get('lon')
+    from .opener_service import generate_opener
+    opener = generate_opener(nickname, lat, lon)
 
-    data = {'session_id': session.id, 'cold_start_done': session.cold_start_done}
-    if not session.cold_start_done:
-        data['opening_question'] = COLD_START_QUESTION
-        data['emotion_choices'] = EMOTION_CHOICES
-    return _ok(data, status.HTTP_201_CREATED)
-
-
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def cold_start(request):
-    """감정 선택 제출 → 초기 감정 컨텍스트 저장 + 후속 질문."""
-    session = _get_session(request.data.get('session_id'))
-    if session is None:
-        return _err('SESSION_NOT_FOUND', '세션을 찾을 수 없습니다.', status.HTTP_404_NOT_FOUND)
-
-    selected = request.data.get('selected_emotion')
-    if selected not in ('joy', 'sadness', 'anger', 'normal'):
-        return _err('INVALID_EMOTION', 'selected_emotion은 joy/sadness/anger/normal 중 하나여야 합니다.')
-
-    session.cold_start_done = True
-    session.selected_emotion = selected
-    session.save(update_fields=['cold_start_done', 'selected_emotion'])
-
-    follow_up = FOLLOW_UP_BY_EMOTION[selected]
-    if session.is_secret:
-        secret_cache.append(session.id, 'assistant', follow_up)
+    # 첫인사도 대화 이력에 남긴다 (다음 턴 컨텍스트 연결)
+    if is_secret:
+        secret_cache.append(session.id, 'assistant', opener)
     else:
-        ChatMessage.objects.create(session=session, role='assistant', content=follow_up)
+        ChatMessage.objects.create(session=session, role='assistant', content=opener)
 
-    tts_task_id = tts_service.create_task(follow_up, session.character, selected, cacheable=True)
+    tts_task_id = tts_service.create_task(opener, character, 'normal')
+
     return _ok({
+        'session_id': session.id,
         'cold_start_done': True,
-        'follow_up_message': follow_up,
+        'opener': opener,
         'tts_task_id': tts_task_id,
-    })
+    }, status.HTTP_201_CREATED)
 
 
 # ═════════════════════════════════════════════════════════════
@@ -155,6 +131,7 @@ def cold_start(request):
 # ═════════════════════════════════════════════════════════════
 
 @api_view(['POST'])
+@authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([AllowAny])
 def chat_turn(request):
     """대화 턴 — 텍스트 즉시 반환 + TTS는 tts_task_id로 폴링."""
@@ -235,6 +212,7 @@ def chat_turn(request):
 
 
 @api_view(['GET'])
+@authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([AllowAny])
 def tts_status(request, task_id):
     """TTS 폴링 — pending/done/failed. done이면 audio_url에서 1회 다운로드."""
@@ -248,6 +226,7 @@ def tts_status(request, task_id):
 
 
 @api_view(['GET'])
+@authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([AllowAny])
 def tts_audio(request, task_id):
     """오디오 1회 반환 후 서버에서 즉시 파기 (다시 듣기 없음 — 저장 안 함 원칙)."""
@@ -263,6 +242,7 @@ def tts_audio(request, task_id):
 # ═════════════════════════════════════════════════════════════
 
 @api_view(['GET'])
+@authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([AllowAny])
 def mbti_next_question(request):
     """프론트 10초 유휴 타이머 → 호출. 수집 미완료면 질문 반환 + pending 설정."""
@@ -296,6 +276,7 @@ def mbti_next_question(request):
 
 
 @api_view(['POST'])
+@authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([AllowAny])
 def mbti_consent(request):
     """시크릿 모드 전용 — MBTI 답변 저장 동의/거부."""
@@ -318,7 +299,7 @@ def mbti_consent(request):
     session.mbti_candidate_answer = None
     session.save(update_fields=['mbti_candidate_answer'])
 
-    confirm = '고마워요, 살짝 기억해둘게요!' if saved else '알겠어요, 이 얘기는 여기서만 남길게요.'
+    confirm = '고마워! 살짝 기억해둘게 ㅎㅎ' if saved else '알겠어, 이 얘기는 우리끼리만 한 걸로!'
     tts_task_id = tts_service.create_task(confirm, session.character, 'normal', cacheable=True)
     return _ok({'saved': saved, 'confirm_message': confirm, 'tts_task_id': tts_task_id})
 
@@ -328,6 +309,7 @@ def mbti_consent(request):
 # ═════════════════════════════════════════════════════════════
 
 @api_view(['POST'])
+@authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([AllowAny])
 def plan_support_view(request):
     """위치 기반 장소 추천 (Tavily + WalkCuration).
@@ -351,6 +333,7 @@ def plan_support_view(request):
 
 
 @api_view(['POST'])
+@authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([AllowAny])
 def session_end(request):
     """세션 종료 — 시크릿 모드 RAM 캐시 + 음성(mp3) 파일 즉시 파기."""
@@ -362,10 +345,11 @@ def session_end(request):
 
 
 # ═════════════════════════════════════════════════════════════
-# 5. 부가 기능 (추천 질문 / 날씨 / 피드백)
+# 5. 부가 기능 (추천 질문)
 # ═════════════════════════════════════════════════════════════
 
 @api_view(['POST'])
+@authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([AllowAny])
 def suggest_questions(request, session_id):
     """'이런 말 어때요?' 추천 질문 3개 생성."""
@@ -402,46 +386,5 @@ def suggest_questions(request, session_id):
     return Response(result)
 
 
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def weather_opener(request):
-    """대화방 상단 날씨 한줄 배너 (Open-Meteo)."""
-    lat = request.GET.get('lat', '37.5665')
-    lon = request.GET.get('lon', '126.9780')
-
-    weather_type = 'clear'
-    temp_c = 20
-    weather_desc = '맑음'
-
-    try:
-        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
-        resp = requests.get(url, timeout=3)
-        if resp.status_code == 200:
-            data = resp.json()
-            current = data.get('current_weather', {})
-            temp_c = round(current.get('temperature', 20))
-            wcode = current.get('weathercode', 0)
-
-            if wcode == 0:
-                weather_type, weather_desc = 'clear', '맑음'
-            elif wcode in (1, 2, 3, 45, 48):
-                weather_type, weather_desc = 'clouds', '흐림'
-            elif wcode in (51, 53, 55, 61, 63, 65, 80, 81, 82):
-                weather_type, weather_desc = 'rain', '비'
-            elif wcode in (71, 73, 75, 77, 85, 86):
-                weather_type, weather_desc = 'snow', '눈'
-            elif wcode in (95, 96, 99):
-                weather_type, weather_desc = 'thunderstorm', '뇌우'
-    except Exception:
-        pass
-
-    opener = f"오늘 날씨는 {weather_desc}이고 기온은 {temp_c}도네. 편안한 마음으로 대화를 시작해볼까?"
-    return Response({
-        'opener': opener,
-        'weather_type': weather_type,
-        'weather_desc': weather_desc,
-        'temp_c': temp_c,
-    })
-
-
 # (👍👎 피드백/MLOps 재학습 큐는 2차 확장으로 제거 — 2026-07-02)
+# (구 콜드스타트 감정 선택 · 날씨 배너 API는 친구 컨셉 개편으로 제거 — 2026-07-03)

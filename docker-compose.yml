@@ -57,8 +57,11 @@ services:
       - VOICE_ID_KKAMI=${VOICE_ID_KKAMI}
       - VOICE_ID_TOTO=${VOICE_ID_TOTO}
       - VOICE_ID_YEOUL=${VOICE_ID_YEOUL}
-      # OAuth 소셜 로그인
+      # OAuth 소셜 로그인 (SECRET은 루트 .env 또는 app/backend/.env 어디에 있어도 동작)
       - FRONTEND_BASE_URL=${FRONTEND_BASE_URL:-http://localhost:5173}
+      - KAKAO_CLIENT_SECRET=${KAKAO_CLIENT_SECRET:-}
+      - NAVER_CLIENT_SECRET=${NAVER_CLIENT_SECRET:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - KAKAO_CLIENT_ID=${KAKAO_CLIENT_ID:-}
       - KAKAO_REDIRECT_URI=${KAKAO_REDIRECT_URI:-http://localhost:5173/login/callback/kakao}
       - KAKAO_SCOPE=${KAKAO_SCOPE:-profile_nickname account_email}
