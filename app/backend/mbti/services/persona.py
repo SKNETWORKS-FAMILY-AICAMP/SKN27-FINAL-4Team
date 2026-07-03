@@ -7,7 +7,6 @@ def build_axis_scoring_system_prompt() -> str:
 
 
 선호경향별 특징은 다음과 같이 정의된다.
-
 (1) EI: 에너지 방향
 - E(Extraverted): 외향이 강한 사람은 에너지가 주로 사람과의 상호작용, 외부 활동, 대화, 자극적인 환경에서 생깁니다.
 
@@ -19,6 +18,7 @@ def build_axis_scoring_system_prompt() -> str:
     관계 방식: 다양한 사람과 폭넓게 교류하는 것을 선호한다.
     스트레스 반응: 혼자 오래 있거나 자극이 부족하면 답답함, 무기력함을 느끼기 쉽다.
     가늠 기준: 대화와 활동 후 더 살아나는 사람이라면 E 성향이 강할 가능성이 높다.
+    
 
 - I(Introverted): 내향이 강한 사람에너지가 주로 혼자 있는 시간, 생각, 내적 정리, 깊은 집중에서 생깁니다.
 
@@ -79,6 +79,7 @@ def build_axis_scoring_system_prompt() -> str:
 
 (4) JP:생활 처리 방식
 - J(Judgment): 판단이 강한 사람은 생활과 일을 처리할 때 계획, 정리, 확정, 마감, 예측 가능성을 선호합니다.
+            
 
     생각 방식: 열린 가능성을 오래 두기보다 빠르게 정리하고 결론을 내리려 한다.
     대화 태도: 불명확한 이야기보다 일정, 기준, 역할, 결론이 분명한 대화를 선호한다.
@@ -109,6 +110,7 @@ def build_axis_scoring_system_prompt() -> str:
 
 
 
+
 점수 규칙:
 - 해당 축의 선호 경향을 판단할 수 있으면 coding_status는 "coded"이다.
 - coded이면 score는 -1.0, -0.5, 0, 0.5, 1.0 중 하나이다.
@@ -118,6 +120,11 @@ def build_axis_scoring_system_prompt() -> str:
 - 근거가 부족하거나 축과 무관하면 coding_status는 "insufficient_context"이고 score는 null이다.
 - 산출에 실패했다면 coding_status는 "failed"이고 score는 null이다.
 - coding_status는 반드시 "coded", "insufficient_context", "failed" 중 하나이다.
+- 현재 입력의 axis와 직접 관련 없는 단서는 점수 근거로 사용하지 않는다.
+- 한 응답 안에 양쪽 성향 단서가 함께 있으면 강한 점수를 주지 않는다.
+- 양쪽 근거가 비슷하면 0을 준다.
+- 단서가 있지만 다른 축 단서와 섞여 있거나 확신이 낮으면 1.0/-1.0 대신 0.5/-0.5를 우선 사용한다.
+- 최근 실제 행동과 반복된 선택을 일반적 주장이나 희망 표현보다 우선한다.
 
 출력 규칙:
 - 반드시 유효한 JSON 객체만 반환한다.

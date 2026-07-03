@@ -32,6 +32,7 @@
           :current-mbti-view="currentMbtiView"
           @refresh="refreshMbtiDemoData"
           @set-view="setMbtiView"
+          @save-mbti="saveMbti"
         />
 
         <TastePanel
@@ -57,7 +58,7 @@
 </template>
 
 <script>
-import { fetchMbtiDemoPayload } from "./mypage.api";
+import { fetchMbtiDemoPayload, fetchMyProfile, updateMyProfile, saveOnboardingMbti } from "./mypage.api";
 import { createMypageState, i18n } from "./mypage.data";
 import MbtiPanel from "./components/MbtiPanel.vue";
 import MypageModal from "./components/MypageModal.vue";
@@ -75,6 +76,14 @@ export default {
     ProfilePanel,
     SettingsPanel,
     TastePanel
+  },
+  async beforeRouteEnter(to, from, next) {
+    try {
+      await fetchMyProfile();
+      next();
+    } catch (e) {
+      next("/login");
+    }
   },
   data() {
     return createMypageState();
@@ -100,7 +109,8 @@ export default {
       return descriptions[this.activePanel] || "";
     },
     currentCharacter() {
-      return this.characters.find(character => character.id === this.selectedCharacter);
+      const found = this.characters.find(character => character.id === this.selectedCharacter);
+      return found || this.characters[0];
     }
   },
   watch: {
@@ -124,8 +134,33 @@ export default {
     }
     this.applySettings();
     this.loadMbtiDemoData();
+    this.loadProfileData();
   },
   methods: {
+    async loadProfileData() {
+      try {
+        const data = await fetchMyProfile();
+        if (data && data.profile) {
+          this.profile = { ...this.profile, ...data.profile };
+          if (data.profile.selectedCharacter) {
+            this.selectedCharacter = data.profile.selectedCharacter;
+            
+            if (this.selectedCharacter === 'otter' || this.selectedCharacter === 'sol') {
+              try {
+                const stored = JSON.parse(localStorage.getItem('binteumsaiCharacter') || '{}');
+                if (stored && stored.characterId && stored.characterId !== this.selectedCharacter) {
+                  this.selectedCharacter = stored.characterId;
+                  updateMyProfile({ selectedCharacter: stored.characterId }).catch(() => {});
+                }
+              } catch (err) {}
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load profile, redirecting to login", e);
+        this.$router.push("/login");
+      }
+    },
     openPanel(panel) {
       this.activePanel = panel;
       this.showCharacterPicker = false;
@@ -137,10 +172,26 @@ export default {
       this.activePanel = null;
       this.showCharacterPicker = false;
     },
-    toggleProfileEdit() {
+    async toggleProfileEdit() {
       if (this.profileEdit) {
-        this.profileSavedAt = new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
-        this.showToast("프로필 수정 내용이 저장된 것처럼 반영되었습니다.");
+        try {
+          const res = await updateMyProfile({
+            ...this.profile,
+            selectedCharacter: this.selectedCharacter
+          });
+          if (res && res.profile) {
+            this.profile = { ...this.profile, ...res.profile };
+            if (res.profile.selectedCharacter) {
+              this.selectedCharacter = res.profile.selectedCharacter;
+            }
+          }
+          this.profileSavedAt = new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+          this.showToast("프로필 수정 내용이 정상적으로 반영되었습니다.");
+        } catch (e) {
+          console.error("Failed to update profile", e);
+          this.showToast("프로필 저장에 실패했습니다.");
+          return;
+        }
       }
       this.profileEdit = !this.profileEdit;
     },
@@ -152,25 +203,46 @@ export default {
       }
       this.profile.interests = [...this.profile.interests, keyword];
     },
-    chooseCharacter(id) {
+    async chooseCharacter(id) {
+      const oldChar = this.selectedCharacter;
       this.selectedCharacter = id;
       this.showCharacterPicker = false;
-      this.showToast("대화 대상 캐릭터가 교체되었습니다.");
+      try {
+        await updateMyProfile({ selectedCharacter: id });
+        localStorage.setItem('binteumsaiCharacter', JSON.stringify({ characterId: id }));
+        this.showToast("대화 대상 캐릭터가 교체되었습니다.");
+      } catch (e) {
+        console.error(e);
+        this.selectedCharacter = oldChar;
+        this.showToast("캐릭터 교체에 실패했습니다.");
+      }
     },
     setMbtiView(viewKey) {
       this.mbtiViewMode = viewKey;
-      this.showToast(`예시 화면: ${this.currentMbtiView.title} 화면으로 전환했습니다.`);
+      this.showToast(`${this.currentMbtiView.title} 화면으로 전환했습니다.`);
     },
-    async loadMbtiDemoData() {
+    async saveMbti(mbtiType) {
       try {
-        const payload = await fetchMbtiDemoPayload();
+        await saveOnboardingMbti(mbtiType);
+        this.showToast("초기 MBTI가 성공적으로 저장되었습니다.");
+        await this.loadMbtiDemoData();
+      } catch (e) {
+        console.error(e);
+        this.showToast("지원하지 않는 MBTI거나 통신 오류가 발생했습니다.");
+      }
+    },
+    async loadMbtiDemoData(force = false) {
+      try {
+        const payload = await fetchMbtiDemoPayload(force);
         const hasMonthlyAnalysis = this.hasRenderableMonthlyMbtiData(payload.mbti_data);
         const hasOnboardingProfile = this.hasRenderableOnboardingMbtiData(payload.mbti_data);
 
         if (hasMonthlyAnalysis || hasOnboardingProfile) {
           this.mbtiData = payload.mbti_data;
         }
-        if (hasMonthlyAnalysis) {
+        if (payload.mbti_data?.onboarding?.type === '----') {
+          this.mbtiViewMode = "onboardingType";
+        } else if (hasMonthlyAnalysis) {
           this.mbtiViewMode = payload.mbti_view_mode || "onboardingNext";
         } else if (hasOnboardingProfile) {
           this.mbtiViewMode = "onboardingType";
@@ -202,10 +274,11 @@ export default {
       );
     },
     async refreshMbtiDemoData() {
-      await this.loadMbtiDemoData();
+      this.showToast("데이터베이스 기반으로 성향 분석을 시작합니다...");
+      await this.loadMbtiDemoData(true);
       const message = this.mbtiApiStatus === "demo-fallback"
-        ? "데모 결과 API를 불러오지 못해 기존 예시를 유지합니다."
-        : "데모 결과를 다시 불러왔습니다.";
+        ? "분석 파이프라인 호출에 실패해 기존 데이터를 유지합니다."
+        : "성향 분석이 완료되어 결과가 업데이트되었습니다!";
       this.showToast(message);
     },
     refreshTaste() {

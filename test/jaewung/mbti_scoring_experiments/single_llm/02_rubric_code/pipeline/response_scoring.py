@@ -71,10 +71,19 @@ def _openai_compatible_chat_content(
     temperature: float,
     max_tokens: int,
 ) -> str:
+    provider_key = provider.lower()
+    if provider_key == "openai":
+        return _langchain_openai_chat_content(
+            model=model,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
     import os
     from openai import OpenAI
 
-    provider_key = provider.lower()
     if provider_key in {"google", "gemini"}:
         api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         base_url = os.getenv(
@@ -110,6 +119,45 @@ def _openai_compatible_chat_content(
 
     response = OpenAI(**client_kwargs).chat.completions.create(**completion_kwargs)
     return response.choices[0].message.content or ""
+
+
+def _langchain_openai_chat_content(
+    *,
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    temperature: float,
+    max_tokens: int,
+) -> str:
+    try:
+        from langchain_core.messages import HumanMessage, SystemMessage
+        from langchain_openai import ChatOpenAI
+    except ModuleNotFoundError as exc:
+        missing = exc.name or "langchain dependency"
+        raise ModuleNotFoundError(
+            f"{missing} is required for OpenAI rubric experiments. "
+            "Install app/backend/requirements.txt in the Python environment "
+            "used to run this script."
+        ) from exc
+
+    llm = ChatOpenAI(
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+    message = llm.invoke(
+        [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt),
+        ]
+    )
+    content = message.content
+    if isinstance(content, list):
+        return "".join(
+            str(item.get("text", item)) if isinstance(item, dict) else str(item)
+            for item in content
+        )
+    return str(content or "")
 
 
 def build_rubric_code_system_prompt() -> str:

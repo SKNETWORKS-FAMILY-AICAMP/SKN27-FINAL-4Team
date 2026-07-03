@@ -1,27 +1,13 @@
-"""
-URL configuration for config project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/6.0/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import include, path
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/user/', include('user.urls')),
-    path('api/chat/', include('chat.urls')),
     path('api/mypage/', include('wellness.urls')),
+    path('api/', include('chat.urls')),            # 챗봇: /api/session/, /api/chat/, /api/tts/, /api/mbti/
     path('api/myprofile/', include('myprofile.urls')),
     path('api/mbti/', include('mbti.urls')),
     path('api/characters/', include('character.urls')),
@@ -29,3 +15,7 @@ urlpatterns = [
     path('api/tarot/', include('game.tarot_api.urls')),
     path('api/report/', include('mindreport.urls')),
 ]
+
+# TTS mp3 등 미디어 파일 서빙 (개발용 — 운영은 웹서버가 담당)
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

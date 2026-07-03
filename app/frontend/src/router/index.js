@@ -5,7 +5,6 @@ const routes = [
 
   // ── 김한솔: 챗봇 (SCR-003, SCR-004) ──────────────────────
   { path: '/chat',         component: () => import('../views/chat/ChatView.vue') },
-  { path: '/chat/council', component: () => import('../views/chat/InnerCouncilView.vue') },
 
   // ── 이성진: 온보딩 / 메인 (ONB-001~008) ──────────────────
   { path: '/login',               component: () => import('../views/onboarding/LoginView.vue') },
@@ -14,6 +13,7 @@ const routes = [
   { path: '/onboarding/info',      component: () => import('../views/onboarding/UserInfoSetupView.vue') },
   { path: '/onboarding/character', component: () => import('../views/onboarding/CharacterSetupView.vue') },
   { path: '/onboarding/preferencesetup',   component: () => import('../views/onboarding/PreferenceSetupView.vue') },
+  { path: '/onboarding/complete', component: () => import('../views/onboarding/OnboardingCompleteView.vue') },
   { path: '/onboarding/fortune',   component: () => import('../views/onboarding/TarotIntroView.vue') },
   { path: '/onboarding/fortune/draw', component: () => import('../views/onboarding/FortuneView.vue') },
   { path: '/calendar',            component: () => import('../views/onboarding/CalendarView.vue') },

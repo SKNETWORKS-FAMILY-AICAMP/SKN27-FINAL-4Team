@@ -1,16 +1,29 @@
-# Web Framework
+# ── Web Framework ──
 Django>=4.2.0,<5.0.0
 djangorestframework>=3.14.0
 django-cors-headers>=4.0.0
 python-dotenv>=1.0.0
 
-# Database
+# ── Database (v6.0: PostgreSQL 단일 — Neo4j 제거, Redis는 선택) ──
 psycopg2-binary>=2.9.6
-neo4j>=5.8.0
+redis>=5.0.0
+django-redis>=5.4.0
 
-# LLM / Agent
+# ── LLM / LangGraph ──
 openai>=1.3.0
-langchain>=0.1.0
-langchain-openai>=0.0.2
-langgraph>=0.0.10
+langchain>=0.3.0
+langchain-openai>=0.2.0
+langgraph>=0.3.0
 langchain_core
+requests>=2.31.0
+
+# ── 감정분류 추론 (KcELECTRA 임베딩 + XGBoost — ai/emotion/emotion_model.py) ──
+torch
+transformers>=4.40.0
+scikit-learn>=1.3.0
+xgboost>=2.0.0
+joblib>=1.3.0
+numpy>=1.24.0
+
+# ── TTS ──
+# ElevenLabs REST API (requests 사용, 별도 SDK 불필요)

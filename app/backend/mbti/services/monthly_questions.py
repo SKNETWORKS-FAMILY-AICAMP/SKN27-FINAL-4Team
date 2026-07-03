@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone, tzinfo
 import re
 from typing import Iterable, Protocol
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 MBTI_AXES = ('IE', 'SN', 'TF', 'JP')
-SEOUL_TZ = ZoneInfo('Asia/Seoul')
+try:
+    SEOUL_TZ = ZoneInfo('Asia/Seoul')
+except ZoneInfoNotFoundError:
+    SEOUL_TZ = timezone(timedelta(hours=9), name='Asia/Seoul')
 PERIOD_KEY_PATTERN = re.compile(r'^\d{4}-(0[1-9]|1[0-2])$')
 
 
@@ -40,7 +43,7 @@ class MbtiMonthlyQuestionBatch:
     total_count: int
 
 
-def _coerce_to_timezone(value: datetime, tz: ZoneInfo) -> datetime:
+def _coerce_to_timezone(value: datetime, tz: tzinfo) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         return value.replace(tzinfo=tz)
     return value.astimezone(tz)
@@ -50,7 +53,7 @@ def resolve_month_period(
     *,
     period_key: str | None = None,
     now: datetime | None = None,
-    tz: ZoneInfo = SEOUL_TZ,
+    tz: tzinfo = SEOUL_TZ,
 ) -> tuple[str, datetime, datetime]:
     """Flow A: resolve the monthly analysis target period."""
     if period_key is None:

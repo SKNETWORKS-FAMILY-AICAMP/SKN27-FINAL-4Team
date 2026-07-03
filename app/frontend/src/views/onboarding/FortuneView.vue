@@ -57,6 +57,11 @@ const question = ref("");
 const readingResult = ref(null);
 const readingError = ref("");
 const isReadingLoading = ref(false);
+const isResultStreaming = ref(false);
+const streamedCategoryResult = ref("");
+const streamedCardReadings = ref([]);
+const streamingTarget = ref(null);
+const streamRunId = ref(0);
 const isShuffling = ref(false);
 const shufflePhase = ref("idle");
 const activeHinduPacket = ref(-1);
@@ -72,11 +77,20 @@ const selectedSlots = computed(() => selectedSlotIds.value
   })
   .filter(Boolean));
 const selectedCount = computed(() => selectedSlots.value.length);
-const canAnalyze = computed(() => selectedCount.value === MAX_SELECTED_CARDS && !isReadingLoading.value);
+const canAnalyze = computed(() => (
+  selectedCount.value === MAX_SELECTED_CARDS &&
+  !isReadingLoading.value &&
+  !isResultStreaming.value
+));
 const selectedCategoryResult = computed(() => {
   const categoryResults = readingResult.value?.category_results;
   const apiId = selectedCategoryData.value.apiId;
   return categoryResults?.[apiId] || readingResult.value?.summary || "";
+});
+const displayedCategoryResult = computed(() => {
+  if (!readingResult.value) return "";
+  if (isResultStreaming.value || streamedCategoryResult.value) return streamedCategoryResult.value;
+  return selectedCategoryResult.value;
 });
 const selectedSearchCharacter = computed(() => getSelectedSearchCharacter());
 const selectedSearchCharacterImage = computed(() => searchCharacterImages[selectedSearchCharacter.value] || searchCharacterImages.bird);
@@ -258,6 +272,7 @@ async function shuffleCards() {
   pickedSlotId.value = "";
   readingResult.value = null;
   readingError.value = "";
+  resetReadingStream();
 
   shuffleRunId.value += 1;
   const runId = shuffleRunId.value;
@@ -296,6 +311,85 @@ function wait(duration) {
   return new Promise((resolve) => {
     window.setTimeout(resolve, duration);
   });
+}
+
+function resetReadingStream() {
+  streamRunId.value += 1;
+  isResultStreaming.value = false;
+  streamedCategoryResult.value = "";
+  streamedCardReadings.value = [];
+  streamingTarget.value = null;
+}
+
+function setStreamedCardReading(index, value) {
+  const nextReadings = [...streamedCardReadings.value];
+  nextReadings[index] = value;
+  streamedCardReadings.value = nextReadings;
+}
+
+async function streamText(fullText, update, runId, delay = 16) {
+  const text = String(fullText || "");
+
+  for (let index = 0; index <= text.length; index += 1) {
+    if (runId !== streamRunId.value) return;
+    update(text.slice(0, index));
+    await wait(delay);
+  }
+}
+
+async function streamReadingResult(result) {
+  const runId = streamRunId.value + 1;
+  streamRunId.value = runId;
+  isResultStreaming.value = true;
+  streamedCategoryResult.value = "";
+  streamedCardReadings.value = selectedSlots.value.map(() => "");
+  streamingTarget.value = "category";
+
+  const categoryResults = result?.category_results;
+  const apiId = selectedCategoryData.value.apiId;
+  const summary = categoryResults?.[apiId] || result?.summary || "";
+
+  await streamText(
+    summary,
+    (value) => {
+      streamedCategoryResult.value = value;
+    },
+    runId,
+    16,
+  );
+
+  const cardTexts = selectedSlots.value.map((slot, index) => (
+    result?.card_readings?.[index]?.interpretation || slot.card.uprightMeaning
+  ));
+
+  for (const [index, text] of cardTexts.entries()) {
+    if (runId !== streamRunId.value) return;
+
+    streamingTarget.value = index;
+    await streamText(
+      text,
+      (value) => {
+        setStreamedCardReading(index, value);
+      },
+      runId,
+      12,
+    );
+  }
+
+  if (runId === streamRunId.value) {
+    isResultStreaming.value = false;
+    streamingTarget.value = null;
+  }
+}
+
+function getDisplayedCardReading(slot, index) {
+  const streamedText = streamedCardReadings.value[index];
+
+  if (isResultStreaming.value || streamedText) {
+    return streamedText || "";
+  }
+
+  return readingResult.value?.card_readings?.[index]?.interpretation || slot.card.uprightMeaning;
 }
 
 function applyShuffledDeckToSlots() {
@@ -381,7 +475,9 @@ async function requestTarotReading() {
   isReadingLoading.value = true;
   readingError.value = "";
   readingResult.value = null;
+  resetReadingStream();
   const loadingStartedAt = Date.now();
+  let nextReadingResult = null;
 
   try {
     const payload = {
@@ -392,7 +488,8 @@ async function requestTarotReading() {
         orientation: slot.orientation,
       })),
     };
-    readingResult.value = await tarotApi.createReading(payload);
+    nextReadingResult = await tarotApi.createReading(payload);
+    readingResult.value = nextReadingResult;
   } catch (error) {
     readingError.value = error?.response?.data?.error || "카드 결과를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.";
   } finally {
@@ -401,11 +498,16 @@ async function requestTarotReading() {
     if (remainingDelay) await wait(remainingDelay);
     isReadingLoading.value = false;
   }
+
+  if (nextReadingResult) {
+    await streamReadingResult(nextReadingResult);
+  }
 }
 
 function clearReading() {
   readingResult.value = null;
   readingError.value = "";
+  resetReadingStream();
 }
 
 function isSlotSelected(slotId) {
@@ -578,16 +680,8 @@ function translateCardName(name) {
           </div>
         </header>
 
-        <div class="tarot-steps" aria-label="타로 진행 단계">
-          <span class="done">카테고리 선택</span>
-          <i></i>
-          <span class="active">카드 3장 선택</span>
-          <i></i>
-          <span>결과 확인</span>
-        </div>
 
         <section class="category-section">
-          <h3>먼저 운세 카테고리를 선택해 주세요</h3>
           <div class="category-chip-row">
             <button
               v-for="category in categories"
@@ -603,7 +697,6 @@ function translateCardName(name) {
 
         <section class="card-spread-section">
           <div class="section-title-row">
-            <h3>카드 3장을 선택해 주세요</h3>
             <strong>선택 {{ selectedCount }} / {{ MAX_SELECTED_CARDS }}</strong>
           </div>
 
@@ -696,7 +789,13 @@ function translateCardName(name) {
           :disabled="!canAnalyze"
           @click="requestTarotReading"
         >
-          {{ isReadingLoading ? "선택한 카드 분석 중..." : "선택한 카드 분석하기" }}
+          {{
+            isReadingLoading
+              ? "선택한 카드 분석 중..."
+              : isResultStreaming
+                ? "결과를 작성하는 중..."
+                : "선택한 카드 분석하기"
+          }}
         </button>
 
         <p v-if="selectedCount < MAX_SELECTED_CARDS && !readingResult" class="result-help">카드 3장을 선택해야 분석할 수 있어요.</p>
@@ -704,12 +803,12 @@ function translateCardName(name) {
 
         <section v-if="readingResult" class="reading-result-card">
           <h4>{{ selectedCategoryData.resultLabel }} 결과</h4>
-          <p>{{ selectedCategoryResult }}</p>
+          <p class="streaming-text" :class="{ streaming: isResultStreaming && streamingTarget === 'category' }">{{ displayedCategoryResult }}</p>
 
           <div class="card-reading-list">
             <article v-for="(slot, index) in selectedSlots" :key="`reading-${slot.id}`">
               <strong>{{ cardRoles[index] }} · {{ slot.card.koreanName }}</strong>
-              <p>{{ readingResult.card_readings?.[index]?.interpretation || slot.card.uprightMeaning }}</p>
+              <p class="streaming-text" :class="{ streaming: isResultStreaming && streamingTarget === index }">{{ getDisplayedCardReading(slot, index) }}</p>
             </article>
           </div>
         </section>
@@ -1468,6 +1567,35 @@ function translateCardName(name) {
   margin: 0;
   color: rgba(255, 245, 230, 0.74);
   line-height: 1.55;
+}
+
+.streaming-text {
+  position: relative;
+  white-space: pre-line;
+}
+
+.streaming-text.streaming::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 4px;
+  border-radius: 999px;
+  background: rgba(255, 245, 230, 0.86);
+  vertical-align: -0.12em;
+  animation: streaming-cursor-blink 0.82s steps(2, start) infinite;
+}
+
+@keyframes streaming-cursor-blink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+
+  46%,
+  100% {
+    opacity: 0;
+  }
 }
 
 .card-reading-list {
