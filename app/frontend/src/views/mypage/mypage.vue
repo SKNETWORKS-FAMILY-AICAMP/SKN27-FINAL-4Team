@@ -77,6 +77,14 @@ export default {
     SettingsPanel,
     TastePanel
   },
+  async beforeRouteEnter(to, from, next) {
+    try {
+      await fetchMyProfile();
+      next();
+    } catch (e) {
+      next("/login");
+    }
+  },
   data() {
     return createMypageState();
   },
@@ -149,7 +157,8 @@ export default {
           }
         }
       } catch (e) {
-        console.error("Failed to load profile, using fallback data", e);
+        console.error("Failed to load profile, redirecting to login", e);
+        this.$router.push("/login");
       }
     },
     openPanel(panel) {

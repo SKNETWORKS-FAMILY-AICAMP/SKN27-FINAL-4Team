@@ -33,6 +33,7 @@ services:
       - ./app:/app
       # ai/ 패키지 (에이전트·감정모델 코드) — settings.py가 / 를 sys.path에 추가하므로 /ai 로 마운트
       - ./ai:/ai
+      - ./etl:/etl:ro
       # 감정분류 학습 산출물 (KcELECTRA+XGBoost) — 없으면 LLM 폴백으로 동작
       - ./ai/emotion/artifacts:/artifacts:ro
       # HuggingFace 모델 캐시 영속화 — 재생성해도 KcELECTRA 재다운로드 안 함 (속도)
