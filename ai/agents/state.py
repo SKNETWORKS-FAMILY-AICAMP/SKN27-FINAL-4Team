@@ -19,8 +19,7 @@ class ChatState(TypedDict, total=False):
     mbti_question_text: str           # 직전에 던진 MBTI 질문 (판별용)
     mbti_question_code: str
     is_mbti_answer: Optional[bool]    # mbti_check_node 판별 결과
-    mbti_needs_consent: bool          # 시크릿 모드: 저장 동의 필요 → 프론트 버튼
-    mbti_saved: bool
+    mbti_saved: bool                  # (시크릿은 MBTI 질문 자체를 안 함 — 완전 무저장)
 
     # 컨텍스트 (감정 라우팅 직후 1회 조회)
     recent_history: list              # [{'role': 'user'|'assistant', 'content': str}]
@@ -29,6 +28,8 @@ class ChatState(TypedDict, total=False):
     # 감성분석 (KcELECTRA + XGBoost, argmax 확정 분류)
     emotion_probs: dict
     emotion_label: str                # joy / sadness / anger / normal
+    prev_emotion: Optional[str]       # 직전 턴 감정 (초단문 바이패스·저확신 폴백용)
+    emotion_source: str               # model / llm_context / short_bypass / fallback (디버깅용)
 
     # 응답 생성
     agent_guide: str                  # 감정 에이전트가 만든 응답 지침

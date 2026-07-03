@@ -40,14 +40,11 @@ def mbti_check_node(state: ChatState) -> dict:
 
 
 def mbti_save_node(state: ChatState) -> dict:
-    """MBTI 답변 처리. 일반 모드: 즉시 저장 / 시크릿 모드: 동의 필요 플래그만 설정.
-    (흐름도 SECCHK→ASKSAVE→MBTISAVE, 최종_통합_흐름도 §5)"""
-    out = {'mbti_needs_consent': False, 'mbti_saved': False}
+    """MBTI 답변 저장 — 일반 모드 전용.
+    (시크릿은 완전 무저장 원칙으로 MBTI 질문 자체를 안 하므로 이 노드에 오지 않음)"""
+    out = {'mbti_saved': False}
 
-    if state.get('session_mode') == 'secret':
-        # 저장하지 않고 프론트에 동의 버튼 표시 → POST /api/mbti/consent 에서 저장
-        out['mbti_needs_consent'] = True
-    elif state.get('user_id'):
+    if state.get('session_mode') != 'secret' and state.get('user_id'):
         from chat.models import MbtiAnswer
         MbtiAnswer.objects.create(
             user_id=state['user_id'],
@@ -71,44 +68,62 @@ def mbti_save_node(state: ChatState) -> dict:
     return out
 
 
-# ── [감성분석: KcELECTRA + XGBoost, argmax 확정 분류] ────────
+# ── [감성분석: KcELECTRA + XGBoost + 확신도 게이트] ──────────
+
+CONF_GATE = 0.55   # 모델 확신이 이 미만이면 '찍지 말고' 문맥 아는 LLM으로 재분류
+SHORT_LEN = 10     # 이 미만의 초단문("응 ㅋㅋ")은 분석 스킵, 직전 감정 유지
+
 
 def analysis_node(state: ChatState) -> dict:
-    """4감정 확정 분류. 학습 모델 우선, 실패 시 LLM 폴백, 그것도 실패면
-    콜드스타트 선택 감정 → normal 순으로 폴백. (흐름도 EMOTION→ROUTE)"""
-    message = state.get('user_message', '')
-    label = None
+    """4감정 분류 — 원칙: 애매할 땐 찍지 않는다.
+    ① 초단문 → 직전 감정 유지 (감정은 한 턴 만에 급변하지 않음)
+    ② 학습 모델 고확신 → 채택
+    ③ 저확신/실패 → 최근 대화 문맥을 포함해 LLM 재분류
+    ④ 그래도 실패 → 모델 저확신값 → 직전 감정 → normal
+    (개선 근거: docs/감정분류_개선실험_계획서 §2-②, 실측 오분류 "김치찌개→anger")"""
+    message = (state.get('user_message') or '').strip()
+    prev = state.get('prev_emotion')
 
-    # 1) KcELECTRA + XGBoost (ai/emotion/artifacts)
+    # ① 초단문 바이패스
+    if len(message) < SHORT_LEN and prev in VALID_EMOTIONS:
+        return {'emotion_label': prev, 'emotion_source': 'short_bypass'}
+
+    # ② 학습 모델 + 확신도
+    label, conf = None, None
     try:
-        from ai.emotion.emotion_model import predict_emotion
-        ko = predict_emotion(message)
+        from ai.emotion.emotion_model import predict_emotion_with_confidence
+        ko, conf = predict_emotion_with_confidence(message)
         if ko:
             label = EMOTION_KO2EN.get(ko, ko if ko in VALID_EMOTIONS else None)
     except Exception:
         label = None
 
-    # 2) LLM 폴백
-    if label not in VALID_EMOTIONS:
-        try:
-            resp = _llm(temperature=0, max_tokens=5).invoke([
-                ('system',
-                 "사용자 메시지의 주요 감정을 다음 중 하나로만 출력하세요: "
-                 "joy / sadness / anger / normal"),
-                ('user', message),
-            ])
-            cand = resp.content.strip().lower()
-            if cand in VALID_EMOTIONS:
-                label = cand
-        except Exception:
-            pass
+    if label in VALID_EMOTIONS and (conf is None or conf >= CONF_GATE):
+        return {'emotion_label': label, 'emotion_source': 'model'}
 
-    # 3) 최종 폴백: 콜드스타트 선택 감정(첫 턴 참고 컨텍스트) → normal
-    if label not in VALID_EMOTIONS:
-        selected = state.get('selected_emotion')
-        label = selected if selected in VALID_EMOTIONS else 'normal'
+    # ③ 문맥 포함 LLM 재분류 (load_context가 먼저 실행돼 recent_history 사용 가능)
+    try:
+        history = state.get('recent_history', [])[-6:]
+        context = '\n'.join(
+            f"{'사용자' if m['role'] == 'user' else '챗봇'}: {m['content']}" for m in history)
+        resp = _llm(temperature=0, max_tokens=5).invoke([
+            ('system',
+             "최근 대화 흐름을 참고해, 사용자의 '마지막 메시지'에 담긴 감정을 "
+             "다음 중 하나로만 출력하세요: joy / sadness / anger / normal\n"
+             "메시지 자체가 중립이면 대화 흐름의 감정을 따르지 말고 normal을 고르세요."),
+            ('user', f"[최근 대화]\n{context}\n\n[마지막 메시지]\n{message}"),
+        ])
+        cand = resp.content.strip().lower()
+        if cand in VALID_EMOTIONS:
+            return {'emotion_label': cand, 'emotion_source': 'llm_context'}
+    except Exception:
+        pass
 
-    return {'emotion_label': label}
+    # ④ 최종 폴백: 모델 저확신값 → 직전 감정 → 콜드스타트 선택 → normal
+    for fb in (label, prev, state.get('selected_emotion')):
+        if fb in VALID_EMOTIONS:
+            return {'emotion_label': fb, 'emotion_source': 'fallback'}
+    return {'emotion_label': 'normal', 'emotion_source': 'fallback'}
 
 
 # ── [컨텍스트 조회: 라우팅 직후 1회만] ────────────────────────

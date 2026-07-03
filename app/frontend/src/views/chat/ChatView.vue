@@ -88,19 +88,6 @@
             {{ msg.content }}
           </div>
 
-          <!-- 🔘 선택 버튼 카드 (시크릿 모드 MBTI 저장 동의) -->
-          <div v-if="msg.role === 'assistant' && msg._choices" class="mbti-options-bar">
-            <button
-              v-for="opt in msg._choices"
-              :key="opt.value"
-              class="mbti-opt-btn"
-              :disabled="!!msg._chosen"
-              @click="handleChoice(msg, opt)"
-            >
-              {{ opt.text }}
-            </button>
-          </div>
-
         </div>
 
         <div v-if="isTyping" class="typing-indicator">
@@ -223,6 +210,7 @@ const DISPLAY_CHARACTER_META = {
 }
 
 const EXPRESSION_LABELS = {
+  default: '평온',
   joy: '기쁨',
   anger: '화남',
   sadness: '슬픔',
@@ -231,12 +219,14 @@ const EXPRESSION_LABELS = {
   panic: '당황',
 }
 
+// 백엔드 emotion_label (joy/sadness/anger/normal) → 표정 이미지 id
+// (구버전 라벨 encourage/sad/angry 매핑이 남아 있어 표정이 안 바뀌던 버그 수정 — 2026-07-03)
 const EMOTION_TO_EXPRESSION = {
-  default: null,
-  encourage: 'joy',
-  sad: 'sadness',
-  angry: 'anger',
-  plan: 'anxiety',
+  joy: 'joy',
+  sadness: 'sadness',
+  anger: 'anger',
+  normal: null,    // 일상 대화면 사용자가 고른 기본 표정 유지
+  default: null,   // 세션 시작 직후
 }
 
 const EXPRESSION_ANIMATION = {
@@ -272,7 +262,9 @@ function normalizeCharacterId(id) {
 
 const storedCharacter = readStoredCharacter()
 const displayCharacterId = ref(normalizeCharacterId(route.query.character || storedCharacter.characterId))
-const selectedExpression = ref(EXPRESSION_LABELS[storedCharacter.expressionId] ? storedCharacter.expressionId : 'joy')
+// 대화방 평상시 표정은 default(평온) 고정 — 온보딩에서 고른 표정은 미리보기용이고,
+// 대화 중 표정은 감정분석 결과가 결정한다 (감정 없으면 평온으로 복귀)
+const selectedExpression = ref('default')
 const { secret: isSecret, setSecret } = useSecret()
 const { playTask, stop: ttsStop } = useTts()
 const sessionId      = ref(null)
@@ -463,28 +455,30 @@ function getCoordsOrNull() {
   })
 }
 
+// 세션 종료 통지 — 일반 모드도 종료 시 잔여 대화가 user_memory 요약에 반영되도록.
+// 탭 닫기/이탈에도 전송이 보장되는 sendBeacon 사용 (응답 안 기다림).
+function endSessionBeacon() {
+  if (!sessionId.value) return
+  const blob = new Blob(
+    [JSON.stringify({ session_id: sessionId.value })],
+    { type: 'application/json' },
+  )
+  navigator.sendBeacon('/api/session/end/', blob)
+}
+
 onMounted(async () => {
+  window.addEventListener('pagehide', endSessionBeacon)
   await initSession()
 })
 
-onUnmounted(() => { clearIdleTimer(); ttsStop() })
+onUnmounted(() => {
+  clearIdleTimer()
+  ttsStop()
+  window.removeEventListener('pagehide', endSessionBeacon)
+  endSessionBeacon()   // 다른 페이지로 이동할 때도 세션 마무리
+})
 
-// ── 선택 버튼 처리 (시크릿 모드 MBTI 저장 동의) ──
-async function handleChoice(msgObj, opt) {
-  if (msgObj._chosen) return
-  msgObj._chosen = opt.value
-
-  if (msgObj._choiceType === 'mbti_consent') {
-    try {
-      const res = await chatApi.mbtiConsent(sessionId.value, opt.value === 'yes')
-      pushAssistant(res.confirm_message, { tts_task_id: res.tts_task_id })
-      startIdleTimer()
-    } catch {
-      msgObj._chosen = null
-    }
-  }
-  await scrollToBottom()
-}
+// (시크릿 모드 MBTI 저장 동의 버튼은 "시크릿 = 완전 무저장" 원칙으로 제거 — 2026-07-03)
 
 async function sendMessage() {
   const content = inputText.value.trim()
@@ -506,14 +500,6 @@ async function sendMessage() {
       emotion_label: res.emotion_label,
       tts_task_id: res.tts_task_id,
     })
-    // 시크릿 모드에서 MBTI 답변 감지 → 저장 동의 버튼 (API_명세서 §5-2)
-    if (res.ui?.show_mbti_save_consent) {
-      m._choices = [
-        { value: 'yes', text: '💾 저장해도 돼요' },
-        { value: 'no',  text: '🙅 이번엔 저장하지 말아요' },
-      ]
-      m._choiceType = 'mbti_consent'
-    }
     if (res.emotion_label) {
       currentEmotion.value = res.emotion_label
       if (res.emotion_label === 'joy') {
@@ -532,6 +518,7 @@ async function sendMessage() {
 
 async function toggleSecret() {
   clearIdleTimer()
+  endSessionBeacon()   // 기존 세션 마무리 (일반→시크릿 전환 시 잔여 요약)
   setSecret(!isSecret.value)
   messages.value = []
   coldStartDone.value = false
@@ -1041,35 +1028,6 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
 }
 .send-btn:not(:disabled):hover { opacity: 0.88; transform: translateY(-1px); }
 .send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-
-/* 🔘 MBTI 선택형 버튼 스타일 */
-.mbti-options-bar {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
-  margin-top: 10px;
-}
-.mbti-opt-btn {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(192, 132, 252, 0.4);
-  color: #E9CAFF;
-  border-radius: 12px;
-  padding: 12px 16px;
-  font-size: 15px;
-  font-weight: 500;
-  text-align: left;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.mbti-opt-btn:hover:not(:disabled) {
-  background: rgba(192, 132, 252, 0.2);
-  border-color: #C4B5FD;
-}
-.mbti-opt-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
 
 /* 🍵 수락/권유형 추천 카드 스타일 */
 .recommend-consent-bar {

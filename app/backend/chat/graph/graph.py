@@ -3,9 +3,10 @@
 
 라우팅 규칙:
   entry ─ mbti_pending? ─ 예 → mbti_check ─ 답변? ─ yes → mbti_save → END
-        │                                 └ no ──→ analysis (pending 해제는 뷰에서)
-        └ 아니오 ──────────────────────────────→ analysis
-  analysis → load_context → (emotion_label) → joy/sadness/anger/normal_agent
+        │                                 └ no ──→ load_context (pending 해제는 뷰에서)
+        └ 아니오 ──────────────────────────────→ load_context
+  load_context → analysis → (emotion_label) → joy/sadness/anger/normal_agent
+  (컨텍스트를 분석보다 먼저 조회 — 저확신 시 LLM 재분류가 최근 대화를 참고하기 위함)
   agent → (need_plan?) → plan_agent → resp_prep → END
                         └──────────→ resp_prep → END
 
@@ -47,22 +48,22 @@ def build_graph():
 
     # entry: MBTI pending 체크 (입력 직후 최우선)
     builder.set_conditional_entry_point(
-        lambda s: 'mbti_check' if s.get('mbti_pending') else 'analysis',
-        {'mbti_check': 'mbti_check', 'analysis': 'analysis'},
+        lambda s: 'mbti_check' if s.get('mbti_pending') else 'load_context',
+        {'mbti_check': 'mbti_check', 'load_context': 'load_context'},
     )
 
     # mbti_check: 답변이면 저장/확인응답, 아니면 일반 플로우 합류
     builder.add_conditional_edges(
         'mbti_check',
-        lambda s: 'mbti_save' if s.get('is_mbti_answer') else 'analysis',
-        {'mbti_save': 'mbti_save', 'analysis': 'analysis'},
+        lambda s: 'mbti_save' if s.get('is_mbti_answer') else 'load_context',
+        {'mbti_save': 'mbti_save', 'load_context': 'load_context'},
     )
     builder.add_edge('mbti_save', END)
 
-    # 감성분석 → 컨텍스트 1회 조회 → 감정 에이전트 1개만 실행
-    builder.add_edge('analysis', 'load_context')
+    # 컨텍스트 1회 조회 → 감성분석(확신도 게이트) → 감정 에이전트 1개만 실행
+    builder.add_edge('load_context', 'analysis')
     builder.add_conditional_edges(
-        'load_context',
+        'analysis',
         lambda s: s.get('emotion_label', 'normal'),
         {
             'joy': 'joy_agent',

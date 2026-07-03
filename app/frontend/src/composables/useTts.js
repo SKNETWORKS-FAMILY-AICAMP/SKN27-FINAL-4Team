@@ -33,7 +33,21 @@ export function useTts() {
           if (abort.aborted) return
           currentAudio = new Audio(data.audio_url)   // 서버는 이 요청 후 즉시 파기
           currentAudio.onended = () => { currentAudio = null }
-          currentAudio.play().catch(() => { currentAudio = null })
+          currentAudio.play().catch(() => {
+            // 자동재생 차단(페이지 로드 직후 첫인사 등) — 첫 상호작용 때 1회 재생 재시도.
+            // 오디오 데이터는 이미 받아와 있어 서버 파기와 무관하게 재생 가능.
+            const audio = currentAudio
+            const resume = () => {
+              cleanup()
+              if (audio && audio === currentAudio) audio.play().catch(() => { currentAudio = null })
+            }
+            const cleanup = () => {
+              window.removeEventListener('pointerdown', resume)
+              window.removeEventListener('keydown', resume)
+            }
+            window.addEventListener('pointerdown', resume, { once: true })
+            window.addEventListener('keydown', resume, { once: true })
+          })
           return
         }
         if (data.status === 'failed') return   // 텍스트만으로 진행 (음성은 부가 기능)

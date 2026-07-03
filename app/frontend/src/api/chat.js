@@ -63,14 +63,6 @@ export const chatApi = {
     }))
   },
 
-  /** MBTI 저장 동의/거부 (시크릿 모드) */
-  async mbtiConsent(sessionId, consent) {
-    return unwrap(await http.post('/mbti/consent/', {
-      session_id: sessionId,
-      consent,
-    }))
-  },
-
   /** 계획도움 (Tavily 장소 추천) */
   async planSupport(sessionId, locationContext) {
     return unwrap(await http.post('/plan-support/', {
