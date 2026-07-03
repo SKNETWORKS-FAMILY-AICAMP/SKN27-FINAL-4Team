@@ -633,7 +633,7 @@ function translateCardName(name) {
         <section class="selected-card-zone">
           <aside class="pick-guide">
             <span>☝</span>
-            <strong>직감이 이끄는 카드를 선택해 보세요</strong>
+            <strong>직감이 이끄는 <br>카드를 선택해 보세요</strong>
             <p>마음이 이끄는 카드가 지금 당신에게 필요한 이야기를 들려줄 거예요.</p>
           </aside>
 

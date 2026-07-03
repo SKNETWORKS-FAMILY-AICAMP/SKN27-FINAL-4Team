@@ -412,14 +412,14 @@ function formatBirthDateForDisplay(value) {
           <header class="preference-heading">
             <div>
               <p>Preference fragments</p>
-              <h3>추천 취미와 관심 분야</h3>
+              <h3> 취미와 관심 분야</h3>
             </div>
             <span>선택한 조각 {{ selectedPreferenceLabels.length }}개</span>
           </header>
 
           <div class="featured-preference-grid">
             <section>
-              <h4>추천 취미</h4>
+              <h4> 취미</h4>
               <div class="featured-card-row">
                 <button
                   v-for="item in featureHobbyItems"
