@@ -33,9 +33,13 @@ INSTALLED_APPS = [
     'user',
     'chat',
     'wellness',
+    'mbti',
+    'myprofile',
+    'taste',
     'character',
     'calendar_api',
     'game.tarot_api',
+    'mindreport',
 ]
 
 MIDDLEWARE = [
