@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { getCsrfToken, getClientId } from './client.js'
 
 const http = axios.create({
   baseURL: '/api',
@@ -6,45 +7,87 @@ const http = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
+http.interceptors.request.use((config) => {
+  config.headers['X-Binteumsai-Client-Id'] = getClientId()
+  const csrfToken = getCsrfToken()
+  if (csrfToken) {
+    config.headers['X-CSRFToken'] = csrfToken
+  }
+  return config
+})
+
+// v6.0 응답 래퍼 {success, data, error} 해제
+function unwrap(res) {
+  const body = res.data
+  if (body && body.success === false) {
+    const err = new Error(body.error?.message || 'API 오류')
+    err.code = body.error?.code
+    throw err
+  }
+  return body?.data ?? body
+}
+
 export const chatApi = {
-  async createSession(character, isSecret) {
-    const { data } = await http.post('/chat/sessions/create/', {
-      character,
+  // ═══════════ v6.0 API (API_명세서 v6.0) ═══════════
+
+  /** 세션 시작 — 친구 컨셉: 날씨/시간/닉네임 첫인사(opener) 반환.
+   *  coords={lat,lon} 있으면 날씨 반영 (없어도 시간대 인사로 정상 동작) */
+  async startSession(characterId, isSecret, coords = null) {
+    return unwrap(await http.post('/session/start/', {
+      character_id: characterId,
       is_secret: isSecret,
-    })
-    return data
+      lat: coords?.lat,
+      lon: coords?.lon,
+    }))
   },
 
-  async getSessions() {
-    const { data } = await http.get('/chat/sessions/')
-    return data
+  /** 대화 턴 (텍스트 즉시 + tts_task_id로 오디오 폴링) */
+  async sendChat(sessionId, message, characterId, isSecret) {
+    return unwrap(await http.post('/chat/', {
+      session_id: sessionId,
+      character_id: characterId,
+      message,
+      is_secret: isSecret,
+    }))
   },
 
-  async sendMessage(sessionId, content) {
-    const { data } = await http.post(`/chat/sessions/${sessionId}/messages/`, { content })
-    return data
+  /** TTS 오디오 폴링 */
+  async getTts(taskId) {
+    return unwrap(await http.get(`/tts/${taskId}/`))
   },
 
-  async recommendTea(sessionId) {
-    const { data } = await http.post(`/chat/sessions/${sessionId}/tea/`)
-    return data
+  /** MBTI 질문 요청 (10초 유휴 타이머에서 호출) */
+  async mbtiNextQuestion(sessionId) {
+    return unwrap(await http.get('/mbti/next-question/', {
+      params: { session_id: sessionId },
+    }))
   },
 
-  async recommendBgm(sessionId) {
-    const { data } = await http.post(`/chat/sessions/${sessionId}/bgm/`)
-    return data
+  /** MBTI 저장 동의/거부 (시크릿 모드) */
+  async mbtiConsent(sessionId, consent) {
+    return unwrap(await http.post('/mbti/consent/', {
+      session_id: sessionId,
+      consent,
+    }))
   },
+
+  /** 계획도움 (Tavily 장소 추천) */
+  async planSupport(sessionId, locationContext) {
+    return unwrap(await http.post('/plan-support/', {
+      session_id: sessionId,
+      location_context: locationContext,
+    }))
+  },
+
+  /** 세션 종료 (시크릿 캐시 즉시 파기) */
+  async endSession(sessionId) {
+    return unwrap(await http.post('/session/end/', { session_id: sessionId }))
+  },
+
+  // ═══════════ 부가 기능 ═══════════
 
   async suggestQuestions(sessionId) {
     const { data } = await http.post(`/chat/sessions/${sessionId}/questions/`)
-    return data
-  },
-
-  async runCouncil(sessionId, userInput, turn) {
-    const { data } = await http.post(`/chat/sessions/${sessionId}/council/`, {
-      user_input: userInput,
-      turn,
-    })
     return data
   },
 }
