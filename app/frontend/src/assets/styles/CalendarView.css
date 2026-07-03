@@ -34,6 +34,7 @@
 .daily-summary p {
   color: var(--muted);
   line-height: 1.62;
+  white-space: pre-line;
 }
 
 .calendar-view {
@@ -650,7 +651,12 @@
   #app .calendar-detail .daily-summary p {
     font-size: 13px !important;
     line-height: 1.45 !important;
+    white-space: pre-line !important;
   }
+}
+
+#app .selected-date-guide {
+  white-space: pre-line !important;
 }
 
 /* ===============================

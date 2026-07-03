@@ -26,6 +26,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 class UserPersonalProfileSerializer(serializers.ModelSerializer):
     nickname = serializers.CharField(source='user.nickname', read_only=True)
+    agreements = serializers.JSONField(write_only=True, required=False)
 
     class Meta:
         model = UserProfile
@@ -37,7 +38,17 @@ class UserPersonalProfileSerializer(serializers.ModelSerializer):
             'job',
             'hobbies',
             'interests',
+            'agreements',
             'created_at',
             'updated_at',
         ]
         read_only_fields = ['created_at', 'updated_at']
+
+    def validate_agreements(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError('필수 약관 동의가 필요합니다.')
+
+        if value.get('termsOfService') is not True or value.get('privacyCollection') is not True:
+            raise serializers.ValidationError('필수 약관 동의가 필요합니다.')
+
+        return value

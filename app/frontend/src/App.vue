@@ -13,10 +13,10 @@
 
         <nav class="nav-links" aria-label="주요 메뉴">
           <router-link to="/home">홈</router-link>
-          <router-link to="/chat">대화</router-link>
-          <router-link to="/report">마음 리포트</router-link>
-          <router-link to="/mypage">마이페이지</router-link>
-          <router-link to="/calendar">캘린더</router-link>
+          <a href="/chat" :class="{ active: route.path.startsWith('/chat') }" @click.prevent="goProtected('/chat')">대화</a>
+          <a href="/report" :class="{ active: route.path.startsWith('/report') }" @click.prevent="goProtected('/report')">마음 리포트</a>
+          <a href="/mypage" :class="{ active: route.path.startsWith('/mypage') }" @click.prevent="goProtected('/mypage')">마이페이지</a>
+          <a href="/calendar" :class="{ active: route.path.startsWith('/calendar') }" @click.prevent="goProtected('/calendar')">캘린더</a>
         </nav>
 
         <div class="nav-right">
@@ -137,15 +137,41 @@ const NAV = {
   info: "/onboarding/info",
   userinfo: "/onboarding/info",
   character: "/onboarding/character",
+  onboardingComplete: "/onboarding/complete",
   calendar: "/calendar",
   council: "/chat/council",
 };
+const PROTECTED_PATHS = new Set(["/chat", "/report", "/mypage", "/calendar"]);
+const PROTECTED_NAV_IDS = new Set(["chat", "report", "my", "mypage", "calendar", "council"]);
+
+function goLogin(redirectPath = "") {
+  if (redirectPath) {
+    router.push({ path: "/login", query: { redirect: redirectPath } });
+    return;
+  }
+  router.push("/login");
+}
+
+function goProtected(path) {
+  if (currentUser.value) {
+    router.push(path);
+    return;
+  }
+
+  goLogin(PROTECTED_PATHS.has(path) ? path : "");
+}
 
 function onNavigate(id) {
   if (id === "login" && currentUser.value) {
     router.push(currentUser.value.next_path || "/home");
     return;
   }
+
+  if (PROTECTED_NAV_IDS.has(id) && !currentUser.value) {
+    goLogin(NAV[id] || "");
+    return;
+  }
+
   if (NAV[id]) router.push(NAV[id]);
 }
 
@@ -279,7 +305,8 @@ function starStyle(i) {
 }
 
 .nav-links a:hover,
-.nav-links a.router-link-active {
+.nav-links a.router-link-active,
+.nav-links a.active {
   color: #fff;
   background: rgba(231, 62, 101, 0.16);
 }
