@@ -61,6 +61,11 @@ def build_axis_scoring_system_prompt() -> str:
 - -1.0은 -방향 성향이 뚜렷함, -0.5는 -방향 성향이 약하게 우세함이다.
 - 0은 중립 또는 양쪽 혼합이다.
 - 0.5는 +방향 성향이 약하게 우세함, 1.0은 +방향 성향이 뚜렷함이다.
+- 현재 입력의 axis와 직접 관련 없는 단서는 점수 근거로 사용하지 않는다.
+- 한 응답 안에 양쪽 성향 단서가 함께 있으면 강한 점수를 주지 않는다.
+- 양쪽 근거가 비슷하면 0을 준다.
+- 단서가 있지만 다른 축 단서와 섞여 있거나 확신이 낮으면 1.0/-1.0 대신 0.5/-0.5를 우선 사용한다.
+- 최근 실제 행동과 반복된 선택을 일반적 주장이나 희망 표현보다 우선한다.
 - 근거가 부족하거나 축과 무관하면 coding_status는 "insufficient_context"이고 score는 null이다.
 - 산출에 실패했다면 coding_status는 "failed"이고 score는 null이다.
 - coding_status는 반드시 "coded", "insufficient_context", "failed" 중 하나이다.

@@ -9,6 +9,7 @@ import importlib
 import json
 import os
 from pathlib import Path
+import re
 from statistics import pstdev
 import sys
 import uuid
@@ -43,6 +44,18 @@ DEFAULT_SCORING_MAX_OUTPUT_TOKENS = 1200
 
 CONTROL_STRATEGY = "persona_direct"
 CONTROL_COMBO = "single_1_openai_baseline"
+CURRENT_DEMO_DATASET = "demo_questions_v4_jp_mixed_j_rebalanced_20260703"
+CURRENT_RUN_BATCH = (
+    os.getenv("MBTI_EXPERIMENT_RUN_BATCH")
+    or "v4_persona_openai_independent_20260703_01"
+)
+PROMPT_VERSIONS = {
+    "persona_direct": "persona_axis_scoring_conservative_v1_20260703",
+    "rubric_code": "rubric_code_prompt_v1",
+    "triple_majority": "placeholder_prompt_na",
+    "hundred_point_ensemble": "placeholder_prompt_na",
+    "triple_supervisor": "placeholder_prompt_na",
+}
 
 
 def _env(name: str, default: str) -> str:
@@ -51,23 +64,16 @@ def _env(name: str, default: str) -> str:
 
 EXPERIMENT_COMBOS = {
     "single_1_openai_baseline": {
-        "description": "Single-model rank 1: supported OpenAI baseline for service adoption.",
+        "description": "Single-model control: current OpenAI baseline service candidate.",
         "provider": _env("MBTI_SINGLE_1_PROVIDER", "openai"),
         "model": _env("MBTI_SINGLE_1_MODEL", "gpt-5.4-mini"),
         "judges": (),
         "supervisor": None,
     },
-    "single_2_openai_quality": {
-        "description": "Single-model rank 2: higher-quality OpenAI comparison candidate.",
-        "provider": _env("MBTI_SINGLE_2_PROVIDER", "openai"),
-        "model": _env("MBTI_SINGLE_2_MODEL", "gpt-5.4"),
-        "judges": (),
-        "supervisor": None,
-    },
-    "single_3_groq_qwen": {
-        "description": "Single-model rank 3: Groq Qwen comparison candidate.",
-        "provider": _env("MBTI_SINGLE_3_PROVIDER", "groq"),
-        "model": _env("MBTI_SINGLE_3_MODEL", "qwen/qwen3-32b"),
+    "single_2_groq_qwen": {
+        "description": "Single-model experiment: Groq Qwen comparison candidate.",
+        "provider": _env("MBTI_SINGLE_2_PROVIDER", "groq"),
+        "model": _env("MBTI_SINGLE_2_MODEL", "qwen/qwen3-32b"),
         "judges": (),
         "supervisor": None,
     },
@@ -167,7 +173,13 @@ class PersonaDirectLlmScoringClient:
             temperature=config.temperature,
             max_tokens=config.max_output_tokens,
         )
-        return _extract_json_object(str(content))
+        try:
+            return _extract_json_object(str(content))
+        except json.JSONDecodeError as exc:
+            return _build_failed_scoring_payload(
+                responses=responses,
+                reason=f"LLM returned invalid JSON: {exc}",
+            )
 
 
 def _build_scoring_config(
@@ -207,9 +219,18 @@ def _openai_compatible_chat_content(
     temperature: float,
     max_tokens: int,
 ) -> str:
+    provider_key = provider.lower()
+    if provider_key == "openai":
+        return _langchain_openai_chat_content(
+            model=model,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
     from openai import OpenAI
 
-    provider_key = provider.lower()
     if provider_key == "groq":
         api_key = os.getenv("GROQ_API_KEY")
         base_url = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
@@ -245,6 +266,55 @@ def _openai_compatible_chat_content(
     return response.choices[0].message.content or ""
 
 
+def _langchain_openai_chat_content(
+    *,
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    temperature: float,
+    max_tokens: int,
+) -> str:
+    try:
+        from langchain_core.messages import HumanMessage, SystemMessage
+        from langchain_openai import ChatOpenAI
+    except ModuleNotFoundError as exc:
+        missing = exc.name or "langchain dependency"
+        raise ModuleNotFoundError(
+            f"{missing} is required for OpenAI experiments. "
+            "Install app/backend/requirements.txt in the Python environment "
+            "used to run this script."
+        ) from exc
+
+    llm = ChatOpenAI(
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+    message = llm.invoke(
+        [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt),
+        ]
+    )
+    content = message.content
+    if isinstance(content, list):
+        return "".join(
+            str(item.get("text", item)) if isinstance(item, dict) else str(item)
+            for item in content
+        )
+    return str(content or "")
+
+
+def _json_loads_lenient(text: str):
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        escaped_invalid_backslashes = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', text)
+        if escaped_invalid_backslashes == text:
+            raise
+        return json.loads(escaped_invalid_backslashes)
+
+
 def _extract_json_object(text: str):
     stripped = text.strip()
     if stripped.startswith("```"):
@@ -252,13 +322,27 @@ def _extract_json_object(text: str):
         if stripped.lower().startswith("json"):
             stripped = stripped[4:].strip()
     try:
-        return json.loads(stripped)
+        return _json_loads_lenient(stripped)
     except json.JSONDecodeError:
         start = stripped.find("{")
         end = stripped.rfind("}") + 1
         if start < 0 or end <= start:
             raise
-        return json.loads(stripped[start:end])
+        return _json_loads_lenient(stripped[start:end])
+
+
+def _build_failed_scoring_payload(*, responses, reason: str) -> dict[str, object]:
+    return {
+        "scores": [
+            {
+                "response_id": response.id,
+                "score": None,
+                "coding_status": "failed",
+                "reason": reason,
+            }
+            for response in responses
+        ]
+    }
 
 
 def _display_score(axis_result) -> int | None:
@@ -380,6 +464,9 @@ def _result_row(
         "run_id": uuid.uuid4().hex,
         "row_type": "data",
         "logged_at": datetime.now().isoformat(timespec="seconds"),
+        "demo_dataset": CURRENT_DEMO_DATASET,
+        "run_batch": CURRENT_RUN_BATCH,
+        "prompt_version": PROMPT_VERSIONS.get(strategy_name, "unknown_prompt_version"),
         "experiment_family": _experiment_family(strategy_name),
         "experiment_group": _experiment_group(
             strategy_name=strategy_name,
@@ -434,6 +521,9 @@ def _csv_fieldnames() -> list[str]:
         "run_id",
         "row_type",
         "logged_at",
+        "demo_dataset",
+        "run_batch",
+        "prompt_version",
         "experiment_family",
         "experiment_group",
         "experiment_variable",
@@ -510,6 +600,9 @@ def _build_analysis_row(*, strategy_name: str, rows: list[dict[str, object]]) ->
         return row
 
     latest = data_rows[-1]
+    row["demo_dataset"] = latest.get("demo_dataset", "")
+    row["run_batch"] = latest.get("run_batch", "")
+    row["prompt_version"] = latest.get("prompt_version", "")
     row["experiment_family"] = latest.get("experiment_family", "")
     row["experiment_group"] = "analysis"
     row["experiment_variable"] = "analysis"
@@ -569,7 +662,17 @@ def _append_row(path: Path, row: dict[str, object]) -> None:
                     existing_row["row_type"] = "data"
 
     rows = existing_rows + [row]
-    rows.append(_build_analysis_row(strategy_name=str(row["strategy"]), rows=rows))
+    current_dataset = str(row.get("demo_dataset", ""))
+    current_run_batch = str(row.get("run_batch", ""))
+    current_prompt_version = str(row.get("prompt_version", ""))
+    analysis_rows = [
+        existing_row
+        for existing_row in rows
+        if str(existing_row.get("demo_dataset", "")) == current_dataset
+        and str(existing_row.get("run_batch", "")) == current_run_batch
+        and str(existing_row.get("prompt_version", "")) == current_prompt_version
+    ]
+    rows.append(_build_analysis_row(strategy_name=str(row["strategy"]), rows=analysis_rows))
     with path.open("w", encoding="utf-8-sig", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
@@ -625,7 +728,7 @@ def run(
     model: str | None = None,
 ) -> None:
     from demo_data import build_demo_monthly_question_batch
-    from mbti.examples.monthly_demo_payload import (
+    from monthly_demo_payload import (
         DemoReportClient,
         build_demo_baseline_snapshot,
     )
