@@ -1,12 +1,13 @@
 <script setup>
 import { onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { userApi } from "../../api/user.js";
 import googleLogo from "../../assets/auth/google-logo.png";
 import kakaoLogo from "../../assets/auth/kakao-logo.png";
 import naverLogo from "../../assets/auth/naver-logo.png";
 
 const router = useRouter();
+const route = useRoute();
 const loadingProvider = ref("");
 const errorMessage = ref("");
 
@@ -27,7 +28,7 @@ onMounted(async () => {
   try {
     const data = await userApi.getCurrentUser();
     if (data.authenticated) {
-      router.replace(data.user?.next_path || "/home");
+      router.replace(getSafeRedirect() || data.user?.next_path || "/home");
     }
   } catch {
     // 세션 확인 실패 시 로그인 화면을 그대로 보여준다.
@@ -39,12 +40,17 @@ async function continueWithProvider(provider) {
   errorMessage.value = "";
 
   try {
-    const { authorization_url } = await userApi.getSocialLoginUrl(provider);
+    const { authorization_url } = await userApi.getSocialLoginUrl(provider, getSafeRedirect() || "/home");
     window.location.assign(authorization_url);
   } catch (error) {
     errorMessage.value = error?.response?.data?.error || "로그인 준비 중 문제가 생겼어요. 설정을 확인한 뒤 다시 시도해주세요.";
     loadingProvider.value = "";
   }
+}
+
+function getSafeRedirect() {
+  const redirect = String(route.query.redirect || "");
+  return redirect.startsWith("/") && !redirect.startsWith("//") ? redirect : "";
 }
 </script>
 
@@ -63,7 +69,7 @@ async function continueWithProvider(provider) {
         <span class="title-line">마음을 정리해보세요</span>
       </h1>
       <p class="login-card__description">
-        소셜 계정으로 간편하게 시작하고, <br>마음 대화·감정 기록·마음 리포트로 감정을 천천히 돌아보세요.
+        소셜 계정으로 간편하게 시작하고, <br>마음 대화·감정 기록·마음 리포트로 <br>감정을 천천히 돌아보세요.
       </p>
 
       <div class="mascot-stage image-area">
@@ -113,7 +119,7 @@ async function continueWithProvider(provider) {
       </section>
 
       <p class="login-notice">
-        로그인하면 빈틈사이의 이용약관 및 개인정보 처리방침에 동의한 것으로 간주합니다.
+        로그인하면 빈틈사이의 이용약관 및 개인정보 처리방침에 동의하게 됩니다.
       </p>
     </article>
   </section>

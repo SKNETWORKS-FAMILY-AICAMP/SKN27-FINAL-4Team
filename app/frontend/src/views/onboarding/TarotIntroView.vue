@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { getLocalDateString } from "../../api/client.js";
 import { tarotApi } from "../../api/tarot.js";
+import { userApi } from "../../api/user.js";
 import { getTarotCardImage } from "../../assets/tarot/cardImages.js";
 import tarotCardBackImage from "../../assets/tarot/tarot-card-back.png";
 import tarotDeckBoxImage from "../../assets/tarot/tarot-deck-box.png";
@@ -24,18 +25,26 @@ const dailyMajor = ref(null);
 const isDailyMajorLoading = ref(false);
 const dailyMajorError = ref("");
 const isDailyCardRevealed = ref(false);
+const currentUser = ref(null);
+const authChecked = ref(false);
+const isAuthenticated = computed(() => Boolean(currentUser.value));
 
 const dailyCardImage = computed(() => getTarotCardImage(dailyMajor.value?.card_number));
 const dailyPillLabel = computed(() => {
+  if (!isAuthenticated.value) return "로그인 후 오늘의 카드 확인하기";
   if (isDailyMajorLoading.value) return "오늘의 카드를 불러오는 중";
-  if (!dailyMajor.value) return "프로필 확인 필요";
-  if (!isDailyCardRevealed.value) return "덱 눌러 확인 ✦";
+  if (!dailyMajor.value) return "로그인 후 오늘의 카드 확인하기";
+  if (!isDailyCardRevealed.value) return "덱을 열어 카드 확인";
   return `오늘의 메이저 카드 · ${dailyMajor.value.card_name_ko || dailyMajor.value.card_name}`;
 });
 
 const dailyCardMeaning = computed(() => {
+  if (!isAuthenticated.value) {
+    return "로그인 후 오늘의 카드 확인하기";
+  }
+
   if (dailyMajor.value && !isDailyCardRevealed.value) {
-    return "덱을 눌러 오늘의 카드를 뽑으면 카드의 정해진 의미가 표시됩니다.";
+    return "덱을 열어 오늘의 카드를 확인하면 카드의 정해진 의미가 표시됩니다.";
   }
 
   if (!dailyMajor.value) {
@@ -46,6 +55,11 @@ const dailyCardMeaning = computed(() => {
 });
 
 function goDraw() {
+  if (!isAuthenticated.value) {
+    router.push({ path: "/login", query: { redirect: "/onboarding/fortune/draw" } });
+    return;
+  }
+
   router.push({ path: "/onboarding/fortune/draw" });
 }
 
@@ -55,7 +69,29 @@ function revealDailyCard() {
   saveDailyMajorCache(true);
 }
 
+function handleDailyCardClick() {
+  if (!isAuthenticated.value) {
+    router.push({ path: "/login", query: { redirect: "/onboarding/fortune" } });
+    return;
+  }
+
+  revealDailyCard();
+}
+
+async function refreshCurrentUser() {
+  try {
+    const data = await userApi.getCurrentUser();
+    currentUser.value = data.authenticated === false ? null : data.user || data;
+  } catch {
+    currentUser.value = null;
+  } finally {
+    authChecked.value = true;
+  }
+}
+
 async function loadDailyMajor() {
+  if (!isAuthenticated.value) return;
+
   const today = getLocalDateString();
   const cached = readDailyMajorCache(today);
 
@@ -125,7 +161,10 @@ function getStoredProfileSignature() {
   }
 }
 
-onMounted(loadDailyMajor);
+onMounted(async () => {
+  await refreshCurrentUser();
+  await loadDailyMajor();
+});
 </script>
 
 <template>
@@ -146,11 +185,11 @@ onMounted(loadDailyMajor);
               class="daily-deck-button"
               :class="{ revealed: isDailyCardRevealed }"
               type="button"
-              :disabled="!dailyMajor || isDailyMajorLoading"
-              @click="revealDailyCard"
+              :disabled="isDailyMajorLoading || !authChecked"
+              @click="handleDailyCardClick"
             >
               <img
-                v-if="isDailyCardRevealed && dailyCardImage"
+                v-if="isAuthenticated && isDailyCardRevealed && dailyCardImage"
                 class="daily-card-image"
                 :src="dailyCardImage"
                 :alt="`${dailyMajor.card_name_ko} 카드`"
@@ -165,10 +204,9 @@ onMounted(loadDailyMajor);
           </div>
 
           <div class="daily-major-copy">
-            <strong class="daily-pill">연속 확인 3일</strong>
             <h2>오늘의 타로 운세</h2>
-            <p>오늘의 메이저 카드 한 장을 뽑고, 하루의 운세 메시지를 확인해보세요.</p>
-            <button class="tarot-glow-button" type="button" :disabled="!dailyMajor || isDailyMajorLoading" @click="revealDailyCard">
+            <p>오늘의 메이저 카드 한 장을 뽑고, <br>하루의 운세 메시지를 확인해보세요.</p>
+            <button class="tarot-glow-button" type="button" :disabled="isDailyMajorLoading || !authChecked" @click="handleDailyCardClick">
               {{ dailyPillLabel }}
             </button>
           </div>
@@ -196,14 +234,14 @@ onMounted(loadDailyMajor);
           <span><img :src="tarotCardBackImage" alt=""></span>
         </div>
 
-        <button class="btn primary large tarot-draw-link" type="button" @click="goDraw">
+        <button class="btn primary large tarot-draw-link" type="button" :disabled="!authChecked" @click="goDraw">
           카드 뽑으러 가기 ✦
         </button>
       </article>
     </div>
 
     <footer class="glass-panel tarot-reference-bar">
-      <span>🎁 타로 운세는 참고용으로, 여러분의 선택과 노력이 가장 큰 변화를 만듭니다. ♥</span>
+      <span>오늘의 운세카드는 하루에 한 번 확인할 수 있어요. 운세 결과는 하루를 가볍게 돌아보고 마음을 정리하는 참고용으로 활용해 주세요.</span>
       <button type="button">이용 안내 ›</button>
     </footer>
   </section>

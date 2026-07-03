@@ -3,6 +3,11 @@ import { computed, ref } from "vue";
 import { userApi } from "../../api/user.js";
 import hobbyCsv from "../../assets/data/onboarding/preference_hobbies.csv?raw";
 import interestCsv from "../../assets/data/onboarding/preference_interests.csv?raw";
+import {
+  AGREEMENT_VERSION,
+  privacyCollectionContent,
+  termsContent,
+} from "../../constants/onboardingAgreements.js";
 
 const emit = defineEmits(["navigate"]);
 
@@ -33,6 +38,9 @@ const isSaving = ref(false);
 const saveError = ref("");
 const activeKeywordModal = ref(null);
 const keywordSearchQuery = ref("");
+const termsOfServiceAgreed = ref(false);
+const privacyCollectionAgreed = ref(false);
+const activeAgreementModal = ref(null);
 
 const selectedPreferenceLabels = computed(() => [...selectedHobbies.value, ...selectedInterests.value]);
 const featureHobbyItems = computed(() => FEATURE_HOBBY_LABELS.map((label) => getKeywordItem(label, "hobby")));
@@ -60,6 +68,9 @@ const filteredModalItems = computed(() => {
     ...featureInterestItems.value,
   ]).filter((item) => item.type === activeKeywordModal.value);
 });
+const agreementsSatisfied = computed(() => termsOfServiceAgreed.value && privacyCollectionAgreed.value);
+const activeAgreementTitle = computed(() => activeAgreementModal.value === "privacy" ? "개인정보 수집 및 이용 안내" : "이용약관");
+const activeAgreementContent = computed(() => activeAgreementModal.value === "privacy" ? privacyCollectionContent : termsContent);
 
 function getStoredProfile() {
   try {
@@ -210,6 +221,14 @@ function closeKeywordModal() {
   keywordSearchQuery.value = "";
 }
 
+function openAgreementModal(type) {
+  activeAgreementModal.value = type;
+}
+
+function closeAgreementModal() {
+  activeAgreementModal.value = null;
+}
+
 function showValidationMessage(message) {
   saveError.value = message;
   alert(message);
@@ -239,6 +258,12 @@ async function saveUserInfo() {
     return;
   }
 
+  if (!agreementsSatisfied.value) {
+    showValidationMessage("필수 약관을 확인하고 동의해 주세요.");
+    isSaving.value = false;
+    return;
+  }
+
   const profilePayload = {
     nickname,
     birth_date: normalizedBirthDate,
@@ -247,6 +272,13 @@ async function saveUserInfo() {
     job: profileForm.value.job.trim(),
     hobbies: selectedHobbies.value,
     interests: selectedInterests.value,
+    agreements: {
+      termsOfService: termsOfServiceAgreed.value,
+      privacyCollection: privacyCollectionAgreed.value,
+      termsVersion: AGREEMENT_VERSION,
+      privacyVersion: AGREEMENT_VERSION,
+      agreedAt: new Date().toISOString(),
+    },
   };
 
   try {
@@ -264,7 +296,16 @@ async function saveUserInfo() {
     };
 
     localStorage.setItem("binteumsaiUserProfile", JSON.stringify(localProfile));
-    emit("navigate", "home");
+    localStorage.setItem("binteumsaiOnboardingJustCompleted", "true");
+
+    try {
+      const updatedUser = await userApi.getCurrentUser();
+      window.dispatchEvent(new CustomEvent("binteumsai-auth-changed", { detail: { user: updatedUser } }));
+    } catch {
+      // 헤더 즉시 갱신에 실패해도 다음 페이지 이동/새로고침 시 정상적으로 반영된다.
+    }
+
+    emit("navigate", "onboardingComplete");
   } catch (error) {
     saveError.value = error.response?.data?.error || "사용자 정보를 저장하지 못했어요. 잠시 후 다시 시도해 주세요.";
   } finally {
@@ -485,6 +526,47 @@ function formatBirthDateForDisplay(value) {
           </section>
         </section>
 
+        <section class="agreement-card" aria-labelledby="agreement-title">
+          <header>
+            <div>
+              <p>Required agreement</p>
+              <h3 id="agreement-title">서비스 이용을 위한 확인</h3>
+            </div>
+            <span>필수 2개</span>
+          </header>
+          <p class="agreement-desc">빈틈사이를 시작하기 전에 필요한 약관을 확인해 주세요.</p>
+
+          <div class="agreement-list">
+            <div class="agreement-row">
+              <label for="terms-of-service-agreement">
+                <input
+                  id="terms-of-service-agreement"
+                  v-model="termsOfServiceAgreed"
+                  type="checkbox"
+                >
+                <span class="required-badge">필수</span>
+                <strong>이용약관에 동의합니다</strong>
+              </label>
+              <button type="button" @click="openAgreementModal('terms')">약관 보기</button>
+            </div>
+
+            <div class="agreement-row">
+              <label for="privacy-collection-agreement">
+                <input
+                  id="privacy-collection-agreement"
+                  v-model="privacyCollectionAgreed"
+                  type="checkbox"
+                >
+                <span class="required-badge">필수</span>
+                <strong>개인정보 수집 및 이용에 동의합니다</strong>
+              </label>
+              <button type="button" @click="openAgreementModal('privacy')">내용 보기</button>
+            </div>
+          </div>
+
+          <p v-if="!agreementsSatisfied" class="agreement-help">필수 약관을 확인하고 동의해 주세요.</p>
+        </section>
+
         <footer class="selected-summary-card">
           <div class="summary-title">
             <span class="summary-icon">🫙</span>
@@ -507,8 +589,8 @@ function formatBirthDateForDisplay(value) {
 
           <div class="summary-action">
             <p v-if="saveError" class="save-error">{{ saveError }}</p>
-            <button class="btn primary large" type="submit" :disabled="isSaving">
-              {{ isSaving ? "저장 중..." : "설정 저장하고 홈으로 ✨" }}
+            <button class="btn primary large" type="submit" :disabled="isSaving || !agreementsSatisfied">
+              {{ isSaving ? "저장 중..." : "동의하고 시작하기 ✨" }}
             </button>
           </div>
         </footer>
@@ -556,6 +638,21 @@ function formatBirthDateForDisplay(value) {
           </div>
           <button class="modal-complete-button" type="button" @click="closeKeywordModal">완료</button>
         </footer>
+      </section>
+    </div>
+
+    <div v-if="activeAgreementModal" class="agreement-modal-backdrop" @click.self="closeAgreementModal">
+      <section class="agreement-modal" role="dialog" aria-modal="true" :aria-labelledby="`${activeAgreementModal}-agreement-title`">
+        <header class="agreement-modal-header">
+          <h3 :id="`${activeAgreementModal}-agreement-title`">{{ activeAgreementTitle }}</h3>
+          <button type="button" aria-label="닫기" @click="closeAgreementModal">×</button>
+        </header>
+
+        <div class="agreement-modal-content">
+          <p v-for="line in activeAgreementContent" :key="line">{{ line }}</p>
+        </div>
+
+        <button class="modal-complete-button" type="button" @click="closeAgreementModal">확인</button>
       </section>
     </div>
   </section>
@@ -773,6 +870,116 @@ function formatBirthDateForDisplay(value) {
   border: 1px solid rgba(255, 116, 180, 0.24);
   border-radius: 22px;
   background: rgba(71, 25, 86, 0.48);
+}
+
+.agreement-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(255, 116, 180, 0.24);
+  border-radius: 22px;
+  background: rgba(73, 27, 88, 0.42);
+}
+
+.agreement-card header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.agreement-card header p {
+  margin: 0 0 6px;
+  color: #f84f9b;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.agreement-card h3 {
+  margin: 0;
+  color: #fff7df;
+  font-size: clamp(22px, 1.6vw, 28px);
+}
+
+.agreement-card header > span {
+  color: #ffd37a;
+  font-size: 14px;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.agreement-desc,
+.agreement-help {
+  margin: 0;
+  color: rgba(255, 245, 230, 0.68);
+  line-height: 1.5;
+}
+
+.agreement-help {
+  color: #ffb09a;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.agreement-list {
+  display: grid;
+  gap: 10px;
+}
+
+.agreement-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 116, 180, 0.18);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.agreement-row label {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #fff7df;
+  cursor: pointer;
+}
+
+.agreement-row input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  accent-color: #f84f9b;
+}
+
+.agreement-row strong {
+  min-width: 0;
+  line-height: 1.4;
+}
+
+.required-badge {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(248, 79, 155, 0.18);
+  color: #ffd37a;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.agreement-row button {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 116, 180, 0.24);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.055);
+  color: #fff7df;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
 }
 
 .preference-heading,
@@ -1022,6 +1229,69 @@ function formatBirthDateForDisplay(value) {
   backdrop-filter: blur(12px);
 }
 
+.agreement-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 320;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(8, 3, 22, 0.62);
+  backdrop-filter: blur(12px);
+}
+
+.agreement-modal {
+  width: min(620px, 100%);
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+  border: 1px solid rgba(255, 116, 180, 0.32);
+  border-radius: 26px;
+  background: rgba(38, 14, 60, 0.96);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.42);
+}
+
+.agreement-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.agreement-modal-header h3 {
+  margin: 0;
+  color: #fff7df;
+  font-size: 24px;
+}
+
+.agreement-modal-header button {
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.agreement-modal-content {
+  display: grid;
+  gap: 10px;
+  max-height: min(52vh, 360px);
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid rgba(255, 116, 180, 0.18);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.agreement-modal-content p {
+  margin: 0;
+  color: rgba(255, 245, 230, 0.78);
+  line-height: 1.65;
+}
+
 .keyword-modal {
   width: min(920px, 100%);
   max-height: min(760px, calc(100dvh - 48px));
@@ -1160,7 +1430,9 @@ function formatBirthDateForDisplay(value) {
   }
 
   .preference-heading,
-  .keyword-vault header {
+  .keyword-vault header,
+  .agreement-card header,
+  .agreement-row {
     display: grid;
   }
 }
