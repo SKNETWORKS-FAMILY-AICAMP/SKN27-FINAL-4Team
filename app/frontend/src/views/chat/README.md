@@ -25,7 +25,7 @@
 - **2단계 응답**: 텍스트 즉시 렌더링 + ElevenLabs TTS 폴링(`tts_task_id`) 재생
 - **MBTI**: 턴 종료 후 10초 무입력 → 질문 push (일반 모드 전용)
 - **세션 종료 통지**: pagehide/unmount 시 sendBeacon으로 `/api/session/end/` → 잔여 대화 기억 정리
-- 추천 질문 칩, 300자 제한 입력바
+- 300자 제한 입력바
 
 ### ChatView.vue (SCR-003-S 시크릿챗) — 완전 무저장
 - 상단 비저장 경고 배너
@@ -50,5 +50,4 @@ GET  /api/mbti/next-question/   → MBTI 질문 (10초 유휴 시 · 일반 모�
 POST /api/session/end/          → 세션 종료 (시크릿: 캐시 파기 / 일반: 잔여 기억 정리)
 ```
 
-부가: `POST /api/chat/sessions/:id/questions/`(추천 질문)
-(구 콜드스타트 감정 선택·날씨 배너·피드백 API는 친구 컨셉 개편으로 제거 — 2026-07-03)
+(구 콜드스타트 감정 선택·날씨 배너·피드백·추천 질문 API는 친구 컨셉 개편으로 제거 — 2026-07-03)

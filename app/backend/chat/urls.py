@@ -14,8 +14,4 @@ urlpatterns = [
     path('tts/<str:task_id>/',       views.tts_status),      # TTS 상태 폴링
     path('tts/<str:task_id>/audio/', views.tts_audio),       # 오디오 1회 다운로드 후 파기
     path('mbti/next-question/',  views.mbti_next_question),  # MBTI 질문 (10초 유휴 · 일반 전용)
-    path('plan-support/',        views.plan_support_view),   # 장소 추천 (트리거 확정 시 연결)
-
-    # ── 부가 기능 ──
-    path('chat/sessions/<int:session_id>/questions/', views.suggest_questions),  # 이런 말 어때요
 ]

@@ -166,7 +166,7 @@ MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
-TAVILY_API_KEY = os.environ.get('TAVILY_API_KEY', '')
+# (TAVILY_API_KEY는 장소 추천 기능 폐기로 제거 — 2026-07-05)
 
 # ── ElevenLabs TTS (TTS_음성설정 v2.0) ──
 ELEVENLABS_API_KEY = os.environ.get('ELEVENLABS_API_KEY', '')

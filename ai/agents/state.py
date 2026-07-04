@@ -33,6 +33,5 @@ class ChatState(TypedDict, total=False):
 
     # 응답 생성
     agent_guide: str                  # 감정 에이전트가 만든 응답 지침
-    need_plan: bool                   # ⚠️ 트리거 조건 미확정 — 현재는 버튼 기반이라 항상 False
-    search_context: str               # Tavily 검색 결과
     final_response: str
+    # (need_plan·search_context는 Plan Agent(장소 추천) 폐기로 제거 — 2026-07-05)

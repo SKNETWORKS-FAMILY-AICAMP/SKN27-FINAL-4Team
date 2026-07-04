@@ -63,23 +63,8 @@ export const chatApi = {
     }))
   },
 
-  /** 계획도움 (Tavily 장소 추천) */
-  async planSupport(sessionId, locationContext) {
-    return unwrap(await http.post('/plan-support/', {
-      session_id: sessionId,
-      location_context: locationContext,
-    }))
-  },
-
   /** 세션 종료 (시크릿 캐시 즉시 파기) */
   async endSession(sessionId) {
     return unwrap(await http.post('/session/end/', { session_id: sessionId }))
-  },
-
-  // ═══════════ 부가 기능 ═══════════
-
-  async suggestQuestions(sessionId) {
-    const { data } = await http.post(`/chat/sessions/${sessionId}/questions/`)
-    return data
   },
 }
