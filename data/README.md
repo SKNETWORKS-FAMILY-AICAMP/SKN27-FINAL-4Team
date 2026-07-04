@@ -25,5 +25,4 @@ python ai/emotion/rebuild_clean_dataset.py --raw "<다운로드 경로>/018.감�
 | 파일 | 내용 | 출처 |
 |---|---|---|
 | `kcelectra_train_clean.jsonl` (로컬 생성) | `{"text", "emotion"}` × 58,234 — 첫 사람 발화 + 6감정 대분류 | AI Hub 감성대화 (재배포 금지) |
-
-(구 `safety_redteam_set.json`·`scale_gold_set.json`·`scales/`는 미사용으로 제거 — 2026-07-03)
+| `chat_eval_set.jsonl` | 채팅체(실사용형) 평가셋 **150문장**(감정별 37~38) — 학습 금지, 평가 전용. ⚠ 라벨 팀 검수 필요 (초
