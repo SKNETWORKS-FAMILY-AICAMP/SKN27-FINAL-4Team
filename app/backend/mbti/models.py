@@ -204,77 +204,7 @@ class MbtiMonthlyReport(models.Model):
         ordering = ['-generated_at', '-id']
 
 
-class MbtiMonthlyAnalysisJob(models.Model):
-    user_id = models.BigIntegerField(db_index=True)
-    period_key = models.CharField(max_length=7, db_index=True)
-    status = models.CharField(
-        max_length=32,
-        choices=ANALYSIS_JOB_STATUS_CHOICES,
-        default='pending',
-        db_index=True,
-    )
-    trigger_source = models.CharField(
-        max_length=32,
-        choices=ANALYSIS_JOB_TRIGGER_CHOICES,
-        default='monthly_scheduler',
-    )
-    input_hash = models.CharField(max_length=128, db_index=True)
-    scoring_model = models.CharField(max_length=64, null=True, blank=True)
-    prompt_version = models.CharField(max_length=64, null=True, blank=True)
-    retry_count = models.IntegerField(default=0)
-    scheduled_at = models.DateTimeField(null=True, blank=True)
-    started_at = models.DateTimeField(null=True, blank=True)
-    finished_at = models.DateTimeField(null=True, blank=True)
-    error_message = models.TextField(null=True, blank=True)
-    monthly_result = models.OneToOneField(
-        MbtiMonthlyResultRecord,
-        db_column='monthly_result_id',
-        on_delete=models.DO_NOTHING,
-        related_name='analysis_job',
-        null=True,
-        blank=True,
-    )
-    created_at = models.DateTimeField(null=True, blank=True)
-    updated_at = models.DateTimeField(null=True, blank=True)
 
-    class Meta:
-        app_label = 'mbti'
-        db_table = 'mbti_monthly_analysis_jobs'
-        indexes = [
-            models.Index(fields=['status', 'scheduled_at']),
-            models.Index(fields=['user_id', 'period_key']),
-            models.Index(fields=['user_id', 'period_key', 'input_hash']),
-        ]
-        constraints = [
-            models.UniqueConstraint(
-                fields=['user_id', 'period_key', 'input_hash', 'prompt_version'],
-                name='uniq_mbti_analysis_job_input_prompt',
-            ),
-        ]
-        ordering = ['scheduled_at', 'id']
-
-
-class MbtiEvidenceEmbedding(models.Model):
-    response_score = models.OneToOneField(
-        MbtiResponseScore,
-        db_column='response_score_id',
-        on_delete=models.DO_NOTHING,
-        related_name='evidence_embedding',
-    )
-    vector_store_key = models.CharField(max_length=255)
-    embedding_model = models.CharField(max_length=64)
-    embedded_at = models.DateTimeField(null=True, blank=True)
-    created_at = models.DateTimeField(null=True, blank=True)
-    updated_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        app_label = 'mbti'
-        db_table = 'mbti_evidence_embeddings'
-        indexes = [
-            models.Index(fields=['response_score']),
-            models.Index(fields=['vector_store_key']),
-        ]
-        ordering = ['-embedded_at', '-id']
 
 
 class MbtiOnboardingProfile(models.Model):
