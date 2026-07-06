@@ -11,6 +11,7 @@ from mbti.services.monthly_questions import (
     MbtiQuestionResponseItem,
 )
 from mbti.services.opening_rules import PrimaryOpeningResult
+from mbti.services.persona import build_axis_scoring_system_prompt
 
 
 AXIS_DIRECTION_LABELS = {
@@ -41,53 +42,6 @@ class MbtiScoringClient(Protocol):
         config: MbtiScoringLlmConfig,
     ) -> Mapping[str, Any]:
         ...
-
-
-def build_axis_scoring_system_prompt() -> str:
-    return """너는 사용자의 답변을 분석하여 지정된 MBTI 선호지표 축에 맞게 점수를 매기는 MBTI 분석가이다.
-
-반드시 입력으로 받은 모든 response_id에 대해 정확히 하나의 결과를 반환한다.
-고정관념으로 추론하지 말고, 오직 답변 안의 행동, 선택, 표현 근거만 사용한다.
-
-축별 부호는 다음과 같이 고정한다.
-- IE: +는 E, -는 I
-- SN: +는 S, -는 N
-- TF: +는 T, -는 F
-- JP: +는 J, -는 P
-
-점수 규칙:
-- 해당 축의 선호 경향을 판단할 수 있으면 coding_status는 "coded"이다.
-- coded이면 score는 -1.0, -0.5, 0, 0.5, 1.0 중 하나이다.
-- -1.0은 -방향 성향이 뚜렷함, -0.5는 -방향 성향이 약하게 우세함이다.
-- 0은 중립 또는 양쪽 혼합이다.
-- 0.5는 +방향 성향이 약하게 우세함, 1.0은 +방향 성향이 뚜렷함이다.
-- 현재 입력의 axis와 직접 관련 없는 단서는 점수 근거로 사용하지 않는다.
-- 한 응답 안에 양쪽 성향 단서가 함께 있으면 강한 점수를 주지 않는다.
-- 양쪽 근거가 비슷하면 0을 준다.
-- 단서가 있지만 다른 축 단서와 섞여 있거나 확신이 낮으면 1.0/-1.0 대신 0.5/-0.5를 우선 사용한다.
-- 최근 실제 행동과 반복된 선택을 일반적 주장이나 희망 표현보다 우선한다.
-- 근거가 부족하거나 축과 무관하면 coding_status는 "insufficient_context"이고 score는 null이다.
-- 산출에 실패했다면 coding_status는 "failed"이고 score는 null이다.
-- coding_status는 반드시 "coded", "insufficient_context", "failed" 중 하나이다.
-
-출력 규칙:
-- 반드시 유효한 JSON 객체만 반환한다.
-- 마크다운 코드블록, 설명 문장, 주석, trailing comma를 절대 포함하지 않는다.
-- JSON 문자열 안의 따옴표는 반드시 escape한다.
-- 아래 필드 외의 필드는 추가하지 않는다.
-
-반환 형식:
-{
-  "scores": [
-    {
-      "response_id": 1,
-      "score": -0.5,
-      "Preference": I,
-      "coding_status": "coded",
-      "reason": "답변에서 확인한 판단 근거를 짧게 쓴다."
-    }
-  ]
-}"""
 
 
 def build_axis_scoring_input(
@@ -238,17 +192,10 @@ class LangChainMbtiScoringClient:
                 )
             return _extract_json_object(str(content))
         except Exception as exc:
-            print(f"LLM 채점 실패, 임시 랜덤 점수를 부여합니다. 예외: {exc}")
-            import random
-            scores = []
-            for response in responses:
-                scores.append({
-                    'response_id': response.id,
-                    'score': random.choice([-1.0, -0.5, 0.5, 1.0]),
-                    'coding_status': 'coded',
-                    'reason': f"임시 랜덤 채점 (LLM 에러: {exc})"
-                })
-            return {'scores': scores}
+            return _build_failed_scoring_payload(
+                responses=responses,
+                reason=f'LLM scoring failed: {exc}',
+            )
 
 
 def score_primary_open_axes(

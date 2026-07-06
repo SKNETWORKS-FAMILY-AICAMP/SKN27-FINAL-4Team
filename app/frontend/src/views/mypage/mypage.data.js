@@ -86,7 +86,7 @@ export function createMypageState() {
     mbtiViews: [
       { key: "onboardingType", title: "온보딩 MBTI 설명", shortLabel: "온보딩 MBTI", buttonLabel: "온보딩 MBTI 설명" },
       { key: "onboardingNext", title: "월간 MBTI 분석", shortLabel: "월간 분석", buttonLabel: "월간 MBTI 분석" },
-      { key: "mockQna", title: "임시 Q&A 입력", shortLabel: "임시 입력", buttonLabel: "임시 Q&A 입력" }
+      // { key: "mockQna", title: "임시 Q&A 입력", shortLabel: "임시 입력", buttonLabel: "임시 Q&A 입력" }
     ],
     mbtiApiStatus: "demo-fallback",
     mbtiData: {

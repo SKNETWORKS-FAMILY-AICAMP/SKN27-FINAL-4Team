@@ -45,13 +45,42 @@ def mbti_save_node(state: ChatState) -> dict:
     out = {'mbti_saved': False}
 
     if state.get('session_mode') != 'secret' and state.get('user_id'):
+        question_code = state.get('mbti_question_code', 'unknown')
+        answer_text   = state.get('user_message', '')
+        user_id       = state['user_id']
+
+        # 1. 기존 chat 테이블 저장 — 챗봇 중복 질문 방지용 (유지)
         from chat.models import MbtiAnswer
         MbtiAnswer.objects.create(
-            user_id=state['user_id'],
-            question_code=state.get('mbti_question_code', 'unknown'),
-            answer_text=state.get('user_message', ''),
+            user_id=user_id,
+            question_code=question_code,
+            answer_text=answer_text,
         )
         out['mbti_saved'] = True
+
+        # 2. MBTI 파이프라인 테이블 연동 저장 (월간 리포트 분석 원천)
+        #    실패해도 챗봇 대화가 끊기지 않도록 예외를 잡아둔다.
+        try:
+            from django.utils.timezone import now as tz_now
+            from mbti.models import MbtiQuestionResponse
+            from ai.agents.mbti import question_text as mbti_question_text
+
+            current_time = tz_now()
+            # 코드 앞 2글자가 target_axis (예: 'IE_1' → 'IE')
+            target_axis = question_code[:2] if len(question_code) >= 2 else 'unknown'
+
+            MbtiQuestionResponse.objects.create(
+                user_id=user_id,
+                conversation_id=state.get('session_id'),      # 챗봇 세션 ID 매핑
+                question_text=mbti_question_text(question_code),
+                answer_text=answer_text,
+                target_axis=target_axis,
+                period_key=current_time.strftime('%Y-%m'),    # 예: '2026-07'
+                answered_at=current_time,
+                created_at=current_time,
+            )
+        except Exception as e:
+            print(f'[mbti_save_node] MbtiQuestionResponse 연동 저장 실패 (무시): {e}')
 
     # LLM 확인 응답 생성 (흐름도 MBTIRESP)
     try:
