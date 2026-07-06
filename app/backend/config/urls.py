@@ -13,6 +13,7 @@ urlpatterns = [
     path('api/characters/', include('character.urls')),
     path('api/calendar/', include('calendar_api.urls')),
     path('api/tarot/', include('game.tarot_api.urls')),
+    path('api/report/', include('mindreport.urls')),
 ]
 
 # TTS mp3 등 미디어 파일 서빙 (개발용 — 운영은 웹서버가 담당)
