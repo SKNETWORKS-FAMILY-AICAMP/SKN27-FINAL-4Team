@@ -80,12 +80,6 @@ const hasViewedTodayCard = computed(() => {
 const selectedMonthHasRecords = computed(() => monthFortunes.value.length > 0);
 const recordCount = computed(() => monthFortunes.value.length);
 const streakCount = computed(() => getCurrentStreak(monthFortunes.value));
-const emotionSummary = computed(() => {
-  if (!monthFortunes.value.length) return "차분한 기록을 기다리는 중";
-  const keyword = monthFortunes.value.find((item) => item.keyword)?.keyword;
-  return keyword ? `${keyword} 흐름이 남아있어요` : "차분한 날이 많았어요";
-});
-
 const selectedCharacterId = computed(() => normalizeCharacterId(storedCharacter.value.characterId));
 const fallbackExpressionId = computed(() => normalizeExpressionId(storedCharacter.value.expressionId));
 const selectedCharacterDefaultUrl = computed(() => getCharacterImageUrl(selectedCharacterId.value, "default"));
@@ -498,7 +492,6 @@ function getErrorMessage(error) {
         <article class="wide">
           <span>↗</span>
           <div>
-            <strong>{{ emotionSummary }}</strong>
             <p>이번 달 감정 요약</p>
           </div>
           <img :src="selectedCharacterDefaultUrl" alt="" aria-hidden="true">
