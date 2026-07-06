@@ -47,78 +47,6 @@
         <section class="panel emotion-panel">
           <div class="panel-head">
             <p>감정 일기</p>
-            <span>시계열 감정 흐름</span>
-          </div>
-          <div class="emotion-strip" :class="{ 'emotion-strip--monthly': currentReport.emotions.length > 7 }">
-            <article
-              v-for="day in currentReport.emotions"
-              :key="day.day"
-              class="emotion-day"
-              :class="emotionToneClass(day)"
-            >
-              <div class="mood">{{ day.icon }}</div>
-              <span>{{ day.day }}</span>
-            </article>
-          </div>
-        </section>
-      </aside>
-
-      <section class="report-card">
-        <header class="report-header">
-          <div>
-            <span class="eyebrow">{{ currentReport.range }} · {{ currentReport.type }}</span>
-            <h1>{{ currentReport.title }}</h1>
-            <div class="report-meta">
-<template>
-  <main class="archive-page">
-    <section class="archive-shell" aria-label="마음 리포트 보관함">
-      <aside class="archive-sidebar">
-        <section class="panel">
-          <div class="panel-head">
-            <p>마음 리포트 보관함</p>
-            <button
-              type="button"
-              class="filter-toggle"
-              :class="{ active: isMonthFilterOpen }"
-              :aria-expanded="isMonthFilterOpen"
-              @click="isMonthFilterOpen = !isMonthFilterOpen"
-            >
-              기간 선택
-            </button>
-          </div>
-
-          <div v-if="isMonthFilterOpen" class="month-filter" aria-label="월별 리포트 필터">
-            <button
-              v-for="month in monthOptions"
-              :key="month.value"
-              type="button"
-              class="month-chip"
-              :class="{ active: selectedMonth === month.value }"
-              :aria-pressed="selectedMonth === month.value"
-              @click="selectedMonth = month.value"
-            >
-              <span class="month-check" aria-hidden="true"></span>
-              {{ month.label }}
-            </button>
-          </div>
-
-          <button
-            v-for="period in filteredReports"
-            :key="period.id"
-            type="button"
-            class="period-card"
-            :class="{ active: selectedReportId === period.id }"
-            @click="selectedReportId = period.id"
-          >
-            <strong>{{ period.range }}</strong>
-            <span>{{ period.type }}</span>
-          </button>
-        </section>
-
-        <section class="panel emotion-panel">
-          <div class="panel-head">
-            <p>감정 일기</p>
-            <span>시계열 감정 흐름</span>
           </div>
           <div class="emotion-strip" :class="{ 'emotion-strip--monthly': currentReport.emotions.length > 7 }">
             <article
@@ -161,8 +89,16 @@
         </section>
 
         <section class="analysis-box">
-          <p v-for="paragraph in currentReport.analysis" :key="paragraph">
-            {{ paragraph }}
+          <p v-for="paragraph in currentReport.analysis" :key="paragraph" class="analysis-line">
+            <template v-if="paragraph.includes('- 왜 추천하나요?')">
+              <span class="detail-label">왜 추천하나요?</span> {{ paragraph.split('왜 추천하나요? ')[1] }}
+            </template>
+            <template v-else-if="paragraph.includes('- 어떻게 시작할까요?')">
+              <span class="detail-label">어떻게 시작할까요?</span> {{ paragraph.split('어떻게 시작할까요? ')[1] }}
+            </template>
+            <template v-else>
+              {{ paragraph }}
+            </template>
           </p>
         </section>
 
@@ -652,6 +588,19 @@ const emotionToneClass = (day) => {
   color: rgba(255, 255, 255, 0.82);
   font-size: 14.5px;
   line-height: 1.86;
+}
+
+.detail-label {
+  display: inline-block;
+  background: rgba(0, 0, 0, 0.35); /* 어두운 계열의 라벨 배경 */
+  padding: 3px 8px;
+  margin-right: 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #BFF8EF; /* 민트 계열 텍스트 포인트 */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  vertical-align: middle;
 }
 
 .report-actions {
