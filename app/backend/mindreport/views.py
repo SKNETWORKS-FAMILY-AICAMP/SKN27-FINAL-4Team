@@ -25,13 +25,34 @@ class MindReportGenerateAPIView(APIView):
         # 1. 생성 기준 확인 (현재 주간 기준으로 테스트)
         criteria_result = ReportCriteriaService.check_weekly_report_eligibility(user)
         
-        # 2. 기준 미달 시 Fallback 리포트 생성 및 반환
+        from .models import MindReport
+        
+        # 2. 기준 미달 시 Fallback 리포트 반환 (DB 최우선 조회)
         if not criteria_result["is_eligible"]:
-            fallback_data = FallbackReportService.generate_fallback_report(
-                user=user, 
-                report_type="주간", 
-                range_text=timezone.now().strftime("%Y.%m.%d") + " 생성"
-            )
+            fallback_report = MindReport.objects.filter(user=user, is_fallback=True).order_by('-created_at').first()
+            
+            # DB에 없으면(백그라운드 생성이 안 끝났거나 누락된 경우) 동기화 생성 후 반환
+            if not fallback_report:
+                fallback_report = FallbackReportService.generate_and_save_fallback_report(
+                    user=user, 
+                    report_type="주간", 
+                    range_text=timezone.now().strftime("%Y.%m.%d") + " 생성"
+                )
+                
+            fallback_data = {
+                "id": f"fallback-{fallback_report.id}",
+                "type": fallback_report.report_type,
+                "range": fallback_report.range_text,
+                "title": fallback_report.title,
+                "summary": fallback_report.summary,
+                "stressCauses": fallback_report.stress_causes,
+                "reliefCauses": fallback_report.relief_causes,
+                "emotions": fallback_report.emotions,
+                "analysis": fallback_report.analysis,
+                "recommendations": fallback_report.recommendations,
+                "is_fallback": fallback_report.is_fallback
+            }
+            
             return Response({
                 "status": "fallback", 
                 "message": "데이터가 부족하여 보완 정책이 실행되었습니다.",
@@ -39,7 +60,9 @@ class MindReportGenerateAPIView(APIView):
                 "report": fallback_data
             })
             
-        # 3. 기준 충족 시 정식 리포트 생성 (추후 ai 폴더의 모델과 연결할 부분)
+        # 3. 기준 충족 시 기존 가짜 리포트 지우고 정식 리포트 생성
+        MindReport.objects.filter(user=user, is_fallback=True).delete()
+        
         # 현재는 통과했다는 Mock 데이터를 보냅니다.
         standard_data = {
             "id": f"weekly-{user.id}-{timezone.now().timestamp()}",

@@ -47,7 +47,6 @@
         <section class="panel emotion-panel">
           <div class="panel-head">
             <p>감정 일기</p>
-            <span>시계열 감정 흐름</span>
           </div>
           <div class="emotion-strip" :class="{ 'emotion-strip--monthly': currentReport.emotions.length > 7 }">
             <article
@@ -75,14 +74,14 @@
           </div>
         </header>
 
-        <section class="report-section">
+        <section class="report-section" v-if="!currentReport.is_fallback">
           <h2>스트레스 주요 원인.</h2>
           <div class="tag-row danger">
             <span v-for="item in currentReport.stressCauses" :key="item">{{ item }}</span>
           </div>
         </section>
 
-        <section class="report-section">
+        <section class="report-section" v-if="!currentReport.is_fallback">
           <h2>스트레스 이완 주요 원인</h2>
           <div class="tag-row calm">
             <span v-for="item in currentReport.reliefCauses" :key="item">{{ item }}</span>
@@ -90,8 +89,16 @@
         </section>
 
         <section class="analysis-box">
-          <p v-for="paragraph in currentReport.analysis" :key="paragraph">
-            {{ paragraph }}
+          <p v-for="paragraph in currentReport.analysis" :key="paragraph" class="analysis-line">
+            <template v-if="paragraph.includes('- 왜 추천하나요?')">
+              <span class="detail-label">왜 추천하나요?</span> {{ paragraph.split('왜 추천하나요? ')[1] }}
+            </template>
+            <template v-else-if="paragraph.includes('- 어떻게 시작할까요?')">
+              <span class="detail-label">어떻게 시작할까요?</span> {{ paragraph.split('어떻게 시작할까요? ')[1] }}
+            </template>
+            <template v-else>
+              {{ paragraph }}
+            </template>
           </p>
         </section>
 
@@ -105,7 +112,8 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
+import { reportApi } from '../../api/report.js'
 import reportBg from '../../assets/report-bg.png'
 
 const monthlyEmotionIcons = [
@@ -119,7 +127,7 @@ const monthlyEmotions = monthlyEmotionIcons.map((icon, index) => ({
   icon,
 }))
 
-const reports = [
+const reports = ref([
   {
     id: 'monthly-202605',
     type: '월간',
@@ -178,7 +186,7 @@ const reports = [
       '음악 감상과 웹툰 보기처럼 혼자 호흡을 정리하는 시간이 안정감을 주었고, 친구와의 통화는 생각을 정리하는 데 도움이 되었어요. 부담이 커질 때는 먼저 감정을 말로 꺼내는 루틴을 만들어보면 좋겠습니다.',
     ],
   },
-]
+])
 
 const getReportStartDate = (report) => new Date(report.range.split(' ~ ')[0].replaceAll('.', '-'))
 const getReportMonth = (report) => report.range.slice(0, 7)
@@ -187,14 +195,14 @@ const formatMonthLabel = (month) => {
   return `${year}년 ${Number(value)}월`
 }
 
-const reportsByNewest = [...reports].sort((a, b) => getReportStartDate(b) - getReportStartDate(a))
-const latestMonth = getReportMonth(reportsByNewest[0])
+const reportsByNewest = computed(() => [...reports.value].sort((a, b) => getReportStartDate(b) - getReportStartDate(a)))
+const latestMonth = computed(() => getReportMonth(reportsByNewest.value[0]))
 const isMonthFilterOpen = ref(false)
-const selectedMonth = ref(latestMonth)
-const selectedReportId = ref(reportsByNewest[0].id)
+const selectedMonth = ref(latestMonth.value)
+const selectedReportId = ref(reportsByNewest.value[0].id)
 
 const monthOptions = computed(() => {
-  const months = [...new Set(reportsByNewest.map(getReportMonth))]
+  const months = [...new Set(reportsByNewest.value.map(getReportMonth))]
   return months.map((month) => ({
     value: month,
     label: formatMonthLabel(month),
@@ -202,7 +210,7 @@ const monthOptions = computed(() => {
 })
 
 const filteredReports = computed(() => (
-  reportsByNewest.filter((report) => getReportMonth(report) === selectedMonth.value)
+  reportsByNewest.value.filter((report) => getReportMonth(report) === selectedMonth.value)
 ))
 
 const currentReport = computed(
@@ -211,6 +219,23 @@ const currentReport = computed(
 
 watch(selectedMonth, () => {
   selectedReportId.value = filteredReports.value[0]?.id
+})
+
+watch(latestMonth, (newMonth) => {
+  selectedMonth.value = newMonth
+})
+
+onMounted(async () => {
+  try {
+    const data = await reportApi.generateReport()
+    if (data && data.report) {
+      reports.value.push(data.report)
+      selectedMonth.value = getReportMonth(data.report)
+      selectedReportId.value = data.report.id
+    }
+  } catch (error) {
+    console.error('Failed to fetch generated report:', error)
+  }
 })
 
 const emotionToneClass = (day) => {
@@ -563,6 +588,19 @@ const emotionToneClass = (day) => {
   color: rgba(255, 255, 255, 0.82);
   font-size: 14.5px;
   line-height: 1.86;
+}
+
+.detail-label {
+  display: inline-block;
+  background: rgba(0, 0, 0, 0.35); /* 어두운 계열의 라벨 배경 */
+  padding: 3px 8px;
+  margin-right: 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #BFF8EF; /* 민트 계열 텍스트 포인트 */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  vertical-align: middle;
 }
 
 .report-actions {

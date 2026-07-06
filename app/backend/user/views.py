@@ -206,6 +206,12 @@ def login_view(request):
     if user is None:
         return Response({'error': '이메일 또는 비밀번호가 올바르지 않습니다.'}, status=status.HTTP_401_UNAUTHORIZED)
     login(request, user)
+    
+    # 로그인 시 백그라운드에서 대체 리포트 미리 생성
+    import threading
+    from mindreport.services.fallback_service import FallbackReportService
+    threading.Thread(target=FallbackReportService.generate_and_save_fallback_report, args=(user,)).start()
+    
     return Response({
         'id': user.id,
         'email': user.email,
@@ -279,6 +285,12 @@ def social_login_callback(request, provider):
         return Response({'error': 'Inactive user.'}, status=status.HTTP_403_FORBIDDEN)
 
     login(request, user)
+    
+    # 소셜 로그인 시 백그라운드에서 대체 리포트 미리 생성
+    import threading
+    from mindreport.services.fallback_service import FallbackReportService
+    threading.Thread(target=FallbackReportService.generate_and_save_fallback_report, args=(user,)).start()
+    
     return Response(_serialize_auth_user(request, user, provider=provider, created=created))
 
 
@@ -354,6 +366,11 @@ def profile(request):
     if request.user.is_authenticated and not profile_user.onboarding_done:
         profile_user.onboarding_done = True
         profile_user.save(update_fields=['onboarding_done'])
+        
+        # 온보딩 완료 시 백그라운드에서 대체 리포트 다시 미리 생성 (취미/관심사 반영)
+        import threading
+        from mindreport.services.fallback_service import FallbackReportService
+        threading.Thread(target=FallbackReportService.generate_and_save_fallback_report, args=(profile_user,)).start()
 
     if previous_birth_date != next_birth_date:
         from game.tarot_api.models import DailyTarotFortune
