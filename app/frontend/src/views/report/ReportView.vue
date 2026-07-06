@@ -69,20 +69,91 @@
             <span class="eyebrow">{{ currentReport.range }} · {{ currentReport.type }}</span>
             <h1>{{ currentReport.title }}</h1>
             <div class="report-meta">
+<template>
+  <main class="archive-page">
+    <section class="archive-shell" aria-label="마음 리포트 보관함">
+      <aside class="archive-sidebar">
+        <section class="panel">
+          <div class="panel-head">
+            <p>마음 리포트 보관함</p>
+            <button
+              type="button"
+              class="filter-toggle"
+              :class="{ active: isMonthFilterOpen }"
+              :aria-expanded="isMonthFilterOpen"
+              @click="isMonthFilterOpen = !isMonthFilterOpen"
+            >
+              기간 선택
+            </button>
+          </div>
+
+          <div v-if="isMonthFilterOpen" class="month-filter" aria-label="월별 리포트 필터">
+            <button
+              v-for="month in monthOptions"
+              :key="month.value"
+              type="button"
+              class="month-chip"
+              :class="{ active: selectedMonth === month.value }"
+              :aria-pressed="selectedMonth === month.value"
+              @click="selectedMonth = month.value"
+            >
+              <span class="month-check" aria-hidden="true"></span>
+              {{ month.label }}
+            </button>
+          </div>
+
+          <button
+            v-for="period in filteredReports"
+            :key="period.id"
+            type="button"
+            class="period-card"
+            :class="{ active: selectedReportId === period.id }"
+            @click="selectedReportId = period.id"
+          >
+            <strong>{{ period.range }}</strong>
+            <span>{{ period.type }}</span>
+          </button>
+        </section>
+
+        <section class="panel emotion-panel">
+          <div class="panel-head">
+            <p>감정 일기</p>
+            <span>시계열 감정 흐름</span>
+          </div>
+          <div class="emotion-strip" :class="{ 'emotion-strip--monthly': currentReport.emotions.length > 7 }">
+            <article
+              v-for="day in currentReport.emotions"
+              :key="day.day"
+              class="emotion-day"
+              :class="emotionToneClass(day)"
+            >
+              <div class="mood">{{ day.icon }}</div>
+              <span>{{ day.day }}</span>
+            </article>
+          </div>
+        </section>
+      </aside>
+
+      <section class="report-card">
+        <header class="report-header">
+          <div>
+            <span class="eyebrow">{{ currentReport.range }} · {{ currentReport.type }}</span>
+            <h1>{{ currentReport.title }}</h1>
+            <div class="report-meta">
               <span>{{ currentReport.summary }}</span>
               <span>{{ currentReport.emotions.length }}일 감정 기록</span>
             </div>
           </div>
         </header>
 
-        <section class="report-section">
+        <section class="report-section" v-if="!currentReport.is_fallback">
           <h2>스트레스 주요 원인.</h2>
           <div class="tag-row danger">
             <span v-for="item in currentReport.stressCauses" :key="item">{{ item }}</span>
           </div>
         </section>
 
-        <section class="report-section">
+        <section class="report-section" v-if="!currentReport.is_fallback">
           <h2>스트레스 이완 주요 원인</h2>
           <div class="tag-row calm">
             <span v-for="item in currentReport.reliefCauses" :key="item">{{ item }}</span>
@@ -105,7 +176,8 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
+import { reportApi } from '../../api/report.js'
 import reportBg from '../../assets/report-bg.png'
 
 const monthlyEmotionIcons = [
@@ -119,7 +191,7 @@ const monthlyEmotions = monthlyEmotionIcons.map((icon, index) => ({
   icon,
 }))
 
-const reports = [
+const reports = ref([
   {
     id: 'monthly-202605',
     type: '월간',
@@ -178,7 +250,7 @@ const reports = [
       '음악 감상과 웹툰 보기처럼 혼자 호흡을 정리하는 시간이 안정감을 주었고, 친구와의 통화는 생각을 정리하는 데 도움이 되었어요. 부담이 커질 때는 먼저 감정을 말로 꺼내는 루틴을 만들어보면 좋겠습니다.',
     ],
   },
-]
+])
 
 const getReportStartDate = (report) => new Date(report.range.split(' ~ ')[0].replaceAll('.', '-'))
 const getReportMonth = (report) => report.range.slice(0, 7)
@@ -187,14 +259,14 @@ const formatMonthLabel = (month) => {
   return `${year}년 ${Number(value)}월`
 }
 
-const reportsByNewest = [...reports].sort((a, b) => getReportStartDate(b) - getReportStartDate(a))
-const latestMonth = getReportMonth(reportsByNewest[0])
+const reportsByNewest = computed(() => [...reports.value].sort((a, b) => getReportStartDate(b) - getReportStartDate(a)))
+const latestMonth = computed(() => getReportMonth(reportsByNewest.value[0]))
 const isMonthFilterOpen = ref(false)
-const selectedMonth = ref(latestMonth)
-const selectedReportId = ref(reportsByNewest[0].id)
+const selectedMonth = ref(latestMonth.value)
+const selectedReportId = ref(reportsByNewest.value[0].id)
 
 const monthOptions = computed(() => {
-  const months = [...new Set(reportsByNewest.map(getReportMonth))]
+  const months = [...new Set(reportsByNewest.value.map(getReportMonth))]
   return months.map((month) => ({
     value: month,
     label: formatMonthLabel(month),
@@ -202,7 +274,7 @@ const monthOptions = computed(() => {
 })
 
 const filteredReports = computed(() => (
-  reportsByNewest.filter((report) => getReportMonth(report) === selectedMonth.value)
+  reportsByNewest.value.filter((report) => getReportMonth(report) === selectedMonth.value)
 ))
 
 const currentReport = computed(
@@ -211,6 +283,23 @@ const currentReport = computed(
 
 watch(selectedMonth, () => {
   selectedReportId.value = filteredReports.value[0]?.id
+})
+
+watch(latestMonth, (newMonth) => {
+  selectedMonth.value = newMonth
+})
+
+onMounted(async () => {
+  try {
+    const data = await reportApi.generateReport()
+    if (data && data.report) {
+      reports.value.push(data.report)
+      selectedMonth.value = getReportMonth(data.report)
+      selectedReportId.value = data.report.id
+    }
+  } catch (error) {
+    console.error('Failed to fetch generated report:', error)
+  }
 })
 
 const emotionToneClass = (day) => {
