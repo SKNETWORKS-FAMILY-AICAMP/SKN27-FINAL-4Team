@@ -49,7 +49,7 @@ const contentActions = [
       </p>
 
       <div class="hero-actions">
-        <button class="btn primary large" type="button" @click="$emit('navigate', 'login')">
+        <button class="btn primary large" type="button" @click="$emit('navigate', 'startWalk')">
           산책 시작하기
         </button>
         <button class="btn secondary large" type="button" @click="$emit('navigate', 'my')">
