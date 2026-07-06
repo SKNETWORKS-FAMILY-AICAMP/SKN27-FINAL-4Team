@@ -6,15 +6,10 @@
   chat_turn       POST /api/chat/                 대화 턴 (텍스트 즉시 + tts_task_id)
   tts_status      GET  /api/tts/<task_id>/        TTS 오디오 폴링
   mbti_next_question GET /api/mbti/next-question/ MBTI 질문 (10초 유휴 · 일반 모드 전용)
-  plan_support_view POST /api/plan-support/       장소 추천 (Tavily)
   session_end     POST /api/session/end/          세션 종료 (시크릿 캐시 파기)
 
-■ 부가 기능
-  suggest_questions POST /api/chat/sessions/<id>/questions/  이런 말 어때요
-
-지원 모듈: graph/(LangGraph), tts_service, mbti, memory, secret_cache, plan_service
+지원 모듈: graph/(LangGraph), tts_service, mbti, memory, secret_cache
 """
-import json
 import re
 
 from rest_framework import status
@@ -24,10 +19,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from ai.agents import mbti as mbti_svc
-from ai.agents.llm import get_client
 from . import memory, secret_cache, tts_service
 from .models import ChatMessage, ChatSession
-from .plan_service import plan_support
 
 
 class CsrfExemptSessionAuthentication(SessionAuthentication):
@@ -38,16 +31,6 @@ VALID_CHARACTERS = {'pori', 'kkami', 'toto', 'yeoul'}
 
 
 # ── 공통 헬퍼 ────────────────────────────────────────────────
-
-def _client():
-    """LLM 클라이언트 — 공급자(openai/groq)는 chat/llm.py 에서 .env로 선택."""
-    return get_client()[0]
-
-
-def _model():
-    from ai.agents.llm import _config
-    return _config()[2]
-
 
 def _ok(data, http_status=status.HTTP_200_OK):
     return Response({'success': True, 'data': data, 'error': None}, status=http_status)
@@ -162,6 +145,20 @@ def chat_turn(request):
             .first()
         )
 
+    # MBTI 질문은 대화 맥락으로 즉석 생성되므로, 판별엔 '실제로 물어본 문장'
+    # (직전 assistant 메시지)을 쓴다. 없으면 고정 template로 폴백.
+    mbti_q_text = ''
+    if session.mbti_pending and not session.is_secret:
+        mbti_q_text = (
+            ChatMessage.objects
+            .filter(session=session, role='assistant')
+            .order_by('-created_at')
+            .values_list('content', flat=True)
+            .first()
+        ) or ''
+    if not mbti_q_text:
+        mbti_q_text = mbti_svc.question_text(session.mbti_last_question_code or '')
+
     # LangGraph 실행: MBTI pending 체크 → 컨텍스트 → 감성분석(확신도 게이트) → 에이전트 → 응답
     from .graph.graph import get_graph
     state = {
@@ -173,7 +170,7 @@ def chat_turn(request):
         'selected_emotion': session.selected_emotion,
         'prev_emotion': prev_emotion,
         'mbti_pending': session.mbti_pending,
-        'mbti_question_text': mbti_svc.question_text(session.mbti_last_question_code or ''),
+        'mbti_question_text': mbti_q_text,
         'mbti_question_code': session.mbti_last_question_code or '',
     }
     result = get_graph().invoke(state)
@@ -215,8 +212,6 @@ def chat_turn(request):
         'emotion_label': emotion_label,
         'tts_task_id': tts_task_id,
         'ui': {
-            'show_recommendation_button': False,
-            'show_plan_result': False,
             'mbti_pending': is_mbti_answer,
         },
     })
@@ -264,9 +259,20 @@ def mbti_next_question(request):
     if session.is_secret:
         return _ok({'has_question': False})
 
+    if session.mbti_pending:
+        return _ok({'has_question': False})
+
     user = _session_user(request, session)
-    nq = mbti_svc.next_question(user)
-    if nq is None or session.mbti_pending:
+
+    # 방금까지의 대화 맥락 → 자연스러운 질문 생성 재료
+    recent = list(
+        ChatMessage.objects.filter(session=session).order_by('-created_at')[:6]
+    )
+    recent.reverse()
+    history = [{'role': m.role, 'content': m.content} for m in recent]
+
+    nq = mbti_svc.generate_question(user, history)
+    if nq is None:
         return _ok({'has_question': False})
 
     code, text = nq
@@ -294,32 +300,8 @@ def mbti_next_question(request):
 
 
 # ═════════════════════════════════════════════════════════════
-# 4. 계획도움 / 세션 종료
+# 4. 세션 종료
 # ═════════════════════════════════════════════════════════════
-
-@api_view(['POST'])
-@authentication_classes([CsrfExemptSessionAuthentication])
-@permission_classes([AllowAny])
-def plan_support_view(request):
-    """위치 기반 장소 추천 (Tavily + WalkCuration).
-    ⚠️ 트리거 조건 미확정 — 현재 프론트 진입점 없음, 확정 시 연결."""
-    session = _get_session(request.data.get('session_id'))
-    if session is None:
-        return _err('SESSION_NOT_FOUND', '세션을 찾을 수 없습니다.', status.HTTP_404_NOT_FOUND)
-
-    location = request.data.get('location_context') or {}
-    address = location.get('address', '')
-
-    emotion = 'normal'
-    if not session.is_secret:
-        last = (ChatMessage.objects
-                .filter(session=session, role='assistant', emotion_label__isnull=False)
-                .order_by('-created_at').first())
-        if last:
-            emotion = last.emotion_label
-
-    return _ok({'plan_result': plan_support(address, emotion)})
-
 
 @api_view(['POST'])
 @authentication_classes([CsrfExemptSessionAuthentication])
@@ -335,47 +317,7 @@ def session_end(request):
     return _ok({'ended': True})   # 음성은 애초에 저장 안 함 (1회 재생 후 파기)
 
 
-# ═════════════════════════════════════════════════════════════
-# 5. 부가 기능 (추천 질문)
-# ═════════════════════════════════════════════════════════════
-
-@api_view(['POST'])
-@authentication_classes([CsrfExemptSessionAuthentication])
-@permission_classes([AllowAny])
-def suggest_questions(request, session_id):
-    """'이런 말 어때요?' 추천 질문 3개 생성."""
-    session = _get_session(session_id)
-    if session is None:
-        return Response({'error': '세션을 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
-
-    recent = list(session.messages.order_by('-created_at')[:6])
-    recent.reverse()
-    context = '\n'.join(f"{'사용자' if m.role == 'user' else '캐릭터'}: {m.content}" for m in recent)
-
-    system = (
-        "당신은 공감 대화 전문가입니다. 대화 흐름을 읽고 사용자가 다음에 할 수 있는 말 3가지를 추천해주세요.\n"
-        "짧고 자연스러운 구어체로, 반드시 아래 JSON 형식으로만 응답하세요:\n"
-        '{"questions": ["질문1", "질문2", "질문3"]}'
-    )
-
-    try:
-        resp = _client().chat.completions.create(
-            model=_model(),
-            messages=[
-                {'role': 'system', 'content': system},
-                {'role': 'user', 'content': f'대화:\n{context}'},
-            ],
-            max_tokens=150,
-            temperature=0.9,
-        )
-        raw = resp.choices[0].message.content.strip()
-        start, end = raw.find('{'), raw.rfind('}') + 1
-        result = json.loads(raw[start:end])
-    except Exception:
-        result = {'questions': ['오늘 하루 어땠어?', '요즘 제일 힘든 게 뭐야?', '그냥 수다 떨까?']}
-
-    return Response(result)
-
-
 # (👍👎 피드백/MLOps 재학습 큐는 2차 확장으로 제거 — 2026-07-02)
 # (구 콜드스타트 감정 선택 · 날씨 배너 API는 친구 컨셉 개편으로 제거 — 2026-07-03)
+# (추천 질문 '이런 말 어때요' API는 기능 폐기로 제거 — 2026-07-03)
+# (계획도움 /api/plan-support/ · WalkCuration은 장소 추천 기능 폐기로 제거 — 2026-07-05)

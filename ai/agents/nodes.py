@@ -2,7 +2,7 @@
 """LangGraph 노드 구현 — [개별] LangGraph_흐름도_김한솔.md v6.0 §2 기준.
 
 노드 목록: mbti_check / mbti_save / analysis / load_context /
-          joy·sadness·anger·normal_agent / plan_agent(스텁) / resp_prep
+          joy·sadness·anger·normal_agent / resp_prep
 콜드스타트와 TTS·저장(비동기)은 그래프 밖(뷰 레이어)에서 처리한다.
 """
 from ai.agents.personas import EMOTION_AGENT_GUIDES, COMMON_RULES
@@ -45,13 +45,42 @@ def mbti_save_node(state: ChatState) -> dict:
     out = {'mbti_saved': False}
 
     if state.get('session_mode') != 'secret' and state.get('user_id'):
+        question_code = state.get('mbti_question_code', 'unknown')
+        answer_text   = state.get('user_message', '')
+        user_id       = state['user_id']
+
+        # 1. 기존 chat 테이블 저장 — 챗봇 중복 질문 방지용 (유지)
         from chat.models import MbtiAnswer
         MbtiAnswer.objects.create(
-            user_id=state['user_id'],
-            question_code=state.get('mbti_question_code', 'unknown'),
-            answer_text=state.get('user_message', ''),
+            user_id=user_id,
+            question_code=question_code,
+            answer_text=answer_text,
         )
         out['mbti_saved'] = True
+
+        # 2. MBTI 파이프라인 테이블 연동 저장 (월간 리포트 분석 원천)
+        #    실패해도 챗봇 대화가 끊기지 않도록 예외를 잡아둔다.
+        try:
+            from django.utils.timezone import now as tz_now
+            from mbti.models import MbtiQuestionResponse
+            from ai.agents.mbti import question_text as mbti_question_text
+
+            current_time = tz_now()
+            # 코드 앞 2글자가 target_axis (예: 'IE_1' → 'IE')
+            target_axis = question_code[:2] if len(question_code) >= 2 else 'unknown'
+
+            MbtiQuestionResponse.objects.create(
+                user_id=user_id,
+                conversation_id=state.get('session_id'),      # 챗봇 세션 ID 매핑
+                question_text=mbti_question_text(question_code),
+                answer_text=answer_text,
+                target_axis=target_axis,
+                period_key=current_time.strftime('%Y-%m'),    # 예: '2026-07'
+                answered_at=current_time,
+                created_at=current_time,
+            )
+        except Exception as e:
+            print(f'[mbti_save_node] MbtiQuestionResponse 연동 저장 실패 (무시): {e}')
 
     # LLM 확인 응답 생성 (흐름도 MBTIRESP)
     try:
@@ -70,7 +99,9 @@ def mbti_save_node(state: ChatState) -> dict:
 
 # ── [감성분석: KcELECTRA + XGBoost + 확신도 게이트] ──────────
 
-CONF_GATE = 0.55   # 모델 확신이 이 미만이면 '찍지 말고' 문맥 아는 LLM으로 재분류
+CONF_GATE = 0.70   # 모델 확신이 이 미만이면 '찍지 말고' 문맥 아는 LLM으로 재분류
+                   # (0.55→0.70 상향, 2026-07-05 — 파인튜닝 모델 확률 보정: 채팅체 150 스윕에서
+                   #  채택률 82.7%·채택분 정확도 0.831, calibrate_gate.py 근거)
 SHORT_LEN = 10     # 이 미만의 초단문("응 ㅋㅋ")은 분석 스킵, 직전 감정 유지
 
 
@@ -161,12 +192,7 @@ def load_context_node(state: ChatState) -> dict:
 
 def _make_emotion_agent(emotion: str):
     def agent_node(state: ChatState) -> dict:
-        return {
-            'agent_guide': EMOTION_AGENT_GUIDES[emotion],
-            # ⚠️ need_plan 트리거 조건 미확정(최종_통합_흐름도 §3)
-            #    현재는 프론트 버튼 기반(POST /api/plan-support)이라 그래프에선 항상 False
-            'need_plan': False,
-        }
+        return {'agent_guide': EMOTION_AGENT_GUIDES[emotion]}
     agent_node.__name__ = f'{emotion}_agent_node'
     return agent_node
 
@@ -177,14 +203,7 @@ anger_agent_node = _make_emotion_agent('anger')
 normal_agent_node = _make_emotion_agent('normal')
 
 
-# ── [Plan Agent: Tavily 외부 검색 — 스텁] ─────────────────────
-
-def plan_agent_node(state: ChatState) -> dict:
-    """need_plan == True 시 Tavily 검색. 트리거 조건 확정 전까지 그래프에선 미사용
-    (버튼 기반 /api/plan-support 뷰가 동일 로직 수행)."""
-    from chat.plan_service import tavily_search
-    query = state.get('user_message', '')
-    return {'search_context': tavily_search(query)}
+# (Plan Agent(Tavily 장소 추천)는 기능 폐기로 제거 — 2026-07-05)
 
 
 # ── [최종 응답 생성] ─────────────────────────────────────────
@@ -208,8 +227,6 @@ def resp_prep_node(state: ChatState) -> dict:
     system_parts = [guide, COMMON_RULES, TTS_ACTING_RULES]
     if state.get('memory_summary'):
         system_parts.append(f"[사용자에 대한 기억 요약]\n{state['memory_summary']}")
-    if state.get('search_context'):
-        system_parts.append(f"[외부 검색 결과 — 필요 시 자연스럽게 반영]\n{state['search_context']}")
 
     messages = [('system', '\n\n'.join(system_parts))]
     for m in state.get('recent_history', []):

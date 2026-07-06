@@ -41,42 +41,16 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - EMOTION_ARTIFACT_DIR=/artifacts
-      - PG_HOST=db
-      - PG_PORT=5432
-      - PG_DB=${PG_DB:-wellness_db}
-      - PG_USER=${PG_USER:-postgres}
-      - PG_PASSWORD=${PG_PASSWORD:-password}
-      # LLM — 공급자 선택: openai(기본) / groq
-      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-5.4-mini}
-      - GROQ_API_KEY=${GROQ_API_KEY}
-      - GROQ_BASE_URL=${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
-      - GROQ_MODEL=${GROQ_MODEL:-llama-3.3-70b-versatile}
-      # Plan Agent (Tavily)
-      - TAVILY_API_KEY=${TAVILY_API_KEY}
-      # ElevenLabs TTS
-      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
-      - ELEVENLABS_MODEL_ID=${ELEVENLABS_MODEL_ID:-eleven_v3}
-      - VOICE_ID_PORI=${VOICE_ID_PORI}
-      - VOICE_ID_KKAMI=${VOICE_ID_KKAMI}
-      - VOICE_ID_TOTO=${VOICE_ID_TOTO}
-      - VOICE_ID_YEOUL=${VOICE_ID_YEOUL}
-      # OAuth 소셜 로그인 (SECRET은 루트 .env 또는 app/backend/.env 어디에 있어도 동작)
-      - FRONTEND_BASE_URL=${FRONTEND_BASE_URL:-http://localhost:5173}
-      - KAKAO_CLIENT_SECRET=${KAKAO_CLIENT_SECRET:-}
-      - NAVER_CLIENT_SECRET=${NAVER_CLIENT_SECRET:-}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
-      - KAKAO_CLIENT_ID=${KAKAO_CLIENT_ID:-}
-      - KAKAO_REDIRECT_URI=${KAKAO_REDIRECT_URI:-http://localhost:5173/login/callback/kakao}
-      - KAKAO_SCOPE=${KAKAO_SCOPE:-profile_nickname account_email}
-      - NAVER_CLIENT_ID=${NAVER_CLIENT_ID:-}
-      - NAVER_REDIRECT_URI=${NAVER_REDIRECT_URI:-http://localhost:5173/login/callback/naver}
-      - NAVER_SCOPE=${NAVER_SCOPE:-}
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
-      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-http://localhost:5173/login/callback/google}
-      - GOOGLE_SCOPE=${GOOGLE_SCOPE:-openid email profile}
+      # Compose에서 컨테이너 내부 실행에 필요한 값만 명시합니다.
+      # OAuth/LLM/TTS secret은 ./app/backend/.env에서 읽게 둬서 빈 값으로 덮이지 않도록 합니다.
+      DJANGO_SETTINGS_MODULE: config.settings
+      EMOTION_ARTIFACT_DIR: /artifacts
+      PG_HOST: db
+      PG_PORT: "5432"
+      PG_DB: ${PG_DB:-wellness_db}
+      PG_USER: ${PG_USER:-postgres}
+      PG_PASSWORD: ${PG_PASSWORD:-password}
+      FRONTEND_BASE_URL: http://localhost:5173
     depends_on:
       - db
 

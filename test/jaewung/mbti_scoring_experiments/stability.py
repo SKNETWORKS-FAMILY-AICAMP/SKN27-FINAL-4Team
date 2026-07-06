@@ -323,10 +323,17 @@ def write_strategy_report(path: Path, summaries: list[dict[str, object]]) -> Non
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def summarize_strategy(*, strategy_name: str, strategy_dir: Path) -> list[dict[str, object]]:
-    result_path = strategy_dir / "results" / "mbti_score_changes.csv"
-    summary_path = strategy_dir / "results" / "stability_summary.csv"
-    report_path = strategy_dir / "results" / "STABILITY_REPORT.md"
+def summarize_strategy(
+    *,
+    strategy_name: str,
+    strategy_dir: Path,
+    result_file_name: str = "mbti_score_changes.csv",
+    summary_file_name: str = "stability_summary.csv",
+    report_file_name: str = "STABILITY_REPORT.md",
+) -> list[dict[str, object]]:
+    result_path = strategy_dir / "results" / result_file_name
+    summary_path = strategy_dir / "results" / summary_file_name
+    report_path = strategy_dir / "results" / report_file_name
     rows = _read_rows(result_path)
     grouped = _group_rows_by_mode(rows)
     summaries = [
@@ -340,7 +347,13 @@ def summarize_strategy(*, strategy_name: str, strategy_dir: Path) -> list[dict[s
     return summaries
 
 
-def write_dashboard(path: Path, summaries: Iterable[dict[str, object]]) -> None:
+def write_dashboard(
+    path: Path,
+    summaries: Iterable[dict[str, object]],
+    *,
+    result_file_name: str = "mbti_score_changes.csv",
+    report_file_name: str = "STABILITY_REPORT.md",
+) -> None:
     rows = list(summaries)
     lines = [
         "# MBTI Scoring Stability Dashboard",
@@ -371,7 +384,8 @@ def write_dashboard(path: Path, summaries: Iterable[dict[str, object]]) -> None:
             "",
             "표준편차 판정: axis_avg는 0.05 이하 안정, 0.15 이하 주의, 초과 불안정으로 본다. 표시점수는 3점 이하 안정, 8점 이하 주의, 초과 불안정으로 본다.",
             "",
-            "각 방안의 상세 축별 안정성은 해당 폴더의 `results/STABILITY_REPORT.md`에서 확인한다.",
+            f"각 방안의 원본 결과는 해당 폴더의 `results/{result_file_name}`에서 확인한다.",
+            f"각 방안의 상세 축별 안정성은 해당 폴더의 `results/{report_file_name}`에서 확인한다.",
         ]
     )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")

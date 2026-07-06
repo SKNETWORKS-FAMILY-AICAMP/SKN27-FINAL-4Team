@@ -47,14 +47,22 @@ CONTROL_COMBO = "single_1_openai_baseline"
 CURRENT_DEMO_DATASET = "demo_questions_v4_jp_mixed_j_rebalanced_20260703"
 CURRENT_RUN_BATCH = (
     os.getenv("MBTI_EXPERIMENT_RUN_BATCH")
-    or "v4_persona_openai_independent_20260703_01"
+    or "v5_persona_prompt_unified_no_random_20260704_01"
 )
+RESULT_SET_NAME = (
+    os.getenv("MBTI_EXPERIMENT_RESULT_SET")
+    or "persona_prompt_unified_no_random_20260704"
+)
+RESULT_FILE_NAME = f"mbti_score_changes_{RESULT_SET_NAME}.csv"
+SUMMARY_FILE_NAME = f"stability_summary_{RESULT_SET_NAME}.csv"
+REPORT_FILE_NAME = f"STABILITY_REPORT_{RESULT_SET_NAME}.md"
+DASHBOARD_FILE_NAME = f"STABILITY_DASHBOARD_{RESULT_SET_NAME}.md"
 PROMPT_VERSIONS = {
-    "persona_direct": "persona_axis_scoring_conservative_v1_20260703",
+    "persona_direct": "persona_py_prompt_source_v1_20260704",
     "rubric_code": "rubric_code_prompt_v1",
     "triple_majority": "placeholder_prompt_na",
     "hundred_point_ensemble": "placeholder_prompt_na",
-    "triple_supervisor": "placeholder_prompt_na",
+    "triple_supervisor": "persona_py_triple_supervisor_v1_20260704",
 }
 
 
@@ -107,6 +115,14 @@ def parse_args() -> argparse.Namespace:
             "Run rubric_code with the experiment rubric_code-only prompt and "
             "docs/한재웅/datasets/mbti_scoring_rubrics.v1.json. This may call "
             "an external LLM API."
+        ),
+    )
+    parser.add_argument(
+        "--use-triple-supervisor-llm",
+        action="store_true",
+        help=(
+            "Run triple_supervisor with three persona-direct LLM scoring calls "
+            "and a deterministic supervisor. This may call external LLM APIs."
         ),
     )
     parser.add_argument(
@@ -220,17 +236,6 @@ def _openai_compatible_chat_content(
     max_tokens: int,
 ) -> str:
     provider_key = provider.lower()
-    if provider_key == "openai":
-        return _langchain_openai_chat_content(
-            model=model,
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-
-    from openai import OpenAI
-
     if provider_key == "groq":
         api_key = os.getenv("GROQ_API_KEY")
         base_url = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
@@ -242,28 +247,20 @@ def _openai_compatible_chat_content(
         )
     else:
         api_key = os.getenv("OPENAI_API_KEY")
-        base_url = None
+        base_url = os.getenv("OPENAI_BASE_URL")
 
-    if not api_key:
+    if provider_key != "openai" and not api_key:
         raise ValueError(f"{provider} API key is not configured.")
 
-    client_kwargs = {"api_key": api_key}
-    if base_url:
-        client_kwargs["base_url"] = base_url
-
-    completion_kwargs = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        "temperature": temperature,
-    }
-    token_key = "max_completion_tokens" if provider_key == "openai" else "max_tokens"
-    completion_kwargs[token_key] = max_tokens
-
-    response = OpenAI(**client_kwargs).chat.completions.create(**completion_kwargs)
-    return response.choices[0].message.content or ""
+    return _langchain_openai_chat_content(
+        model=model,
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        api_key=api_key,
+        base_url=base_url,
+    )
 
 
 def _langchain_openai_chat_content(
@@ -273,6 +270,8 @@ def _langchain_openai_chat_content(
     user_prompt: str,
     temperature: float,
     max_tokens: int,
+    api_key: str | None = None,
+    base_url: str | None = None,
 ) -> str:
     try:
         from langchain_core.messages import HumanMessage, SystemMessage
@@ -285,10 +284,18 @@ def _langchain_openai_chat_content(
             "used to run this script."
         ) from exc
 
+    llm_kwargs = {
+        "model": model,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    if api_key:
+        llm_kwargs["api_key"] = api_key
+    if base_url:
+        llm_kwargs["base_url"] = base_url
+
     llm = ChatOpenAI(
-        model=model,
-        temperature=temperature,
-        max_tokens=max_tokens,
+        **llm_kwargs,
     )
     message = llm.invoke(
         [
@@ -460,6 +467,12 @@ def _result_row(
     combo = _combo_metadata(combo_name)
     judge_models = str(combo["combo_judge_models"] or _judge_models_from_env())
     supervisor_model = str(combo["combo_supervisor_model"] or _supervisor_model_from_env())
+    model_label = _model_label(scoring_config.provider, scoring_config.model)
+    if strategy_name == "triple_supervisor" and mode == "llm":
+        if not judge_models:
+            judge_models = "; ".join([model_label, model_label, model_label])
+        if not supervisor_model:
+            supervisor_model = "rule:mode_if_available_else_median"
     row: dict[str, object] = {
         "run_id": uuid.uuid4().hex,
         "row_type": "data",
@@ -482,7 +495,7 @@ def _result_row(
         "combo_description": combo["combo_description"],
         "provider": scoring_config.provider,
         "model": scoring_config.model,
-        "model_label": _model_label(scoring_config.provider, scoring_config.model),
+        "model_label": model_label,
         "judge_models": judge_models,
         "supervisor_model": supervisor_model,
         "period_key": monthly.period_key,
@@ -680,7 +693,7 @@ def _append_row(path: Path, row: dict[str, object]) -> None:
 
 
 def _strategy_results_path(strategy_name: str) -> Path:
-    return STRATEGY_DIRS[strategy_name] / "results" / "mbti_score_changes.csv"
+    return STRATEGY_DIRS[strategy_name] / "results" / RESULT_FILE_NAME
 
 
 def _default_scoring_client_for_strategy(
@@ -688,9 +701,19 @@ def _default_scoring_client_for_strategy(
     strategy_name: str,
     use_persona_llm: bool,
     use_rubric_llm: bool,
+    use_triple_supervisor_llm: bool,
 ):
     if strategy_name == "persona_direct" and use_persona_llm:
         return PersonaDirectLlmScoringClient()
+
+    if strategy_name == "triple_supervisor" and use_triple_supervisor_llm:
+        supervisor_dir = STRATEGY_DIRS["triple_supervisor"]
+        supervisor_dir_text = str(supervisor_dir)
+        if supervisor_dir_text not in sys.path:
+            sys.path.insert(0, supervisor_dir_text)
+
+        module = importlib.import_module("pipeline.response_scoring")
+        return module.TripleSupervisorScoringClient()
 
     if strategy_name != "rubric_code":
         return None
@@ -711,9 +734,17 @@ def _refresh_stability_outputs(strategy_names: tuple[str, ...]) -> None:
             summarize_strategy(
                 strategy_name=name,
                 strategy_dir=STRATEGY_DIRS[name],
+                result_file_name=RESULT_FILE_NAME,
+                summary_file_name=SUMMARY_FILE_NAME,
+                report_file_name=REPORT_FILE_NAME,
             )
         )
-    write_dashboard(BASE_DIR / "STABILITY_DASHBOARD.md", summaries)
+    write_dashboard(
+        BASE_DIR / DASHBOARD_FILE_NAME,
+        summaries,
+        result_file_name=RESULT_FILE_NAME,
+        report_file_name=REPORT_FILE_NAME,
+    )
 
 
 def run(
@@ -721,6 +752,7 @@ def run(
     strategy_name: str | None = None,
     use_persona_llm: bool = False,
     use_rubric_llm: bool = False,
+    use_triple_supervisor_llm: bool = False,
     scoring_client_override=None,
     mode_override: str | None = None,
     combo_name: str | None = None,
@@ -759,6 +791,7 @@ def run(
             strategy_name=strategy.name,
             use_persona_llm=use_persona_llm,
             use_rubric_llm=use_rubric_llm,
+            use_triple_supervisor_llm=use_triple_supervisor_llm,
         )
         scoring_client = (
             scoring_client_override
@@ -776,6 +809,7 @@ def run(
             "llm" if (
                 (strategy.name == "persona_direct" and use_persona_llm)
                 or (strategy.name == "rubric_code" and use_rubric_llm)
+                or (strategy.name == "triple_supervisor" and use_triple_supervisor_llm)
             )
             else (
                 "rubric_file_placeholder"
@@ -801,7 +835,7 @@ def run(
             f"model={row['model_label']}"
         )
     _refresh_stability_outputs(tuple(STRATEGY_DIRS))
-    print(f"wrote {BASE_DIR / 'STABILITY_DASHBOARD.md'}")
+    print(f"wrote {BASE_DIR / DASHBOARD_FILE_NAME}")
 
 
 def main() -> None:
@@ -810,6 +844,7 @@ def main() -> None:
         strategy_name=args.strategy,
         use_persona_llm=args.use_persona_llm,
         use_rubric_llm=args.use_rubric_llm,
+        use_triple_supervisor_llm=args.use_triple_supervisor_llm,
         combo_name=args.combo,
         provider=args.provider,
         model=args.model,

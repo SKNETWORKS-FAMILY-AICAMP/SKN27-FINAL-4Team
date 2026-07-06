@@ -7,7 +7,9 @@
     <header v-if="!isAuthScreen" class="gnav">
       <div class="gnav-inner">
         <router-link to="/home" class="brand">
-          <span class="brand-mark" aria-hidden="true">빈</span>
+          <span class="brand-mark" aria-hidden="true">
+            <img :src="brandLogo" alt="">
+          </span>
           <span class="brand-name">빈틈사이</span>
         </router-link>
 
@@ -53,6 +55,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { clearCsrfToken } from "./api/client.js";
 import { userApi } from "./api/user.js";
+import brandLogo from "./assets/brand-logo.png";
 import { useSecret } from "./composables/useSecret.js";
 
 const route = useRoute();
@@ -162,6 +165,16 @@ function goProtected(path) {
 }
 
 function onNavigate(id) {
+  if (id === "startWalk") {
+    if (currentUser.value) {
+      router.push("/chat");
+      return;
+    }
+
+    goLogin("/chat");
+    return;
+  }
+
   if (id === "login" && currentUser.value) {
     router.push(currentUser.value.next_path || "/home");
     return;
@@ -262,14 +275,20 @@ function starStyle(i) {
 .brand-mark {
   width: 46px;
   height: 46px;
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 12px;
   background: linear-gradient(135deg, #e73e65, #ee5d5f 48%, #e77e6e);
-  color: #fff;
-  font-size: 20px;
-  font-weight: 950;
+  overflow: hidden;
   box-shadow: 0 0 26px rgba(231, 62, 101, 0.36);
+}
+
+.brand-mark img {
+  display: block;
+  width: 86%;
+  height: 86%;
+  object-fit: contain;
 }
 
 .brand-name {

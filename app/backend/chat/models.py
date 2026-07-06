@@ -74,26 +74,7 @@ class ChatMessage(models.Model):
         ordering = ['created_at']
 
 
-# ── 산책/활동 큐레이션 마스터 (plan-support가 사용) ─────────────
-class WalkCuration(models.Model):
-    EMOTION4_CHOICES = [
-        ('joy',     '기쁨'),
-        ('sadness', '슬픔'),
-        ('anger',   '분노'),
-        ('normal',  '일반'),
-    ]
-    emotion = models.CharField(max_length=10, choices=EMOTION4_CHOICES, verbose_name='감정 코드')
-    name = models.CharField(max_length=100, verbose_name='산책로/활동 명칭')
-    duration = models.CharField(max_length=50, verbose_name='소요 시간')
-    description = models.TextField(verbose_name='활동 및 추천 코스 설명')
-
-    class Meta:
-        db_table = 'walk_curations'
-        verbose_name = '산책 큐레이션'
-        verbose_name_plural = '산책 큐레이션 목록'
-
-    def __str__(self):
-        return f'[{self.get_emotion_display()}] {self.name}'
+# (WalkCuration(산책 큐레이션)은 장소 추천 기능 폐기로 제거 — 2026-07-05, 0013 마이그레이션)
 
 
 # ── 장기 요약 메모리 (user_memory) ───────────────────────────

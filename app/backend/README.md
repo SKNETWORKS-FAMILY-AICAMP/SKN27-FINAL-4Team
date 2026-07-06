@@ -12,7 +12,7 @@ backend/
 ├── chat/                ★ 챗봇 핵심 앱 — views.py와 urls.py는 각각 하나뿐
 │   ├── views.py         모든 챗봇 엔드포인트 (상단 docstring에 전체 목록)
 │   ├── urls.py          모든 챗봇 라우팅
-│   ├── models.py        ChatSession / ChatMessage / UserMemory / MbtiAnswer / WalkCuration
+│   ├── models.py        ChatSession / ChatMessage / UserMemory / MbtiAnswer
 │   ├── graph/           LangGraph 멀티에이전트
 │   │   ├── state.py       ChatState 스키마
 │   │   ├── personas.py    캐릭터 4종(포리·까미·토토·여울) + 감정 지침
@@ -23,7 +23,6 @@ backend/
 │   ├── mbti.py          MBTI 8문항 + 수집 진행 판정
 │   ├── memory.py        user_memory 장기 요약 (비동기)
 │   ├── secret_cache.py  시크릿 모드 RAM 캐시 (DB 저장 없음)
-│   ├── plan_service.py  Tavily 장소 검색 (+WalkCuration 조인)
 │   └── tests.py         python manage.py test chat (sqlite — Postgres 불필요)
 ├── user/                로그인/회원 (팀 공용)
 └── wellness/            마이페이지 (팀 공용)
@@ -49,7 +48,6 @@ docker compose down -v && docker compose up -d --build
 | `OPENAI_MODEL` | N | 기본 `gpt-5.4-mini` |
 | `LLM_PROVIDER` | N | `openai`(기본) / `groq` — groq 쓸 땐 `GROQ_API_KEY` 필요 |
 | `PG_*` | Y | PostgreSQL 접속 (docker면 자동) |
-| `TAVILY_API_KEY` | N | 없으면 plan-support가 빈 결과 |
 | `ELEVENLABS_API_KEY` + `VOICE_ID_{PORI,KKAMI,TOTO,YEOUL}` | N | 없으면 TTS만 failed, 대화는 정상 |
 
 > .env는 레포 루트 하나로 통합. docker와 로컬 runserver 모두 루트 `.env`를 읽음.

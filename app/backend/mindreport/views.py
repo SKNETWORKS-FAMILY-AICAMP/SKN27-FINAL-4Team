@@ -7,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from .services.criteria_service import ReportCriteriaService
 from .services.fallback_service import FallbackReportService
+from .services.flow import MindReportFlowService, format_for_frontend
 
 class MindReportGenerateAPIView(APIView):
     # 실제 연동 시에는 인증된 사용자만 접근 가능하도록 주석 해제 (테스트를 위해 잠시 주석 처리 가능)
@@ -19,7 +20,10 @@ class MindReportGenerateAPIView(APIView):
         """
         user = request.user
         if not user.is_authenticated:
-            return Response({"error": "로그인이 필요합니다."}, status=401)
+            from django.contrib.auth import get_user_model
+            user = get_user_model().objects.first()
+            if not user:
+                return Response({"error": "DB에 유저가 없습니다."}, status=401)
             
         import calendar
         from datetime import timedelta
@@ -68,21 +72,27 @@ class MindReportGenerateAPIView(APIView):
             })
         else:
             MindReport.objects.filter(user=user, is_fallback=True, report_type__contains="주간").delete()
-            generated_reports.append({
-                "id": f"weekly-{user.id}-{timezone.now().timestamp()}",
-                "type": "주간",
-                "range": timezone.now().strftime("%Y.%m.%d") + " 생성",
-                "title": f"정식 마음 리포트 생성 완료",
-                "summary": "충분한 대화가 모여 리포트가 정상적으로 분석되었습니다.",
-                "stressCauses": ["업무", "피로"],
-                "reliefCauses": ["휴식"],
-                "emotions": [{"day": "오늘", "icon": "😄"}],
-                "analysis": [
-                    "대화 기준(5개 이상)을 충족하여 정상적인 분석을 완료했습니다.",
-                    "다음 주 AI 모델이 연동되면 실제 분석 데이터가 이곳에 표시됩니다."
-                ],
-                "is_fallback": False
-            })
+            
+            # --- 정식 파이프라인(대화수 충족 로직) 가동 ---
+            flow_service = MindReportFlowService()
+            flow_result = flow_service.run(user=user, period_type="week")
+            report_data = format_for_frontend(flow_result=flow_result, user_id=user.id, period_name="주간")
+            
+            final_report = MindReport.objects.create(
+                user=user,
+                report_type=report_data["type"],
+                range_text=report_data["range"],
+                title=report_data["title"],
+                summary=report_data["summary"],
+                stress_causes=report_data["stressCauses"],
+                relief_causes=report_data["reliefCauses"],
+                emotions=report_data["emotions"],
+                analysis=report_data["analysis"],
+                recommendations=report_data.get("recommendations", []),
+                is_fallback=False
+            )
+            report_data["id"] = f"weekly-{final_report.id}"
+            generated_reports.append(report_data)
 
         # ==========================================
         # 2. 월간 리포트 처리 (마지막 주일 경우에만)
@@ -113,21 +123,27 @@ class MindReportGenerateAPIView(APIView):
                 })
             else:
                 MindReport.objects.filter(user=user, is_fallback=True, report_type__contains="월간").delete()
-                generated_reports.append({
-                    "id": f"monthly-{user.id}-{timezone.now().timestamp()}",
-                    "type": "월간",
-                    "range": timezone.now().strftime("%Y.%m") + " 월간 결산",
-                    "title": f"정식 월간 마음 리포트 생성 완료",
-                    "summary": "한 달간의 충분한 대화가 모여 리포트가 정상적으로 분석되었습니다.",
-                    "stressCauses": ["프로젝트", "미래 고민"],
-                    "reliefCauses": ["취미 생활"],
-                    "emotions": [{"day": "이번 달", "icon": "😌"}],
-                    "analysis": [
-                        "월간 대화 기준(20개 이상)을 충족하여 정상적인 분석을 완료했습니다.",
-                        "추후 AI 모델이 연동되면 실제 월간 분석 데이터가 표시됩니다."
-                    ],
-                    "is_fallback": False
-                })
+                
+                # --- 정식 파이프라인(대화수 충족 로직) 가동 ---
+                flow_service = MindReportFlowService()
+                flow_result = flow_service.run(user=user, period_type="month")
+                report_data = format_for_frontend(flow_result=flow_result, user_id=user.id, period_name="월간")
+                
+                final_report = MindReport.objects.create(
+                    user=user,
+                    report_type=report_data["type"],
+                    range_text=report_data["range"],
+                    title=report_data["title"],
+                    summary=report_data["summary"],
+                    stress_causes=report_data["stressCauses"],
+                    relief_causes=report_data["reliefCauses"],
+                    emotions=report_data["emotions"],
+                    analysis=report_data["analysis"],
+                    recommendations=report_data.get("recommendations", []),
+                    is_fallback=False
+                )
+                report_data["id"] = f"monthly-{final_report.id}"
+                generated_reports.append(report_data)
 
         return Response({
             "status": "success", 

@@ -11,62 +11,71 @@ import {
 
 const emit = defineEmits(["navigate"]);
 
-const FEATURE_HOBBY_LABELS = ["음악 감상", "카페 투어", "산책", "요리"];
-const FEATURE_INTEREST_LABELS = ["심리", "반려동물", "드라마", "디지털 트렌드"];
-const VAULT_GROUP_CONFIG = [
-  { title: "취미", icon: "🎵", type: "hobby", labels: ["독서", "영화 감상", "운동", "사진 찍기", "요리", "드로잉", "게임", "악기 연주"] },
-  { title: "관심 분야", icon: "⭐", type: "interest", labels: ["심리", "반려동물", "K-POP", "자기계발", "다큐멘터리", "댄스/퍼포먼스", "드라마", "디지털 트렌드"] },
-  { title: "라이프스타일", icon: "🌿", type: "interest", labels: ["여행/외출", "감성/무드", "건강/운동", "패션/뷰티", "인테리어", "맛집/카페", "환경/지속가능", "문화/예술"] },
-  { title: "학습/성장", icon: "🎓", type: "hobby", labels: ["외국어 학습", "글쓰기", "프로그래밍", "디자인", "마케팅", "창업", "자격증", "독서 모임"] },
-];
+const MIN_PREFERENCE_COUNT = 3;
+const PREFERENCE_GRID_SLOT_COUNT = 16;
+const HOBBY_CATEGORIES = ["전체", "스포츠", "외출·공간", "콘텐츠·몰입", "음악·표현", "라이프스타일", "소셜·체험", "성장"];
+const INTEREST_CATEGORIES = ["전체", "콘텐츠", "음악·문화", "공간·취향", "라이프스타일", "관계·성장", "감성·표현", "트렌드"];
 
 const hobbyItems = parseKeywordCsv(hobbyCsv, "hobby");
 const interestItems = parseKeywordCsv(interestCsv, "interest");
 const storedProfile = getStoredProfile();
+const defaultHobbies = ["볼링", "해외여행", "카페 투어"];
+const defaultInterests = [];
+const initialHobbies = normalizeInitialPreferenceLabels(
+  storedProfile.hobbies?.length ? storedProfile.hobbies : defaultHobbies,
+  "hobby",
+  Infinity,
+);
+const initialInterests = normalizeInitialPreferenceLabels(
+  storedProfile.interests?.length ? storedProfile.interests : defaultInterests,
+  "interest",
+  Infinity,
+);
 
 const profileForm = ref({
-  nickname: storedProfile.nickname || "별빛소년",
-  birthDate: formatBirthDateForDisplay(storedProfile.birth_date) || storedProfile.birthDate || storedProfile.birthday || "1997.05.21",
+  nickname: storedProfile.nickname || "레이설",
+  birthDate: formatBirthDateForDisplay(storedProfile.birth_date) || storedProfile.birthDate || storedProfile.birthday || "1998.12.23",
   gender: storedProfile.gender || "남",
   job: storedProfile.job || "UI/UX 디자이너",
 });
 
 const genderOptions = ["남", "여", "선택 안 함"];
-const selectedHobbies = ref(storedProfile.hobbies?.length ? storedProfile.hobbies : ["음악 감상", "카페 투어", "산책"]);
-const selectedInterests = ref(storedProfile.interests?.length ? storedProfile.interests : ["심리", "반려동물", "드라마", "디지털 트렌드"]);
+const selectedHobbies = ref(initialHobbies);
+const selectedInterests = ref(initialInterests);
 const isSaving = ref(false);
 const saveError = ref("");
-const activeKeywordModal = ref(null);
-const keywordSearchQuery = ref("");
+const activePreferenceType = ref("hobby");
+const activePreferenceCategory = ref("전체");
 const termsOfServiceAgreed = ref(false);
 const privacyCollectionAgreed = ref(false);
 const activeAgreementModal = ref(null);
 
 const selectedPreferenceLabels = computed(() => [...selectedHobbies.value, ...selectedInterests.value]);
-const featureHobbyItems = computed(() => FEATURE_HOBBY_LABELS.map((label) => getKeywordItem(label, "hobby")));
-const featureInterestItems = computed(() => FEATURE_INTEREST_LABELS.map((label) => getKeywordItem(label, "interest")));
-const vaultGroups = computed(() => VAULT_GROUP_CONFIG.map((group) => ({
-  ...group,
-  items: group.labels.map((label) => getKeywordItem(label, group.type)),
-})));
-const activeModalItems = computed(() => activeKeywordModal.value === "hobby" ? hobbyItems : interestItems);
-const activeModalSelected = computed(() => activeKeywordModal.value === "hobby" ? selectedHobbies.value : selectedInterests.value);
-const activeModalTitle = computed(() => activeKeywordModal.value === "hobby" ? "취미 전체 선택" : "관심분야 전체 선택");
-const activeModalCountLabel = computed(() => activeKeywordModal.value === "hobby" ? "선택한 취미" : "선택한 관심분야");
-const activeModalPlaceholder = computed(() => activeKeywordModal.value === "hobby" ? "취미 키워드를 검색해보세요" : "관심분야를 검색해보세요");
-const filteredModalItems = computed(() => {
-  const query = keywordSearchQuery.value.trim().toLowerCase();
-  const items = activeModalItems.value;
+const selectedPreferenceItems = computed(() => [
+  ...selectedHobbies.value.map((label) => ({ ...getKeywordItem(label, "hobby"), type: "hobby" })),
+  ...selectedInterests.value.map((label) => ({ ...getKeywordItem(label, "interest"), type: "interest" })),
+]);
+const activePreferenceItems = computed(() => activePreferenceType.value === "hobby" ? hobbyItems : interestItems);
+const activeCategoryOptions = computed(() => activePreferenceType.value === "hobby" ? HOBBY_CATEGORIES : INTEREST_CATEGORIES);
+const activePreferenceTitle = computed(() => activePreferenceType.value === "hobby" ? "취미/활동" : "관심 주제");
+const visiblePreferenceItems = computed(() => {
+  const items = activePreferenceItems.value;
+  const filtered = activePreferenceCategory.value === "전체"
+    ? items
+    : items.filter((item) => item.onboardingCategory === activePreferenceCategory.value);
+  return filtered;
+});
+const preferenceGridItems = computed(() => {
+  const slots = visiblePreferenceItems.value.map((item) => ({ ...item, placeholder: false }));
 
-  if (query) {
-    return items.filter((item) => item.searchText.includes(query));
+  while (slots.length < PREFERENCE_GRID_SLOT_COUNT) {
+    slots.push({
+      id: `preference-placeholder-${activePreferenceType.value}-${activePreferenceCategory.value}-${slots.length}`,
+      placeholder: true,
+    });
   }
 
-  return uniqueItems([
-    ...items.slice(0, 32),
-    ...featureHobbyItems.value,
-    ...featureInterestItems.value,
-  ]).filter((item) => item.type === activeKeywordModal.value);
+  return slots;
 });
 const agreementsSatisfied = computed(() => termsOfServiceAgreed.value && privacyCollectionAgreed.value);
 const activeAgreementTitle = computed(() => activeAgreementModal.value === "privacy" ? "개인정보 수집 및 이용 안내" : "이용약관");
@@ -149,11 +158,52 @@ function normalizeKeywordItem(raw, type) {
     label,
     category: raw.category || "기타",
     subCategory: raw.subcategory || raw.subCategory || "",
+    onboardingCategory: getOnboardingCategory(raw, type),
+    icon: getKeywordIcon(label, type),
     relatedKeywords,
     sortOrder: Number(raw.sort_order || raw.sortOrder || 999),
     popularityScore: Number(raw.popularity_score || raw.popularityScore || 0),
     searchText,
   };
+}
+
+function getOnboardingCategory(raw, type) {
+  const source = [raw.category, raw.subcategory, raw.subCategory, raw.label, raw.display_label, raw.keyword].filter(Boolean).join(" ");
+
+  if (type === "hobby") {
+    if (/운동|스포츠|산책|러닝|등산|요가|헬스/.test(source)) return "스포츠";
+    if (/여행|외출|카페|맛집|공간|전시|공연|문화|사진/.test(source)) return "외출·공간";
+    if (/영상|콘텐츠|영화|드라마|웹툰|게임|디지털|독서/.test(source)) return "콘텐츠·몰입";
+    if (/음악|연주|노래|창작|표현|드로잉|글쓰기/.test(source)) return "음악·표현";
+    if (/요리|미식|반려|자연|가드닝|라이프|홈/.test(source)) return "라이프스타일";
+    if (/소셜|모임|체험|방문|페스티벌/.test(source)) return "소셜·체험";
+    if (/학습|성장|자기|외국어|프로그래밍|디자인|마케팅|자격/.test(source)) return "성장";
+    return "라이프스타일";
+  }
+
+  if (/콘텐츠|미디어|영상|영화|드라마|웹툰|예능|애니/.test(source)) return "콘텐츠";
+  if (/음악|문화|K-POP|공연|뮤지컬|댄스|퍼포먼스/.test(source)) return "음악·문화";
+  if (/여행|장소|공간|맛집|카페|팝업|사진/.test(source)) return "공간·취향";
+  if (/라이프|패션|뷰티|반려|식물|홈|루틴|자기관리|쇼핑|음식|커피|차/.test(source)) return "라이프스타일";
+  if (/관계|소통|연애|성장|자기이해|자기계발|심리/.test(source)) return "관계·성장";
+  if (/감성|무드|창작|표현|사진 감성/.test(source)) return "감성·표현";
+  if (/트렌드|레트로|뉴트로|호러|오컬트|로맨스|판타지|디지털/.test(source)) return "트렌드";
+  return "라이프스타일";
+}
+
+function getKeywordIcon(label, type) {
+  const text = String(label || "");
+  if (/음악|K-POP|발라드|재즈|콘서트|악기|연주/.test(text)) return "🎧";
+  if (/산책|러닝|운동|헬스|요가|등산|스포츠/.test(text)) return "🚶";
+  if (/카페|커피|차|맛집|요리|베이킹/.test(text)) return "☕";
+  if (/영화|드라마|웹툰|예능|애니|콘텐츠|유튜브/.test(text)) return "🎬";
+  if (/게임|디지털|트렌드/.test(text)) return "🎮";
+  if (/독서|글쓰기|자기계발|학습|심리/.test(text)) return "📚";
+  if (/사진|전시|문화|공연|창작|드로잉|표현/.test(text)) return "🖼️";
+  if (/반려|동물|식물|가드닝|자연/.test(text)) return "🐾";
+  if (/여행|외출|공간|팝업|캠핑/.test(text)) return "🧭";
+  if (/패션|뷰티|인테리어|쇼핑/.test(text)) return "✨";
+  return type === "hobby" ? "💫" : "🔖";
 }
 
 function splitRelatedKeywords(value) {
@@ -176,10 +226,30 @@ function getKeywordItem(label, type) {
     id: `${type}-${label}`,
     type,
     label,
+    onboardingCategory: type === "hobby" ? "라이프스타일" : "라이프스타일",
+    icon: getKeywordIcon(label, type),
     searchText: label.toLowerCase(),
     sortOrder: 999,
     popularityScore: 0,
   };
+}
+
+function normalizeInitialPreferenceLabels(labels, type, limit) {
+  if (limit <= 0) return [];
+
+  const seen = new Set();
+  const normalized = [];
+
+  for (const label of labels || []) {
+    const normalizedLabel = getKeywordItem(label, type).label?.trim();
+    if (!normalizedLabel || seen.has(normalizedLabel)) continue;
+
+    seen.add(normalizedLabel);
+    normalized.push(normalizedLabel);
+    if (normalized.length >= limit) break;
+  }
+
+  return normalized;
 }
 
 function uniqueItems(items) {
@@ -191,34 +261,31 @@ function uniqueItems(items) {
   });
 }
 
+function getKeywordType(item) {
+  return item?.type === "interest" ? "interest" : item?.type === "hobby" ? "hobby" : activePreferenceType.value;
+}
+
 function isKeywordSelected(item) {
-  return getSelectedRef(item.type).value.includes(item.label);
+  return getSelectedRef(getKeywordType(item)).value.includes(item.label);
 }
 
 function toggleKeywordItem(item) {
-  const selected = getSelectedRef(item.type);
+  const type = getKeywordType(item);
+  const selected = getSelectedRef(type);
 
   if (selected.value.includes(item.label)) {
     selected.value = selected.value.filter((label) => label !== item.label);
+    saveError.value = "";
     return;
   }
 
-  selected.value.push(item.label);
+  saveError.value = "";
+  selected.value = [...selected.value, item.label];
 }
 
 function removeSelectedKeyword(label, type) {
   const selected = getSelectedRef(type);
   selected.value = selected.value.filter((item) => item !== label);
-}
-
-function openKeywordModal(type) {
-  activeKeywordModal.value = type;
-  keywordSearchQuery.value = "";
-}
-
-function closeKeywordModal() {
-  activeKeywordModal.value = null;
-  keywordSearchQuery.value = "";
 }
 
 function openAgreementModal(type) {
@@ -260,6 +327,12 @@ async function saveUserInfo() {
 
   if (!agreementsSatisfied.value) {
     showValidationMessage("필수 약관을 확인하고 동의해 주세요.");
+    isSaving.value = false;
+    return;
+  }
+
+  if (selectedPreferenceLabels.value.length < MIN_PREFERENCE_COUNT) {
+    showValidationMessage(`취향 조각을 ${MIN_PREFERENCE_COUNT}개 이상 선택해 주세요.`);
     isSaving.value = false;
     return;
   }
@@ -387,7 +460,8 @@ function formatBirthDateForDisplay(value) {
 
       <header class="userinfo-heading">
         <div class="text-area">
-          <h2>기본 정보와 취향 조각 수집하기 ✨</h2>
+          <h2>기본 정보와 취향 조각 수집하기</h2>
+          <span class="sparkle-mark" aria-hidden="true">✨</span>
           <p>당신에게 맞는 대화를 위해 필요한 정보만 가볍게 입력해 주세요.</p>
         </div>
 
@@ -398,8 +472,15 @@ function formatBirthDateForDisplay(value) {
       </header>
 
       <form class="setup-form" novalidate @submit.prevent="saveUserInfo">
-        <section class="basic-info-card" aria-label="기본 정보 입력">
-          <div class="profile-column">
+        <div class="form-grid">
+          <section class="basic-info-card" aria-label="기본 정보 입력">
+            <header class="section-heading">
+              <div>
+                <h3>기본 정보 입력</h3>
+                <p>프로필 생성을 위한 기본 정보를 입력해 주세요.</p>
+              </div>
+            </header>
+
             <label class="field">
               <span>이름 또는 닉네임</span>
               <input
@@ -411,24 +492,25 @@ function formatBirthDateForDisplay(value) {
             </label>
 
             <label class="field">
+              <span>생년월일</span>
+              <span class="input-with-icon">
+                <input
+                  v-model="profileForm.birthDate"
+                  class="ltr-input"
+                  type="text"
+                  dir="ltr"
+                  inputmode="numeric"
+                  maxlength="10"
+                  placeholder="생년월일 8자리"
+                  @input="normalizeBirthDateInput"
+                >
+                
+              </span>
+            </label>
+
+            <label class="field">
               <span>직업</span>
               <input v-model="profileForm.job" type="text" placeholder="직업을 입력해 주세요">
-            </label>
-          </div>
-
-          <div class="profile-column">
-            <label class="field">
-              <span>생년월일</span>
-              <input
-                v-model="profileForm.birthDate"
-                class="ltr-input"
-                type="text"
-                dir="ltr"
-                inputmode="numeric"
-                maxlength="10"
-                placeholder="YYYY.MM.DD"
-                @input="normalizeBirthDateInput"
-              >
             </label>
 
             <div class="field">
@@ -446,85 +528,103 @@ function formatBirthDateForDisplay(value) {
                 </button>
               </div>
             </div>
-          </div>
-        </section>
 
-        <section class="preference-card" aria-label="취미와 관심분야 키워드 설정">
-          <header class="preference-heading">
-            <div>
-              <p>Preference fragments</p>
-              <h3> 취미와 관심 분야</h3>
-            </div>
-            <span>선택한 조각 {{ selectedPreferenceLabels.length }}개</span>
-          </header>
+            <p class="lock-note">🔒 입력한 정보는 안전하게 보호되며, 서비스 제공 목적으로만 사용됩니다.</p>
+          </section>
 
-          <div class="featured-preference-grid">
-            <section>
-              <h4> 취미</h4>
-              <div class="featured-card-row">
-                <button
-                  v-for="item in featureHobbyItems"
-                  :key="item.id"
-                  type="button"
-                  class="featured-keyword-card"
-                  :class="{ selected: isKeywordSelected(item) }"
-                  @click="toggleKeywordItem(item)"
-                >
-                  <span>{{ item.label === "카페 투어" ? "☕" : item.label === "산책" ? "👟" : item.label === "요리" ? "🍳" : "🎵" }}</span>
-                  <strong>{{ item.label }}</strong>
-                  <i>{{ isKeywordSelected(item) ? "✓" : "+" }}</i>
-                </button>
-              </div>
-            </section>
-
-            <section>
-              <h4>관심 분야</h4>
-              <div class="featured-card-row">
-                <button
-                  v-for="item in featureInterestItems"
-                  :key="item.id"
-                  type="button"
-                  class="featured-keyword-card interest"
-                  :class="{ selected: isKeywordSelected(item) }"
-                  @click="toggleKeywordItem(item)"
-                >
-                  <span>{{ item.label === "반려동물" ? "🐾" : item.label === "드라마" ? "🎬" : item.label === "디지털 트렌드" ? "💡" : "💗" }}</span>
-                  <strong>{{ item.label }}</strong>
-                  <i>{{ isKeywordSelected(item) ? "✓" : "+" }}</i>
-                </button>
-              </div>
-            </section>
-          </div>
-
-          <section class="keyword-vault" aria-label="전체 키워드 보관함">
-            <header>
+          <section class="preference-card" aria-label="취미와 관심분야 키워드 설정">
+            <header class="preference-heading">
               <div>
-                <h3>전체 키워드 보관함</h3>
-                <p>원하는 키워드를 클릭하여 선택해보세요.</p>
+                <h3>취미와 관심 분야</h3>
+                <p>좋아하거나 관심 있는 활동을 자유롭게 골라주세요.</p>
               </div>
-              <div class="vault-actions">
-                <button type="button" @click="openKeywordModal('hobby')">+ 취미 더보기</button>
-                <button type="button" @click="openKeywordModal('interest')">+ 관심분야 더보기</button>
-              </div>
+              <span>선택한 태그 {{ selectedPreferenceLabels.length }}개</span>
             </header>
 
-            <article v-for="group in vaultGroups" :key="group.title" class="keyword-group-card">
-              <strong><span>{{ group.icon }}</span>{{ group.title }}</strong>
-              <div>
+            <div class="preference-tabs" role="tablist" aria-label="취향 종류">
+              <button
+                type="button"
+                :class="{ active: activePreferenceType === 'hobby' }"
+                @click="activePreferenceType = 'hobby'; activePreferenceCategory = '전체'"
+              >
+                취미/활동
+              </button>
+              <button
+                type="button"
+                :class="{ active: activePreferenceType === 'interest' }"
+                @click="activePreferenceType = 'interest'; activePreferenceCategory = '전체'"
+              >
+                관심 주제
+              </button>
+            </div>
+
+            <div class="preference-choice-box">
+              <div class="preference-choice-box-header">
+                <strong>{{ activePreferenceTitle }} 항목</strong>
+                <em>{{ activePreferenceCategory }}</em>
+              </div>
+
+              <div class="preference-category-row" :aria-label="`${activePreferenceTitle} 카테고리`">
                 <button
-                  v-for="item in group.items"
-                  :key="`${group.title}-${item.label}`"
+                  v-for="category in activeCategoryOptions"
+                  :key="category"
                   type="button"
-                  class="keyword-chip"
-                  :class="{ selected: isKeywordSelected(item) }"
-                  @click="toggleKeywordItem(item)"
+                  :class="{ active: activePreferenceCategory === category }"
+                  @click="activePreferenceCategory = category"
                 >
-                  {{ item.label }} <span>{{ isKeywordSelected(item) ? "✓" : "+" }}</span>
+                  {{ category }}
                 </button>
               </div>
-            </article>
+
+              <div class="preference-chip-grid" :aria-label="`${activePreferenceTitle} 선택 목록`">
+                <template v-for="item in preferenceGridItems" :key="item.id">
+                  <span
+                    v-if="item.placeholder"
+                    class="preference-choice-placeholder"
+                    aria-hidden="true"
+                  />
+                  <button
+                    v-else
+                    type="button"
+                    class="keyword-chip preference-choice-chip"
+                    :class="{ selected: isKeywordSelected(item) }"
+                    :aria-pressed="isKeywordSelected(item)"
+                    @click="toggleKeywordItem(item)"
+                  >
+                    <span class="chip-icon" aria-hidden="true">{{ item.icon }}</span>
+                    <strong>{{ item.label }}</strong>
+                    <i>{{ isKeywordSelected(item) ? "✓" : "" }}</i>
+                  </button>
+                </template>
+              </div>
+            </div>
+
+            <section class="selected-fragments" aria-label="선택한 취향 조각">
+              <header>
+                <div>
+                  <h4>선택한 취향 조각</h4>
+                  <p>{{ selectedPreferenceLabels.length }}개 선택 완료!</p>
+                </div>
+              </header>
+
+              <div v-if="selectedPreferenceItems.length" class="selected-keyword-row">
+                <button
+                  v-for="item in selectedPreferenceItems"
+                  :key="`${item.type}-${item.label}`"
+                  type="button"
+                  class="selected-keyword-pill"
+                  @click="removeSelectedKeyword(item.label, item.type)"
+                >
+                  <span aria-hidden="true">{{ item.icon }}</span>
+                  {{ item.label }}
+                  <i aria-hidden="true">×</i>
+                </button>
+              </div>
+
+              <p v-else class="empty-selected-message">아직 선택한 조각이 없어요. 위 항목에서 취향을 골라주세요.</p>
+            </section>
           </section>
-        </section>
+        </div>
 
         <section class="agreement-card" aria-labelledby="agreement-title">
           <header>
@@ -567,79 +667,14 @@ function formatBirthDateForDisplay(value) {
           <p v-if="!agreementsSatisfied" class="agreement-help">필수 약관을 확인하고 동의해 주세요.</p>
         </section>
 
-        <footer class="selected-summary-card">
-          <div class="summary-title">
-            <span class="summary-icon">🫙</span>
-            <div>
-              <strong>선택한 취향 조각</strong>
-              <p>{{ selectedPreferenceLabels.length }}개 선택 완료!</p>
-            </div>
-          </div>
-
-          <div class="selected-chip-row">
-            <button
-              v-for="label in selectedPreferenceLabels.slice(0, 8)"
-              :key="label"
-              type="button"
-              @click="removeSelectedKeyword(label, selectedHobbies.includes(label) ? 'hobby' : 'interest')"
-            >
-              {{ label }} ×
-            </button>
-          </div>
-
-          <div class="summary-action">
-            <p v-if="saveError" class="save-error">{{ saveError }}</p>
-            <button class="btn primary large" type="submit" :disabled="isSaving || !agreementsSatisfied">
-              {{ isSaving ? "저장 중..." : "동의하고 시작하기 ✨" }}
-            </button>
-          </div>
+        <footer class="setup-submit-row">
+          <p v-if="saveError" class="save-error">{{ saveError }}</p>
+          <button class="btn primary large" type="submit" :disabled="isSaving || !agreementsSatisfied">
+            {{ isSaving ? "저장 중..." : "동의하고 시작하기 ✨" }}
+          </button>
         </footer>
       </form>
     </article>
-
-    <div v-if="activeKeywordModal" class="keyword-modal-backdrop" @click.self="closeKeywordModal">
-      <section class="keyword-modal" role="dialog" aria-modal="true" :aria-label="activeModalTitle">
-        <header class="keyword-modal-header">
-          <h3>{{ activeModalTitle }}</h3>
-          <button type="button" aria-label="닫기" @click="closeKeywordModal">×</button>
-        </header>
-
-        <label class="keyword-search">
-          <input v-model="keywordSearchQuery" type="search" :placeholder="activeModalPlaceholder">
-          <span>⌕</span>
-        </label>
-
-        <div class="modal-keyword-list">
-          <button
-            v-for="item in filteredModalItems"
-            :key="item.id"
-            type="button"
-            class="keyword-chip modal-chip"
-            :class="{ selected: isKeywordSelected(item) }"
-            @click="toggleKeywordItem(item)"
-          >
-            {{ item.label }} <span>{{ isKeywordSelected(item) ? "✓" : "+" }}</span>
-          </button>
-          <p v-if="!filteredModalItems.length" class="empty-keyword-message">검색 결과가 없어요.</p>
-        </div>
-
-        <footer class="keyword-modal-footer">
-          <strong>{{ activeModalCountLabel }} {{ activeModalSelected.length }}개</strong>
-          <div class="selected-keyword-row">
-            <button
-              v-for="label in activeModalSelected"
-              :key="label"
-              type="button"
-              class="selected-keyword-pill"
-              @click="removeSelectedKeyword(label, activeKeywordModal)"
-            >
-              {{ label }} ×
-            </button>
-          </div>
-          <button class="modal-complete-button" type="button" @click="closeKeywordModal">완료</button>
-        </footer>
-      </section>
-    </div>
 
     <div v-if="activeAgreementModal" class="agreement-modal-backdrop" @click.self="closeAgreementModal">
       <section class="agreement-modal" role="dialog" aria-modal="true" :aria-labelledby="`${activeAgreementModal}-agreement-title`">
@@ -1010,6 +1045,126 @@ function formatBirthDateForDisplay(value) {
   font-size: 14px;
   font-weight: 950;
   white-space: nowrap;
+}
+
+.preference-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 6px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.preference-tabs button {
+  min-height: 54px;
+  border: 0;
+  border-radius: 13px;
+  background: transparent;
+  color: rgba(255, 245, 230, 0.74);
+  font-size: 15px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.preference-tabs button.active {
+  color: #fff;
+  background: linear-gradient(90deg, #f84f9b 0%, #ff8a57 100%);
+  box-shadow: 0 12px 28px rgba(248, 79, 155, 0.24);
+}
+
+.preference-category-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.preference-category-row button {
+  min-height: 36px;
+  padding: 0 15px;
+  border: 1px solid rgba(255, 116, 180, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 245, 230, 0.8);
+  font-size: 13px;
+  font-weight: 900;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.preference-category-row button.active {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(90deg, #f84f9b 0%, #ff8a57 100%);
+}
+
+.preference-chip-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.preference-choice-chip {
+  position: relative;
+  min-height: 58px;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0 44px 0 16px;
+  border-radius: 14px;
+}
+
+.preference-choice-chip .chip-icon {
+  font-size: 18px;
+}
+
+.preference-choice-chip strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.preference-choice-chip i {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 950;
+}
+
+.selected-fragments {
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 116, 180, 0.16);
+}
+
+.selected-fragments header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.selected-fragments h4 {
+  margin: 0;
+  color: #fff7df;
+  font-size: 16px;
+}
+
+.selected-fragments p {
+  margin: 0;
+  color: rgba(255, 245, 230, 0.66);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .featured-preference-grid {
@@ -1395,6 +1550,7 @@ function formatBirthDateForDisplay(value) {
 
   .userinfo-heading,
   .basic-info-card,
+  .preference-chip-grid,
   .featured-preference-grid,
   .selected-summary-card {
     grid-template-columns: 1fr;
@@ -1424,6 +1580,7 @@ function formatBirthDateForDisplay(value) {
   }
 
   .gender-toggle,
+  .preference-tabs,
   .featured-card-row,
   .keyword-group-card {
     grid-template-columns: 1fr;
@@ -1434,6 +1591,509 @@ function formatBirthDateForDisplay(value) {
   .agreement-card header,
   .agreement-row {
     display: grid;
+  }
+}
+
+:global(#app .userinfo-setup-view) {
+  width: 100% !important;
+  max-width: none !important;
+  padding: clamp(26px, 4vh, 54px) clamp(18px, 4vw, 52px) 72px !important;
+}
+
+:global(#app .userinfo-setup-view .userinfo-panel) {
+  width: min(100%, 1120px) !important;
+  margin: 0 auto !important;
+}
+
+.userinfo-panel {
+  padding: clamp(38px, 4.2vw, 62px);
+  border: 1px solid rgba(255, 151, 197, 0.24);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(255, 87, 166, 0.12), transparent 32%),
+    radial-gradient(circle at 86% 20%, rgba(255, 145, 92, 0.12), transparent 28%),
+    linear-gradient(145deg, rgba(31, 14, 59, 0.9), rgba(38, 13, 57, 0.88) 48%, rgba(23, 10, 44, 0.92));
+  box-shadow:
+    0 30px 90px rgba(7, 2, 26, 0.34),
+    inset 0 1px 0 rgba(255, 245, 238, 0.12);
+  backdrop-filter: blur(20px) saturate(132%);
+}
+
+.setup-stepper {
+  max-width: 720px;
+  margin-bottom: clamp(42px, 5vw, 72px);
+}
+
+.setup-stepper span {
+  gap: 10px;
+  font-size: 14px;
+}
+
+.setup-stepper b {
+  width: 44px;
+  height: 44px;
+}
+
+.setup-stepper span:not(:last-child)::after {
+  top: 21px;
+  left: calc(50% + 32px);
+  width: calc(100% - 52px);
+}
+
+.userinfo-heading {
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 24px;
+  align-items: start;
+  margin-bottom: 34px;
+}
+
+.userinfo-heading h2 {
+  max-width: 690px;
+  font-size: clamp(38px, 4.3vw, 56px);
+  letter-spacing: 0;
+}
+
+.sparkle-mark {
+  display: block;
+  margin-top: 10px;
+  color: #ffcf72;
+  font-size: clamp(36px, 4vw, 52px);
+  line-height: 1;
+  filter: drop-shadow(0 0 18px rgba(255, 142, 87, 0.38));
+}
+
+.mascot-card {
+  min-height: 170px;
+  padding-top: 0;
+}
+
+.mascot-card img {
+  width: 150px;
+  height: 122px;
+}
+
+.setup-form {
+  gap: 18px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.18fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.basic-info-card,
+.preference-card,
+.agreement-card {
+  border-color: rgba(255, 116, 180, 0.22);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018)),
+    rgba(64, 25, 83, 0.36);
+  box-shadow: inset 0 1px 0 rgba(255, 245, 238, 0.07);
+}
+
+.basic-info-card {
+  grid-template-columns: 1fr;
+  gap: 18px;
+  align-content: start;
+  padding: 22px;
+  border-radius: 20px;
+}
+
+.preference-card {
+  gap: 14px;
+  padding: 22px;
+  border-radius: 20px;
+}
+
+.section-heading h3,
+.preference-heading h3 {
+  margin: 0;
+  color: #fff7df;
+  font-size: clamp(22px, 2vw, 28px);
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.section-heading p,
+.preference-heading p {
+  margin: 8px 0 0;
+  color: rgba(255, 245, 230, 0.66);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.field {
+  gap: 10px;
+}
+
+.field > span {
+  font-size: 14px;
+}
+
+.field input {
+  min-height: 54px;
+  border-color: rgba(255, 122, 181, 0.24);
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow: inset 0 1px 0 rgba(255, 245, 238, 0.05);
+}
+
+.input-with-icon {
+  position: relative;
+  display: block;
+}
+
+.input-with-icon input {
+  padding-right: 48px;
+}
+
+.input-with-icon > span {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: rgba(255, 245, 230, 0.66);
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.gender-toggle {
+  gap: 10px;
+}
+
+.gender-toggle button {
+  min-height: 52px;
+  border-radius: 13px;
+}
+
+.lock-note,
+.preference-limit {
+  margin: auto 0 0;
+  color: rgba(255, 245, 230, 0.58);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.preference-heading {
+  align-items: start;
+}
+
+.preference-heading > span {
+  padding-top: 6px;
+  font-size: 13px;
+}
+
+.preference-tabs {
+  gap: 0;
+  padding: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.preference-tabs button {
+  min-height: 48px;
+  border-radius: 12px;
+  font-size: 13px;
+}
+
+.preference-category-row {
+  gap: 7px;
+}
+
+.preference-category-row button {
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+.preference-chip-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: 38px;
+  gap: 9px;
+  align-content: start;
+  min-height: calc((38px * 4) + (9px * 3));
+  max-height: calc((38px * 4) + (9px * 3));
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-top: 2px;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 129, 150, 0.58) rgba(255, 255, 255, 0.06);
+}
+
+:global(#app .userinfo-setup-view .preference-chip-grid) {
+  max-height: calc((38px * 4) + (9px * 3)) !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+.preference-chip-grid::-webkit-scrollbar {
+  width: 6px;
+}
+
+.preference-chip-grid::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.preference-chip-grid::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(248, 79, 155, 0.72), rgba(255, 138, 87, 0.72));
+}
+
+.preference-choice-chip {
+  width: 100%;
+  height: 38px;
+  min-height: 38px;
+  padding: 0 34px 0 13px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  font-size: 12px;
+}
+
+.preference-choice-placeholder {
+  display: block;
+  width: 100%;
+  height: 38px;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.preference-choice-chip .chip-icon {
+  font-size: 14px;
+}
+
+.preference-choice-chip strong {
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.preference-choice-chip i {
+  right: 9px;
+  width: 18px;
+  height: 18px;
+  font-size: 11px;
+}
+
+.preference-choice-box {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(255, 116, 180, 0.24);
+  border-radius: 18px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.058), rgba(255, 255, 255, 0.018)),
+    rgba(37, 10, 58, 0.38);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 245, 238, 0.07),
+    0 14px 30px rgba(18, 4, 35, 0.16);
+}
+
+.preference-choice-box-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 2px;
+}
+
+.preference-choice-box-header strong {
+  color: #fff7df;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.preference-choice-box-header em {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 11px;
+  border: 1px solid rgba(255, 211, 122, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 211, 122, 0.09);
+  color: #ffd37a;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.selected-fragments {
+  display: grid;
+  gap: 11px;
+  margin-top: 2px;
+  padding: 14px;
+  border: 1px solid rgba(255, 116, 180, 0.22);
+  border-radius: 18px;
+  background:
+    linear-gradient(145deg, rgba(248, 79, 155, 0.09), rgba(255, 138, 87, 0.045)),
+    rgba(255, 255, 255, 0.035);
+  box-shadow: inset 0 1px 0 rgba(255, 245, 238, 0.06);
+}
+
+.selected-fragments header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.selected-fragments h4 {
+  margin: 0;
+  color: #fff7df;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.selected-fragments p {
+  margin: 4px 0 0;
+  color: rgba(255, 245, 230, 0.62);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.selected-fragments header > span {
+  color: #ffd37a;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.45;
+  text-align: right;
+}
+
+.selected-fragments .selected-keyword-row {
+  gap: 7px;
+}
+
+.selected-fragments .selected-keyword-pill {
+  min-height: 30px;
+  padding: 0 10px;
+  border-color: rgba(255, 211, 122, 0.22);
+  background: rgba(255, 255, 255, 0.065);
+  color: rgba(255, 245, 230, 0.88);
+  font-size: 12px;
+}
+
+.selected-fragments .selected-keyword-pill span {
+  margin-right: 4px;
+}
+
+.selected-fragments .selected-keyword-pill i {
+  margin-left: 5px;
+  color: #ffd37a;
+  font-style: normal;
+  font-weight: 950;
+}
+
+.empty-selected-message {
+  padding: 10px 12px;
+  border: 1px dashed rgba(255, 116, 180, 0.2);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.028);
+}
+
+.agreement-card {
+  gap: 12px;
+  padding: 22px;
+  border-radius: 20px;
+}
+
+.agreement-card header p {
+  margin-bottom: 5px;
+  font-size: 12px;
+}
+
+.agreement-card h3 {
+  font-size: clamp(24px, 2.2vw, 31px);
+  letter-spacing: 0;
+}
+
+.agreement-row {
+  min-height: 56px;
+  padding: 10px 14px;
+}
+
+.setup-submit-row {
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.setup-submit-row .btn {
+  width: min(360px, 100%);
+  min-height: 64px;
+  border: 0;
+  border-radius: 16px;
+  background: linear-gradient(90deg, #f84f9b 0%, #ff6f7a 54%, #ff8a57 100%);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 950;
+  box-shadow: 0 18px 44px rgba(248, 79, 155, 0.26);
+}
+
+.setup-submit-row .btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  filter: saturate(0.75);
+}
+
+@media (max-width: 1120px) {
+  .form-grid,
+  .userinfo-heading {
+    grid-template-columns: 1fr;
+  }
+
+  .mascot-card {
+    justify-self: start;
+  }
+}
+
+@media (max-width: 760px) {
+  :global(#app .userinfo-setup-view) {
+    padding-inline: 12px !important;
+  }
+
+  .userinfo-panel {
+    padding: 22px 16px;
+    border-radius: 24px;
+  }
+
+  .userinfo-heading h2 {
+    font-size: 34px;
+  }
+
+  .preference-chip-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-height: calc((38px * 8) + (9px * 7));
+    max-height: calc((38px * 8) + (9px * 7));
+  }
+
+  :global(#app .userinfo-setup-view .preference-chip-grid) {
+    max-height: calc((38px * 8) + (9px * 7)) !important;
+  }
+
+  .selected-fragments header {
+    display: grid;
+  }
+
+  .selected-fragments header > span {
+    text-align: left;
+  }
+
+  .agreement-row {
+    display: grid;
+    justify-items: start;
+  }
+
+  .setup-submit-row {
+    justify-items: stretch;
+  }
+
+  .setup-submit-row .btn {
+    width: 100%;
   }
 }
 </style>

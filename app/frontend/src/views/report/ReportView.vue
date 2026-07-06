@@ -188,8 +188,15 @@ const reports = ref([
   },
 ])
 
-const getReportStartDate = (report) => new Date(report.range.split(' ~ ')[0].replaceAll('.', '-'))
-const getReportMonth = (report) => report.range.slice(0, 7)
+const getReportStartDate = (report) => {
+  if (!report || !report.range) return new Date()
+  const dateStr = report.range.split(' ~ ')[0].replace(' 생성', '').replaceAll('.', '-')
+  return new Date(dateStr)
+}
+const getReportMonth = (report) => {
+  if (!report || !report.range) return ''
+  return report.range.slice(0, 7)
+}
 const formatMonthLabel = (month) => {
   const [year, value] = month.split('.')
   return `${year}년 ${Number(value)}월`

@@ -13,12 +13,14 @@ from run_experiment import run
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run triple_supervisor experiment.")
+    parser.add_argument("--use-llm", action="store_true")
     parser.add_argument("--combo")
     parser.add_argument("--provider")
     parser.add_argument("--model")
     args = parser.parse_args()
     run(
         strategy_name="triple_supervisor",
+        use_triple_supervisor_llm=args.use_llm,
         combo_name=args.combo,
         provider=args.provider,
         model=args.model,

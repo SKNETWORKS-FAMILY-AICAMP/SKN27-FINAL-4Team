@@ -96,15 +96,6 @@
       </section>
     </div>
 
-    <!-- ===== 추천 질문 ===== -->
-    <div class="suggest-bar">
-      <span class="suggest-label">✦ 이런 말 어때요?</span>
-      <span v-if="suggestLoading" class="suggest-loading">생각 중…</span>
-      <button v-else v-for="q in suggestedQuestions" :key="q" class="q-chip" @click="fillInput(q)">
-        {{ q }}
-      </button>
-    </div>
-
     <!-- ===== 입력바 ===== -->
     <div class="input-zone">
       <div class="input-bar">
@@ -273,9 +264,6 @@ const showExitModal  = ref(false)
 const messages       = ref([])
 const inputText      = ref('')
 const isTyping       = ref(false)
-const suggestLoading = ref(false)
-const suggestedQuestions = ref([])
-const suggestionRequestId = ref(0)
 const mbtiQuestionLoading = ref(false)
 const lastMbtiQuestionKey = ref('')
 const currentEmotion = ref('default')
@@ -337,27 +325,6 @@ function confettiStyle(n) {
     width: `${size}px`,
     height: `${size}px`,
     transform: `rotate(${Math.random() * 360}deg)`
-  }
-}
-
-async function refreshSuggestions() {
-  if (!sessionId.value || isSecret.value || suggestLoading.value) return
-  const requestId = suggestionRequestId.value + 1
-  suggestionRequestId.value = requestId
-  suggestLoading.value = true
-  try {
-    const result = await chatApi.suggestQuestions(sessionId.value)
-    if (requestId === suggestionRequestId.value) {
-      suggestedQuestions.value = result.questions ?? []
-    }
-  } catch {
-    if (requestId === suggestionRequestId.value) {
-      suggestedQuestions.value = []
-    }
-  } finally {
-    if (requestId === suggestionRequestId.value) {
-      suggestLoading.value = false
-    }
   }
 }
 
@@ -426,13 +393,11 @@ async function initSession() {
     sessionId.value = sess.session_id
     coldStartDone.value = true
     lastMbtiQuestionKey.value = ''
-    suggestionRequestId.value = 0
     userTurnCount.value = 0
 
     // 서버가 만든 친구 첫인사를 바로 표시 (+ 음성 자동 재생)
     const opener = sess.opener || OPENER_MSG[character.value]?.(isSecret.value) || '안녕! 뭐 하고 있었어?'
     pushAssistant(opener, { tts_task_id: sess.tts_task_id })
-    refreshSuggestions()
     startIdleTimer()   // 10초 무입력이면 MBTI (강사님 확정)
   } catch {
     sessionId.value = null
@@ -506,7 +471,6 @@ async function sendMessage() {
         triggerJoyCelebration()
       }
     }
-    refreshSuggestions()
   } catch {
     messages.value.push({ _tempId: Date.now(), role: 'assistant', content: '잠시 연결이 끊겼어요. 다시 시도해 줄래요? 🙏' })
   } finally {
@@ -544,7 +508,6 @@ async function confirmExitSecret() {
   router.replace({ query: { character: displayCharacterId.value } })
 }
 
-function fillInput(text) { inputText.value = text; inputRef.value?.focus() }
 function autoResize(e) { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px' }
 async function scrollToBottom() { await nextTick(); if (threadRef.value) threadRef.value.scrollTop = threadRef.value.scrollHeight }
 
@@ -680,18 +643,11 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
 
 /* ── 시크릿챗 패널 톤: 차분한 푸른/은빛 ── */
 .is-secret .left-panel,
-.is-secret .suggest-bar,
 .is-secret .input-zone { border-color: rgba(150,180,255,0.18); }
 .is-secret .send-btn {
   background: linear-gradient(135deg, #8fb0ff, #b9cdff);
   color: #0a1230;
 }
-.is-secret .q-chip {
-  border-color: rgba(150,180,255,0.4);
-  color: #d4e2ff;
-  background: rgba(120,150,255,0.12);
-}
-.is-secret .q-chip:hover { background: rgba(120,150,255,0.22); }
 .is-secret .char-face { box-shadow: 0 0 30px rgba(150,180,255,0.18); }
 .is-secret .msg-input:focus { border-color: rgba(150,180,255,0.6); }
 .is-secret .emotion-tag { background: rgba(150,180,255,0.18); color: #bcd2ff; }
@@ -945,41 +901,6 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
 @keyframes bounce {
   0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
   40%           { transform: translateY(-6px); opacity: 1; }
-}
-
-/* ── 추천 질문 바 ── */
-.suggest-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 16px 32px;
-  border-top: 1px solid rgba(192,132,252,0.15);
-  background: rgba(13,5,32,0.25);
-  backdrop-filter: blur(10px);
-  flex-shrink: 0;
-}
-.suggest-label {
-  font-size: 14.5px;
-  color: rgba(255,255,255,0.4);
-  font-weight: 600;
-  white-space: nowrap;
-}
-.q-chip {
-  font-size: 15px;
-  border: 1px solid rgba(192,132,252,0.35);
-  border-radius: 999px;
-  padding: 10px 19px;
-  color: #E9CAFF;
-  background: rgba(192,132,252,0.1);
-  transition: background 0.2s;
-}
-.q-chip:hover { background: rgba(192,132,252,0.22); }
-
-.suggest-loading {
-  font-size: 13.5px;
-  color: rgba(255,255,255,0.35);
-  font-style: italic;
 }
 
 /* ── 입력바 ── */
