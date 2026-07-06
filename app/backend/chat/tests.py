@@ -4,32 +4,13 @@
 실행: python manage.py test chat   (Postgres 불필요 — 테스트는 sqlite 사용)
 LLM 호출이 필요한 경로(chat_turn 본 플로우)는 스모크 테스트 후 mock 기반으로 추가 예정.
 """
-from unittest.mock import MagicMock, patch
-
-from rest_framework import status
 from rest_framework.test import APITestCase
 
 from ai.emotion.emotion_model import is_active, predict_emotion
-from .models import ChatMessage, ChatSession
 
 
 class SideApiTests(APITestCase):
-    """부가 기능 — 추천질문/감정모델 폴백"""
-
-    @patch('chat.views._client')
-    def test_suggest_questions_api(self, mock_client):
-        """이런 말 어때요? 추천 질문 생성"""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = '{"questions": ["a", "b", "c"]}'
-        mock_client.return_value.chat.completions.create.return_value = mock_response
-
-        session = ChatSession.objects.create(character='pori', is_secret=False)
-        ChatMessage.objects.create(session=session, role='user', content='요즘 우울해')
-
-        resp = self.client.post(f'/api/chat/sessions/{session.id}/questions/')
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(resp.data['questions']), 3)
+    """부가 기능 — 감정모델 폴백"""
 
     def test_emotion_model_loader_fallback(self):
         """감정모델 산출물이 없어도 예외 없이 None 폴백"""

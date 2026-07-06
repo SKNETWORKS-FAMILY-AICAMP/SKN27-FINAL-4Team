@@ -4,7 +4,7 @@
 LLM_PROVIDER=openai (기본)  → OPENAI_API_KEY + OPENAI_MODEL(기본 gpt-5.4-mini)
 LLM_PROVIDER=groq           → GROQ_API_KEY + GROQ_MODEL(기본 llama-3.3-70b-versatile)
 
-사용처: graph/nodes.py(응답 생성/판별), memory.py(장기 요약), views.py(추천 질문)
+사용처: graph/nodes.py(응답 생성/판별), memory.py(장기 요약)
 """
 import os
 
@@ -44,14 +44,4 @@ def get_llm(temperature=0.7, max_tokens=300):
         kwargs['base_url'] = base_url
     return ChatOpenAI(**kwargs)
 
-
-def get_client():
-    """(openai.OpenAI 클라이언트, 모델명) — 레거시 스타일 호출용 (suggest_questions)."""
-    from openai import OpenAI
-    api_key, base_url, model = _config()
-    if not api_key:
-        raise ValueError('LLM API 키가 설정되지 않았습니다. .env를 확인하세요.')
-    kwargs = dict(api_key=api_key)
-    if base_url:
-        kwargs['base_url'] = base_url
-    return OpenAI(**kwargs), model
+# (get_client — 추천 질문 전용 레거시 헬퍼는 기능 폐기로 제거 — 2026-07-03)

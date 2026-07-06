@@ -1,3 +1,11 @@
+# 개별 작업 문서 (팀 공유 제외)
+\[개별\]*
+docs/감정분류_개선실험_계획서_김한솔.md
+docs/최종_통합_흐름도_구현검증본.md
+docs/최종_통합_흐름도_김한솔.md
+docs/기억시스템_실증사례_김한솔.md
+docs/\[데이터 수집 및 저장\]*
+
 # 환경 변수 및 비밀키
 .env
 .env.development
@@ -23,8 +31,13 @@ postgres_data/
 neo4j_data/
 storage/
 
-# AI Hub 파생 데이터 — 재배포 금지 (data/README.md 참조, 재생성: ai/emotion/rebuild_clean_dataset.py)
+# AI Hub 파생 데이터 — 재배포 금지 (data/README.md 참조, 재생성: rebuild_clean_dataset.py / prepare_aug_datasets.py)
 data/kcelectra_train_clean.jsonl
+data/aug_voice.jsonl
+data/aug_wellness.jsonl
+
+# 파인튜닝 모델 (대용량 · 팀 공유는 Drive로, 재생성: 실험2 노트북 최종 학습 셀)
+ai/emotion/artifacts_ft/
 
 # 파이썬 캐시 및 가상환경
 __pycache__/
@@ -61,23 +74,9 @@ __mount_test.txt
 *.json
 *.jsonl
 data/raw/
+# 커밋 허용 예외 — 자체 제작(재배포 문제 없음) · 실험 결과 기록
+!data/chat_eval_set.jsonl
+!ai/emotion/exp1_results.json
 ai/emotion/artifacts*/
 
-# 개별 문서
-docs/\[개별\]*
-docs/_archive_v5/
-
-# 바이너리 문서
-*.docx
-*.xlsx
-*.pptx
-
-# IDE 설정
-.vscode/
-.idea/
-
-# 프로토타입 파일 (Vue로 대체됨)
-app/frontend/src/views/mypage/mypage.html
-app/frontend/src/views/mypage/mypage.js
-app/frontend/src/assets/b97c24d60f8306b5.png
-app/frontend/src/assets/design-system.css
+# 

@@ -8,6 +8,7 @@
 - 닉네임: 로그인 사용자의 nickname, 없으면 '너'
 """
 import datetime
+import random
 
 import requests
 
@@ -88,13 +89,14 @@ def _memory_opener(user_id: int, nickname: str) -> str | None:
             return None
 
         from ai.agents.llm import get_llm
-        resp = get_llm(temperature=0.8, max_tokens=100).invoke([
+        resp = get_llm(temperature=0.9, max_tokens=100).invoke([
             ('system',
              "너는 사용자의 진짜 친한 친구다. 아래 [기억 요약]을 보고, "
              "지난 얘기를 자연스럽게 이어가는 첫인사를 반말 1~2문장으로 만들어라.\n"
-             "- 가장 최근이거나 마음에 걸릴 만한 일 '하나만' 골라 안부를 물어 "
-             "(예: '어제 팀장이랑 그 일은 어떻게 됐어? 계속 생각나던데').\n"
-             "- 요약을 그대로 읊지 말 것. 캐묻는 느낌 금지, 궁금해하는 친구 느낌.\n"
+             "- 요약 속 여러 일 중 '매번 다른' 걸 골라 가볍게 안부를 물어. "
+             "특히 다가오는 큰 일정(여행·시험·면접 등) '하나'만 계속 반복하지 마 — "
+             "소소한 취향·근황·최근 감정도 섞어서 다양하게.\n"
+             "- 요약을 그대로 읊지 말 것. 캐묻거나 잔소리하는 느낌 금지, 그냥 궁금한 친구 느낌.\n"
              "- 반드시 질문으로 끝맺어. 오직 순수 한국어. 목록/이모지 금지.\n"
              f"- 호칭은 '{nickname}'(없으면 생략 가능)."),
             ('user', f'[기억 요약]\n{summary}'),
@@ -111,8 +113,10 @@ def generate_opener(nickname: str | None, lat=None, lon=None, user_id=None) -> s
     now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9)))  # KST
     hour = now.hour
 
-    # ① 기억 우선 — "얘가 날 기억하네"가 첫 문장부터 (선순환의 입구)
-    if user_id:
+    # ① 기억 기반 첫인사 — "얘가 날 기억하네"가 선순환의 입구.
+    #    단, 매번 기억으로 열면 같은 일정(예: 여행)만 반복돼 잔소리처럼 느껴진다.
+    #    절반만 기억으로 열고 나머지는 날씨/시간대로 — 자연스러운 완급 조절.
+    if user_id and random.random() < 0.5:
         m = _memory_opener(user_id, n)
         if m:
             return m
