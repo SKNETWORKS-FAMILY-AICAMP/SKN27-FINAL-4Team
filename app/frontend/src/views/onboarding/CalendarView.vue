@@ -26,11 +26,13 @@ const USER_PROFILE_KEY = "binteumsaiUserProfile";
 const CHARACTER_STORAGE_KEY = "binteumsaiCharacter";
 const VALID_CHARACTER_IDS = new Set(["otter", "cat", "redpanda", "bird"]);
 const VALID_EXPRESSION_IDS = new Set(["joy", "anger", "sadness", "anxiety", "hurt", "panic"]);
+// 백엔드 emotion_label (joy/sadness/anger/normal) → 표정 이미지 id
+// (구버전 라벨 매핑으로 표정이 안 바뀌던 버그 수정 — 2026-07-03)
 const EMOTION_TO_EXPRESSION = {
-  encourage: "joy",
-  sad: "sadness",
-  angry: "anger",
-  plan: "anxiety",
+  joy: "joy",
+  sadness: "sadness",
+  anger: "anger",
+  normal: null,
 };
 const dailyMajor = ref(null);
 const isDailyMajorLoading = ref(false);

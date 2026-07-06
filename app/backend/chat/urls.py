@@ -13,8 +13,7 @@ urlpatterns = [
     path('chat/',                views.chat_turn),           # 대화 턴 (텍스트 즉시 + tts_task_id)
     path('tts/<str:task_id>/',       views.tts_status),      # TTS 상태 폴링
     path('tts/<str:task_id>/audio/', views.tts_audio),       # 오디오 1회 다운로드 후 파기
-    path('mbti/next-question/',  views.mbti_next_question),  # MBTI 질문 (10초 유휴)
-    path('mbti/consent/',        views.mbti_consent),        # MBTI 저장 동의 (시크릿)
+    path('mbti/next-question/',  views.mbti_next_question),  # MBTI 질문 (10초 유휴 · 일반 전용)
     path('plan-support/',        views.plan_support_view),   # 장소 추천 (트리거 확정 시 연결)
 
     # ── 부가 기능 ──
