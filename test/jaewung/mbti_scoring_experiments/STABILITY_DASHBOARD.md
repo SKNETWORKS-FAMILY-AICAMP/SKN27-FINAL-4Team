@@ -15,7 +15,7 @@
 | rubric_code | legacy_demo_dataset / legacy_run_batch / legacy_prompt_version / llm / single_1_openai_baseline / openai:gpt-5.4-mini | 주의 | 20 | INFJ | 100.0% | 1 | 0.1054 | 5.3094 | JP:P->J |
 | triple_majority | no_data | 데이터없음 | 0 |  | 0.0% | 0 | 0.0000 | 0.0000 | 변화 없음 |
 | hundred_point_ensemble | no_data | 데이터없음 | 0 |  | 0.0% | 0 | 0.0000 | 0.0000 | 변화 없음 |
-| triple_supervisor | no_data | 데이터없음 | 0 |  | 0.0% | 0 | 0.0000 | 0.0000 | 변화 없음 |
+| triple_supervisor | demo_questions_v4_jp_mixed_j_rebalanced_20260703 / v4_persona_openai_independent_20260703_01 / placeholder_prompt_na / placeholder / custom / openai:gpt-5.4-mini | 안정 | 2 | ISFJ | 100.0% | 1 | 0.0000 | 0.0000 | SN:N->S; JP:P->J |
 
 표준편차 판정: axis_avg는 0.05 이하 안정, 0.15 이하 주의, 초과 불안정으로 본다. 표시점수는 3점 이하 안정, 8점 이하 주의, 초과 불안정으로 본다.
 
