@@ -25,4 +25,8 @@ python ai/emotion/rebuild_clean_dataset.py --raw "<다운로드 경로>/018.감�
 | 파일 | 내용 | 출처 |
 |---|---|---|
 | `kcelectra_train_clean.jsonl` (로컬 생성) | `{"text", "emotion"}` × 58,234 — 첫 사람 발화 + 6감정 대분류 | AI Hub 감성대화 (재배포 금지) |
-| `chat_eval_set.jsonl` | 채팅체(실사용형) 평가셋 **150문장**(감정별 37~38) — 학습 금지, 평가 전용. ⚠ 라벨 팀 검수 필요 (초
+| `chat_eval_set.jsonl` | 채팅체(실사용형) 평가셋 **150문장**(감정별 37~38) — 학습 금지, 평가 전용. ⚠ 라벨 팀 검수 필요 (초안 작성 2026-07-03, 60→150 증량) | 자체 제작 (커밋 가능) |
+| `aug_voice.jsonl` (로컬 생성) | 실험② 추가 데이터 — 음성 대화 전사 36,677건, 5명 중 3표 합의만 | AI Hub (재배포 금지) — `prepare_aug_datasets.py`로 재생성 |
+| `aug_wellness.jsonl` (로컬 생성) | 실험② 추가 데이터 — 웰니스 상담 발화 1,002건 (⚠ 기쁨 12건, 불균형 심함) | AI Hub (재배포 금지) — 동일 스크립트 |
+
+(구 `safety_redteam_set.json`·`scale_gold_set.json`·`scales/`는 미사용으로 제거 — 2026-07-03)

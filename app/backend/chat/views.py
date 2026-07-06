@@ -145,6 +145,20 @@ def chat_turn(request):
             .first()
         )
 
+    # MBTI 질문은 대화 맥락으로 즉석 생성되므로, 판별엔 '실제로 물어본 문장'
+    # (직전 assistant 메시지)을 쓴다. 없으면 고정 template로 폴백.
+    mbti_q_text = ''
+    if session.mbti_pending and not session.is_secret:
+        mbti_q_text = (
+            ChatMessage.objects
+            .filter(session=session, role='assistant')
+            .order_by('-created_at')
+            .values_list('content', flat=True)
+            .first()
+        ) or ''
+    if not mbti_q_text:
+        mbti_q_text = mbti_svc.question_text(session.mbti_last_question_code or '')
+
     # LangGraph 실행: MBTI pending 체크 → 컨텍스트 → 감성분석(확신도 게이트) → 에이전트 → 응답
     from .graph.graph import get_graph
     state = {
@@ -156,7 +170,7 @@ def chat_turn(request):
         'selected_emotion': session.selected_emotion,
         'prev_emotion': prev_emotion,
         'mbti_pending': session.mbti_pending,
-        'mbti_question_text': mbti_svc.question_text(session.mbti_last_question_code or ''),
+        'mbti_question_text': mbti_q_text,
         'mbti_question_code': session.mbti_last_question_code or '',
     }
     result = get_graph().invoke(state)
@@ -245,9 +259,20 @@ def mbti_next_question(request):
     if session.is_secret:
         return _ok({'has_question': False})
 
+    if session.mbti_pending:
+        return _ok({'has_question': False})
+
     user = _session_user(request, session)
-    nq = mbti_svc.next_question(user)
-    if nq is None or session.mbti_pending:
+
+    # 방금까지의 대화 맥락 → 자연스러운 질문 생성 재료
+    recent = list(
+        ChatMessage.objects.filter(session=session).order_by('-created_at')[:6]
+    )
+    recent.reverse()
+    history = [{'role': m.role, 'content': m.content} for m in recent]
+
+    nq = mbti_svc.generate_question(user, history)
+    if nq is None:
         return _ok({'has_question': False})
 
     code, text = nq
