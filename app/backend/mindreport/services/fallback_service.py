@@ -31,15 +31,27 @@ class FallbackReportService:
             hobbies = profile.hobbies
             interests = profile.interests
             
-        # 2. Web Agent로 트렌디한 콘텐츠/활동 추천 받기
+        # 2. MBTI 정보 조회 (월간 리포트인 경우 등)
+        user_mbti = None
+        if "월간" in report_type:
+            try:
+                from mbti.models import MbtiOnboardingProfile
+                mbti_profile = MbtiOnboardingProfile.objects.filter(user_id=user.id).first()
+                if mbti_profile and mbti_profile.mbti_type:
+                    user_mbti = mbti_profile.mbti_type
+            except Exception as e:
+                print(f"MBTI 조회 실패: {e}")
+                
+        # 3. Web Agent로 트렌디한 콘텐츠/활동 추천 받기
         recommendations = FallbackWebAgent.get_trendy_contents(
             age=age, 
             gender=gender, 
             hobbies=hobbies, 
-            interests=interests
+            interests=interests,
+            mbti=user_mbti
         )
         
-        # 3. 프론트엔드 ReportView.vue 구조에 맞게 JSON(Dict) 조립
+        # 4. 프론트엔드 ReportView.vue 구조에 맞게 JSON(Dict) 조립
         analysis_lines = [
             "아직 마음 리포트를 짠! 하고 보여드리기엔 대화 기록이 조금 부족해요 🥺 저와 조금 더 이야기를 나눠주시면, 마음의 흐름을 꼼꼼하게 살펴서 딱 맞는 리포트를 분석해 드릴게요! ✨",
             "우리의 소중한 대화가 모이는 동안 심심하시지 않게, 지금 당장 가볍게 기분 전환하기 딱 좋은 맞춤 활동들을 쏙쏙 골라왔어요! 🎁"

@@ -15,23 +15,37 @@ class MindReportGenerateAPIView(APIView):
     def get(self, request):
         """
         마음 리포트 생성 기준을 확인하고, 결과에 따라 정식 리포트 또는 데이터 부족 보완 리포트를 반환합니다.
+        월말(마지막 주)일 경우 주간과 월간 리포트를 동시에 반환합니다.
         """
-        # 임시 유저 처리 (인증 설정 전 테스트용)
         user = request.user
         if not user.is_authenticated:
-            # 로그인하지 않은 상태면 가짜 유저 데이터로 에러 방지 (실제 서비스에선 에러 리턴)
             return Response({"error": "로그인이 필요합니다."}, status=401)
             
-        # 1. 생성 기준 확인 (현재 주간 기준으로 테스트)
-        criteria_result = ReportCriteriaService.check_weekly_report_eligibility(user)
+        import calendar
+        from datetime import timedelta
+        
+        now = timezone.now()
+        target_date = now.date()
+        
+        # 이번 주가 월의 마지막 주인지 확인 (일요일이 다음 달로 넘어가거나, 오늘이 말일과 가까운지)
+        # 이번 주 일요일 계산
+        days_to_sunday = 6 - target_date.weekday()
+        sunday_date = target_date + timedelta(days=days_to_sunday)
+        
+        # 일요일의 월이 현재 월과 다르거나, 현재 월의 마지막 날짜인 경우 마지막 주로 간주
+        _, last_day_of_month = calendar.monthrange(target_date.year, target_date.month)
+        is_last_week = (sunday_date.month != target_date.month) or (sunday_date.day == last_day_of_month)
         
         from .models import MindReport
         
-        # 2. 기준 미달 시 Fallback 리포트 반환 (DB 최우선 조회)
-        if not criteria_result["is_eligible"]:
-            fallback_report = MindReport.objects.filter(user=user, is_fallback=True).order_by('-created_at').first()
-            
-            # DB에 없으면(백그라운드 생성이 안 끝났거나 누락된 경우) 동기화 생성 후 반환
+        generated_reports = []
+        
+        # ==========================================
+        # 1. 주간 리포트 처리
+        # ==========================================
+        weekly_criteria = ReportCriteriaService.check_weekly_report_eligibility(user)
+        if not weekly_criteria["is_eligible"]:
+            fallback_report = MindReport.objects.filter(user=user, is_fallback=True, report_type__contains="주간").order_by('-created_at').first()
             if not fallback_report:
                 fallback_report = FallbackReportService.generate_and_save_fallback_report(
                     user=user, 
@@ -39,7 +53,7 @@ class MindReportGenerateAPIView(APIView):
                     range_text=timezone.now().strftime("%Y.%m.%d") + " 생성"
                 )
                 
-            fallback_data = {
+            generated_reports.append({
                 "id": f"fallback-{fallback_report.id}",
                 "type": fallback_report.report_type,
                 "range": fallback_report.range_text,
@@ -51,39 +65,73 @@ class MindReportGenerateAPIView(APIView):
                 "analysis": fallback_report.analysis,
                 "recommendations": fallback_report.recommendations,
                 "is_fallback": fallback_report.is_fallback
-            }
-            
-            return Response({
-                "status": "fallback", 
-                "message": "데이터가 부족하여 보완 정책이 실행되었습니다.",
-                "criteria": criteria_result,
-                "report": fallback_data
             })
-            
-        # 3. 기준 충족 시 기존 가짜 리포트 지우고 정식 리포트 생성
-        MindReport.objects.filter(user=user, is_fallback=True).delete()
-        
-        # 현재는 통과했다는 Mock 데이터를 보냅니다.
-        standard_data = {
-            "id": f"weekly-{user.id}-{timezone.now().timestamp()}",
-            "type": "주간",
-            "range": timezone.now().strftime("%Y.%m.%d") + " 생성",
-            "title": f"정식 마음 리포트 생성 완료",
-            "summary": "충분한 대화가 모여 리포트가 정상적으로 분석되었습니다.",
-            "stressCauses": ["업무", "피로"],
-            "reliefCauses": ["휴식"],
-            "emotions": [{"day": "오늘", "icon": "😄"}],
-            "analysis": [
-                "대화 기준(5개 이상)을 충족하여 정상적인 분석을 완료했습니다.",
-                "다음 주 AI 모델이 연동되면 실제 분석 데이터가 이곳에 표시됩니다."
-            ],
-            "is_fallback": False
-        }
-        
+        else:
+            MindReport.objects.filter(user=user, is_fallback=True, report_type__contains="주간").delete()
+            generated_reports.append({
+                "id": f"weekly-{user.id}-{timezone.now().timestamp()}",
+                "type": "주간",
+                "range": timezone.now().strftime("%Y.%m.%d") + " 생성",
+                "title": f"정식 마음 리포트 생성 완료",
+                "summary": "충분한 대화가 모여 리포트가 정상적으로 분석되었습니다.",
+                "stressCauses": ["업무", "피로"],
+                "reliefCauses": ["휴식"],
+                "emotions": [{"day": "오늘", "icon": "😄"}],
+                "analysis": [
+                    "대화 기준(5개 이상)을 충족하여 정상적인 분석을 완료했습니다.",
+                    "다음 주 AI 모델이 연동되면 실제 분석 데이터가 이곳에 표시됩니다."
+                ],
+                "is_fallback": False
+            })
+
+        # ==========================================
+        # 2. 월간 리포트 처리 (마지막 주일 경우에만)
+        # ==========================================
+        if is_last_week:
+            monthly_criteria = ReportCriteriaService.check_monthly_report_eligibility(user)
+            if not monthly_criteria["is_eligible"]:
+                m_fallback = MindReport.objects.filter(user=user, is_fallback=True, report_type__contains="월간").order_by('-created_at').first()
+                if not m_fallback:
+                    m_fallback = FallbackReportService.generate_and_save_fallback_report(
+                        user=user, 
+                        report_type="월간", 
+                        range_text=timezone.now().strftime("%Y.%m") + " 월간 결산"
+                    )
+                
+                generated_reports.append({
+                    "id": f"fallback-m-{m_fallback.id}",
+                    "type": m_fallback.report_type,
+                    "range": m_fallback.range_text,
+                    "title": m_fallback.title,
+                    "summary": m_fallback.summary,
+                    "stressCauses": m_fallback.stress_causes,
+                    "reliefCauses": m_fallback.relief_causes,
+                    "emotions": m_fallback.emotions,
+                    "analysis": m_fallback.analysis,
+                    "recommendations": m_fallback.recommendations,
+                    "is_fallback": m_fallback.is_fallback
+                })
+            else:
+                MindReport.objects.filter(user=user, is_fallback=True, report_type__contains="월간").delete()
+                generated_reports.append({
+                    "id": f"monthly-{user.id}-{timezone.now().timestamp()}",
+                    "type": "월간",
+                    "range": timezone.now().strftime("%Y.%m") + " 월간 결산",
+                    "title": f"정식 월간 마음 리포트 생성 완료",
+                    "summary": "한 달간의 충분한 대화가 모여 리포트가 정상적으로 분석되었습니다.",
+                    "stressCauses": ["프로젝트", "미래 고민"],
+                    "reliefCauses": ["취미 생활"],
+                    "emotions": [{"day": "이번 달", "icon": "😌"}],
+                    "analysis": [
+                        "월간 대화 기준(20개 이상)을 충족하여 정상적인 분석을 완료했습니다.",
+                        "추후 AI 모델이 연동되면 실제 월간 분석 데이터가 표시됩니다."
+                    ],
+                    "is_fallback": False
+                })
+
         return Response({
             "status": "success", 
             "message": "리포트 생성이 완료되었습니다.",
-            "criteria": criteria_result,
-            "report": standard_data
+            "reports": generated_reports
         })
 

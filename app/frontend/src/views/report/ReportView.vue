@@ -228,10 +228,13 @@ watch(latestMonth, (newMonth) => {
 onMounted(async () => {
   try {
     const data = await reportApi.generateReport()
-    if (data && data.report) {
-      reports.value.push(data.report)
-      selectedMonth.value = getReportMonth(data.report)
-      selectedReportId.value = data.report.id
+    if (data && data.reports && data.reports.length > 0) {
+      data.reports.forEach(report => {
+        reports.value.push(report)
+      })
+      // 기본적으로 가장 첫 번째 리포트를 선택
+      selectedMonth.value = getReportMonth(data.reports[0])
+      selectedReportId.value = data.reports[0].id
     }
   } catch (error) {
     console.error('Failed to fetch generated report:', error)
