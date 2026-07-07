@@ -1,6 +1,7 @@
 # 루트 임시/테스트 파일
 googlelogin.html
 googlelogin.css
+docker-compose.yml
 
 # 개별 작업 문서 (팀 공유 제외)
 \[개별\]*
