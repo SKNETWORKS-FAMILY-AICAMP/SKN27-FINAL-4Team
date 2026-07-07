@@ -70,8 +70,11 @@ SKN27-FINAL-4Team/
 ### 5. `etl/` (Extract-Transform-Load Pipelines)
 - 원천 JSON/CSV 데이터셋을 PostgreSQL 구조적 테이블 및 Neo4j의 그래프 네트워크(`(:Tea)`, `(:TheoryChunk)`)로 정제하여 가공 적재하기 위한 초기 설정용 자동화 스크립트 집합입니다.
 
+### 6. `prompts/` (Persona Prompt Engine)
+- 다중 에이전트(LangGraph)로 구동되는 개별 캐릭터(해온이, 그릉이, 달콩이)의 개성 있는 말투, 특화 심리 이론 개입 규칙을 정의해 둔 System Prompt 파일들입니다.
+
 ### 7. `storage/` (Resources & Metadata)
-- 외부 API 통신을 최소화하기 위해 플랫폼 내부에 메타데이터를 통합 보관합니다.
+- 외부 API 통신을 최소화하기 위해 플랫폼 내부에 내장한 64종 힐링 차의 성분, 카페인 함유 유무, 알레르기 유발 항원 등의 정적 메타데이터를 통합 보관합니다.
 
 ### 8. `test/` (Sandbox & Test Bed)
 - 본격적인 모델 배포 전 데이터 토큰화 효율성 검증, 데이터셋 병합 분석 및 개별 프로토타입 작성용 주피터 노트북 샌드박스입니다.
