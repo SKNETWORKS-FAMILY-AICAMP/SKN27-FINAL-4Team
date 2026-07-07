@@ -15,14 +15,18 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = BASE_DIR.parent.parent
 
 # app/backend/.env 가 있으면 추가 로드 (OAuth 시크릿 등 로컬 전용 키)
-load_dotenv(BASE_DIR / '.env')
+load_dotenv(BASE_DIR / ".env", override=True)
 
 backend_env = dotenv_values(BASE_DIR / '.env')
 for key in ('KAKAO_CLIENT_SECRET', 'NAVER_CLIENT_SECRET', 'GOOGLE_CLIENT_SECRET'):
     if not os.environ.get(key) and backend_env.get(key):
         os.environ[key] = backend_env[key]
 
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-af7tf^s)+euab4fl@0w!@fi%rgw_gi7dxh)cm8236d^9_h5@f9')
+SECRET_KEY = (
+    os.environ.get('DJANGO_SECRET_KEY')
+    or os.environ.get('SECRET_KEY')
+    or 'django-insecure-af7tf^s)+euab4fl@0w!@fi%rgw_gi7dxh)cm8236d^9_h5@f9'
+)
 
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
@@ -105,7 +109,6 @@ REST_FRAMEWORK = {
 
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',  # Vue dev server
-    'http://127.0.0.1:5173',
 ]
 
 FRONTEND_BASE_URL = os.environ.get('FRONTEND_BASE_URL', 'http://localhost:5173').rstrip('/')
