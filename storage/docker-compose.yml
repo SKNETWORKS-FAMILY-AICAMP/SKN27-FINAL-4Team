@@ -1,0 +1,59 @@
+# v6.0 (최종 확정 아키텍처): PostgreSQL 단일 DB 구성
+# - Neo4j 제거 (GraphDB는 2차 확장 — 최종_통합_흐름도 §6)
+# - Redis 컨테이너 없음: 시크릿 모드는 서버 인메모리 캐시 사용 (ERD v6.0 §3-2)
+# DB 초기화(전체 리셋): docker compose down -v && docker compose up -d --build
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: wellness_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ${PG_DB:-wellness_db}
+      POSTGRES_USER: ${PG_USER:-postgres}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-password}
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  web:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: wellness_django
+    restart: always
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py load_tarot_data &&
+             python manage.py runserver 0.0.0.0:8000 --noreload"
+    env_file:
+      - ./app/backend/.env
+    volumes:
+      - ./app:/app
+      # ai/ 패키지 (에이전트·감정모델 코드) — settings.py가 / 를 sys.path에 추가하므로 /ai 로 마운트
+      - ./ai:/ai
+      - ./etl:/etl:ro
+      # 감정분류 학습 산출물 (KcELECTRA+XGBoost) — 없으면 LLM 폴백으로 동작
+      - ./ai/emotion/artifacts:/artifacts:ro
+      # HuggingFace 모델 캐시 영속화 — 재생성해도 KcELECTRA 재다운로드 안 함 (속도)
+      - hf_cache:/root/.cache/huggingface
+    ports:
+      - "8000:8000"
+    environment:
+      # Compose에서 컨테이너 내부 실행에 필요한 값만 명시합니다.
+      # OAuth/LLM/TTS secret은 ./app/backend/.env에서 읽게 둬서 빈 값으로 덮이지 않도록 합니다.
+      DJANGO_SETTINGS_MODULE: config.settings
+      EMOTION_ARTIFACT_DIR: /artifacts
+      PG_HOST: db
+      PG_PORT: "5432"
+      PG_DB: ${PG_DB:-wellness_db}
+      PG_USER: ${PG_USER:-postgres}
+      PG_PASSWORD: ${PG_PASSWORD:-password}
+      FRONTEND_BASE_URL: http://localhost:5173
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:
+  hf_cache:

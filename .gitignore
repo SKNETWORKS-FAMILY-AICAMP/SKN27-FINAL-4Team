@@ -44,7 +44,9 @@ test/hansol/
 # 데이터베이스 캐시 및 볼륨 데이터
 postgres_data/
 neo4j_data/
-storage/
+# storage/ 폴더 내 DB 볼륨 데이터만 제외 (SQL·설정 파일은 추적)
+storage/postgres_data/
+storage/neo4j_data/
 
 # AI Hub 파생 데이터 — 재배포 금지 (data/README.md 참조, 재생성: rebuild_clean_dataset.py / prepare_aug_datasets.py)
 data/kcelectra_train_clean.jsonl
