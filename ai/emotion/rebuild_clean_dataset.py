@@ -14,7 +14,7 @@ AI Hub 데이터는 이용약관상 재배포가 금지되어 정제본을 repo�
 사용법:
   python ai/emotion/rebuild_clean_dataset.py \
       --raw "<원천 폴더>/018.감성대화" \
-      --out data/kcelectra_train_clean.jsonl
+      --out etl/data/kcelectra_train_clean.jsonl
 
 원천 폴더 구조 (AI Hub 다운로드 기준):
   018.감성대화/
@@ -63,7 +63,7 @@ def rebuild(raw_dir: str, out_path: str) -> int:
 if __name__ == '__main__':
     ap = argparse.ArgumentParser(description='AI Hub 감성대화 → 학습 정제본 재생성')
     ap.add_argument('--raw', required=True, help='원천 폴더 (018.감성대화)')
-    ap.add_argument('--out', default='data/kcelectra_train_clean.jsonl')
+    ap.add_argument('--out', default='etl/data/kcelectra_train_clean.jsonl')
     args = ap.parse_args()
     n = rebuild(args.raw, args.out)
     print(f'재생성 완료: {n:,}건 → {args.out}')

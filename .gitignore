@@ -48,10 +48,10 @@ neo4j_data/
 storage/postgres_data/
 storage/neo4j_data/
 
-# AI Hub 파생 데이터 — 재배포 금지 (data/README.md 참조, 재생성: rebuild_clean_dataset.py / prepare_aug_datasets.py)
-data/kcelectra_train_clean.jsonl
-data/aug_voice.jsonl
-data/aug_wellness.jsonl
+# AI Hub 파생 데이터 — 재배포 금지 (etl/data/README.md 참조, 재생성: rebuild_clean_dataset.py / prepare_aug_datasets.py)
+etl/data/kcelectra_train_clean.jsonl
+etl/data/aug_voice.jsonl
+etl/data/aug_wellness.jsonl
 
 # 파인튜닝 모델 (대용량 · 팀 공유는 Drive로, 재생성: 실험2 노트북 최종 학습 셀)
 ai/emotion/artifacts_ft/
@@ -90,9 +90,9 @@ __mount_test.txt
 # 데이터셋 (AI Hub 등 원본·파생 데이터는 재배포 금지 → 커밋 제외, AI Hub에서 직접 내려받아 사용)
 *.json
 *.jsonl
-data/raw/
+etl/data/raw/
 # 커밋 허용 예외 — 자체 제작(재배포 문제 없음) · 실험 결과 기록
-!data/chat_eval_set.jsonl
+!etl/data/chat_eval_set.jsonl
 !ai/emotion/exp1_results.json
 ai/emotion/artifacts*/
 

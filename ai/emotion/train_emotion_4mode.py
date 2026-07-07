@@ -12,7 +12,7 @@
       본 스크립트는 가볍고 빠른 freeze-임베딩 파이프라인의 '최적 버전'이다.
 
 사용:
-  python train_emotion_4mode.py --data ../../data/kcelectra_train_clean.jsonl --label-col emotion
+  python train_emotion_4mode.py --data ../../etl/data/kcelectra_train_clean.jsonl --label-col emotion
   (느리면) --sample 5000  으로 감정별 샘플링 후 빠르게 테스트
 """
 import argparse, os, json, time

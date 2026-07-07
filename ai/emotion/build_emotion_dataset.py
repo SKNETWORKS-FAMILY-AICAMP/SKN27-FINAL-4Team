@@ -13,9 +13,9 @@
 
 사용
   python build_emotion_dataset.py \
-      --aihub ../../data/raw/감성대화_Training.json \
-      --kote  ../../data/raw/kote_raw.json \
-      --out   ../../data/kcelectra_train_clean.jsonl
+      --aihub ../../etl/data/raw/감성대화_Training.json \
+      --kote  ../../etl/data/raw/kote_raw.json \
+      --out   ../../etl/data/kcelectra_train_clean.jsonl
 
 원본 키 구조가 버전마다 달라서, 자동 탐지 + --*-key 옵션으로 덮어쓸 수 있게 했음.
 """
