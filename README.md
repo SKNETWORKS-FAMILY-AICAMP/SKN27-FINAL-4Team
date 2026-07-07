@@ -1,91 +1,346 @@
-# 🍀 빈틈사이 (Bintheum-Sai)
-> **"편하게 털어놓는 수다 같지만, 사실은 정밀한 마음 케어."**  
-> 사용자가 캐릭터와 편하게 일상 대화를 나누는 동안, 백엔드의 **숨은 척도 엔진**이 6종 임상 척도를 추정하고 다정한 위로 카드와 맞춤형 웰니스 솔루션을 제공하는 **비의료 개인 맞춤형 웰니스 케어 플랫폼**입니다.
+# 🌗 빈틈사이 (Binteumsai)
+
+> **바쁜 하루의 빈틈 사이, 마음을 쉬어가요.**
+> 다중 에이전트 기반 감정 분석 활용 AI 소통형 웰니스 챗봇 및 마음 리포트 서비스
+
+<p align="center">
+  <b>SK네트웍스 Family AI 캠프 27기 · 4팀 · FINAL 프로젝트</b><br/>
+  <b>개발 기간 : 2026.06.11 ~ 2026.08.04</b> &nbsp;|&nbsp; 중간 발표 : 2026.07.10 &nbsp;·&nbsp; 최종 발표 : 2026.08.04<br/>
+  <b>주제 5</b> · 다중 에이전트 기반 개인 맞춤형 웰니스 케어 플랫폼
+</p>
 
 ---
 
-## 🛠️ 개발 환경 (Tech Stack)
-- **Language**: Python 3.12
-- **Backend Framework**: Django
-- **Agent Orchestrator**: LangGraph (Multi-Agent System)
-- **Database**: PostgreSQL (트랜잭션, 회원, 대화 로그, 척도 채점 이력 보관)
-- **Frontend**: Vue 3 + Vite
+## 📑 목차
+1. [팀 소개](#1-팀-소개)
+2. [프로젝트 개요](#2-프로젝트-개요)
+3. [프로젝트 기획](#3-프로젝트-기획)
+4. [기술 스택](#4-기술-스택)
+5. [주요 기능](#5-주요-기능)
+6. [시스템 아키텍처](#6-시스템-아키텍처)
+7. [데이터](#7-데이터)
+8. [감정 분류 모델링 & 성능](#8-감정-분류-모델링--성능)
+9. [프로젝트 개선 노력](#9-프로젝트-개선-노력)
+10. [수행 결과 · 데모 시연](#10-수행-결과--데모-시연)
+11. [프로젝트 구조](#11-프로젝트-구조)
+12. [트러블슈팅](#12-트러블슈팅)
+13. [향후 계획](#13-향후-계획)
+14. [실행 방법](#14-실행-방법)
+15. [한 줄 회고](#15-한-줄-회고)
 
 ---
 
-## 📂 프로젝트 폴더 구조 (Directory Structure)
+## 1. 팀 소개
+
+| 이름 | 역할 | 주요 담당 |
+|---|---|---|
+| **김한솔** 👑 | PM | 프로젝트 기획·관리, AI 감정 분류 모델 개발, 데이터 수집·전처리, 백엔드, 인프라 배포·운영 |
+| **한재웅** | APM | 프로젝트 기획·관리, DB·시스템 설계, 프론트엔드·백엔드, 문서화 및 산출물 관리 (마이페이지·MBTI 분석) |
+| **이성진** | Frontend / Backend | 온보딩·로그인·캐릭터 선택·타로 운세·감정 캘린더 화면 UI/UX 구현, 백엔드 연동, 데이터 흐름 설계 |
+| **박송원** | AI / Backend | 프로젝트 기획·관리, 백엔드, AI 모델 개발 (마음 리포트 분석 파이프라인) |
+
+---
+
+## 2. 프로젝트 개요
+
+### 2.1 프로젝트명 — 🌗 빈틈사이
+
+감정을 검사지·절차 없이 **가벼운 대화**로 풀어내고, 그 흐름을 **감정 캘린더·마음 리포트**로 조용히 정리해 주는 웰니스 챗봇 서비스.
+
+### 2.2 프로젝트 소개
+
+사용자가 친구 같은 캐릭터와 **반말 수다**를 떨면, 매 턴 감정을 자동 분석(KcELECTRA 파인튜닝)하여 캐릭터의 **표정·응답 톤·음성(TTS)** 에 반영하고, 대화·감정을 시계열로 쌓아 **일별 감정 캘린더**와 **주/월간 마음 리포트**로 시각화합니다. 앞단은 편안한 대화·타로로 진입 문턱을 낮추고, 뒷단에서 감정 분석이 조용히 구조화하는 **'보이지 않는 구조화'** 가 핵심 가치입니다.
+
+> ⚠️ 본 서비스는 **비의료 웰니스 서비스**로, 전문가의 진단·개입을 대체하지 않습니다.
+
+### 2.3 주제 선정 배경
+
+- **외로움은 개인이 아닌 사회 현상** — 핵가족화·코로나·개인화로 고립·은둔 청년 약 54만 명(2023), 독거노인 우울증상 16.1%.
+- **도움은 있는데 못 쓴다** — 우울장애 환자조차 **71.8%가 도움을 받지 않음**(보건복지부 2021 정신건강실태조사). 비용·낙인·복잡한 문턱·'분석당하는 느낌'이 장벽.
+- **대화만으로도 효과** — AI 대화 기반 개입이 우울·불안을 유의하게 낮춘다는 임상 근거(Woebot RCT). 단, 대면 치료의 **보조수단**.
+- **커지는 시장** — 정신건강 앱 79.8억\$(2025)→184.5억\$(2030), 정신건강 AI 15억\$→51억\$.
+
+> 출처: [경향신문(보사연 고립 실태)](https://www.khan.co.kr/article/202602181620001) · 보건복지부 2021 정신건강실태조사 · [Woebot RCT(JMIR)](https://mental.jmir.org/2017/2/e19/) · 통계청 2024 인구주택총조사 · Mordor Intelligence / GII
+
+### 2.4 사용자 요구사항 분석
+
+기존 정신건강 서비스의 문턱을 분석한 결과, 사용자의 핵심 요구는 다음과 같았습니다.
+
+- 검사지·설문 없이 **부담 없이 시작**하고 싶어요.
+- 내 감정 흐름을 **알아서 정리·기억**해 줬으면 좋겠어요.
+- 상담처럼 무겁지 않고, **친구처럼 편하게** 이야기하고 싶어요.
+- '분석당하는 느낌' 없이 **자연스럽게** 나를 돌아보고 싶어요.
+
+### 2.5 서비스 차별점
+
+| 항목 | 🌗 빈틈사이 | 구조화형 (Woebot·Wysa) | 동반자형 (Replika·Character.AI) |
+|---|---|---|---|
+| 진입 문턱 | **낮음** (검사지 없음) | 높음 (설문·척도) | 낮음 |
+| 감정 분석·기록 | **높음** (4감정·캘린더·리포트) | 높음 | 낮음 |
+| 정서적 몰입 | **높음** (캐릭터·TTS·2단 기억) | 중간 | 높음 |
+| 포지션 | **낮은 문턱 × 높은 분석 (빈 영역)** | 신뢰↑·문턱↑ | 몰입↑·구조화↓ |
+
+빈틈사이는 "구조화형"과 "동반자형" 사이의 **비어있는 영역** — **낮은 진입 문턱 + 높은 분석·기록** — 을 차지합니다.
+
+### 2.6 기대 효과
+
+- **진입 문턱 완화** — 검사지·비용 없이 감정 케어를 시작
+- **자기 이해** — 감정 캘린더·마음 리포트·MBTI 성향 분석으로 나를 돌아봄
+- **정서적 지지** — 먼저 말 거는, 나를 기억하는 친구
+- **조기 신호 인지 지원** — 감정 흐름 시각화로 변화를 스스로 인지 (비의료)
+
+---
+
+## 3. 프로젝트 기획
+
+| 산출물 | 위치 |
+|---|---|
+| 프로젝트 기획서 | `docs/` |
+| 요구사항 정의서 | `docs/` |
+| 화면설계서 | `docs/화면설계서/` |
+| WBS | `docs/` |
+| 데이터 수집·전처리 보고서 | `docs/` |
+| 감정분류 모델 개선 실험 보고서 | `docs/` |
+| **중간 발표 자료** | `docs/빈틈사이_중간발표자료_한솔작성.pptx` |
+
+### 개발 일정 (WBS)
+
+| 주차 | 기간 | 단계 | 주요 산출물 |
+|---|---|---|---|
+| 1W | 06/11~06/19 | 기획 | 요구사항 정의서 · WBS |
+| 2W | 06/22~06/26 | 데이터 수집·저장 | 프로젝트 기획서 · 수집 데이터 보고서 · 화면설계서 |
+| 3W | 06/29~07/03 | 데이터 전처리 | DB·저장소 설계 문서 · 데이터 전처리 결과서 |
+| 4W | 07/06~07/10 | 모델링·평가 | ML/DL 학습결과서·학습 모델 · 벡터DB/GraphDB 구축 결과서 · **중간 발표(07/10)** |
+| 5W | 07/13~07/17 | 모델링·평가 | AI 시스템 아키텍처 · LLM 연동 소프트웨어 |
+| 6W | 07/20~07/24 | 평가 | 멀티 에이전트 테스트 결과 보고서(sLLM 파인튜닝 평가 포함) · 시스템 구성도 |
+| 7W | 07/27~07/31 | 모델 배포 | LLM 연동 웹 애플리케이션 · 서비스 테스트 결과 · 최종 발표 자료 |
+| 8W | 08/03~08/04 | 마무리 | 프로젝트 소스코드 · 시연 영상 · **최종 발표(08/04)** |
+
+---
+
+## 4. 기술 스택
+
+| 카테고리 | 기술 |
+|---|---|
+| **Backend** | ![Python](https://img.shields.io/badge/Python-3776AB?style=flat&logo=python&logoColor=white) ![Django](https://img.shields.io/badge/Django-092E20?style=flat&logo=django&logoColor=white) ![DRF](https://img.shields.io/badge/DRF-A30000?style=flat&logo=django&logoColor=white) |
+| **Frontend** | ![Vue](https://img.shields.io/badge/Vue%203-42B883?style=flat&logo=vuedotjs&logoColor=white) ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat&logo=vite&logoColor=white) ![JS](https://img.shields.io/badge/JavaScript-F7DF1E?style=flat&logo=javascript&logoColor=black) |
+| **AI Core** | ![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=flat&logo=pytorch&logoColor=white) ![HF](https://img.shields.io/badge/KcELECTRA%20파인튜닝-FFD21E?style=flat&logo=huggingface&logoColor=black) ![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?style=flat&logo=langchain&logoColor=white) ![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=flat&logo=langchain&logoColor=white) ![XGBoost](https://img.shields.io/badge/XGBoost%20baseline-8C5AB4?style=flat) ![TTS](https://img.shields.io/badge/ElevenLabs%20TTS-111111?style=flat) |
+| **Database** | ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat&logo=postgresql&logoColor=white) |
+| **학습·배포·협업** | ![Colab](https://img.shields.io/badge/Colab%20T4-F9AB00?style=flat&logo=googlecolab&logoColor=white) ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white) ![AWS](https://img.shields.io/badge/AWS-FF9900?style=flat&logo=amazonaws&logoColor=white) ![Git](https://img.shields.io/badge/Git-F05032?style=flat&logo=git&logoColor=white) |
+
+---
+
+## 5. 주요 기능
+
+| 기능 | 설명 | 상태 |
+|---|---|---|
+| **친구 챗봇 (감정 분석)** | 친구 같은 캐릭터와 반말 대화. 매 턴 4감정 자동 분류 → 표정·톤·음성에 반영 | ✅ 구현 |
+| **2단 장기 기억** | 매 턴 기억 가치를 즉시 캡처 + 주기적 압축·정리 → 재방문 시 회상 | ✅ 구현 |
+| **선제 첫인사** | 진입 시 캐릭터가 먼저 말 걸기 (기억·날씨·시간대 기반) | ✅ 구현 |
+| **시크릿챗** | 대화·감정·기억을 저장하지 않는 완전 무저장 세션 | ✅ 구현 |
+| **TTS 음성 응답** | ElevenLabs 감정 연기 음성 (1회 재생 후 파기) | ✅ 구현 |
+| **온보딩 · 캐릭터** | 소셜 로그인, 성격 기반 캐릭터 4종, 회원정보·관심 키워드 | ✅ 구현 |
+| **카드 운세 (타로)** | 오늘의 메이저 카드 + 상황별 3장 리딩(LLM 해석) | ✅ 구현 |
+| **감정 캘린더** | 날짜별 대화 감정을 캐릭터 아이콘으로 시각화 | ✅ 구현 |
+| **마이페이지 · MBTI** | 방 일러스트 프로필, 대화 기반 MBTI 성향 분석 | 🔧 진행 중 |
+| **마음 리포트** | 주/월간 감정 리포트, 스트레스 원인·이완 키워드, 행동 대안 | 🔧 진행 중 |
+
+---
+
+## 6. 시스템 아키텍처
+
+사용자 → **Vue 프론트(화면)** → REST API → **Django + DRF 웹 서버(LangGraph 대화 흐름)** ↔ **PostgreSQL** 구조이며, 감정 분류(KcELECTRA)·ElevenLabs TTS가 백엔드에 연동됩니다. 감정 분류 모델은 Colab T4에서 파인튜닝 후 배포합니다.
+
+![시스템 아키텍처](docs/중간발표_이미지/13_시스템아키텍처.png)
+
+**대화 흐름 (LangGraph):** MBTI 판별 → 컨텍스트 조회 → 감정 분석 → 감정별 응답(톤 지침) → 최종 정제 · 저장/기억은 백그라운드 비동기 처리.
+
+**분석 파이프라인 (다중 에이전트):** 마음 리포트·MBTI 성향 분석·취향 분석은 수집/채점/집계/리포트 생성을 담당하는 **다중 에이전트(멀티 에이전트) 구조**로 처리합니다. (주제 5 — 다중 에이전트 기반 웰니스 케어에 대응)
+
+---
+
+## 7. 데이터
+
+### 7.1 데이터 수집
+
+| 데이터 | 규모(원천→사용) | 역할 |
+|---|---|---|
+| AI Hub 감성대화 말뭉치 | → 58,234 | 기준 학습 (6감정 → 4감정 매핑) |
+| AI Hub 음성 감성대화(전사) | 43,991 → 36,677 | 구어체 보강 (5인 중 3표 합의분) |
+| KOTE (온라인 댓글 44라벨) | 50,000 → 13,216 | 온라인 구어체 보강 (4감정 단일 수렴분) |
+| 채팅체 평가셋 (자체 제작) | 150 | **평가 전용**(학습 금지), 감정별 균형·팀 검수 |
+| AI Hub 웰니스 상담(전사) | 1,002 | 증강 실험 후 **기각**(문체·불균형) |
+
+### 7.2 데이터 전처리
+
+- 결측(0건)·완전중복(17건)·라벨 상충(17건) 정리 → **정제 58,234건**
+- 6감정 → 4감정 매핑 (분노·불안→분노 / 슬픔·상처→슬픔 / 당황→일반 / 기쁨→기쁨)
+- 증강 병합 후 **평가 문장 전량 학습 제외(누수 필터)** → **최종 학습셋 90,456건**
+- AI Hub 재배포 금지 대응 — 원본 대신 재생성 스크립트 배포(원 정제본과 100% 일치 검증)
+
+### 7.3 데이터베이스 설계 (PostgreSQL)
+
+도메인을 분리한 **19개 테이블 · 3NF 기준**(JSONB는 화면 스냅샷·근거 묶음에 한정). Django 모델 역공학 + ETL·화면 요구사항 교차 검증으로 설계.
+
+| 도메인 | 주요 테이블 |
+|---|---|
+| 계정·프로필 | `users` · `oauth_accounts` · `user_profiles` · `user_preference_keywords` |
+| 대화 | `chat_sessions` · `chat_messages` · `user_memory`(2단 장기 기억) |
+| MBTI 분석 | `mbti_answers` · `mbti_question_responses` · `mbti_response_scores` · `mbti_monthly_axis_results` · `mbti_monthly_results` · `mbti_monthly_reports` |
+| 마음 리포트·취향 | `mind_reports` · `preference_evidence` · `preference_keyword_summaries` |
+| 타로 | `tarot_cards` · `tarot_card_chunks` · `tarot_readings` · `tarot_reading_cards` · `daily_tarot_fortunes` |
+| 척도 | `clinical_scales`(PHQ-9·GAD-7 등, 향후 척도 추정용) |
+
+> 상세 ERD·테이블 정의서·제약조건은 `docs/한재웅/[데이터 수집 및 저장] 데이터베이스_저장소 설계 문서_27기_4팀_최종본.docx` 참고. 시크릿챗 세션은 애플리케이션 레벨에서 영구 저장 대상에서 제외.
+
+---
+
+## 8. 감정 분류 모델링 & 성능
+
+> **문제:** 학습 데이터(정제된 **문어체**) vs 실사용(**채팅체**) 도메인 격차 — 초기 동결 임베딩+XGBoost는 작성체 F1 0.67에서 **채팅체 0.48로 붕괴**.
+
+### 실험 ① — 모델 × 방식 (10조합)
+KcELECTRA vs KoBERT × 동결 임베딩 vs 파인튜닝 + 임베딩 레시피 4종을 **작성체·채팅체 이중 평가**.
+→ **KcELECTRA 파인튜닝**이 양쪽에서 승자.
+
+### 실험 ② — 데이터 추가 ablation
+
+| 조합 | 채팅체 F1 | 판정 |
+|---|---|---|
+| base (감성대화만) | 0.48 | 기준선 |
+| + 음성 전사 | 0.74 (+0.26) | 채택 |
+| + 웰니스 | 0.44 (−0.04) | 기각 |
+| + KOTE | 0.50 (+0.02) | 채택 |
+| **+ 음성 + KOTE** | **0.78** ˢ | **결승** |
+
+<sub>ˢ 누수 필터 전(시험 문장 포함) 최고 0.82 → 무누수 조건 **0.78**을 공식 성적으로 채택.</sub>
+
+### 최종 배포 모델 (무누수 조건)
+
+- **KcELECTRA 파인튜닝 (+음성·KOTE, lr 5e-5)** · 학습 90,456건
+- 작성체 Macro-F1 **0.71** · 채팅체 Macro-F1 **0.78** (기준선 0.48 → 0.78)
+- 클래스별 F1(채팅체): 기쁨 0.93 · 분노 0.75 · 일반 0.73 · 슬픔 0.70
+- 재현성: 시드 3회 표준편차 ±0.003
+
+### 확신도 게이트 (서빙)
+- 초단문(10자 미만) → 직전 감정 유지
+- 모델 확신도 0.70 미만 → 최근 대화 문맥을 포함한 **LLM 재분류** ("애매하면 찍지 않는다")
+- 임계값 0.70에서 모델 채택률 82.7% · 채택분 정확도 0.83
+
+---
+
+## 9. 프로젝트 개선 노력
+
+- **이중 평가 체계** — 작성체 테스트 + 채팅체 평가셋을 항상 함께 채점해 도메인 격차를 가시화
+- **무누수 원칙** — 평가 문장을 학습에서 전량 제외(누수 3건 검출·제거)하여 부풀림 없는 성적 측정
+- **오분류 정성 분석** — 고확신 오답(≥0.9)을 3패턴으로 규명 (① 자기비하·외로움을 오인 ② 감정어 없는 부당대우 서술 ③ 중립 문장의 키워드 유발 감정화) → "임계값이 아니라 데이터로 풀 문제"로 2차 과제화
+- **재현성 확보** — seed 고정, 시드 3회 반복·학습률 탐색으로 결과가 우연이 아님을 검증
+
+### 성능 · 품질 목표 (비기능 요구사항)
+
+| 항목 | 목표 | 설계 |
+|---|---|---|
+| 응답 속도 | p95 < 3.0초 | 텍스트 즉시 반환 + TTS 비동기 폴링(2단 응답) |
+| 감정 추론 | p95 < 300ms | 파인튜닝 KcELECTRA GPU 서빙 기준 |
+| 저장 무결성 | 저장 장애 시 **응답 무중단** | 기억·저장은 응답과 분리된 백그라운드 비동기 |
+| 반응성 | 감정 → 캐릭터 표정 실시간 전환 | 감정 매핑 즉시 반영 |
+| 보안·프라이버시 | 온보딩 동의·암호화·시크릿챗 즉시 소거·탈퇴 시 영구 파기 | 개인정보보호법 준수(민감정보) |
+| 법적 | 임상 병명 노출 금지·비의료 면책 표기 | 위험 신호 시 전문가 도움 권유(프롬프트 규칙) |
+
+---
+
+## 10. 수행 결과 · 데모 시연
+
+| 마음 대화 (감정→표정) | 홈 |
+|---|---|
+| ![chat](docs/중간발표_이미지/screencapture-localhost-5173-chat-2026-07-06-19_20_56.png) | ![home](docs/중간발표_이미지/screencapture-localhost-5173-home-2026-07-06-19_21_39.png) |
+
+| 마음 리포트 | 감정 캘린더 |
+|---|---|
+| ![report](docs/중간발표_이미지/screencapture-localhost-5173-report-2026-07-06-19_22_09.png) | ![calendar](docs/중간발표_이미지/screencapture-localhost-5173-calendar-2026-07-06-19_22_41.png) |
+
+> "지치고 마음이 무거워"라고 입력하면 캐릭터가 **우는 표정**으로 바뀌고, 감정에 맞춘 공감 응답 + TTS 음성이 재생됩니다.
+
+📊 **중간 발표 자료** : [`빈틈사이_중간발표자료_한솔작성.pptx`](docs/빈틈사이_중간발표자료_한솔작성.pptx) · 🎬 시연 영상 · 🔗 배포 URL : **배포 시 공개 예정 (향후)**
+
+---
+
+## 11. 프로젝트 구조
 
 ```text
 SKN27-FINAL-4Team/
-|-- .env                             # 환경 변수 (로컬 전용 — git 제외)
-|-- .gitignore                       # Git 제외 파일 설정
-|-- README.md                        # 본 프로젝트 메인 리드미
-|-- ai/                              # 🧠 LangGraph 에이전트 및 AI 모델 작업 공간
-|   |-- agents/                      # 멀티에이전트 노드, 페르소나, 상태, LLM 설정
-|   |-- emotion/                     # KcELECTRA + XGBoost 감정분류 파이프라인
-|   |-- experiments/                 # 감정분류 개선 실험 노트북 및 결과
-|   `-- scale/                       # 6종 임상 척도 간접 추정 모듈
-|-- app/                             # 💻 Django 웹 서비스 애플리케이션
-|   |-- Dockerfile
-|   |-- backend/                     # Django REST API 서버 (챗봇, 인증, 온보딩 등)
-|   `-- frontend/                    # Vue 3 + Vite 프론트엔드
-|-- docs/                            # 📑 프로젝트 기획 및 설계 산출물
-|   |-- 김한솔팀장/                   # 팀장 개별 문서
-|   |-- 박송원/                       # 팀원 개별 문서
-|   |-- 한재웅/                       # 팀원 개별 문서
-|   `-- 화면설계서/                   # 전체 화면설계서
-|-- etl/                             # 🔄 데이터 파이프라인 및 ETL 작업 공간
-|   |-- data/                        # AI 학습 데이터셋 (AI Hub 파생물은 repo 미포함)
-|   |-- datasets/                    # MBTI 등 원천 데이터셋
-|   |-- scripts/                     # 데이터 처리 스크립트
-|   |-- seed_postgres_static_data.py # PostgreSQL 정적 기초 데이터 시딩
-|   `-- load_scales_to_postgres.py   # 심리 척도 6종 DB 적재
-|-- storage/                         # 📦 인프라 설정 파일 보관
-|   |-- docker-compose.yml           # PostgreSQL 컨테이너 구성 (루트에 복사해서 사용)
-|   `-- DDL_MY_설정_관리자_insert_target_v0.9.1.sql
-|-- test/                            # 🧪 팀원별 테스트 및 실험 공간
-|   |-- hansol/                      # 김한솔
-|   |-- jaewung/                     # 한재웅
-|   |-- seongjin/                    # 성진
-|   `-- songwon/                     # 박송원
+├── ai/                       # 🧠 LangGraph 대화 흐름 및 AI 모델
+│   ├── agents/               #   대화 노드·페르소나·상태·LLM 설정 (감정 분기 구조)
+│   └── emotion/              #   KcELECTRA 파인튜닝 감정 분류 파이프라인 + 실험 노트북·산출물
+├── app/                      # 💻 웹 서비스
+│   ├── backend/              #   Django REST API (chat·onboarding·calendar·tarot·mbti·report 등)
+│   └── frontend/             #   Vue 3 + Vite
+├── docs/                     # 📑 기획·설계·발표 산출물
+├── etl/                      # 🔄 데이터 파이프라인 / 시딩 스크립트
+├── storage/                  # 📦 인프라 설정 (docker-compose.yml, DDL)
+└── README.md
 ```
 
----
+> AI Hub 파생 학습 데이터는 재배포 금지 정책에 따라 repo에 포함하지 않으며, 재생성 스크립트로 복원합니다.
 
-## ⚙️ 주요 디렉토리 상세 역할
-
-### 1. `ai/` (AI & ML)
-- **agents/** : LangGraph 기반 멀티에이전트 시스템. 포리(pori)·까미(kkami)·토토(toto)·여울(yeoul) 4개 캐릭터 페르소나와 노드, 상태 관리가 위치합니다.
-- **emotion/** : KcELECTRA 임베딩 + XGBoost 분류기 기반 실시간 감정분류 모델. 학습·추론·산출물(artifacts/)이 위치합니다.
-- **scale/** : PHQ-9, GAD-7 등 6종 임상 척도 간접 추정 모듈입니다.
-
-### 2. `app/` (Django Backend + Vue Frontend)
-- Django REST API 서버와 Vue 3 + Vite 프론트엔드로 구성됩니다.
-- 챗봇 세션, 사용자 인증, 온보딩, 마이페이지, 마음 리포트, 타로 등 서비스 앱이 위치합니다.
-
-### 3. `docs/` (System Design & Plan)
-- 팀 협업 산출물(기획안, 요구사항 정의서, 화면설계서 명세)과 팀원별 개별 설계 문서가 위치합니다.
-
-### 4. `etl/` (Extract-Transform-Load Pipelines)
-- 원천 데이터를 PostgreSQL에 적재하는 ETL 스크립트와 AI 학습 데이터셋이 위치합니다.
-
-### 5. `storage/` (Infrastructure)
-- `docker-compose.yml`을 루트에 복사해 `docker compose up -d --build`로 실행하세요.
-
-### 6. `test/` (Sandbox)
-- 팀원별 프로토타이핑 및 기능 단위 테스트 공간입니다.
+**협업 · 브랜치 전략** — `main`(배포) / `develop`(통합)을 베이스로, 작업 단위마다 `feature/*`·`fix/*` 브랜치를 생성해 작업 후 PR·리뷰를 거쳐 `develop`에 병합합니다. 문서·산출물은 `docs/`에서 버전 관리합니다.
 
 ---
 
-## 🚀 실행 방법
+## 12. 트러블슈팅
+
+| 이슈 | 원인 | 해결 |
+|---|---|---|
+| 소셜 로그인 연동 | 서버 재실행 시 로그인 실패 | 조사·진행 중 |
+| MBTI 프롬프트 결과 불안정 | 점수 산정 기준 모호 → 반복 실행 시 결과 변동 | 프롬프트에 산정 규칙을 구체·명확화 → 일관성 확보 |
+| MBTI 데이터셋 부족 | 신뢰 가능한 라벨 데이터 부족 → ML 학습 실패 | ML 대신 **LLM 프롬프트 기반 점수 산정**으로 전환 |
+| 챗봇 설계 관점 | 기능 중심 설계로 사용자·비즈니스 관점 결여 | 사용자 관점에서 기능 간소화·소통 중심으로 흐름도 재작성 |
+
+---
+
+## 13. 향후 계획
+
+- **MVP+** : 친밀도 말투·캐릭터 메모리, 주/월간 마음 리포트, MBTI·취향 분석, 접근성
+- **Phase 2** : 음성 대화·장기 기억, 감정 시계열 분석, 선물·도토리·구독(BM)
+- **고도화·배포** : 마음 리포트 시계열 + ML/DL + 키워드 분류, **AWS 배포** → 배포 시 웹 서비스 URL·시연 영상 공개
+- **모델** : 서술형 분노·중립 문장 데이터 보강, 실사용 로그 기반 저확신 샘플 재학습 루프
+
+---
+
+## 14. 실행 방법
 
 ```bash
-# 1. storage/docker-compose.yml을 루트로 복사
+# 1) 인프라 (PostgreSQL)
 cp storage/docker-compose.yml .
-
-# 2. 환경 변수 설정
-cp app/backend/.env.example app/backend/.env  # API 키 입력
-
-# 3. Docker 실행
 docker compose up -d --build
+
+# 2) 백엔드 (Django)
+cd app/backend
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env            # DB·LLM·ElevenLabs API 키 입력
+python manage.py migrate
+python manage.py runserver      # http://localhost:8000
+
+# 3) 프론트엔드 (Vue 3)
+cd app/frontend
+npm install
+npm run dev                     # http://localhost:5173
 ```
+
+> 감정 분류 모델: `ai/emotion/artifacts_ft`에 파인튜닝 모델(`model.safetensors`)을 두면 자동 로드되며, 없으면 LLM 폴백으로 동작합니다.
+
+---
+
+## 15. 한 줄 회고
+
+> _(최종 발표 시 작성 예정)_
+
+- 💚 **김한솔** :
+- 💛 **한재웅** :
+- 🧡 **이성진** :
+- 💜 **박송원** :
+
+---
+
+<p align="center"><i>빈틈사이 — 잠시 생긴 하루의 틈에서, 마음을 쉬어가세요. 🌗</i></p>
