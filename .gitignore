@@ -1,3 +1,8 @@
+# 루트 임시/테스트 파일
+googlelogin.html
+googlelogin.css
+docker-compose.yml
+
 # 개별 작업 문서 (팀 공유 제외)
 \[개별\]*
 docs/감정분류_개선실험_계획서_김한솔.md
@@ -5,6 +10,22 @@ docs/최종_통합_흐름도_구현검증본.md
 docs/최종_통합_흐름도_김한솔.md
 docs/기억시스템_실증사례_김한솔.md
 docs/\[데이터 수집 및 저장\]*
+docs/김한솔팀장/감정분류_개선실험_계획서_김한솔.md
+docs/김한솔팀장/최종_통합_흐름도_구현검증본.md
+docs/김한솔팀장/최종_통합_흐름도_김한솔.md
+docs/김한솔팀장/기억시스템_실증사례_김한솔.md
+docs/김한솔팀장/대화.md
+docs/김한솔팀장/빈틈사이_발표대본_김한솔.md
+docs/김한솔팀장/빈틈사이_배경기획_슬라이드안_김한솔.md
+docs/김한솔팀장/빈틈사이_배경기획_조사.md
+docs/김한솔팀장/빈틈사이_출처검증표_김한솔.md
+docs/김한솔팀장/데이터_정제_명세_김한솔.md
+docs/김한솔팀장/챗봇_컨셉개편_친구모드_기획서.md
+docs/김한솔팀장/\[데이터 수집 및 저장\]*
+docs/발표_이미지/
+docs/중간발표_이미지/
+docs/빈틈사이_발표대본_김한솔.md
+docs/빈틈사이_배경기획_슬라이드안_김한솔.md
 
 # 환경 변수 및 비밀키
 .env
@@ -29,15 +50,20 @@ test/hansol/
 # 데이터베이스 캐시 및 볼륨 데이터
 postgres_data/
 neo4j_data/
-storage/
+# storage/ 폴더 내 DB 볼륨 데이터만 제외 (SQL·설정 파일은 추적)
+storage/postgres_data/
+storage/neo4j_data/
 
-# AI Hub 파생 데이터 — 재배포 금지 (data/README.md 참조, 재생성: rebuild_clean_dataset.py / prepare_aug_datasets.py)
-data/kcelectra_train_clean.jsonl
-data/aug_voice.jsonl
-data/aug_wellness.jsonl
+# AI Hub 파생 데이터 — 재배포 금지 (etl/data/README.md 참조, 재생성: rebuild_clean_dataset.py / prepare_aug_datasets.py)
+etl/data/kcelectra_train_clean.jsonl
+etl/data/aug_voice.jsonl
+etl/data/aug_wellness.jsonl
 
 # 파인튜닝 모델 (대용량 · 팀 공유는 Drive로, 재생성: 실험2 노트북 최종 학습 셀)
 ai/emotion/artifacts_ft/
+
+# IDE 설정
+.vscode/
 
 # 파이썬 캐시 및 가상환경
 __pycache__/
@@ -73,9 +99,9 @@ __mount_test.txt
 # 데이터셋 (AI Hub 등 원본·파생 데이터는 재배포 금지 → 커밋 제외, AI Hub에서 직접 내려받아 사용)
 *.json
 *.jsonl
-data/raw/
+etl/data/raw/
 # 커밋 허용 예외 — 자체 제작(재배포 문제 없음) · 실험 결과 기록
-!data/chat_eval_set.jsonl
+!etl/data/chat_eval_set.jsonl
 !ai/emotion/exp1_results.json
 ai/emotion/artifacts*/
 
