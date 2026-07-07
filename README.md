@@ -8,8 +8,8 @@
 - **Language**: Python 3.12
 - **Backend Framework**: Django
 - **Agent Orchestrator**: LangGraph (Multi-Agent System)
-- **Database**: 
-  - **PostgreSQL**: 트랜잭션, 회원, 대화 로그, 척도 채점 이력 보관
+- **Database**: PostgreSQL (트랜잭션, 회원, 대화 로그, 척도 채점 이력 보관)
+- **Frontend**: Vue 3 + Vite
 
 ---
 
@@ -17,41 +17,37 @@
 
 ```text
 SKN27-FINAL-4Team/
-|-- .env.example                     # 환경 변수 템플릿
+|-- .env                             # 환경 변수 (로컬 전용 — git 제외)
 |-- .gitignore                       # Git 제외 파일 설정
 |-- README.md                        # 본 프로젝트 메인 리드미
-|-- docker-compose.yml               # PostgreSQL 컨테이너 인프라 구성
-|-- ai/                              # 🧠 AI 모델 학습 및 가중치 관리 공간
-|   `-- README.md
-|-- app/                             # 💻 Django 웹 서비스 애플리케이션 소스 코드
+|-- ai/                              # 🧠 LangGraph 에이전트 및 AI 모델 작업 공간
+|   |-- agents/                      # 멀티에이전트 노드, 페르소나, 상태, LLM 설정
+|   |-- emotion/                     # KcELECTRA + XGBoost 감정분류 파이프라인
+|   |-- experiments/                 # 감정분류 개선 실험 노트북 및 결과
+|   `-- scale/                       # 6종 임상 척도 간접 추정 모듈
+|-- app/                             # 💻 Django 웹 서비스 애플리케이션
 |   |-- Dockerfile
-|   |-- README.md
-|   `-- backend/requirements.txt      # 백엔드 의존성 패키지
-|-- data/                            # 📊 학습 데이터셋 (AI Hub 파생물은 repo 미포함 — data/README.md 참조)
-|   `-- README.md                    # 데이터 출처·재생성 안내 (rebuild_clean_dataset.py)
-|-- docs/                            # 📑 프로젝트 기획 및 설계 산출물 (정본)
-|   |-- README.md
-|   |-- [기획] WBS_양식_27기_4팀.xlsx
-|   |-- [통합] WBS 계획서.md
-|   |-- [통합] 시스템 설계서.md
-|   |-- [통합] 요구사항 정의서.md
-|   |-- [통합] 종합 기획안.md
-|   |-- [통합] 화면설계서 명세.md
-|   `-- 학습 결과서 — 감정분류 (KcELECTRA).md
-|-- etl/                             # 🔄 데이터 전처리 및 초기 마이그레이션(ETL) 스크립트
-|   |-- README.md
-|   |-- load_scales_to_postgres.py   # 임상 척도 질문 문항 로더
-|   `-- seed_postgres_static_data.py # PostgreSQL 초기 정적 마스터 데이터 적재
-|-- prompts/                         # 📝 캐릭터 에이전트별 시스템 프롬프트 정의
-|   |-- dalkong_prompt.json          # 달콩이 (코치형 / ACT 기반)
-|   |-- greung_prompt.json           # 그릉이 (직면형 / 마음챙김 기반)
-|   `-- haeon_prompt.json            # 해온이 (위로형 / 내러티브 기반)
-|-- storage/                         # 📦 로컬 데이터셋 및 정적 리소스 보관함
-|   |-- README.md
-|   `-- 마시는_차_추천_데이터셋.json     # 64종 힐링 차 원천 메타데이터
-`-- test/                            # 🧪 개별 프로토타이핑 및 기능 단위 테스트 공간
-    |-- README.md
-    `-- 감성대화_토큰나이저.ipynb
+|   |-- backend/                     # Django REST API 서버 (챗봇, 인증, 온보딩 등)
+|   `-- frontend/                    # Vue 3 + Vite 프론트엔드
+|-- docs/                            # 📑 프로젝트 기획 및 설계 산출물
+|   |-- 김한솔팀장/                   # 팀장 개별 문서
+|   |-- 박송원/                       # 팀원 개별 문서
+|   |-- 한재웅/                       # 팀원 개별 문서
+|   `-- 화면설계서/                   # 전체 화면설계서
+|-- etl/                             # 🔄 데이터 파이프라인 및 ETL 작업 공간
+|   |-- data/                        # AI 학습 데이터셋 (AI Hub 파생물은 repo 미포함)
+|   |-- datasets/                    # MBTI 등 원천 데이터셋
+|   |-- scripts/                     # 데이터 처리 스크립트
+|   |-- seed_postgres_static_data.py # PostgreSQL 정적 기초 데이터 시딩
+|   `-- load_scales_to_postgres.py   # 심리 척도 6종 DB 적재
+|-- storage/                         # 📦 인프라 설정 파일 보관
+|   |-- docker-compose.yml           # PostgreSQL 컨테이너 구성 (루트에 복사해서 사용)
+|   `-- DDL_MY_설정_관리자_insert_target_v0.9.1.sql
+|-- test/                            # 🧪 팀원별 테스트 및 실험 공간
+|   |-- hansol/                      # 김한솔
+|   |-- jaewung/                     # 한재웅
+|   |-- seongjin/                    # 성진
+|   `-- songwon/                     # 박송원
 ```
 
 ---
@@ -59,27 +55,37 @@ SKN27-FINAL-4Team/
 ## ⚙️ 주요 디렉토리 상세 역할
 
 ### 1. `ai/` (AI & ML)
-- KcELECTRA 기반 실시간 감정 분류 모델 파인튜닝 코드 및 최종 가중치 모델이 위치합니다.
-- 사용자의 대화 맥락에서 6종 임상 척도를 추정하기 위한 머신러닝(XGBoost) 파이프라인과 특징 추출 모듈을 다룹니다.
+- **agents/** : LangGraph 기반 멀티에이전트 시스템. 포리(pori)·까미(kkami)·토토(toto)·여울(yeoul) 4개 캐릭터 페르소나와 노드, 상태 관리가 위치합니다.
+- **emotion/** : KcELECTRA 임베딩 + XGBoost 분류기 기반 실시간 감정분류 모델. 학습·추론·산출물(artifacts/)이 위치합니다.
+- **scale/** : PHQ-9, GAD-7 등 6종 임상 척도 간접 추정 모듈입니다.
 
-### 2. `app/` (Django Backend Service)
-- Django 기반의 RESTful API 서버입니다.
-- 사용자 관리, 온보딩 흐름 제어, 실시간 챗봇 API 세션 관리, 이너 카운슬 LangGraph 오케스트레이션이 이루어지는 서비스의 심장부입니다.
+### 2. `app/` (Django Backend + Vue Frontend)
+- Django REST API 서버와 Vue 3 + Vite 프론트엔드로 구성됩니다.
+- 챗봇 세션, 사용자 인증, 온보딩, 마이페이지, 마음 리포트, 타로 등 서비스 앱이 위치합니다.
 
-### 3. `data/` (Dataset Validation & Safety)
-- 챗봇 답변의 부적절하거나 유해한 표현을 걸러내기 위한 자체 **안전 레드팀셋**과, 6대 임상 척도의 정교한 간접 예측 보정을 수행하기 위한 **척도 골드셋**이 수록되어 있습니다.
+### 3. `docs/` (System Design & Plan)
+- 팀 협업 산출물(기획안, 요구사항 정의서, 화면설계서 명세)과 팀원별 개별 설계 문서가 위치합니다.
 
-### 4. `docs/` (System Design & Plan)
-- 팀의 협업 프로세스를 관리하기 위한 WBS, PM 산출물(기획안, 요구사항 정의서, 화면설계서 명세) 및 시스템 아키텍처 다이어그램(Master ERD 및 시퀀스 흐름 마블링 마크다운)이 모여 있습니다.
+### 4. `etl/` (Extract-Transform-Load Pipelines)
+- 원천 데이터를 PostgreSQL에 적재하는 ETL 스크립트와 AI 학습 데이터셋이 위치합니다.
 
-### 5. `etl/` (Extract-Transform-Load Pipelines)
-- 원천 JSON/CSV 데이터셋을 PostgreSQL 구조적 테이블로 정제하여 가공 적재하기 위한 초기 설정용 자동화 스크립트 집합입니다.
+### 5. `storage/` (Infrastructure)
+- `docker-compose.yml`을 루트에 복사해 `docker compose up -d --build`로 실행하세요.
 
-### 6. `prompts/` (Persona Prompt Engine)
-- 다중 에이전트(LangGraph)로 구동되는 개별 캐릭터(해온이, 그릉이, 달콩이)의 개성 있는 말투, 특화 심리 이론 개입 규칙을 정의해 둔 System Prompt 파일들입니다.
+### 6. `test/` (Sandbox)
+- 팀원별 프로토타이핑 및 기능 단위 테스트 공간입니다.
 
-### 7. `storage/` (Resources & Metadata)
-- 외부 API 통신을 최소화하기 위해 플랫폼 내부에 내장한 64종 힐링 차의 성분, 카페인 함유 유무, 알레르기 유발 항원 등의 정적 메타데이터를 통합 보관합니다.
+---
 
-### 8. `test/` (Sandbox & Test Bed)
-- 본격적인 모델 배포 전 데이터 토큰화 효율성 검증, 데이터셋 병합 분석 및 개별 프로토타입 작성용 주피터 노트북 샌드박스입니다.
+## 🚀 실행 방법
+
+```bash
+# 1. storage/docker-compose.yml을 루트로 복사
+cp storage/docker-compose.yml .
+
+# 2. 환경 변수 설정
+cp app/backend/.env.example app/backend/.env  # API 키 입력
+
+# 3. Docker 실행
+docker compose up -d --build
+```
