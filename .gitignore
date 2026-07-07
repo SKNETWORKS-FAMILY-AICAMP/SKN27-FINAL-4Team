@@ -60,6 +60,9 @@ etl/data/aug_wellness.jsonl
 # 파인튜닝 모델 (대용량 · 팀 공유는 Drive로, 재생성: 실험2 노트북 최종 학습 셀)
 ai/emotion/artifacts_ft/
 
+# IDE 설정
+.vscode/
+
 # 파이썬 캐시 및 가상환경
 __pycache__/
 *.pyc
