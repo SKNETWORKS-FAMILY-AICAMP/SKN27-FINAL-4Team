@@ -11,7 +11,7 @@ class FallbackWebAgent:
     """
     
     @staticmethod
-    def get_trendy_contents(age, gender, hobbies=None, interests=None):
+    def get_trendy_contents(age, gender, hobbies=None, interests=None, mbti=None):
         """
         OpenAI API를 사용하여 사용자 프로필 기반의 가벼운 환기 활동 3가지를 생성합니다.
         API 호출 실패 시 기존 Mocking 데이터(trends_db)를 Fallback으로 반환합니다.
@@ -32,7 +32,19 @@ class FallbackWebAgent:
                 interests_str = ", ".join(interests) if interests else "없음"
                 
                 # Tavily 웹 검색 로직 추가 (나이/성별 기반 최신 트렌드만 검색)
+                age_str = f"{age}대" if age else "20대/30대"
+                gender_str = gender if gender else "남녀 모두"
+                
                 search_context = ""
+                if hobbies or interests:
+                    search_context = f"사용자의 기존 취미/관심사: {', '.join((hobbies or []) + (interests or []))}\n"
+                    
+                mbti_context = ""
+                if mbti:
+                    mbti_context = f"사용자의 MBTI 성향: {mbti}\n"
+                
+                # Tavily 웹 검색 로직 추가
+                tavily_search_str = ""
                 if tavily_key:
                     try:
                         query = f"요즘 {age_str} {gender_str} 사이에서 유행하는 이색적인 스트레스 해소 힐링 활동 트렌드"
@@ -43,15 +55,19 @@ class FallbackWebAgent:
                         )
                         if resp.status_code == 200:
                             results = resp.json().get("results", [])
-                            search_context = "\n[실시간 웹 트렌드 검색 결과]\n" + "\n".join(f"- {r.get('content', '')}" for r in results)
+                            tavily_search_str = "\n[실시간 웹 트렌드 검색 결과]\n" + "\n".join(f"- {r.get('content', '')}" for r in results)
                     except Exception as search_err:
                         print(f"Tavily Search Error: {search_err}")
 
                 prompt = (
                     f"타겟 사용자: {age_str} {gender_str}\n"
-                    f"{search_context}\n\n"
+                    f"{search_context}"
+                    f"{mbti_context}"
+                    f"{tavily_search_str}\n\n"
                     "당신은 실시간 인터넷 트렌드를 분석하는 에이전트입니다.\n"
-                    "사용자의 기존 취미는 무시하고, 위 타겟 연령대와 성별 사이에서 **최근 웹에서 새롭게 떠오르고 있는(유행하는) 트렌디하고 이색적인 기분 전환/스트레스 해소 활동 3가지**를 검색 결과를 바탕으로 추천해주세요.\n"
+                    "위 타겟 연령대와 성별 사이에서 **최근 웹에서 새롭게 떠오르고 있는(유행하는) 트렌디하고 이색적인 기분 전환/스트레스 해소 활동 3가지**를 검색 결과를 바탕으로 추천해주세요.\n"
+                    "사용자 성향(MBTI)이 주어졌다면 해당 성향에 잘 맞는 힐링 활동으로 맞춤 추천하세요. "
+                    "단, **[절대 지켜야 할 규칙]: 화면에 '사용자의 MBTI(예: INFP)가 이러이러해서 추천한다'는 식의 직접적인 언급이나 설명은 절대로 출력하지 마세요.** 추천 활동과 내용에만 성향을 은근히 반영하세요.\n"
                     "뻔한 답변(산책, 음악 감상 등)을 피하고, 요즘 핫한 구체적인 트렌드 활동을 추천해야 합니다.\n"
                     "반드시 매우 따뜻하고 명랑하며, 이모지를 적절히 섞어 쓴 다정한 친구 같은 말투로 작성해주세요! (해요체 사용)\n"
                     "반드시 아래 JSON 형식으로 응답하세요:\n"
