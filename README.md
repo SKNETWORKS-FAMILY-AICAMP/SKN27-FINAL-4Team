@@ -270,21 +270,71 @@ KcELECTRA vs KoBERT × 동결 임베딩 vs 파인튜닝 + 임베딩 레시피 4�
 
 ```text
 SKN27-FINAL-4Team/
-├── ai/                       # 🧠 LangGraph 대화 흐름 및 AI 모델
-│   ├── agents/               #   대화 노드·페르소나·상태·LLM 설정 (감정 분기 구조)
-│   └── emotion/              #   KcELECTRA 파인튜닝 감정 분류 파이프라인 + 실험 노트북·산출물
-├── app/                      # 💻 웹 서비스
-│   ├── backend/              #   Django REST API (chat·onboarding·calendar·tarot·mbti·report 등)
-│   └── frontend/             #   Vue 3 + Vite
-├── docs/                     # 📑 기획·설계·발표 산출물
-├── etl/                      # 🔄 데이터 파이프라인 / 시딩 스크립트
-├── storage/                  # 📦 인프라 설정 (docker-compose.yml, DDL)
-└── README.md
+├── ai/                            # 🧠 LangGraph 에이전트 및 AI 모델 작업 공간
+│   ├── agents/                    #   멀티에이전트 핵심 모듈
+│   │   ├── nodes.py               #     LangGraph 노드 (감정분류→라우팅→응답 생성 흐름)
+│   │   ├── personas.py            #     캐릭터별 페르소나 정의 (포리·까미·토토·여울)
+│   │   ├── state.py               #     대화 상태 스키마 (TypedDict)
+│   │   ├── llm.py                 #     LLM 공급자 설정 (OpenAI / Groq 선택)
+│   │   ├── mbti.py                #     MBTI 축별 질문 풀 및 채점 규칙
+│   │   └── web_agent.py           #     Plan Agent — 타비리(Tavily) 웹 검색 연동
+│   ├── emotion/                   #   감정분류 파이프라인
+│   │   ├── emotion_model.py       #     추론 진입점 (모델 로드 → LLM 폴백)
+│   │   ├── train_emotion_4mode.py #     KcELECTRA 파인튜닝 학습 스크립트
+│   │   ├── build_emotion_dataset.py #   AI Hub + KOTE 병합 데이터셋 생성
+│   │   ├── rebuild_clean_dataset.py #   AI Hub 정제본 재생성 (재배포 대응)
+│   │   └── artifacts_ft/          #     파인튜닝 산출물 (model.safetensors 등, git 제외)
+│   ├── experiments/               #   실험 노트북 및 결과 기록
+│   └── scale/                     #   6종 임상 척도 간접 추정 모듈
+│
+├── app/                           # 💻 Django 백엔드 + Vue 프론트엔드
+│   ├── Dockerfile                 #   백엔드 컨테이너 빌드 설정
+│   ├── backend/                   #   Django REST API 서버
+│   │   ├── config/                #     프로젝트 설정·URL 라우터
+│   │   ├── chat/                  #     챗봇 세션·메시지·TTS·MBTI 답변 API
+│   │   ├── user/                  #     회원가입·로그인·소셜 OAuth
+│   │   ├── calendar_api/          #     감정 캘린더
+│   │   ├── character/             #     캐릭터 선택·정보
+│   │   ├── mbti/                  #     MBTI 성향 분석·월간 리포트
+│   │   ├── mindreport/            #     마음 리포트 (주간·월간)
+│   │   ├── myprofile/             #     마이페이지·프로필
+│   │   ├── taste/                 #     취향 분석·키워드 요약
+│   │   ├── wellness/              #     웰니스 지표
+│   │   └── game/tarot_api/        #     타로 카드 운세
+│   └── frontend/                  #   Vue 3 + Vite 프론트엔드
+│       └── src/views/             #     화면별 컴포넌트
+│           ├── chat/              #       챗봇 대화 (ChatView, InnerCouncil)
+│           ├── onboarding/        #       온보딩 흐름 (로그인·캐릭터·정보입력 등)
+│           ├── report/            #       마음 리포트
+│           ├── mypage/            #       마이페이지
+│           └── community/         #       커뮤니티 (예정)
+│
+├── docs/                          # 📑 기획·설계·발표 산출물
+│   ├── 화면설계서/                #   SVG·HTML 화면설계서
+│   ├── 김한솔팀장/                #   팀장 개별 문서
+│   ├── 한재웅/                    #   ERD·DDL·시퀀스다이어그램
+│   └── 박송원/                    #   팀원 개별 문서
+│
+├── etl/                           # 🔄 데이터 파이프라인 및 ETL 스크립트
+│   ├── data/                      #   AI 학습 데이터셋 (AI Hub 파생물은 git 제외)
+│   ├── datasets/                  #   MBTI 등 원천 데이터셋
+│   ├── seed_postgres_static_data.py #  PostgreSQL 정적 기초 데이터 시딩
+│   └── load_scales_to_postgres.py #   심리 척도 6종 DB 적재
+│
+├── storage/                       # 📦 인프라 설정 파일
+│   ├── docker-compose.yml         #   PostgreSQL 컨테이너 구성 (루트에 복사해서 사용)
+│   └── DDL_MY_설정_관리자_insert_target_v0.9.1.sql
+│
+└── test/                          # 🧪 팀원별 테스트 및 실험 공간
+    ├── hansol/                    #   김한솔 (TTS 실험, 감성대화 토크나이저)
+    ├── jaewung/                   #   한재웅 (MBTI 스코어링 실험)
+    ├── seongjin/                  #   이성진
+    └── songwon/                   #   박송원
 ```
 
-> AI Hub 파생 학습 데이터는 재배포 금지 정책에 따라 repo에 포함하지 않으며, 재생성 스크립트로 복원합니다.
+> AI Hub 파생 학습 데이터는 재배포 금지 정책에 따라 repo에 포함하지 않으며, `ai/emotion/rebuild_clean_dataset.py`로 재생성합니다.
 
-**협업 · 브랜치 전략** — `main`(배포) / `develop`(통합)을 베이스로, 작업 단위마다 `feature/*`·`fix/*` 브랜치를 생성해 작업 후 PR·리뷰를 거쳐 `develop`에 병합합니다. 문서·산출물은 `docs/`에서 버전 관리합니다.
+**협업 · 브랜치 전략** — `main`(배포) / `dev`(통합)을 베이스로, 작업 단위마다 `feature/*` 브랜치를 생성해 PR·리뷰를 거쳐 `dev`에 병합합니다.
 
 ---
 
