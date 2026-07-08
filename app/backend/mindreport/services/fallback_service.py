@@ -24,12 +24,14 @@ class FallbackReportService:
         interests = []
         
         # profile이 존재하지 않을 수도 있으므로 예외 처리
-        if hasattr(user, 'profile'):
+        try:
             profile = user.profile
             age = profile.age
             gender = profile.gender
             hobbies = profile.hobbies
             interests = profile.interests
+        except Exception:
+            pass
             
         # 2. MBTI 정보 조회 (월간 리포트인 경우 등)
         user_mbti = None

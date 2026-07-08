@@ -11,7 +11,7 @@ class FallbackWebAgent:
     """
     
     @staticmethod
-    def get_trendy_contents(age, gender, hobbies=None, interests=None):
+    def get_trendy_contents(age, gender, hobbies=None, interests=None, mbti=None):
         """
         OpenAI API를 사용하여 사용자 프로필 기반의 가벼운 환기 활동 3가지를 생성합니다.
         API 호출 실패 시 기존 Mocking 데이터(trends_db)를 Fallback으로 반환합니다.
