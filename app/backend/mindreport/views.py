@@ -16,8 +16,8 @@ class MindReportGenerateAPIView(APIView):
     def get(self, request):
         """
         마음 리포트 생성 기준을 확인하고, 결과에 따라 정식 리포트 또는 데이터 부족 보완 리포트를 반환합니다.
+        월말(마지막 주)일 경우 주간과 월간 리포트를 동시에 반환합니다.
         """
-        # 임시 유저 처리 (인증 설정 전 테스트용)
         user = request.user
         if not user.is_authenticated:
             from django.contrib.auth import get_user_model
@@ -25,16 +25,31 @@ class MindReportGenerateAPIView(APIView):
             if not user:
                 return Response({"error": "DB에 유저가 없습니다."}, status=401)
             
-        # 1. 생성 기준 확인 (현재 주간 기준으로 테스트)
-        criteria_result = ReportCriteriaService.check_weekly_report_eligibility(user)
+        import calendar
+        from datetime import timedelta
+        
+        now = timezone.now()
+        target_date = now.date()
+        
+        # 이번 주가 월의 마지막 주인지 확인 (일요일이 다음 달로 넘어가거나, 오늘이 말일과 가까운지)
+        # 이번 주 일요일 계산
+        days_to_sunday = 6 - target_date.weekday()
+        sunday_date = target_date + timedelta(days=days_to_sunday)
+        
+        # 일요일의 월이 현재 월과 다르거나, 현재 월의 마지막 날짜인 경우 마지막 주로 간주
+        _, last_day_of_month = calendar.monthrange(target_date.year, target_date.month)
+        is_last_week = (sunday_date.month != target_date.month) or (sunday_date.day == last_day_of_month)
         
         from .models import MindReport
         
-        # 2. 기준 미달 시 Fallback 리포트 반환 (DB 최우선 조회)
-        if not criteria_result["is_eligible"]:
-            fallback_report = MindReport.objects.filter(user=user, is_fallback=True).order_by('-created_at').first()
-            
-            # DB에 없으면(백그라운드 생성이 안 끝났거나 누락된 경우) 동기화 생성 후 반환
+        generated_reports = []
+        
+        # ==========================================
+        # 1. 주간 리포트 처리
+        # ==========================================
+        weekly_criteria = ReportCriteriaService.check_weekly_report_eligibility(user)
+        if not weekly_criteria["is_eligible"]:
+            fallback_report = MindReport.objects.filter(user=user, is_fallback=True, report_type__contains="주간").order_by('-created_at').first()
             if not fallback_report:
                 fallback_report = FallbackReportService.generate_and_save_fallback_report(
                     user=user, 
@@ -42,7 +57,7 @@ class MindReportGenerateAPIView(APIView):
                     range_text=timezone.now().strftime("%Y.%m.%d") + " 생성"
                 )
                 
-            fallback_data = {
+            generated_reports.append({
                 "id": f"fallback-{fallback_report.id}",
                 "type": fallback_report.report_type,
                 "range": fallback_report.range_text,
@@ -54,53 +69,85 @@ class MindReportGenerateAPIView(APIView):
                 "analysis": fallback_report.analysis,
                 "recommendations": fallback_report.recommendations,
                 "is_fallback": fallback_report.is_fallback
-            }
-            
-            return Response({
-                "status": "fallback", 
-                "message": "데이터가 부족하여 보완 정책이 실행되었습니다.",
-                "criteria": criteria_result,
-                "report": fallback_data
             })
+        else:
+            MindReport.objects.filter(user=user, is_fallback=True, report_type__contains="주간").delete()
             
-        # 3. 기준 충족 시 기존 가짜 리포트 지우고 정식 리포트 생성
-        MindReport.objects.filter(user=user, is_fallback=True).delete()
-        
-        # --- 정식 파이프라인(대화수 충족 로직) 가동 ---
-        flow_service = MindReportFlowService()
-        
-        # LLM 점수화 및 감정 패턴 분석, 대안 생성 전체 흐름 실행
-        flow_result = flow_service.run(
-            user=user,
-            period_type="week"
-        )
-        
-        # 프론트엔드 형식에 맞춰 JSON 조립
-        report_data = format_for_frontend(
-            flow_result=flow_result,
-            user_id=user.id,
-            period_name="주간"
-        )
-        
-        # 생성된 정식 리포트를 DB에 저장
-        final_report = MindReport.objects.create(
-            user=user,
-            report_type=report_data["type"],
-            range_text=report_data["range"],
-            title=report_data["title"],
-            summary=report_data["summary"],
-            stress_causes=report_data["stressCauses"],
-            relief_causes=report_data["reliefCauses"],
-            emotions=report_data["emotions"],
-            analysis=report_data["analysis"],
-            recommendations=report_data.get("recommendations", []),
-            is_fallback=False
-        )
-        
+            # --- 정식 파이프라인(대화수 충족 로직) 가동 ---
+            flow_service = MindReportFlowService()
+            flow_result = flow_service.run(user=user, period_type="week")
+            report_data = format_for_frontend(flow_result=flow_result, user_id=user.id, period_name="주간")
+            
+            final_report = MindReport.objects.create(
+                user=user,
+                report_type=report_data["type"],
+                range_text=report_data["range"],
+                title=report_data["title"],
+                summary=report_data["summary"],
+                stress_causes=report_data["stressCauses"],
+                relief_causes=report_data["reliefCauses"],
+                emotions=report_data["emotions"],
+                analysis=report_data["analysis"],
+                recommendations=report_data.get("recommendations", []),
+                is_fallback=False
+            )
+            report_data["id"] = f"weekly-{final_report.id}"
+            generated_reports.append(report_data)
+
+        # ==========================================
+        # 2. 월간 리포트 처리 (마지막 주일 경우에만)
+        # ==========================================
+        if is_last_week:
+            monthly_criteria = ReportCriteriaService.check_monthly_report_eligibility(user)
+            if not monthly_criteria["is_eligible"]:
+                m_fallback = MindReport.objects.filter(user=user, is_fallback=True, report_type__contains="월간").order_by('-created_at').first()
+                if not m_fallback:
+                    m_fallback = FallbackReportService.generate_and_save_fallback_report(
+                        user=user, 
+                        report_type="월간", 
+                        range_text=timezone.now().strftime("%Y.%m") + " 월간 결산"
+                    )
+                
+                generated_reports.append({
+                    "id": f"fallback-m-{m_fallback.id}",
+                    "type": m_fallback.report_type,
+                    "range": m_fallback.range_text,
+                    "title": m_fallback.title,
+                    "summary": m_fallback.summary,
+                    "stressCauses": m_fallback.stress_causes,
+                    "reliefCauses": m_fallback.relief_causes,
+                    "emotions": m_fallback.emotions,
+                    "analysis": m_fallback.analysis,
+                    "recommendations": m_fallback.recommendations,
+                    "is_fallback": m_fallback.is_fallback
+                })
+            else:
+                MindReport.objects.filter(user=user, is_fallback=True, report_type__contains="월간").delete()
+                
+                # --- 정식 파이프라인(대화수 충족 로직) 가동 ---
+                flow_service = MindReportFlowService()
+                flow_result = flow_service.run(user=user, period_type="month")
+                report_data = format_for_frontend(flow_result=flow_result, user_id=user.id, period_name="월간")
+                
+                final_report = MindReport.objects.create(
+                    user=user,
+                    report_type=report_data["type"],
+                    range_text=report_data["range"],
+                    title=report_data["title"],
+                    summary=report_data["summary"],
+                    stress_causes=report_data["stressCauses"],
+                    relief_causes=report_data["reliefCauses"],
+                    emotions=report_data["emotions"],
+                    analysis=report_data["analysis"],
+                    recommendations=report_data.get("recommendations", []),
+                    is_fallback=False
+                )
+                report_data["id"] = f"monthly-{final_report.id}"
+                generated_reports.append(report_data)
+
         return Response({
             "status": "success", 
             "message": "리포트 생성이 완료되었습니다.",
-            "criteria": criteria_result,
-            "report": report_data
+            "reports": generated_reports
         })
 

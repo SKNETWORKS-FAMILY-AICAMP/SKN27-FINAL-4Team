@@ -124,7 +124,7 @@
 |---|---|
 | **Backend** | ![Python](https://img.shields.io/badge/Python-3776AB?style=flat&logo=python&logoColor=white) ![Django](https://img.shields.io/badge/Django-092E20?style=flat&logo=django&logoColor=white) ![DRF](https://img.shields.io/badge/DRF-A30000?style=flat&logo=django&logoColor=white) |
 | **Frontend** | ![Vue](https://img.shields.io/badge/Vue%203-42B883?style=flat&logo=vuedotjs&logoColor=white) ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat&logo=vite&logoColor=white) ![JS](https://img.shields.io/badge/JavaScript-F7DF1E?style=flat&logo=javascript&logoColor=black) |
-| **AI Core** | ![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=flat&logo=pytorch&logoColor=white) ![HF](https://img.shields.io/badge/KcELECTRA%20파인튜닝-FFD21E?style=flat&logo=huggingface&logoColor=black) ![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?style=flat&logo=langchain&logoColor=white) ![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=flat&logo=langchain&logoColor=white) ![XGBoost](https://img.shields.io/badge/XGBoost%20baseline-8C5AB4?style=flat) ![TTS](https://img.shields.io/badge/ElevenLabs%20TTS-111111?style=flat) |
+| **AI Core** | ![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=flat&logo=pytorch&logoColor=white) ![HF](https://img.shields.io/badge/KcELECTRA%20파인튜닝-FFD21E?style=flat&logo=huggingface&logoColor=black) ![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?style=flat&logo=langgraph&logoColor=white) ![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=flat&logo=langchain&logoColor=white) ![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=flat&logo=openai&logoColor=white) ![Groq](https://img.shields.io/badge/Groq-F55036?style=flat&logo=groq&logoColor=white) ![XGBoost](https://img.shields.io/badge/XGBoost%20baseline-8C5AB4?style=flat) ![TTS](https://img.shields.io/badge/ElevenLabs%20TTS-111111?style=flat) |
 | **Database** | ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat&logo=postgresql&logoColor=white) |
 | **학습·배포·협업** | ![Colab](https://img.shields.io/badge/Colab%20T4-F9AB00?style=flat&logo=googlecolab&logoColor=white) ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white) ![AWS](https://img.shields.io/badge/AWS-FF9900?style=flat&logo=amazonaws&logoColor=white) ![Git](https://img.shields.io/badge/Git-F05032?style=flat&logo=git&logoColor=white) |
 
@@ -217,10 +217,11 @@ KcELECTRA vs KoBERT × 동결 임베딩 vs 파인튜닝 + 임베딩 레시피 4�
 
 ### 최종 배포 모델 (무누수 조건)
 
-- **KcELECTRA 파인튜닝 (+음성·KOTE, lr 5e-5)** · 학습 90,456건
+- **KcELECTRA 파인튜닝 (+음성·KOTE, lr 5e-5 · 3 epoch)** · 학습 90,456건
 - 작성체 Macro-F1 **0.71** · 채팅체 Macro-F1 **0.78** (기준선 0.48 → 0.78)
 - 클래스별 F1(채팅체): 기쁨 0.93 · 분노 0.75 · 일반 0.73 · 슬픔 0.70
 - 재현성: 시드 3회 표준편차 ±0.003
+- epoch 탐색(2·3·4): 3 epoch에서 채팅체 F1 최고 (4 epoch 과적합) → **3 epoch 확정**
 
 ### 확신도 게이트 (서빙)
 - 초단문(10자 미만) → 직전 감정 유지
@@ -234,14 +235,14 @@ KcELECTRA vs KoBERT × 동결 임베딩 vs 파인튜닝 + 임베딩 레시피 4�
 - **이중 평가 체계** — 작성체 테스트 + 채팅체 평가셋을 항상 함께 채점해 도메인 격차를 가시화
 - **무누수 원칙** — 평가 문장을 학습에서 전량 제외(누수 3건 검출·제거)하여 부풀림 없는 성적 측정
 - **오분류 정성 분석** — 고확신 오답(≥0.9)을 3패턴으로 규명 (① 자기비하·외로움을 오인 ② 감정어 없는 부당대우 서술 ③ 중립 문장의 키워드 유발 감정화) → "임계값이 아니라 데이터로 풀 문제"로 2차 과제화
-- **재현성 확보** — seed 고정, 시드 3회 반복·학습률 탐색으로 결과가 우연이 아님을 검증
+- **재현성 확보** — seed 고정, 시드 3회 반복·학습률·epoch 탐색으로 결과가 우연이 아님을 검증
 
 ### 성능 · 품질 목표 (비기능 요구사항)
 
 | 항목 | 목표 | 설계 |
 |---|---|---|
 | 응답 속도 | p95 < 3.0초 | 텍스트 즉시 반환 + TTS 비동기 폴링(2단 응답) |
-| 감정 추론 | p95 < 300ms | 파인튜닝 KcELECTRA GPU 서빙 기준 |
+| 감정 추론 | **실측 p95 17.5ms** (목표 < 300ms) | 파인튜닝 KcELECTRA GPU(T4) 서빙 · 단건 150문장 기준 |
 | 저장 무결성 | 저장 장애 시 **응답 무중단** | 기억·저장은 응답과 분리된 백그라운드 비동기 |
 | 반응성 | 감정 → 캐릭터 표정 실시간 전환 | 감정 매핑 즉시 반영 |
 | 보안·프라이버시 | 온보딩 동의·암호화·시크릿챗 즉시 소거·탈퇴 시 영구 파기 | 개인정보보호법 준수(민감정보) |
