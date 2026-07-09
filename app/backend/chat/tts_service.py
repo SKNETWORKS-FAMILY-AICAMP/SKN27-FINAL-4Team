@@ -10,6 +10,7 @@
 감정 톤: 팀 Colab 청취 실험값 기반 eleven_v3 프리셋 + 오디오 태그.
 """
 import hashlib
+import re
 import threading
 import time
 import uuid
@@ -17,32 +18,45 @@ import uuid
 import requests
 from django.conf import settings
 
-# ── 감정별 프리셋 (Colab 청취 실험 결과 · eleven_v3 오디오 태그 포함) ──
+# ── 감정별 프리셋 (multilingual_v2 기준 · 한국어 감정 구분 최적값) ──
+# 근거: ElevenLabs 한국어 설정 가이드 종합(NotebookLM). 감정 구분의 핵심은
+#   Style을 넓게 벌리는 것(일반 0.20 → 기쁨/분노 0.4~0.5)과 Stability 대비
+#   (일반 높게=평온, 감정 낮게=표현 풍부). 이전엔 Style이 0.05~0.20으로 다 비슷해
+#   기쁨/분노/일반이 똑같이 들렸음.
 # 주의: TTS가 읽는 건 '봇의 응답'이다. anger는 봇이 화내는 게 아니라
-#       "차분히 편들어주는" 톤이어야 하므로 안정적으로 설정.
+#   "편들어주는" 톤 — 단, 일반과 구분되게 조금 더 힘 있고 또렷하게(텍스트가 위로라 harsh하지 않음).
 EMOTION_PRESETS = {
+    # 듣기 편함 우선: Style은 낮게(왜곡 방지), Stability 높게(안정),
+    # 감정 구분은 '속도'로만 은은하게 — 얌전한 목소리가 뭉개지지 않게.
     'joy': {
-        'stability': 0.35, 'similarity_boost': 0.80, 'style': 0.20, 'speed': 1.05,
+        'stability': 0.58, 'similarity_boost': 0.85, 'style': 0.12, 'speed': 1.08,
         'tag': '[laughs]',
     },
     'sadness': {
-        'stability': 0.40, 'similarity_boost': 0.85, 'style': 0.10, 'speed': 0.88,
+        'stability': 0.62, 'similarity_boost': 0.85, 'style': 0.05, 'speed': 0.86,
         'tag': '[sighs]',
     },
     'anger': {
-        'stability': 0.60, 'similarity_boost': 0.85, 'style': 0.10, 'speed': 0.95,
+        'stability': 0.66, 'similarity_boost': 0.85, 'style': 0.07, 'speed': 0.95,
         'tag': '',
     },
     'normal': {
-        'stability': 0.65, 'similarity_boost': 0.85, 'style': 0.05, 'speed': 1.00,
+        'stability': 0.68, 'similarity_boost': 0.85, 'style': 0.05, 'speed': 1.00,
         'tag': '',
     },
     'whisper': {
-        'stability': 0.50, 'similarity_boost': 0.80, 'style': 0.05, 'speed': 0.95,
+        'stability': 0.55, 'similarity_boost': 0.80, 'style': 0.05, 'speed': 0.95,
         'tag': '[whispers]',
     },
 }
-# 캐릭터별 목소리 차이는 voice_id(ELEVENLABS_VOICES)로 낸다.
+# 캐릭터 목소리는 voice_id(ELEVENLABS_VOICES)로 내고,
+# 아래 톤 성향(style/speed/similarity 델타)으로 성격을 더 입힌다 — 공통 프리셋 위에 얹음.
+CHARACTER_TUNING = {
+    'pori':  {'style': 0.10, 'speed': 0.03, 'similarity': 0.00},   # 레서판다·밝음·응원 → 활기
+    'kkami': {'style': 0.05, 'speed': -0.04, 'similarity': 0.05},  # 고양이·깊음·묵직 → 따뜻·차분 (감정대비는 프리셋이 담당)
+    'toto':  {'style': 0.18, 'speed': 0.05, 'similarity': 0.00},   # 수달·장난·환기 → 표현력·빠름
+    'yeoul': {'style': 0.08, 'speed': -0.03, 'similarity': 0.00},  # 뱁새·차분·포근 → 부드럽게
+}
 
 _TASK_TTL = 10 * 60
 _lock = threading.Lock()
@@ -56,18 +70,20 @@ def _clamp(v: float, lo: float, hi: float) -> float:
 
 def build_voice_settings(character: str, emotion: str, v3: bool = True) -> dict:
     p = EMOTION_PRESETS.get(emotion, EMOTION_PRESETS['normal'])
+    t = CHARACTER_TUNING.get(character, {})   # 캐릭터별 톤 델타
     stability = _clamp(p['stability'], 0.0, 1.0)
     if v3:
-        # eleven_v3는 3단계 모드만 지원 (공식 가이드):
-        # Creative 0.0(표현력 최대) / Natural 0.5 / Robust 1.0(밋밋)
-        # 감정 표현이 필요한 joy/sadness/whisper → Creative, 나머지 → Natural
-        stability = 0.0 if emotion in ('joy', 'sadness', 'whisper') else 0.5
+        # eleven_v3는 3단계 모드만 지원: Creative 0.0 / Natural 0.5 / Robust 1.0.
+        # Creative(0.0)는 표현력 최대지만 얌전한 목소리에선 불안정(왜곡)해질 수 있어
+        # Natural(0.5)로 통일 — 감정 연기는 텍스트의 오디오 태그가 담당하고,
+        # 목소리 자체는 안정적으로 유지한다.
+        stability = 0.5
     return {
         'stability': stability,
-        'similarity_boost': p['similarity_boost'],
-        'style': _clamp(p['style'], 0.0, 1.0),
+        'similarity_boost': _clamp(p['similarity_boost'] + t.get('similarity', 0.0), 0.0, 1.0),
+        'style': _clamp(p['style'] + t.get('style', 0.0), 0.0, 1.0),
         'use_speaker_boost': True,
-        'speed': _clamp(p['speed'], 0.7, 1.2),
+        'speed': _clamp(p['speed'] + t.get('speed', 0.0), 0.7, 1.2),
     }
 
 
@@ -91,8 +107,13 @@ def _generate(task_id: str, text: str, character: str, emotion: str, cache_key: 
                 _tasks[task_id].update(status='failed')
         return
     try:
-        model_id = getattr(settings, 'ELEVENLABS_MODEL_ID', 'eleven_v3')
+        model_id = getattr(settings, 'ELEVENLABS_MODEL_ID', 'eleven_multilingual_v2')
         is_v3 = model_id.startswith('eleven_v3') or model_id == 'eleven_v3'
+        # v3가 아니면 오디오 태그를 해석 못 하므로, LLM이 넣은 [laughs]/[sighs] 등을
+        # 제거해 소리로 읽히지 않게 한다 (영문 브래킷 태그만 대상).
+        if not is_v3:
+            text = re.sub(r'\[[a-zA-Z][a-zA-Z ]*\]', '', text)
+            text = re.sub(r'\s{2,}', ' ', text).strip()
         # LLM이 이미 [sighs] 등 태그를 삽입했으면 그대로 사용, 없을 때만 감정 태그 프리픽스
         tag = emotion_tag(emotion) if (is_v3 and '[' not in text) else ''
         payload = {
@@ -100,7 +121,9 @@ def _generate(task_id: str, text: str, character: str, emotion: str, cache_key: 
             'model_id': model_id,
             'voice_settings': build_voice_settings(character, emotion, v3=is_v3),
         }
-        if not model_id.startswith('eleven_v3'):
+        # language_code 강제는 flash/turbo v2.5 계열만 지원한다.
+        # multilingual_v2에 보내면 에러가 나므로(모델이 미지원) 붙이지 않는다 — 한국어 자동 감지됨.
+        if model_id in ('eleven_flash_v2_5', 'eleven_turbo_v2_5', 'eleven_flash_v2'):
             payload['language_code'] = 'ko'
         resp = requests.post(
             f'https://api.elevenlabs.io/v1/text-to-speech/{voice_id}',
@@ -109,6 +132,9 @@ def _generate(task_id: str, text: str, character: str, emotion: str, cache_key: 
             json=payload,
             timeout=60,
         )
+        if resp.status_code >= 400:
+            # 실패 사유(크레딧 부족·모델 미지원 등)를 로그에 그대로 남긴다.
+            print(f'[tts_service] ElevenLabs {resp.status_code} 본문: {resp.text[:500]}')
         resp.raise_for_status()
 
         with _lock:

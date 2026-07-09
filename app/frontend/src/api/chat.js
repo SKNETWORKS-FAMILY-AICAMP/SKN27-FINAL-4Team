@@ -41,13 +41,15 @@ export const chatApi = {
     }))
   },
 
-  /** 대화 턴 (텍스트 즉시 + tts_task_id로 오디오 폴링) */
-  async sendChat(sessionId, message, characterId, isSecret) {
+  /** 대화 턴 (텍스트 즉시 + tts_task_id로 오디오 폴링)
+   *  image: data URL(선택) — 사진 첨부 시 멀티모달로 전달, 저장은 안 함 */
+  async sendChat(sessionId, message, characterId, isSecret, image = null) {
     return unwrap(await http.post('/chat/', {
       session_id: sessionId,
       character_id: characterId,
       message,
       is_secret: isSecret,
+      image,
     }))
   },
 
