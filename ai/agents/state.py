@@ -12,6 +12,8 @@ class ChatState(TypedDict, total=False):
 
     # 입력
     user_message: str
+    image_data_url: Optional[str]     # 사진 첨부 시 data URL (멀티모달 · 저장 안 함)
+    image_caption: str                # 사진 한 줄 캡션 (저장·리포트·기억용, analysis_node 생성)
     selected_emotion: Optional[str]   # 콜드스타트에서 선택한 초기 감정 (첫 턴 참고)
 
     # MBTI 서브플로우

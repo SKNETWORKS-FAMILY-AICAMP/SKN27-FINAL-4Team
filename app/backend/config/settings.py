@@ -173,7 +173,10 @@ OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
 
 # ── ElevenLabs TTS (TTS_음성설정 v2.0) ──
 ELEVENLABS_API_KEY = os.environ.get('ELEVENLABS_API_KEY', '')
-ELEVENLABS_MODEL_ID = os.environ.get('ELEVENLABS_MODEL_ID', 'eleven_v3')   # 감정 연기(오디오 태그) 지원
+# 기본 eleven_multilingual_v2: 한국어 품질 안정 + style/stability로 감정 조절.
+# (일부 라이브러리 목소리(예: Kanna)는 eleven_v3 미지원 → v3 요청 시 API가 거부해 실패.)
+# 사용 목소리가 v3를 지원하면 .env에서 ELEVENLABS_MODEL_ID=eleven_v3 로 오버라이드.
+ELEVENLABS_MODEL_ID = os.environ.get('ELEVENLABS_MODEL_ID', 'eleven_multilingual_v2')
 # voice_id 4종은 Voice Library에서 팀이 선정 후 .env에 설정 (TODO)
 ELEVENLABS_VOICES = {
     'pori':  os.environ.get('VOICE_ID_PORI', ''),

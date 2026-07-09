@@ -105,13 +105,41 @@ CONF_GATE = 0.70   # 모델 확신이 이 미만이면 '찍지 말고' 문맥 �
 SHORT_LEN = 10     # 이 미만의 초단문("응 ㅋㅋ")은 분석 스킵, 직전 감정 유지
 
 
-def analysis_node(state: ChatState) -> dict:
-    """4감정 분류 — 원칙: 애매할 땐 찍지 않는다.
-    ① 초단문 → 직전 감정 유지 (감정은 한 턴 만에 급변하지 않음)
-    ② 학습 모델 고확신 → 채택
-    ③ 저확신/실패 → 최근 대화 문맥을 포함해 LLM 재분류
-    ④ 그래도 실패 → 모델 저확신값 → 직전 감정 → normal
-    (개선 근거: docs/감정분류_개선실험_계획서 §2-②, 실측 오분류 "김치찌개→anger")"""
+def _describe_image(image_url: str) -> tuple:
+    """사진을 '한 줄 캡션 + 4감정'으로 한 번에 분석 (비전 호출 1회).
+    반환 (caption, emotion). 캡션은 저장·리포트·기억용, 감정은 표정·톤용.
+    실패 시 ('', 'normal'). 감정은 뚜렷하지 않으면 normal(오독 방지)."""
+    try:
+        from langchain_core.messages import HumanMessage, SystemMessage
+        resp = _llm(temperature=0, max_tokens=80).invoke([
+            SystemMessage(content=(
+                "사진을 분석해 아래 두 줄 형식으로만 출력하세요.\n"
+                "caption: <장면을 사실 위주로 한국어 한 줄. 분위기는 과하게 해석하지 말 것>\n"
+                "emotion: <joy | sadness | anger | normal 중 하나. 뚜렷하지 않으면 normal>")),
+            HumanMessage(content=[
+                {'type': 'text', 'text': '이 사진을 분석해줘.'},
+                {'type': 'image_url', 'image_url': {'url': image_url, 'detail': 'low'}},
+            ]),
+        ])
+        caption, emotion = '', 'normal'
+        for line in resp.content.strip().splitlines():
+            low = line.strip().lower()
+            if low.startswith('caption:'):
+                caption = line.split(':', 1)[1].strip()
+            elif low.startswith('emotion:'):
+                e = line.split(':', 1)[1].strip().lower()
+                if e in VALID_EMOTIONS:
+                    emotion = e
+        return caption, emotion
+    except Exception as e:
+        print(f'[analysis_node] 사진 분석 실패(normal): {e}')
+        return '', 'normal'
+
+
+def _text_emotion(state: ChatState) -> dict:
+    """텍스트 기반 4감정 분류 — 원칙: 애매할 땐 찍지 않는다.
+    ① 초단문 → 직전 감정 유지 ② 학습 모델 고확신 → 채택
+    ③ 저확신/실패 → 문맥 LLM 재분류 ④ 그래도 실패 → 저확신값 → 직전 → normal."""
     message = (state.get('user_message') or '').strip()
     prev = state.get('prev_emotion')
 
@@ -157,6 +185,41 @@ def analysis_node(state: ChatState) -> dict:
     return {'emotion_label': 'normal', 'emotion_source': 'fallback'}
 
 
+def analysis_node(state: ChatState) -> dict:
+    """4감정 분류 (흐름도 EMOTION) — 글 우선 + 사진 보완(방법 3).
+    · 글이 확신 있게 '감정적'이면 글 채택 (사람이 말로 표현한 게 우선)
+    · 글이 밍밍/없는데 사진이 있으면 사진 감정으로 메꿈 (애매하면 normal)
+    하류(캐릭터 표정·TTS·마음리포트)는 emotion_label을 그대로 소비하므로 추가 배선 불필요."""
+    image_url = state.get('image_data_url')
+    if not image_url:
+        return _text_emotion(state)   # 텍스트 전용 — 기존 흐름 그대로
+
+    # ── 사진이 있는 턴 ──
+    message = (state.get('user_message') or '').strip()
+
+    # 캡션+감정을 한 번에 확보 (캡션은 글 감정이 이기든 지든 항상 저장·리포트용으로 남긴다)
+    caption, img_emotion = _describe_image(image_url)
+    out = {'image_caption': caption} if caption else {}
+
+    # 1) 글이 확신 있게 '감정적(non-normal)'이면 글이 이긴다 (라벨만)
+    if message:
+        label, conf = None, None
+        try:
+            from ai.emotion.emotion_model import predict_emotion_with_confidence
+            ko, conf = predict_emotion_with_confidence(message)
+            if ko:
+                label = EMOTION_KO2EN.get(ko, ko if ko in VALID_EMOTIONS else None)
+        except Exception:
+            label = None
+        if label in VALID_EMOTIONS and label != 'normal' and (conf is None or conf >= CONF_GATE):
+            return {**out, 'emotion_label': label, 'emotion_source': 'model'}
+
+    # 2) 글이 밍밍/없음 → 사진 감정으로 메꿈
+    if img_emotion in VALID_EMOTIONS and img_emotion != 'normal':
+        return {**out, 'emotion_label': img_emotion, 'emotion_source': 'image'}
+    return {**out, 'emotion_label': 'normal', 'emotion_source': 'image_normal'}
+
+
 # ── [컨텍스트 조회: 라우팅 직후 1회만] ────────────────────────
 
 def load_context_node(state: ChatState) -> dict:
@@ -184,6 +247,14 @@ def load_context_node(state: ChatState) -> dict:
                 .values_list('summary_text', flat=True)
                 .first()
             ) or ''
+            # 그래프(구조화 관계) 기억 병행 회상 — Neo4j 미설정 시 '' 이라 영향 없음
+            try:
+                from chat.graph_memory import recall as graph_recall
+                g = graph_recall(state['user_id'])
+                if g:
+                    summary = (summary + '\n\n[관계 기억]\n' + g).strip()
+            except Exception:
+                pass
 
     return {'recent_history': history, 'memory_summary': summary}
 
@@ -221,18 +292,38 @@ TTS_ACTING_RULES = (
 
 def resp_prep_node(state: ChatState) -> dict:
     """감정 지침 + 공통 규칙 + 컨텍스트(요약/최근 N턴) + 검색 결과 종합 → 최종 응답.
-    캐릭터는 이미지·목소리로만 구분 — 프롬프트는 캐릭터 무관 공통. (흐름도 RESP)"""
+    캐릭터는 이미지·목소리로만 구분 — 프롬프트는 캐릭터 무관 공통. (흐름도 RESP)
+    사진 첨부 시 멀티모달 메시지로 전달 → 친구처럼 사진에 반응(MVP · 비전 지원 모델 필요)."""
     guide = state.get('agent_guide', EMOTION_AGENT_GUIDES['normal'])
 
     system_parts = [guide, COMMON_RULES, TTS_ACTING_RULES]
     if state.get('memory_summary'):
         system_parts.append(f"[사용자에 대한 기억 요약]\n{state['memory_summary']}")
 
+    image_url = state.get('image_data_url')
+    if image_url:
+        system_parts.append(
+            "[사진 반응] 사용자가 방금 사진을 보냈어. 사진을 직접 본 것처럼 친구답게 자연스럽게 "
+            "반응해줘 — 뭐가 보이는지 가볍게 짚고 궁금한 걸 되물어도 좋아. 사진을 설명·분석하듯 "
+            "딱딱하게 말하지 말고 반말로 짧게. "
+            "단, 사용자의 '말'과 '사진 분위기'가 서로 다르게 느껴지면(예: 말은 신나는데 사진은 슬퍼 보임), "
+            "사진을 말에 억지로 맞추지 말고 친구처럼 부드럽게 확인해줘 "
+            "(예: '오 좋은 일 있었구나! 근데 사진은 좀 슬퍼 보이는데, 무슨 사진이야?').")
+
     messages = [('system', '\n\n'.join(system_parts))]
     for m in state.get('recent_history', []):
         role = 'assistant' if m['role'] == 'assistant' else 'user'
         messages.append((role, m['content']))
-    messages.append(('user', state.get('user_message', '')))
+
+    if image_url:
+        from langchain_core.messages import HumanMessage
+        txt = (state.get('user_message') or '').strip()
+        messages.append(HumanMessage(content=[
+            {'type': 'text', 'text': txt or '(사진만 보냈어)'},
+            {'type': 'image_url', 'image_url': {'url': image_url, 'detail': 'low'}},
+        ]))
+    else:
+        messages.append(('user', state.get('user_message', '')))
 
     try:
         resp = _llm(temperature=0.7, max_tokens=300).invoke(messages)

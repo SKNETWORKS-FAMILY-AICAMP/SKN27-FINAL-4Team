@@ -5,7 +5,7 @@
   session_start   POST /api/session/start/        세션 시작 (친구 첫인사)
   chat_turn       POST /api/chat/                 대화 턴 (텍스트 즉시 + tts_task_id)
   tts_status      GET  /api/tts/<task_id>/        TTS 오디오 폴링
-  mbti_next_question GET /api/mbti/next-question/ MBTI 질문 (10초 유휴 · 일반 모드 전용)
+  mbti_next_question GET /api/mbti/next-question/ (레거시·미사용) — MBTI 질문은 chat_turn 응답에 삽입
   session_end     POST /api/session/end/          세션 종료 (시크릿 캐시 파기)
 
 지원 모듈: graph/(LangGraph), tts_service, mbti, memory, secret_cache
@@ -19,7 +19,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from ai.agents import mbti as mbti_svc
-from . import memory, secret_cache, tts_service
+from . import graph_memory, memory, secret_cache, tts_service
 from .models import ChatMessage, ChatSession
 
 
@@ -126,10 +126,16 @@ def chat_turn(request):
         return _err('COLD_START_REQUIRED', '먼저 감정 선택(콜드스타트)을 완료해주세요.')
 
     message = (request.data.get('message') or '').strip()
-    if not message:
+    image_data_url = (request.data.get('image') or '').strip()   # 사진 첨부(data URL) · 저장 안 함
+    if not message and not image_data_url:
         return _err('EMPTY_MESSAGE', '메시지 내용을 입력해주세요.')
     if len(message) > 300:
         return _err('MESSAGE_TOO_LONG', '메시지는 300자 이내여야 합니다.')
+    if image_data_url:
+        if not image_data_url.startswith('data:image/'):
+            return _err('INVALID_IMAGE', '이미지 형식이 올바르지 않습니다.')
+        if len(image_data_url) > 5_000_000:   # base64 ~3.7MB 초과 차단
+            return _err('IMAGE_TOO_LARGE', '이미지가 너무 큽니다. 더 작게 보내주세요.')
 
     user = _session_user(request, session)
     session_mode = 'secret' if session.is_secret else 'normal'
@@ -167,6 +173,7 @@ def chat_turn(request):
         'session_mode': session_mode,
         'character_id': session.character,
         'user_message': message,
+        'image_data_url': image_data_url or None,   # 멀티모달(사진) · 저장은 안 함
         'selected_emotion': session.selected_emotion,
         'prev_emotion': prev_emotion,
         'mbti_pending': session.mbti_pending,
@@ -179,6 +186,26 @@ def chat_turn(request):
     final_response = _strip_tags(tagged_response)        # 화면/DB용
     emotion_label = result.get('emotion_label')          # MBTI 답변 턴이면 None
     is_mbti_answer = bool(result.get('is_mbti_answer'))
+    image_caption = (result.get('image_caption') or '').strip()   # 사진 캡션 (저장·리포트·기억용)
+
+    # ── MBTI 질문을 대화 흐름에 자연스럽게 엮기 (유휴 타이머 대신) ──
+    #  트리거가 '침묵(초)'이 아니라 '방금 사용자가 한 말'이 되도록 이 턴 안에서 판단.
+    #  조건: 로그인 · 일반모드 · 이번 턴이 MBTI 답변 턴이 아님 · 감정이 안 무거움(joy/normal)
+    #       · 워밍업(사용자 3턴↑) · 4턴마다 1번 · 수집 미완료.
+    #  통과하면 봇 응답 끝에 질문 한 문장을 '같은 말풍선'으로 얹는다.
+    probe_code = None
+    if (user and not session.is_secret and not session.mbti_pending
+            and emotion_label in ('joy', 'normal')):
+        user_turn_no = ChatMessage.objects.filter(session=session, role='user').count() + 1
+        if user_turn_no >= 3 and user_turn_no % 4 == 0 and not mbti_svc.is_complete(user):
+            _recent = list(ChatMessage.objects.filter(session=session).order_by('-created_at')[:6])
+            _recent.reverse()
+            _history = [{'role': m.role, 'content': m.content} for m in _recent]
+            _probe = mbti_svc.generate_question(user, _history)
+            if _probe:
+                probe_code, _probe_text = _probe
+                final_response = f'{final_response}\n\n{_probe_text}'
+                tagged_response = f'{tagged_response}\n\n{_probe_text}'
 
     # MBTI pending 정리 (답변이든 다른 얘기든 해제)
     if session.mbti_pending:
@@ -187,19 +214,33 @@ def chat_turn(request):
 
     # 저장 — 출력을 막지 않음 (일반: DB+비동기 요약 / 시크릿: RAM 캐시)
     message_id = None
+    # 저장 텍스트: 사진은 원본 대신 캡션(설명)으로 남긴다 → 마음리포트·기억이 사진 맥락을 반영
+    if image_caption:
+        stored_user_msg = f'{message} (사진: {image_caption})'.strip()
+    elif image_data_url:
+        stored_user_msg = message or '[사진]'
+    else:
+        stored_user_msg = message
     if session.is_secret:
-        secret_cache.append(session.id, 'user', message)
+        secret_cache.append(session.id, 'user', stored_user_msg)
         secret_cache.append(session.id, 'assistant', final_response)
     else:
-        ChatMessage.objects.create(session=session, role='user', content=message)
+        ChatMessage.objects.create(session=session, role='user', content=stored_user_msg)
         assistant_msg = ChatMessage.objects.create(
             session=session, role='assistant',
             content=final_response, emotion_label=emotion_label,
         )
         message_id = assistant_msg.id
         uid = user.id if user else None
-        memory.capture_async(uid, message)        # 중요 정보 즉시 저장
+        memory.capture_async(uid, stored_user_msg)   # 중요 정보 즉시 저장 (사진 캡션 포함)
+        graph_memory.capture_async(uid, stored_user_msg)  # 구조화 기억(그래프) 병행 — Neo4j 미설정 시 no-op
         memory.update_async(uid, session.id)      # 8턴 경계 압축·정리
+
+        # 응답에 MBTI 질문을 얹었으면, 다음 사용자 메시지를 그 답변으로 받도록 pending 설정
+        if probe_code:
+            session.mbti_pending = True
+            session.mbti_last_question_code = probe_code
+            session.save(update_fields=['mbti_pending', 'mbti_last_question_code'])
 
     # TTS 병렬 생성 (ElevenLabs) — 연기 태그 포함 원문으로 생성, 1회 재생 후 파기
     tts_task_id = tts_service.create_task(
@@ -251,8 +292,9 @@ def tts_audio(request, task_id):
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([AllowAny])
 def mbti_next_question(request):
-    """프론트 10초 유휴 타이머 → 호출. 수집 미완료면 질문 반환 + pending 설정.
-    시크릿 모드는 완전 무저장 원칙 — 답을 저장할 수 없으니 질문 자체를 안 한다."""
+    """(레거시) 구 10초 유휴 타이머용 엔드포인트 — 현재 프론트는 호출하지 않음.
+    MBTI 질문은 chat_turn 응답에 대화 흐름으로 얹는다(2026-07-08). 코드는 하위호환용 유지.
+    수집 미완료면 질문 반환 + pending 설정. 시크릿 모드는 완전 무저장 원칙으로 질문 안 함."""
     session = _get_session(request.GET.get('session_id'))
     if session is None:
         return _err('SESSION_NOT_FOUND', '세션을 찾을 수 없습니다.', status.HTTP_404_NOT_FOUND)

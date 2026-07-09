@@ -1,5 +1,11 @@
 <template>
-  <div class="chat-page" :class="{ 'is-secret': isSecret }">
+  <div class="chat-page" :class="{ 'is-secret': isSecret }"
+       @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="onDropImage">
+
+    <!-- 📷 이미지 드래그&드롭 오버레이 -->
+    <div v-if="isDragging" class="drop-overlay">
+      <div class="drop-overlay-inner">📷 여기에 사진을 놓으면 첨부돼요</div>
+    </div>
 
     <!-- 🎉 기쁨 감정 축하 폭죽 효과 오버레이 -->
     <div v-if="showJoyCelebration" class="joy-celebration-overlay">
@@ -85,7 +91,8 @@
         >
           <!-- 감정 라벨(슬픔 모드 등)은 화면에 표시하지 않음 — 친구 컨셉 (분석은 뒤에서만) -->
           <div class="bubble" :class="msg.role === 'user' ? 'bubble-user' : 'bubble-char'">
-            {{ msg.content }}
+            <img v-if="msg.image" :src="msg.image" class="bubble-img" alt="첨부 이미지" />
+            <span v-if="msg.content" class="bubble-text">{{ msg.content }}</span>
           </div>
 
         </div>
@@ -98,7 +105,14 @@
 
     <!-- ===== 입력바 ===== -->
     <div class="input-zone">
+      <!-- 첨부 사진 미리보기 (전송 전) -->
+      <div v-if="attachedImage" class="img-preview">
+        <img :src="attachedImage" alt="첨부 미리보기" />
+        <button class="img-preview-remove" @click="clearImage" title="사진 제거">✕</button>
+      </div>
       <div class="input-bar">
+        <input ref="fileInputRef" type="file" accept="image/*" class="file-hidden" @change="onPickImage" />
+        <button class="attach-btn" :disabled="isTyping" @click="fileInputRef?.click()" title="사진 첨부">📷</button>
         <textarea
           ref="inputRef"
           v-model="inputText"
@@ -110,7 +124,7 @@
           @input="autoResize"
         />
         <span class="char-count">{{ inputText.length }}/300</span>
-        <button class="send-btn" :disabled="!inputText.trim() || isTyping" @click="sendMessage">
+        <button class="send-btn" :disabled="(!inputText.trim() && !attachedImage) || isTyping" @click="sendMessage">
           전송 ➤
         </button>
       </div>
@@ -119,7 +133,7 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { chatApi } from '../../api/chat.js'
 import chatBg from '../../assets/chat-bg.png'
@@ -264,11 +278,12 @@ const showExitModal  = ref(false)
 const messages       = ref([])
 const inputText      = ref('')
 const isTyping       = ref(false)
-const mbtiQuestionLoading = ref(false)
-const lastMbtiQuestionKey = ref('')
 const currentEmotion = ref('default')
 const threadRef = ref(null)
 const inputRef  = ref(null)
+const fileInputRef  = ref(null)
+const attachedImage = ref(null)   // 첨부 사진 data URL (전송 전, 저장 안 함)
+const isDragging    = ref(false)  // 이미지 드래그&드롭 오버레이 표시
 
 const displayCharacter = computed(() => DISPLAY_CHARACTER_META[displayCharacterId.value] || DISPLAY_CHARACTER_META.otter)
 const backendCharacter = computed(() => displayCharacter.value.backendCharacter)
@@ -343,38 +358,11 @@ const OPENER_MSG = {
     : '안녕. 오늘 하루는 어땠어? 천천히 말해줘도 괜찮아',
 }
 
-// ── 유휴 타이머: 10초 무입력이면 무조건 MBTI 질문 (강사님 확정: "그냥 10초 뒤") ──
-const IDLE_MS = 10000
-const userTurnCount = ref(0)      // (게이미피케이션/통계용 카운트 — MBTI 게이트로는 사용 안 함)
-let idleTimer = null
-function clearIdleTimer() { if (idleTimer) { clearTimeout(idleTimer); idleTimer = null } }
-function startIdleTimer() {
-  clearIdleTimer()
-  idleTimer = setTimeout(askMbtiIfIdle, IDLE_MS)   // 턴 수 조건 없이 10초 무입력이면 트리거
-}
-
-async function askMbtiIfIdle() {
-  if (isTyping.value || mbtiQuestionLoading.value || !sessionId.value || !coldStartDone.value) return
-  mbtiQuestionLoading.value = true
-  try {
-    const res = await chatApi.mbtiNextQuestion(sessionId.value)
-    if (res.has_question) {
-      const questionKey = res.question_code || res.question_text
-      if (questionKey && questionKey === lastMbtiQuestionKey.value) return
-      lastMbtiQuestionKey.value = questionKey
-      pushAssistant(res.question_text, {
-        tts_task_id: res.tts_task_id,
-        _mbtiQuestionCode: res.question_code,
-      })
-      await scrollToBottom()
-    }
-  } catch {
-    // Optional MBTI prompt failures should not affect chat.
-  } finally {
-    mbtiQuestionLoading.value = false
-  }
-}
-watch(inputText, v => { if (v) clearIdleTimer() })   // 입력 시작하면 눈치껏 대기
+// ── (구) 유휴 타이머 MBTI 트리거 폐지 (2026-07-08) ──
+// MBTI 질문은 이제 백엔드(chat_turn)가 대화 흐름에 맞춰 응답 끝에 얹는다.
+// clearIdleTimer는 기존 호출부(onUnmounted·sendMessage 등) 호환용 no-op으로 유지.
+const userTurnCount = ref(0)      // 대화 턴 통계용 (MBTI 게이트로는 미사용)
+function clearIdleTimer() {}
 
 // ── 어시스턴트 말풍선 push + TTS 자동 1회 재생 (재생 후 서버에서 파기) ──
 function pushAssistant(text, extra = {}) {
@@ -392,13 +380,12 @@ async function initSession() {
     const sess = await chatApi.startSession(character.value, isSecret.value, coords)
     sessionId.value = sess.session_id
     coldStartDone.value = true
-    lastMbtiQuestionKey.value = ''
     userTurnCount.value = 0
 
     // 서버가 만든 친구 첫인사를 바로 표시 (+ 음성 자동 재생)
     const opener = sess.opener || OPENER_MSG[character.value]?.(isSecret.value) || '안녕! 뭐 하고 있었어?'
     pushAssistant(opener, { tts_task_id: sess.tts_task_id })
-    startIdleTimer()   // 10초 무입력이면 MBTI (강사님 확정)
+    // MBTI 질문은 유휴 타이머 대신 대화 흐름에 맞춰 백엔드가 응답에 얹음 (startIdleTimer 제거)
   } catch {
     sessionId.value = null
     messages.value.push({
@@ -433,6 +420,7 @@ function endSessionBeacon() {
 
 onMounted(async () => {
   window.addEventListener('pagehide', endSessionBeacon)
+  window.addEventListener('paste', onPasteImage)
   await initSession()
 })
 
@@ -440,26 +428,72 @@ onUnmounted(() => {
   clearIdleTimer()
   ttsStop()
   window.removeEventListener('pagehide', endSessionBeacon)
+  window.removeEventListener('paste', onPasteImage)
   endSessionBeacon()   // 다른 페이지로 이동할 때도 세션 마무리
 })
 
 // (시크릿 모드 MBTI 저장 동의 버튼은 "시크릿 = 완전 무저장" 원칙으로 제거 — 2026-07-03)
 
+// ── 사진 첨부: 선택/드롭/붙여넣기 → 최대 1024px 리사이즈 → JPEG data URL (용량·비용 절감) ──
+function processImageFile(file) {
+  if (!file || !file.type.startsWith('image/')) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    const img = new Image()
+    img.onload = () => {
+      const MAX = 1024
+      let { width, height } = img
+      if (width > MAX || height > MAX) {
+        const r = Math.min(MAX / width, MAX / height)
+        width = Math.round(width * r); height = Math.round(height * r)
+      }
+      const canvas = document.createElement('canvas')
+      canvas.width = width; canvas.height = height
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height)
+      attachedImage.value = canvas.toDataURL('image/jpeg', 0.8)
+    }
+    img.src = reader.result
+  }
+  reader.readAsDataURL(file)
+}
+function onPickImage(e) {
+  const file = e.target.files?.[0]
+  e.target.value = ''            // 같은 파일 다시 선택 가능하게 초기화
+  processImageFile(file)
+}
+// 화면에 이미지 파일 드래그&드롭
+function onDropImage(e) {
+  isDragging.value = false
+  processImageFile(e.dataTransfer?.files?.[0])
+}
+function onDragOver() { if (!isTyping.value) isDragging.value = true }
+function onDragLeave(e) {
+  if (!e.relatedTarget) isDragging.value = false   // 창 밖으로 완전히 나갔을 때만 해제(깜빡임 방지)
+}
+// 클립보드 이미지 붙여넣기(Ctrl+V)
+function onPasteImage(e) {
+  const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'))
+  if (item) processImageFile(item.getAsFile())
+}
+function clearImage() { attachedImage.value = null }
+
 async function sendMessage() {
   const content = inputText.value.trim()
-  if (!content || isTyping.value) return
+  const image = attachedImage.value
+  if ((!content && !image) || isTyping.value) return
   if (!sessionId.value) {
     messages.value.push({ _tempId: Date.now(), role: 'assistant', content: '연결이 끊겨 있어요. 새로고침 해주세요!' })
     return
   }
   clearIdleTimer()
   userTurnCount.value += 1                 // 대화 턴 카운트 (게이미피케이션/통계용)
-  messages.value.push({ _tempId: Date.now(), role: 'user', content })
+  messages.value.push({ _tempId: Date.now(), role: 'user', content, image })
   inputText.value = ''
+  attachedImage.value = null
   isTyping.value = true
   await scrollToBottom()
   try {
-    const res = await chatApi.sendChat(sessionId.value, content, character.value, isSecret.value)
+    const res = await chatApi.sendChat(sessionId.value, content, character.value, isSecret.value, image)
     const m = pushAssistant(res.message.text, {
       id: res.message_id ?? undefined,
       emotion_label: res.emotion_label,
@@ -475,7 +509,6 @@ async function sendMessage() {
     messages.value.push({ _tempId: Date.now(), role: 'assistant', content: '잠시 연결이 끊겼어요. 다시 시도해 줄래요? 🙏' })
   } finally {
     isTyping.value = false
-    startIdleTimer()
     await scrollToBottom()
   }
 }
@@ -949,6 +982,77 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
 }
 .send-btn:not(:disabled):hover { opacity: 0.88; transform: translateY(-1px); }
 .send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* 📷 사진 첨부 (MVP) */
+.file-hidden { display: none; }
+
+.attach-btn {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 16px;
+  padding: 13px 15px;
+  font-size: 18px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+.attach-btn:not(:disabled):hover { background: rgba(255,255,255,0.14); }
+.attach-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.img-preview { position: relative; display: inline-block; margin-bottom: 10px; }
+.img-preview img {
+  max-width: 140px;
+  max-height: 140px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.2);
+  display: block;
+}
+.img-preview-remove {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.75);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 드래그&드롭 오버레이 */
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(20, 10, 30, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;   /* 드롭 이벤트가 루트로 전달되도록 */
+}
+.drop-overlay-inner {
+  border: 2px dashed rgba(255,255,255,0.75);
+  border-radius: 20px;
+  padding: 40px 60px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(0,0,0,0.35);
+}
+
+/* 말풍선 안 첨부 이미지 */
+.bubble-img {
+  display: block;
+  max-width: 240px;
+  max-height: 240px;
+  border-radius: 12px;
+  margin-bottom: 6px;
+}
+.bubble-text { white-space: pre-wrap; }
 
 /* 🍵 수락/권유형 추천 카드 스타일 */
 .recommend-consent-bar {
