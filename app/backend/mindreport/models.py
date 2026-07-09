@@ -3,6 +3,7 @@
 """
 from django.db import models
 from django.conf import settings
+from pgvector.django import VectorField
 
 class MindReport(models.Model):
     user = models.ForeignKey(
@@ -28,3 +29,21 @@ class MindReport(models.Model):
 
     def __str__(self):
         return f"{self.user.nickname} - {self.title} ({self.created_at.strftime('%Y-%m-%d')})"
+
+
+class WellnessKnowledge(models.Model):
+    title = models.CharField(max_length=200, help_text="가이드 소스 문서 제목")
+    content = models.TextField(help_text="지식 청크 텍스트")
+    page_number = models.IntegerField(null=True, blank=True, help_text="원본 PDF 페이지 번호")
+    
+    # 1536차원의 OpenAI text-embedding-3-small 임베딩 벡터 저장 필드
+    embedding = VectorField(dimensions=1536)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'wellness_knowledge_base'
+
+    def __str__(self):
+        return f"[{self.title}] Page {self.page_number} - {self.content[:30]}..."
+
