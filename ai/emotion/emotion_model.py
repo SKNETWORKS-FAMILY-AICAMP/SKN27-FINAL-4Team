@@ -134,5 +134,24 @@ def predict_emotion(text: str):
     return label
 
 
+def predict_emotion_full(text: str):
+    """(한글 라벨, 확신도, 4감정 확률 dict) 반환 — 복합 감정 감지용 (2026-07-10).
+    softmax 분포는 원래 계산되고 있었으나 top1만 노출하던 것을 전체 반환.
+    모델 비활성/오류면 (None, None, None). xgb 폴백 등 분포 미지원이면 (라벨, conf, None)."""
+    if not text or not _load():
+        return None, None, None
+    try:
+        if _S['mode'] == 'ft':
+            proba = _ft_proba(text)
+            idx = max(range(len(proba)), key=lambda i: proba[i])
+            probs = {EMO4[i]: float(p) for i, p in enumerate(proba)}
+            return EMO4[idx], float(proba[idx]), probs
+        label, conf = predict_emotion_with_confidence(text)
+        return label, conf, None
+    except Exception as e:
+        print(f'[emotion_model] full 추론 실패: {e}')
+        return None, None, None
+
+
 def is_active() -> bool:
     return _load()
