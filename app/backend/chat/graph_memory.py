@@ -85,6 +85,8 @@ def _extract(message: str):
          "- 관계의 끝(이별·절교·퇴사 등)이나 일정 취소를 말하면 expired에 기록하라. "
          "예: '민수랑 헤어졌어' → expired에 민수(person) + events에 이별 사건. "
          "'여행 취소됐어' → expired에 여행(event).\n"
+         "- 사용자가 '잊어줘/기억하지 마/그 얘기 지워줘'라고 요청하면 그 대상을 expired에 기록하라 "
+         "(kind: person|event|preference, reason: '사용자 요청'). 잊어달라는 요청 자체는 events로 저장하지 마라.\n"
          "형식(없는 키는 생략 가능, JSON 외 다른 말 금지):\n"
          '{"events":[{"name":"면접","date":"2026-07-13","emotion":"불안","people":["엄마"]}],'
          '"people":[{"name":"엄마","relation":"가족"}],"preferences":["드라마"],'
@@ -208,6 +210,14 @@ def _store(tx, uid: int, data: dict, salience: float = 1.0) -> None:
                 'SET e.valid_until = $today, e.ended_reason = coalesce($reason, e.ended_reason)',
                 uid=uid, xkey=xkey, xname=(ex.get('name') or '').strip(),
                 today=today, reason=reason)
+        elif kind == 'preference':
+            # "잊어줘" 명령 (2026-07-12) — 잊어달라면 진짜 잊는 친구 (시크릿챗과 짝을 이루는 신뢰 장치)
+            tx.run(
+                'MATCH (u:User {uid:$uid})-[:PREFERS]->(f:Preference) '
+                'WHERE f.key = $xkey OR f.name = $xname '
+                'SET f.valid_until = $today, f.ended_reason = coalesce($reason, f.ended_reason)',
+                uid=uid, xkey=xkey, xname=(ex.get('name') or '').strip(),
+                today=today, reason=reason)
 
 
 
@@ -301,6 +311,7 @@ def recall(user_id, limit: int = 6, message: str = None) -> str:
                 lines.append('- 인물: ' + ', '.join(names))
             pref = s.run(
                 'MATCH (u:User {uid:$uid})-[:PREFERS]->(f:Preference) '
+                'WHERE f.valid_until IS NULL '
                 'RETURN collect(f.name) AS names', uid=user_id).single()
             if pref and pref['names']:
                 lines.append('- 취향: ' + ', '.join(pref['names']))
