@@ -399,7 +399,8 @@ def load_context_node(state: ChatState) -> dict:
             # 그래프(구조화 관계) 기억 병행 회상 — Neo4j 미설정 시 '' 이라 영향 없음
             try:
                 from chat.graph_memory import recall as graph_recall
-                g = graph_recall(state['user_id'])
+                g = graph_recall(state['user_id'],
+                                 message=state.get('user_message'))   # 재강화: 언급된 기억만 강화
                 if g:
                     summary = (summary + '\n\n[관계 기억]\n' + g).strip()
             except Exception:

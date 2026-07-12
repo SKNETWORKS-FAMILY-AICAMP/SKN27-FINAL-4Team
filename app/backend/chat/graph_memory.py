@@ -240,8 +240,10 @@ def capture_async(user_id, message: str, emotion: str = None) -> None:
 
 # ── 회상 (서브그래프 → 텍스트) ───────────────────────────────
 
-def recall(user_id, limit: int = 6) -> str:
-    """사용자의 사건(감정·인물·날짜)과 취향을 그래프에서 꺼내 텍스트로. 비활성/실패 시 ''."""
+def recall(user_id, limit: int = 6, message: str = None) -> str:
+    """사용자의 사건(감정·인물·날짜)과 취향을 그래프에서 꺼내 텍스트로. 비활성/실패 시 ''.
+    message가 있으면 재강화(2026-07-12): 사용자가 '직접 언급한' 기억의 강도를 올린다
+    — 떠올린 기억은 선명해진다(reconsolidation). 매 턴 수동 주입분은 강화하지 않음(부익부 고착 방지)."""
     if not user_id or not is_enabled():
         return ''
     try:
@@ -254,7 +256,7 @@ def recall(user_id, limit: int = 6) -> str:
                 'MATCH (u:User {uid:$uid})-[:HAS_EVENT]->(e:Event) '
                 'WHERE e.date >= $today AND e.valid_until IS NULL '
                 'OPTIONAL MATCH (e)-[:INVOLVES]->(p:Person) '
-                'RETURN e.name AS name, e.date AS date, collect(DISTINCT p.name) AS people '
+                'RETURN e.key AS key, e.name AS name, e.date AS date, collect(DISTINCT p.name) AS people '
                 'ORDER BY e.date ASC LIMIT 3',
                 uid=user_id, today=today).data()
             for c in coming:
@@ -270,9 +272,11 @@ def recall(user_id, limit: int = 6) -> str:
                 'WHERE e.date IS NULL OR e.date < $today '
                 'OPTIONAL MATCH (e)-[:FELT]->(m:Emotion) '
                 'OPTIONAL MATCH (e)-[:INVOLVES]->(p:Person) '
-                'RETURN e.name AS name, e.date AS date, coalesce(e.salience, 1.0) AS sal, '
+                'RETURN e.key AS key, e.name AS name, e.date AS date, '
+                'coalesce(e.salience, 1.0) + 0.1 * CASE WHEN coalesce(e.recall_count, 0) > 5 '
+                'THEN 5 ELSE coalesce(e.recall_count, 0) END AS sal, '   # 재강화 보정(상한 +0.5 — 고착 방지)
                 'collect(DISTINCT m.type) AS emotions, collect(DISTINCT p.name) AS people '
-                'ORDER BY coalesce(date, \'\') DESC, sal DESC LIMIT $limit',   # 집계 RETURN에선 반환 컬럼만 정렬 가능(Cypher 규칙)
+                'ORDER BY coalesce(date, \'\') DESC, sal DESC LIMIT $limit',   # 집계 RETURN에선 반환 컬럼만 정렬 가능
                 uid=user_id, today=today, limit=limit).data()
             for e in events:
                 parts = [e['name']]
@@ -289,7 +293,7 @@ def recall(user_id, limit: int = 6) -> str:
             people = s.run(
                 'MATCH (u:User {uid:$uid})-[:KNOWS]->(p:Person) '
                 'WHERE p.valid_until IS NULL '
-                'RETURN p.name AS name, p.relation AS relation LIMIT 10',
+                'RETURN p.key AS key, p.name AS name, p.relation AS relation LIMIT 10',
                 uid=user_id).data()
             names = [f"{p['name']}({p['relation']})" if p.get('relation') else p['name']
                      for p in people if p.get('name')]
@@ -300,6 +304,28 @@ def recall(user_id, limit: int = 6) -> str:
                 'RETURN collect(f.name) AS names', uid=user_id).single()
             if pref and pref['names']:
                 lines.append('- 취향: ' + ', '.join(pref['names']))
+        # 재강화: 사용자가 이번 메시지에서 직접 언급한 기억만 (이름이 메시지에 포함될 때)
+        if message:
+            ev_keys = [r.get('key') for r in (coming + events)
+                       if r.get('key') and r.get('name') and len(r['name']) >= 2
+                       and r['name'] in message]
+            pp_keys = [r.get('key') for r in people
+                       if r.get('key') and r.get('name') and len(r['name']) >= 2
+                       and r['name'] in message]
+            if ev_keys or pp_keys:
+                with drv.session() as s:
+                    if ev_keys:
+                        s.run('MATCH (u:User {uid:$uid})-[:HAS_EVENT]->(e:Event) '
+                              'WHERE e.key IN $keys '
+                              'SET e.recall_count = coalesce(e.recall_count, 0) + 1, '
+                              '    e.last_recalled = $today',
+                              uid=user_id, keys=ev_keys, today=today)
+                    if pp_keys:
+                        s.run('MATCH (u:User {uid:$uid})-[:KNOWS]->(p:Person) '
+                              'WHERE p.key IN $keys '
+                              'SET p.recall_count = coalesce(p.recall_count, 0) + 1, '
+                              '    p.last_recalled = $today',
+                              uid=user_id, keys=pp_keys, today=today)
         return '\n'.join(lines)
     except Exception as e:
         print(f'[graph_memory] 회상 실패: {e}')
