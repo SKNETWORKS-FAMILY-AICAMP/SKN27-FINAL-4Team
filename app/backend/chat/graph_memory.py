@@ -82,9 +82,13 @@ def _extract(message: str):
          f"- 날짜 표현(내일, 다음주 화요일 등)은 오늘 {_today_kst()} 기준 실제 날짜(YYYY-MM-DD)로 변환.\n"
          "- 사용자가 직접 말한 사실만. 추측 금지. 없으면 빈 배열.\n"
          "- 일회성 스몰토크(날씨·메뉴), 단순 감탄·맞장구는 제외.\n"
+         "- 관계의 끝(이별·절교·퇴사 등)이나 일정 취소를 말하면 expired에 기록하라. "
+         "예: '민수랑 헤어졌어' → expired에 민수(person) + events에 이별 사건. "
+         "'여행 취소됐어' → expired에 여행(event).\n"
          "형식(없는 키는 생략 가능, JSON 외 다른 말 금지):\n"
          '{"events":[{"name":"면접","date":"2026-07-13","emotion":"불안","people":["엄마"]}],'
-         '"people":[{"name":"엄마","relation":"가족"}],"preferences":["드라마"]}'),
+         '"people":[{"name":"엄마","relation":"가족"}],"preferences":["드라마"],'
+         '"expired":[{"kind":"person","name":"민수","reason":"이별"}]}'),
         ('user', message),
     ])
     raw = resp.content.strip()
@@ -178,6 +182,33 @@ def _store(tx, uid: int, data: dict, salience: float = 1.0) -> None:
             'ON CREATE SET f.name = $pr '
             'MERGE (u)-[:PREFERS]->(f)',
             uid=uid, fkey=fkey, pr=pr)
+    # supersede (2026-07-12, Zep식 시간 유효성): 끝난 관계·취소된 일정은 삭제 대신 만료 도장.
+    # 노드·역사는 남되 '현재 사실' 자격만 잃는다 → 회상에서 제외 ("헤어진 애인 안부 묻기" 방지)
+    # ★반드시 저장 루프 '뒤'에 실행 — 같은 턴의 사건(이별)이 인물을 재생성해도 도장이 이긴다
+    today = _today_iso()
+    for ex in (data.get('expired') or []):
+        if not isinstance(ex, dict):
+            continue
+        xkey = _norm_key(ex.get('name') or '')
+        if not xkey:
+            continue
+        kind = (ex.get('kind') or '').strip().lower()
+        reason = (ex.get('reason') or '').strip() or None
+        if kind == 'person':
+            tx.run(
+                'MATCH (u:User {uid:$uid})-[:KNOWS]->(p:Person) '
+                'WHERE p.key = $xkey OR p.name = $xname '
+                'SET p.valid_until = $today, p.ended_reason = coalesce($reason, p.ended_reason)',
+                uid=uid, xkey=xkey, xname=(ex.get('name') or '').strip(),
+                today=today, reason=reason)
+        elif kind == 'event':
+            tx.run(
+                'MATCH (u:User {uid:$uid})-[:HAS_EVENT]->(e:Event) '
+                'WHERE e.key = $xkey OR e.name CONTAINS $xname '
+                'SET e.valid_until = $today, e.ended_reason = coalesce($reason, e.ended_reason)',
+                uid=uid, xkey=xkey, xname=(ex.get('name') or '').strip(),
+                today=today, reason=reason)
+
 
 
 def _capture(uid: int, message: str, emotion: str = None) -> None:
@@ -221,7 +252,7 @@ def recall(user_id, limit: int = 6) -> str:
             # ① 다가오는 일 (선제 챙김 — "내일 면접이지?" 의 재료, 2026-07-12)
             coming = s.run(
                 'MATCH (u:User {uid:$uid})-[:HAS_EVENT]->(e:Event) '
-                'WHERE e.date >= $today '
+                'WHERE e.date >= $today AND e.valid_until IS NULL '
                 'OPTIONAL MATCH (e)-[:INVOLVES]->(p:Person) '
                 'RETURN e.name AS name, e.date AS date, collect(DISTINCT p.name) AS people '
                 'ORDER BY e.date ASC LIMIT 3',
@@ -239,9 +270,9 @@ def recall(user_id, limit: int = 6) -> str:
                 'WHERE e.date IS NULL OR e.date < $today '
                 'OPTIONAL MATCH (e)-[:FELT]->(m:Emotion) '
                 'OPTIONAL MATCH (e)-[:INVOLVES]->(p:Person) '
-                'RETURN e.name AS name, e.date AS date, '
+                'RETURN e.name AS name, e.date AS date, coalesce(e.salience, 1.0) AS sal, '
                 'collect(DISTINCT m.type) AS emotions, collect(DISTINCT p.name) AS people '
-                'ORDER BY coalesce(e.date, \'\') DESC, coalesce(e.salience, 1.0) DESC LIMIT $limit',
+                'ORDER BY coalesce(date, \'\') DESC, sal DESC LIMIT $limit',   # 집계 RETURN에선 반환 컬럼만 정렬 가능(Cypher 규칙)
                 uid=user_id, today=today, limit=limit).data()
             for e in events:
                 parts = [e['name']]
@@ -257,6 +288,7 @@ def recall(user_id, limit: int = 6) -> str:
             # 인물(KNOWS) 회상 — 저장만 되고 회상 안 되던 구멍 보수 (2026-07-12)
             people = s.run(
                 'MATCH (u:User {uid:$uid})-[:KNOWS]->(p:Person) '
+                'WHERE p.valid_until IS NULL '
                 'RETURN p.name AS name, p.relation AS relation LIMIT 10',
                 uid=user_id).data()
             names = [f"{p['name']}({p['relation']})" if p.get('relation') else p['name']
@@ -285,7 +317,7 @@ def upcoming(user_id, days: int = 7, limit: int = 2) -> str:
         with drv.session() as s:
             rows = s.run(
                 'MATCH (u:User {uid:$uid})-[:HAS_EVENT]->(e:Event) '
-                'WHERE e.date >= $today '
+                'WHERE e.date >= $today AND e.valid_until IS NULL '
                 'OPTIONAL MATCH (e)-[:INVOLVES]->(p:Person) '
                 'RETURN e.name AS name, e.date AS date, collect(DISTINCT p.name) AS people '
                 'ORDER BY e.date ASC LIMIT $limit',
