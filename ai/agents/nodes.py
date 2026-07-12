@@ -261,11 +261,16 @@ def _text_emotion(state: ChatState) -> dict:
     except Exception:
         label = None
 
-    # ① 초단문 바이패스 — 단, 모델이 매우 확신하는 감정 초단문("짜증나!")은 반영
-    if len(message) < SHORT_LEN and prev in VALID_EMOTIONS:
+    # ① 초단문 처리 — 단, 모델이 매우 확신하는 감정 초단문("짜증나!" 0.97)은 반영
+    #    직전 감정이 없는 첫 턴 초단문("몰라"→분노 0.84 함정)은 모델을 믿지 않고
+    #    문맥 LLM 재분류(③)에 위임 — 오프너 질문까지 보고 무기력/심드렁을 구분 (2026-07-10 실측 보정)
+    short_cold = False
+    if len(message) < SHORT_LEN:
         if label in VALID_EMOTIONS and conf is not None and conf >= SHORT_OVERRIDE and label != 'normal':
             return {'emotion_label': label, 'emotion_source': 'short_override'}
-        return {'emotion_label': prev, 'emotion_source': 'short_bypass'}
+        if prev in VALID_EMOTIONS:
+            return {'emotion_label': prev, 'emotion_source': 'short_bypass'}
+        short_cold = True   # 첫 턴 초단문 — 아래 모델 게이트 건너뛰고 ③으로
 
     # ②-1 복합 감정 감지 (2026-07-10 심사위원 피드백 — "이별+빵" · 절 분할 방식)
     #     실측: 파인튜닝 모델은 복합 문장에서 뒤 절 감정에 0.96~0.999로 과확신 →
@@ -294,7 +299,7 @@ def _text_emotion(state: ChatState) -> dict:
                     out['emotion_secondary'] = other
                 return out
 
-    if label in VALID_EMOTIONS and (conf is None or conf >= CONF_GATE):
+    if not short_cold and label in VALID_EMOTIONS and (conf is None or conf >= CONF_GATE):
         return {'emotion_label': label, 'emotion_source': 'model'}
 
     # ③ 문맥 포함 LLM 재분류 (load_context가 먼저 실행돼 recent_history 사용 가능)
@@ -316,7 +321,8 @@ def _text_emotion(state: ChatState) -> dict:
         pass
 
     # ④ 최종 폴백: 모델 저확신값 → 직전 감정 → 콜드스타트 선택 → normal
-    for fb in (label, prev, state.get('selected_emotion')):
+    #    (첫 턴 초단문은 모델값 폴백 제외 — "몰라" 분노 0.84로 도로 찍히는 것 방지)
+    for fb in ((None if short_cold else label), prev, state.get('selected_emotion')):
         if fb in VALID_EMOTIONS:
             return {'emotion_label': fb, 'emotion_source': 'fallback'}
     return {'emotion_label': 'normal', 'emotion_source': 'fallback'}
