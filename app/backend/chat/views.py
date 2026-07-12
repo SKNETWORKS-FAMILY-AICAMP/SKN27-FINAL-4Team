@@ -269,6 +269,7 @@ def tts_status(request, task_id):
     data = {'status': task['status'], 'audio_url': task.get('audio_url')}
     if task['status'] == 'done':
         data['voice_id'] = task.get('voice_id')
+        data['alignment'] = task.get('alignment')   # 글자별 타임스탬프 (자막 동기용, 없으면 null)
     return _ok(data)
 
 
@@ -363,3 +364,7 @@ def session_end(request):
 # (구 콜드스타트 감정 선택 · 날씨 배너 API는 친구 컨셉 개편으로 제거 — 2026-07-03)
 # (추천 질문 '이런 말 어때요' API는 기능 폐기로 제거 — 2026-07-03)
 # (계획도움 /api/plan-support/ · WalkCuration은 장소 추천 기능 폐기로 제거 — 2026-07-05)
+
+
+# (복합 감정 임계값 보정용 임시 /api/emotion/probe/ 는 실측 완료 후 제거 — 2026-07-10.
+#  재보정 필요 시 predict_emotion_full을 임시 뷰로 노출해 절 분할 실측 재현 가능)

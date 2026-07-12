@@ -7,11 +7,6 @@
       <div class="drop-overlay-inner">📷 여기에 사진을 놓으면 첨부돼요</div>
     </div>
 
-    <!-- 🎉 기쁨 감정 축하 폭죽 효과 오버레이 -->
-    <div v-if="showJoyCelebration" class="joy-celebration-overlay">
-      <div v-for="n in 35" :key="n" class="confetti-particle" :style="confettiStyle(n)"></div>
-    </div>
-
     <!-- 배경: 일반=노을 일러스트 / 시크릿=밤하늘+별똥별 -->
     <div
       class="chat-bg"
@@ -92,7 +87,7 @@
           <!-- 감정 라벨(슬픔 모드 등)은 화면에 표시하지 않음 — 친구 컨셉 (분석은 뒤에서만) -->
           <div class="bubble" :class="msg.role === 'user' ? 'bubble-user' : 'bubble-char'">
             <img v-if="msg.image" :src="msg.image" class="bubble-img" alt="첨부 이미지" />
-            <span v-if="msg.content" class="bubble-text">{{ msg.content }}</span>
+            <span v-if="msg.content" class="bubble-text">{{ (msg.displayed !== undefined ? msg.displayed : msg.content) || '…' }}</span>
           </div>
 
         </div>
@@ -293,56 +288,6 @@ const displayExpressionLabel = computed(() => EXPRESSION_LABELS[displayExpressio
 const displayCharacterImage = computed(() => `/characters/${displayCharacterId.value}/${displayExpressionId.value}.png`)
 const displayAnimationClass = computed(() => EXPRESSION_ANIMATION[displayExpressionId.value] || 'anim-joy')
 
-const showJoyCelebration = ref(false)
-
-function triggerJoyCelebration() {
-  showJoyCelebration.value = true
-  playFanfare()
-  setTimeout(() => {
-    showJoyCelebration.value = false
-  }, 3000)
-}
-
-function playFanfare() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)()
-    const now = ctx.currentTime
-    const notes = [261.63, 329.63, 392.00, 523.25]
-    notes.forEach((freq, idx) => {
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-      osc.type = 'triangle'
-      osc.frequency.setValueAtTime(freq, now + idx * 0.08)
-      gain.gain.setValueAtTime(0.12, now + idx * 0.08)
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.08 + 0.5)
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-      osc.start(now + idx * 0.08)
-      osc.stop(now + idx * 0.08 + 0.6)
-    })
-  } catch (e) {
-    console.warn("Web Audio API not supported or blocked:", e)
-  }
-}
-
-function confettiStyle(n) {
-  const colors = ['#FCD34D', '#F472B6', '#38BDF8', '#34D399', '#A78BFA']
-  const left = Math.random() * 100
-  const delay = Math.random() * 0.8
-  const duration = 1.5 + Math.random() * 1.5
-  const size = 6 + Math.random() * 10
-  const color = colors[n % colors.length]
-  return {
-    left: `${left}%`,
-    backgroundColor: color,
-    animationDelay: `${delay}s`,
-    animationDuration: `${duration}s`,
-    width: `${size}px`,
-    height: `${size}px`,
-    transform: `rotate(${Math.random() * 360}deg)`
-  }
-}
-
 const OPENER_MSG = {
   pori:   isSecret => isSecret
     ? '여긴 비밀이니까 마음 편히 다 풀어놔! 무슨 일 있어?'
@@ -365,10 +310,66 @@ const userTurnCount = ref(0)      // 대화 턴 통계용 (MBTI 게이트로는 
 function clearIdleTimer() {}
 
 // ── 어시스턴트 말풍선 push + TTS 자동 1회 재생 (재생 후 서버에서 파기) ──
+// 음성이 있으면 재생 시작에 맞춰 텍스트를 음성 길이만큼 타이핑(동기 자막).
+// 음성 실패·자동재생 차단·지연(7초) 시엔 텍스트 전체를 즉시 표시.
+function animateReveal(m, durationSec, alignment, audioEl) {
+  if (m.displayed === m.content) return
+  if (m._revealTimer) clearInterval(m._revealTimer)
+
+  // ── 정밀 모드: ElevenLabs 글자별 타임스탬프 + 오디오 현재 시각으로 1:1 동기 ──
+  // TTS로 보낸 텍스트와 화면 텍스트가 같아야 성립 — 다르면 균등 타이핑 폴백.
+  const canSync = alignment && Array.isArray(alignment.chars) && alignment.chars.length > 0
+    && audioEl && alignment.chars.join('') === m.content
+  if (canSync) {
+    const starts = alignment.starts
+    m._revealTimer = setInterval(() => {
+      const t = audioEl.currentTime
+      if (audioEl.ended || (audioEl.paused && t === 0)) {   // 종료·중단 → 전체 표시
+        clearInterval(m._revealTimer); m._revealTimer = null
+        m.displayed = m.content
+        return
+      }
+      let idx = 0
+      while (idx < starts.length && starts[idx] <= t + 0.12) idx++   // 120ms 선행(읽기 편하게)
+      m.displayed = m.content.slice(0, idx)
+      scrollToBottom()
+      if (idx >= m.content.length) { clearInterval(m._revealTimer); m._revealTimer = null }
+    }, 45)
+    return
+  }
+
+  // ── 폴백: 음성 길이에 맞춘 균등 타이핑 ──
+  const total = m.content.length
+  const durMs = Math.max(800, (durationSec ? durationSec * 1000 : total * 55) * 0.93)
+  const t0 = performance.now()
+  m._revealTimer = setInterval(() => {
+    const p = Math.min(1, (performance.now() - t0) / durMs)
+    m.displayed = m.content.slice(0, Math.ceil(total * p))
+    scrollToBottom()
+    if (p >= 1) { clearInterval(m._revealTimer); m._revealTimer = null }
+  }, 50)
+}
+function revealNow(m) {
+  if (m._revealTimer) { clearInterval(m._revealTimer); m._revealTimer = null }
+  m.displayed = m.content
+}
+
 function pushAssistant(text, extra = {}) {
   const m = { _tempId: Date.now(), role: 'assistant', content: text, ...extra }
+  if (m.tts_task_id) {
+    m.displayed = ''                    // 음성 시작까지 잠깐 '…' 표시
+    messages.value.push(m)
+    const target = messages.value[messages.value.length - 1]   // 반응형 프록시로 조작
+    playTask(m.tts_task_id, {
+      onStart: (d, alignment, audioEl) => animateReveal(target, d, alignment, audioEl),
+      onFail: () => revealNow(target),
+    })
+    setTimeout(() => {                  // 안전장치: TTS 생성이 8초+ 걸릴 수 있어 폴링 타임아웃(~28초)보다 늦게
+      if (target.displayed !== target.content && !target._revealTimer) revealNow(target)
+    }, 30000)
+    return target
+  }
   messages.value.push(m)
-  if (m.tts_task_id) playTask(m.tts_task_id)
   return m
 }
 
@@ -501,9 +502,6 @@ async function sendMessage() {
     })
     if (res.emotion_label) {
       currentEmotion.value = res.emotion_label
-      if (res.emotion_label === 'joy') {
-        triggerJoyCelebration()
-      }
     }
   } catch {
     messages.value.push({ _tempId: Date.now(), role: 'assistant', content: '잠시 연결이 끊겼어요. 다시 시도해 줄래요? 🙏' })
@@ -1132,32 +1130,5 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* 🎉 기쁨 감정 축하 (폭죽/Confetti) 효과 */
-.joy-celebration-overlay {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 10;
-  overflow: hidden;
-}
-.confetti-particle {
-  position: absolute;
-  top: -20px;
-  border-radius: 3px;
-  opacity: 0.85;
-  animation: fallDown linear forwards;
-}
-@keyframes fallDown {
-  0% {
-    transform: translateY(0) rotate(0deg);
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(110vh) rotate(720deg);
-    opacity: 0;
-  }
-}
 
 </style>
-
-
