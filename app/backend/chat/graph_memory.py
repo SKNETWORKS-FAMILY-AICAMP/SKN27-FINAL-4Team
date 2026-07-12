@@ -179,7 +179,7 @@ def recall(user_id, limit: int = 6) -> str:
                 'OPTIONAL MATCH (e)-[:INVOLVES]->(p:Person) '
                 'RETURN e.name AS name, e.date AS date, '
                 'collect(DISTINCT m.type) AS emotions, collect(DISTINCT p.name) AS people '
-                'ORDER BY e.date DESC LIMIT $limit',
+                'ORDER BY coalesce(e.date, \'\') DESC LIMIT $limit',   # null 날짜가 DESC에서 맨 앞에 오는 문제 보정 (2026-07-12)
                 uid=user_id, limit=limit).data()
             for e in events:
                 parts = [e['name']]
@@ -192,6 +192,15 @@ def recall(user_id, limit: int = 6) -> str:
                 if ppl:
                     parts.append('· 함께: ' + ', '.join(ppl))
                 lines.append('- ' + ' '.join(parts))
+            # 인물(KNOWS) 회상 — 저장만 되고 회상 안 되던 구멍 보수 (2026-07-12)
+            people = s.run(
+                'MATCH (u:User {uid:$uid})-[:KNOWS]->(p:Person) '
+                'RETURN p.name AS name, p.relation AS relation LIMIT 10',
+                uid=user_id).data()
+            names = [f"{p['name']}({p['relation']})" if p.get('relation') else p['name']
+                     for p in people if p.get('name')]
+            if names:
+                lines.append('- 인물: ' + ', '.join(names))
             pref = s.run(
                 'MATCH (u:User {uid:$uid})-[:PREFERS]->(f:Preference) '
                 'RETURN collect(f.name) AS names', uid=user_id).single()

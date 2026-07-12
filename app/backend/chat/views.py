@@ -233,7 +233,10 @@ def chat_turn(request):
         message_id = assistant_msg.id
         uid = user.id if user else None
         memory.capture_async(uid, stored_user_msg)   # 중요 정보 즉시 저장 (사진 캡션 포함)
-        graph_memory.capture_async(uid, stored_user_msg)  # 구조화 기억(그래프) 병행 — Neo4j 미설정 시 no-op
+        # 위기 턴은 구조화 기억(그래프)에서 제외 — 민감 발화 영구 박제·오회상 방지 (2026-07-12)
+        # (텍스트 요약에는 남겨 위로 연속성 유지 — 그래프/요약 역할 분리 원칙)
+        if not result.get('crisis'):
+            graph_memory.capture_async(uid, stored_user_msg)  # 구조화 기억(그래프) 병행 — Neo4j 미설정 시 no-op
         memory.update_async(uid, session.id)      # 8턴 경계 압축·정리
 
         # 응답에 MBTI 질문을 얹었으면, 다음 사용자 메시지를 그 답변으로 받도록 pending 설정
