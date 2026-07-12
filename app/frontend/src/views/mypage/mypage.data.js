@@ -5,6 +5,9 @@ export const i18n = {
     hint: "방 안의 오브젝트에 커서를 올리거나 클릭해 기능을 열어보세요.",
     user: "서마음",
     profile: "프로필 조회",
+    character: "캐릭터 정보",
+    weather: "날씨 정보",
+    wardrobe: "오늘의 옷장",
     mbti: "MBTI 분석",
     taste: "취향 분석",
     settings: "설정"
@@ -15,6 +18,9 @@ export const i18n = {
     hint: "Hover or click room objects to open each feature.",
     user: "Maeum Seo",
     profile: "Profile",
+    character: "Character Info",
+    weather: "Weather",
+    wardrobe: "Wardrobe",
     mbti: "MBTI Analysis",
     taste: "Taste Analysis",
     settings: "Settings"
@@ -25,7 +31,17 @@ export function createMypageState() {
   return {
     activePanel: null,
     toast: "",
-    showCharacterPicker: false,
+    weatherPayload: null,
+    weatherLoading: false,
+    weatherError: "",
+    weatherLocation: null,
+    wardrobePayload: null,
+    wardrobeLoading: false,
+    wardrobeError: "",
+    weatherRegions: [
+      "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종",
+      "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"
+    ],
     profileSavedAt: "",
     profileEdit: false,
     selectedCharacter: "otter",

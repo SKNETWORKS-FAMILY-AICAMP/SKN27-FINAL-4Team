@@ -8,7 +8,7 @@ LLM_PROVIDER=groq           → GROQ_API_KEY + GROQ_MODEL(기본 llama-3.3-70b-v
 """
 import os
 
-OPENAI_DEFAULT_MODEL = 'gpt-5.4-mini'      # 저렴+한국어 안정. 구형 계정이면 gpt-4o-mini로 교체
+OPENAI_DEFAULT_MODEL = 'gpt-4o-mini'      # 저렴+한국어 안정. 구형 계정이면 gpt-4o-mini로 교체
 GROQ_DEFAULT_MODEL = 'llama-3.3-70b-versatile'
 
 

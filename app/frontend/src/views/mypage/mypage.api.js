@@ -43,6 +43,48 @@ export async function updateMyProfile(profileData) {
   return response.json();
 }
 
+export async function fetchCurrentWeather(location = {}) {
+  const params = new URLSearchParams();
+  if (location.lat != null && location.lon != null) {
+    params.set("lat", location.lat);
+    params.set("lon", location.lon);
+  }
+  if (location.region) {
+    params.set("region", location.region);
+  }
+
+  const query = params.toString();
+  const response = await fetch(`/api/myweather/current/${query ? `?${query}` : ""}`, {
+    cache: "no-store",
+    credentials: "include"
+  });
+  if (!response.ok) {
+    let detail = `Failed to fetch weather: ${response.status}`;
+    try {
+      const data = await response.json();
+      detail = data.detail || detail;
+    } catch (error) {}
+    throw new Error(detail);
+  }
+  return response.json();
+}
+
+export async function fetchWardrobeRecommendation() {
+  const response = await fetch("/api/mywardrobe/recommendation/", {
+    cache: "no-store",
+    credentials: "include"
+  });
+  if (!response.ok) {
+    let detail = `Failed to fetch wardrobe recommendation: ${response.status}`;
+    try {
+      const data = await response.json();
+      detail = data.detail || detail;
+    } catch (error) {}
+    throw new Error(detail);
+  }
+  return response.json();
+}
+
 export async function saveOnboardingMbti(mbtiType) {
   const response = await fetch("/api/mbti/onboarding/", {
     method: "POST",

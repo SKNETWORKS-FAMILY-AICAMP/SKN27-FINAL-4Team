@@ -1,6 +1,6 @@
 <template>
   <main class="app-shell">
-    <MypageRoom :labels="t" @open-panel="openPanel">
+    <MypageRoom :labels="t" :current-character="currentCharacter" @open-panel="openPanel">
       <MypageModal
         :active-panel="activePanel"
         :title="currentPanelTitle"
@@ -13,14 +13,15 @@
           :profile-options="profileOptions"
           :profile-edit="profileEdit"
           :profile-saved-at="profileSavedAt"
+          @toggle-profile-edit="toggleProfileEdit"
+          @toggle-interest-keyword="toggleInterestKeyword"
+        />
+
+        <CharacterPanel
+          v-if="activePanel === 'character'"
           :selected-character="selectedCharacter"
           :current-character="currentCharacter"
           :characters="characters"
-          :show-character-picker="showCharacterPicker"
-          @open-character-picker="showCharacterPicker = true"
-          @close-character-picker="showCharacterPicker = false"
-          @toggle-profile-edit="toggleProfileEdit"
-          @toggle-interest-keyword="toggleInterestKeyword"
           @choose-character="chooseCharacter"
         />
 
@@ -33,6 +34,27 @@
           @refresh="refreshMbtiDemoData"
           @set-view="setMbtiView"
           @save-mbti="saveMbti"
+        />
+
+        <WeatherPanel
+          v-if="activePanel === 'weather'"
+          :payload="weatherPayload"
+          :loading="weatherLoading"
+          :error="weatherError"
+          :location="weatherLocation"
+          :regions="weatherRegions"
+          @refresh="loadWeatherData()"
+          @change-region="setWeatherRegion"
+          @close="closePanel"
+        />
+
+        <WardrobePanel
+          v-if="activePanel === 'wardrobe'"
+          :payload="wardrobePayload"
+          :loading="wardrobeLoading"
+          :error="wardrobeError"
+          @refresh="loadWardrobeData"
+          @close="closePanel"
         />
 
         <TastePanel
@@ -58,24 +80,30 @@
 </template>
 
 <script>
-import { fetchMbtiDemoPayload, fetchMyProfile, updateMyProfile, saveOnboardingMbti } from "./mypage.api";
+import { fetchCurrentWeather, fetchMbtiDemoPayload, fetchMyProfile, fetchWardrobeRecommendation, updateMyProfile, saveOnboardingMbti } from "./mypage.api";
 import { createMypageState, i18n } from "./mypage.data";
+import CharacterPanel from "./components/CharacterPanel.vue";
 import MbtiPanel from "./components/MbtiPanel.vue";
 import MypageModal from "./components/MypageModal.vue";
 import MypageRoom from "./components/MypageRoom.vue";
 import ProfilePanel from "./components/ProfilePanel.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import TastePanel from "./components/TastePanel.vue";
+import WeatherPanel from "./components/WeatherPanel.vue";
+import WardrobePanel from "./components/WardrobePanel.vue";
 
 export default {
   name: "MypageView",
   components: {
+    CharacterPanel,
     MbtiPanel,
     MypageModal,
     MypageRoom,
     ProfilePanel,
     SettingsPanel,
-    TastePanel
+    TastePanel,
+    WeatherPanel,
+    WardrobePanel
   },
   async beforeRouteEnter(to, from, next) {
     try {
@@ -100,8 +128,13 @@ export default {
       return this.t[this.activePanel];
     },
     currentPanelDescription() {
+      if (this.activePanel === "wardrobe") {
+        return "최근 대화의 감정 흐름과 프로필 취향을 바탕으로 오늘 입기 편한 옷차림을 추천합니다.";
+      }
       const descriptions = {
         profile: "사전 정보 입력 화면에서 설정한 기본 정보와 관심분야 키워드를 조회하고, 수정합니다.",
+        character: "방 안의 동행 캐릭터를 고르고, 캐릭터의 말투와 성향을 확인합니다.",
+        weather: "창문 밖 현재 날씨와 오늘의 컨디션 관리 추천을 확인합니다.",
         mbti: "대화 중 자연스럽게 나눈 성향 답변을 바탕으로, 내가 요즘 어떤 방식으로 생각하고 소통하는지 MBTI 유형으로 돌아봐요.",
         taste: "최근 30일 대화 로그에서 반복적으로 나타난 관심사·취향 키워드를 집계해 보여줍니다. 일정 횟수 이상 등장한 키워드만 대시보드에 표시됩니다.",
         settings: "계정 기본 정보와 언어, 접근성 설정을 관리합니다."
@@ -163,14 +196,18 @@ export default {
     },
     openPanel(panel) {
       this.activePanel = panel;
-      this.showCharacterPicker = false;
       if (panel === "mbti") {
         this.loadMbtiDemoData();
+      }
+      if (panel === "weather") {
+        this.loadWeatherData();
+      }
+      if (panel === "wardrobe") {
+        this.loadWardrobeData();
       }
     },
     closePanel() {
       this.activePanel = null;
-      this.showCharacterPicker = false;
     },
     async toggleProfileEdit() {
       if (this.profileEdit) {
@@ -206,7 +243,6 @@ export default {
     async chooseCharacter(id) {
       const oldChar = this.selectedCharacter;
       this.selectedCharacter = id;
-      this.showCharacterPicker = false;
       try {
         await updateMyProfile({ selectedCharacter: id });
         localStorage.setItem('binteumsaiCharacter', JSON.stringify({ characterId: id }));
@@ -215,6 +251,88 @@ export default {
         console.error(e);
         this.selectedCharacter = oldChar;
         this.showToast("캐릭터 교체에 실패했습니다.");
+      }
+    },
+    getSavedWeatherLocation() {
+      try {
+        return JSON.parse(localStorage.getItem("mindroom-weather-location") || "null");
+      } catch (error) {
+        return null;
+      }
+    },
+    saveWeatherLocation(location) {
+      this.weatherLocation = location;
+      localStorage.setItem("mindroom-weather-location", JSON.stringify(location));
+    },
+    getBrowserLocation() {
+      return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+          reject(new Error("geolocation unavailable"));
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          (position) => resolve({
+            mode: "auto",
+            region: "현재 위치",
+            lat: position.coords.latitude,
+            lon: position.coords.longitude
+          }),
+          reject,
+          { enableHighAccuracy: false, timeout: 5000, maximumAge: 10 * 60 * 1000 }
+        );
+      });
+    },
+    async resolveWeatherLocation(force = false) {
+      const saved = this.getSavedWeatherLocation();
+      if (!force && saved) {
+        this.weatherLocation = saved;
+        return saved;
+      }
+      try {
+        const browserLocation = await this.getBrowserLocation();
+        this.saveWeatherLocation(browserLocation);
+        return browserLocation;
+      } catch (error) {
+        const fallback = saved || { mode: "manual", region: "서울" };
+        this.saveWeatherLocation(fallback);
+        return fallback;
+      }
+    },
+    async loadWeatherData(force = false) {
+      this.weatherLoading = true;
+      this.weatherError = "";
+      try {
+        const location = await this.resolveWeatherLocation(force);
+        const requestLocation = location.mode === "auto"
+          ? { lat: location.lat, lon: location.lon, region: location.region }
+          : { region: location.region || "서울" };
+        this.weatherPayload = await fetchCurrentWeather(requestLocation);
+      } catch (error) {
+        console.error(error);
+        this.weatherError = error.message || "날씨 정보를 불러오지 못했습니다.";
+      } finally {
+        this.weatherLoading = false;
+      }
+    },
+    async setWeatherRegion(region) {
+      if (region === "현재 위치") {
+        localStorage.removeItem("mindroom-weather-location");
+        await this.loadWeatherData(true);
+        return;
+      }
+      this.saveWeatherLocation({ mode: "manual", region });
+      await this.loadWeatherData();
+    },
+    async loadWardrobeData() {
+      this.wardrobeLoading = true;
+      this.wardrobeError = "";
+      try {
+        this.wardrobePayload = await fetchWardrobeRecommendation();
+      } catch (error) {
+        console.error(error);
+        this.wardrobeError = error.message || "옷장 추천을 불러오지 못했습니다.";
+      } finally {
+        this.wardrobeLoading = false;
       }
     },
     setMbtiView(viewKey) {
