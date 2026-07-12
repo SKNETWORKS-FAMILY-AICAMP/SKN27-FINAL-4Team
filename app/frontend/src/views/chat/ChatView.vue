@@ -108,6 +108,9 @@
       <div class="input-bar">
         <input ref="fileInputRef" type="file" accept="image/*" class="file-hidden" @change="onPickImage" />
         <button class="attach-btn" :disabled="isTyping" @click="fileInputRef?.click()" title="사진 첨부">📷</button>
+        <button v-if="sttSupported" class="attach-btn stt-btn" :class="{ 'stt-recording': isRecording }"
+                :disabled="isTyping" @click="toggleStt"
+                :title="isRecording ? '음성 입력 중지' : '음성으로 입력'">🎤</button>
         <textarea
           ref="inputRef"
           v-model="inputText"
@@ -134,6 +137,7 @@ import { chatApi } from '../../api/chat.js'
 import chatBg from '../../assets/chat-bg.png'
 import { useSecret } from '../../composables/useSecret.js'
 import { useTts } from '../../composables/useTts.js'
+import { useStt } from '../../composables/useStt.js'
 
 const router = useRouter()
 const route  = useRoute()
@@ -267,6 +271,22 @@ const displayCharacterId = ref(normalizeCharacterId(route.query.character || sto
 const selectedExpression = ref('default')
 const { secret: isSecret, setSecret } = useSecret()
 const { playTask, stop: ttsStop } = useTts()
+const { isSupported: sttSupported, isRecording, start: sttStart, stop: sttStop } = useStt()
+
+// 🎤 음성 입력 (STT) — 말하면 입력창에 실시간으로 채워지고, 확인 후 전송 (2026-07-10)
+let sttBaseText = ''
+function toggleStt() {
+  if (isRecording.value) { sttStop(); return }
+  sttBaseText = inputText.value ? inputText.value.replace(/\s+$/, '') + ' ' : ''
+  sttStart({
+    onInterim: (t) => { inputText.value = (sttBaseText + t).slice(0, 300) },
+    onFinal:   (t) => {
+      inputText.value = (sttBaseText + t).slice(0, 300)
+      sttBaseText = inputText.value.replace(/\s+$/, '') + ' '
+    },
+    onEnd: () => { nextTick(() => autoResize()) },
+  })
+}
 const sessionId      = ref(null)
 const coldStartDone  = ref(false)
 const showExitModal  = ref(false)
@@ -1130,5 +1150,17 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   to { opacity: 1; transform: translateY(0); }
 }
 
+
+
+/* 🎤 음성 입력 (STT) */
+.stt-btn.stt-recording {
+  background: rgba(248, 113, 113, 0.25);
+  border-color: rgba(248, 113, 113, 0.8);
+  animation: sttPulse 1.2s ease-in-out infinite;
+}
+@keyframes sttPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.45); }
+  50%      { box-shadow: 0 0 0 7px rgba(248, 113, 113, 0); }
+}
 
 </style>
