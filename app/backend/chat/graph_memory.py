@@ -59,12 +59,32 @@ def _get_driver():
             pwd = os.environ.get('NEO4J_PASSWORD', '')
             drv = GraphDatabase.driver(uri, auth=(user, pwd))
             drv.verify_connectivity()
+            _ensure_vector_index(drv)   # 운영 자동화: 첫 연결 때 인덱스 보장 (멱등)
             _driver = drv
             print('[graph_memory] Neo4j 연결됨')
         except Exception as e:
             print(f'[graph_memory] Neo4j 비활성({e})')
             _driver = None
         return _driver
+
+
+def _ensure_vector_index(drv):
+    """벡터 인덱스 자동 생성 (2026-07-13) — 수동 init 없이도 운영 배포가 안전하게.
+
+    첫 연결 시 1회 실행, CREATE ... IF NOT EXISTS라 멱등. 신규 환경(운영 포함)은
+    이것만으로 의미 검색이 켜짐 — 저장 시 임베딩은 자동 부착되므로 백필이 필요한
+    건 "임베딩 도입 이전의 옛 데이터"가 있는 개발 DB뿐 (그때만 memory_vector_init).
+    실패해도 무해: 벡터 질의가 키워드 폴백으로 동작."""
+    try:
+        from chat import embedder
+        with drv.session() as s:
+            s.run(
+                f'CREATE VECTOR INDEX {VEC_INDEX} IF NOT EXISTS '
+                'FOR (e:Event) ON (e.embedding) '
+                'OPTIONS {indexConfig: {`vector.dimensions`: $dim, '
+                '`vector.similarity_function`: "cosine"}}', dim=embedder.EMBED_DIM)
+    except Exception as e:
+        print(f'[graph_memory] 벡터 인덱스 자동 생성 실패(키워드 폴백 동작): {e}')
 
 
 def is_enabled() -> bool:
