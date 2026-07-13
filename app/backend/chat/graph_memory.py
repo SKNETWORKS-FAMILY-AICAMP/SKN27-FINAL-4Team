@@ -363,6 +363,38 @@ def recall(user_id, limit: int = 6, message: str = None) -> str:
                 if ppl:
                     parts.append('· 함께: ' + ', '.join(ppl))
                 lines.append('- ' + ' '.join(parts))
+            # ③ 언급 기반 직접 검색 (2026-07-12) — "너 그거 기억나?" 커버.
+            #    회상 창(상위 N개) 밖으로 밀린 옛 기억도, 사용자가 이름을 부르면
+            #    창과 무관하게 그래프에서 직접 찾아온다. 만료된 기억은 제외(잊은 건 잊은 것).
+            if message and len(message.strip()) >= 4:
+                msgnorm = _norm_key(message)
+                # 중복 방지는 key+name 이중으로 — 옛 노드(key=null)끼리 null==null 오판 방지 (실측 버그)
+                seen_keys = {r.get('key') for r in (coming + events) if r.get('key')}
+                seen_names = {r.get('name') for r in (coming + events) if r.get('name')}
+                asked = s.run(
+                    'MATCH (u:User {uid:$uid})-[:HAS_EVENT]->(e:Event) '
+                    'WHERE e.valid_until IS NULL AND size(e.name) >= 2 '
+                    'AND ($msg CONTAINS e.name '
+                    '     OR (size(e.key) >= 2 AND $msgnorm CONTAINS e.key) '
+                    '     OR any(t IN split(e.name, \' \') '
+                    '            WHERE size(t) >= 2 AND $msg CONTAINS t)) '
+                    'OPTIONAL MATCH (e)-[:FELT]->(m:Emotion) '
+                    'RETURN e.key AS key, e.name AS name, e.date AS date, '
+                    'collect(DISTINCT m.type) AS emotions LIMIT 4',
+                    uid=user_id, msg=message, msgnorm=msgnorm).data()
+                for r in asked:
+                    if (r.get('key') and r['key'] in seen_keys) \
+                            or (r.get('name') and r['name'] in seen_names):
+                        continue   # 이미 회상 창에 있는 건 중복 방지
+                    parts = [r['name']]
+                    if r.get('date'):
+                        parts.append(f"({r['date']})")
+                    emos = [x for x in (r.get('emotions') or []) if x]
+                    if emos:
+                        parts.append('· 감정: ' + ', '.join(emos))
+                    lines.append('- (방금 물어본 기억) ' + ' '.join(parts))
+                    events.append(r)   # 재강화 매칭 범위에 포함 — 꺼낸 기억은 선명해진다
+
             # 인물(KNOWS) 회상 — 저장만 되고 회상 안 되던 구멍 보수 (2026-07-12)
             people = s.run(
                 'MATCH (u:User {uid:$uid})-[:KNOWS]->(p:Person) '
