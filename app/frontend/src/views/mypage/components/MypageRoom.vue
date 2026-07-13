@@ -71,7 +71,7 @@ export default {
         character: { x: 45.2, y: 33.8 },
         profile: { x: 21.8, y: 20.1 },
         weather: { x: 31.0, y: 16.6 },
-        book: { x: 58.2, y: 20.4 },
+        book: { x: 58.1, y: 26.4 },
         mbti: { x: 74.0, y: 20.8 },
         settings: { x: 82.8, y: 60.2 }
       };

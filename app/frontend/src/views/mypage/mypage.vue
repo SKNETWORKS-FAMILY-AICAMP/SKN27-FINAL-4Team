@@ -58,10 +58,10 @@
             <strong>방 안 상태판</strong>
           </div>
           <section class="summary-grid" aria-label="내 상태 요약">
-            <button class="summary-card" type="button" @click="openPanel('book')">
+            <button class="summary-card" type="button" @click="goToReport">
               <span>오늘 기분</span>
               <strong>{{ todayEmotionLabel }}</strong>
-              <small>책장 추천에 반영</small>
+              <small>마음 리포트에서 확인</small>
             </button>
             <button class="summary-card" type="button" @click="openPanel('mbti')">
               <span>MBTI</span>
@@ -315,6 +315,11 @@ export default {
       if (!list.length) return fallback;
       const visible = list.slice(0, 2).join(", ");
       return list.length > 2 ? `${visible} 외 ${list.length - 2}` : visible;
+    },
+    goToReport() {
+      this.pendingPanel = null;
+      this.closePanel();
+      this.$router.push("/report");
     },
     async loadProfileData() {
       try {
