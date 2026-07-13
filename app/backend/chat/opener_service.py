@@ -86,6 +86,16 @@ def _memory_opener(user_id: int, nickname: str) -> str | None:
             .first()
         )
         if not summary or not summary.strip():
+            summary = '(요약 없음)'
+
+        # 다가오는 일정(그래프 기억) — 있으면 첫인사가 먼저 챙긴다 (2026-07-12)
+        up = ''
+        try:
+            from chat import graph_memory
+            up = graph_memory.upcoming(user_id)
+        except Exception:
+            up = ''
+        if summary == '(요약 없음)' and not up:
             return None
 
         from ai.agents.llm import get_llm
@@ -99,7 +109,8 @@ def _memory_opener(user_id: int, nickname: str) -> str | None:
              "- 요약을 그대로 읊지 말 것. 캐묻거나 잔소리하는 느낌 금지, 그냥 궁금한 친구 느낌.\n"
              "- 반드시 질문으로 끝맺어. 오직 순수 한국어. 목록/이모지 금지.\n"
              f"- 호칭은 '{nickname}'(없으면 생략 가능)."),
-            ('user', f'[기억 요약]\n{summary}'),
+            ('user', f'[기억 요약]\n{summary}'
+             + (f'\n\n[다가오는 일 — 있으면 이걸 최우선으로 자연스럽게 챙겨줘]\n{up}' if up else '')),
         ])
         text = resp.content.strip()
         return text if 5 <= len(text) <= 120 else None
@@ -116,7 +127,16 @@ def generate_opener(nickname: str | None, lat=None, lon=None, user_id=None) -> s
     # ① 기억 기반 첫인사 — "얘가 날 기억하네"가 선순환의 입구.
     #    단, 매번 기억으로 열면 같은 일정(예: 여행)만 반복돼 잔소리처럼 느껴진다.
     #    절반만 기억으로 열고 나머지는 날씨/시간대로 — 자연스러운 완급 조절.
-    if user_id and random.random() < 0.5:
+    #    예외: 오늘·내일 일정(D-1 이내)이 있으면 무조건 기억으로 연다 (선제 챙김, 2026-07-12)
+    urgent = False
+    if user_id:
+        try:
+            from chat import graph_memory
+            urgent = any(k in graph_memory.upcoming(user_id, days=1)
+                         for k in ('D-DAY', 'D-1'))
+        except Exception:
+            urgent = False
+    if user_id and (urgent or random.random() < 0.5):
         m = _memory_opener(user_id, n)
         if m:
             return m

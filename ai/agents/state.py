@@ -31,7 +31,9 @@ class ChatState(TypedDict, total=False):
     emotion_probs: dict
     emotion_label: str                # joy / sadness / anger / normal
     prev_emotion: Optional[str]       # 직전 턴 감정 (초단문 바이패스·저확신 폴백용)
-    emotion_source: str               # model / llm_context / short_bypass / fallback (디버깅용)
+    emotion_source: str               # model / llm_context / short_bypass / crisis / mixed_llm / mixed_model / fallback (디버깅용)
+    emotion_secondary: Optional[str]  # 복합 감정의 부감정 (응답 생성 전용 — 저장하지 않음, 2026-07-10)
+    crisis: bool                      # 위기 신호 감지 (라우팅 전용 — 저장하지 않음, 2026-07-10)
 
     # 응답 생성
     agent_guide: str                  # 감정 에이전트가 만든 응답 지침

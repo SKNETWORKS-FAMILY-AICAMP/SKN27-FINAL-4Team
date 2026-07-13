@@ -43,11 +43,19 @@ def _err(code, message, http_status=status.HTTP_400_BAD_REQUEST):
     )
 
 
-def _get_session(session_id):
+def _get_session(session_id, request=None):
+    """세션 조회 + 소유 검증 (2026-07-12 보안 보강).
+    주인 있는 세션은 그 주인만 접근 가능 — 세션 ID 추측으로 남의 대화·기억에
+    접근하는 IDOR 차단. request를 주면 검증까지, 안 주면 조회만(내부용)."""
     try:
-        return ChatSession.objects.get(id=session_id)
+        session = ChatSession.objects.get(id=session_id)
     except (ChatSession.DoesNotExist, ValueError, TypeError):
         return None
+    if request is not None and session.user_id:
+        requester = request.user if request.user.is_authenticated else None
+        if requester is None or requester.id != session.user_id:
+            return None   # 소유 불일치 — 존재 여부도 숨김 (404와 동일 응답)
+    return session
 
 
 def _session_user(request, session):
@@ -62,6 +70,21 @@ _TAG_RE = re.compile(r'\[[^\[\]]{1,30}\]')
 def _strip_tags(text: str) -> str:
     """[sighs] 같은 오디오 태그 제거 — 화면/DB용 깨끗한 텍스트."""
     return re.sub(r'\s{2,}', ' ', _TAG_RE.sub('', text)).strip()
+
+
+# 페이지 안내 룰 (2026-07-12) — 사용자가 관련 얘기를 꺼냈을 때만 바로가기 칩 제안 (잔소리 방지)
+_SUGGEST_REPORT = re.compile(r'리포트|내\s*감정\s*(기록|통계|어땠|흐름)|감정\s*캘린더|이번\s*주\s*나\s*어땠|기록\s*보고')
+_SUGGEST_MYPAGE = re.compile(r'마이\s*페이지|프로필|닉네임|MBTI|엠비티아이|내\s*성향|설정\s*바꾸')
+
+
+def _page_suggestion(message: str):
+    """(page, label) 또는 (None, None) — 명시적 언급에만 반응."""
+    m = message or ''
+    if _SUGGEST_REPORT.search(m):
+        return 'report', '📊 마음 리포트 보러 가기'
+    if _SUGGEST_MYPAGE.search(m):
+        return 'mypage', '👤 마이페이지로 가기'
+    return None, None
 
 
 # ═════════════════════════════════════════════════════════════
@@ -100,7 +123,9 @@ def session_start(request):
     else:
         ChatMessage.objects.create(session=session, role='assistant', content=opener)
 
-    tts_task_id = tts_service.create_task(opener, character, 'normal')
+    use_tts = request.data.get('tts', True)
+    use_tts = use_tts not in (False, 'false', '0', 0)
+    tts_task_id = tts_service.create_task(opener, character, 'normal') if use_tts else None
 
     return _ok({
         'session_id': session.id,
@@ -119,7 +144,7 @@ def session_start(request):
 @permission_classes([AllowAny])
 def chat_turn(request):
     """대화 턴 — 텍스트 즉시 반환 + TTS는 tts_task_id로 폴링."""
-    session = _get_session(request.data.get('session_id'))
+    session = _get_session(request.data.get('session_id'), request)
     if session is None:
         return _err('SESSION_NOT_FOUND', '세션을 찾을 수 없습니다.', status.HTTP_404_NOT_FOUND)
     if not session.cold_start_done:
@@ -233,7 +258,10 @@ def chat_turn(request):
         message_id = assistant_msg.id
         uid = user.id if user else None
         memory.capture_async(uid, stored_user_msg)   # 중요 정보 즉시 저장 (사진 캡션 포함)
-        graph_memory.capture_async(uid, stored_user_msg)  # 구조화 기억(그래프) 병행 — Neo4j 미설정 시 no-op
+        # 위기 턴은 구조화 기억(그래프)에서 제외 — 민감 발화 영구 박제·오회상 방지 (2026-07-12)
+        # (텍스트 요약에는 남겨 위로 연속성 유지 — 그래프/요약 역할 분리 원칙)
+        if not result.get('crisis'):
+            graph_memory.capture_async(uid, stored_user_msg, emotion=emotion_label)  # 구조화 기억 병행 — 감정 가중 응고화 (Neo4j 미설정 시 no-op)
         memory.update_async(uid, session.id)      # 8턴 경계 압축·정리
 
         # 응답에 MBTI 질문을 얹었으면, 다음 사용자 메시지를 그 답변으로 받도록 pending 설정
@@ -242,9 +270,15 @@ def chat_turn(request):
             session.mbti_last_question_code = probe_code
             session.save(update_fields=['mbti_pending', 'mbti_last_question_code'])
 
+    # 페이지 안내 칩 — 사용자가 리포트·마이페이지 관련 얘기를 꺼냈을 때만 (2026-07-12)
+    suggest_page, suggest_label = _page_suggestion(message)
+
     # TTS 병렬 생성 (ElevenLabs) — 연기 태그 포함 원문으로 생성, 1회 재생 후 파기
+    # 음소거 사용자(tts=false)는 생성 자체를 스킵 — 듣지 않을 음성에 크레딧을 쓰지 않는다 (2026-07-12)
+    use_tts = request.data.get('tts', True)
+    use_tts = use_tts not in (False, 'false', '0', 0)
     tts_task_id = tts_service.create_task(
-        tagged_response, session.character, emotion_label or 'normal')
+        tagged_response, session.character, emotion_label or 'normal') if use_tts else None
 
     return _ok({
         'session_id': session.id,
@@ -254,6 +288,8 @@ def chat_turn(request):
         'tts_task_id': tts_task_id,
         'ui': {
             'mbti_pending': is_mbti_answer,
+            'suggest_page': suggest_page,       # 'report' | 'mypage' | None — 대화 맥락 바로가기 칩
+            'suggest_label': suggest_label,
         },
     })
 
@@ -269,6 +305,7 @@ def tts_status(request, task_id):
     data = {'status': task['status'], 'audio_url': task.get('audio_url')}
     if task['status'] == 'done':
         data['voice_id'] = task.get('voice_id')
+        data['alignment'] = task.get('alignment')   # 글자별 타임스탬프 (자막 동기용, 없으면 null)
     return _ok(data)
 
 
@@ -295,7 +332,7 @@ def mbti_next_question(request):
     """(레거시) 구 10초 유휴 타이머용 엔드포인트 — 현재 프론트는 호출하지 않음.
     MBTI 질문은 chat_turn 응답에 대화 흐름으로 얹는다(2026-07-08). 코드는 하위호환용 유지.
     수집 미완료면 질문 반환 + pending 설정. 시크릿 모드는 완전 무저장 원칙으로 질문 안 함."""
-    session = _get_session(request.GET.get('session_id'))
+    session = _get_session(request.GET.get('session_id'), request)
     if session is None:
         return _err('SESSION_NOT_FOUND', '세션을 찾을 수 없습니다.', status.HTTP_404_NOT_FOUND)
     if session.is_secret:
@@ -328,7 +365,9 @@ def mbti_next_question(request):
     else:
         ChatMessage.objects.create(session=session, role='assistant', content=text)
 
-    tts_task_id = tts_service.create_task(text, session.character, 'normal', cacheable=True)
+    use_tts = request.GET.get('tts', '1') not in ('false', '0')
+    tts_task_id = (tts_service.create_task(text, session.character, 'normal', cacheable=True)
+                   if use_tts else None)
     return _ok({
         'has_question': True,
         'question_code': code,
@@ -350,7 +389,7 @@ def mbti_next_question(request):
 @permission_classes([AllowAny])
 def session_end(request):
     """세션 종료 — 시크릿: RAM 캐시 파기 / 일반: 8턴 못 채운 잔여 대화 요약 반영."""
-    session = _get_session(request.data.get('session_id'))
+    session = _get_session(request.data.get('session_id'), request)
     if session is None:
         return _err('SESSION_NOT_FOUND', '세션을 찾을 수 없습니다.', status.HTTP_404_NOT_FOUND)
     secret_cache.purge(session.id)
@@ -363,3 +402,7 @@ def session_end(request):
 # (구 콜드스타트 감정 선택 · 날씨 배너 API는 친구 컨셉 개편으로 제거 — 2026-07-03)
 # (추천 질문 '이런 말 어때요' API는 기능 폐기로 제거 — 2026-07-03)
 # (계획도움 /api/plan-support/ · WalkCuration은 장소 추천 기능 폐기로 제거 — 2026-07-05)
+
+
+# (복합 감정 임계값 보정용 임시 /api/emotion/probe/ 는 실측 완료 후 제거 — 2026-07-10.
+#  재보정 필요 시 predict_emotion_full을 임시 뷰로 노출해 절 분할 실측 재현 가능)
