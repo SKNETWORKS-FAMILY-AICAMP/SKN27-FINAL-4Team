@@ -17,6 +17,7 @@ from langgraph.graph import END, StateGraph
 from ai.agents.nodes import (
     analysis_node,
     anger_agent_node,
+    crisis_agent_node,
     joy_agent_node,
     load_context_node,
     mbti_check_node,
@@ -41,6 +42,7 @@ def build_graph():
     builder.add_node('sadness_agent', sadness_agent_node)
     builder.add_node('anger_agent', anger_agent_node)
     builder.add_node('normal_agent', normal_agent_node)
+    builder.add_node('crisis_agent', crisis_agent_node)   # 위기 대응 (2026-07-10)
     builder.add_node('resp_prep', resp_prep_node)
 
     # entry: MBTI pending 체크 (입력 직후 최우선)
@@ -57,12 +59,14 @@ def build_graph():
     )
     builder.add_edge('mbti_save', END)
 
-    # 컨텍스트 1회 조회 → 감성분석(확신도 게이트) → 감정 에이전트 1개만 실행
+    # 컨텍스트 1회 조회 → 감성분석(위기 감지 → 확신도 게이트) → 에이전트 1개만 실행
+    # 위기 감지 시 감정은 sadness로 고정(표정·TTS 톤 일관)하되 crisis_agent가 위로 전담
     builder.add_edge('load_context', 'analysis')
     builder.add_conditional_edges(
         'analysis',
-        lambda s: s.get('emotion_label', 'normal'),
+        lambda s: 'crisis' if s.get('crisis') else s.get('emotion_label', 'normal'),
         {
+            'crisis': 'crisis_agent',
             'joy': 'joy_agent',
             'sadness': 'sadness_agent',
             'anger': 'anger_agent',
@@ -71,7 +75,7 @@ def build_graph():
     )
 
     # 에이전트 → 응답 정제 (Plan Agent는 장소 추천 기능 폐기로 제거 — 2026-07-05)
-    for agent in ('joy_agent', 'sadness_agent', 'anger_agent', 'normal_agent'):
+    for agent in ('joy_agent', 'sadness_agent', 'anger_agent', 'normal_agent', 'crisis_agent'):
         builder.add_edge(agent, 'resp_prep')
     builder.add_edge('resp_prep', END)
 

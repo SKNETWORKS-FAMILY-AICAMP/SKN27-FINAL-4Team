@@ -32,24 +32,26 @@ export const chatApi = {
 
   /** 세션 시작 — 친구 컨셉: 날씨/시간/닉네임 첫인사(opener) 반환.
    *  coords={lat,lon} 있으면 날씨 반영 (없어도 시간대 인사로 정상 동작) */
-  async startSession(characterId, isSecret, coords = null) {
+  async startSession(characterId, isSecret, coords = null, tts = true) {
     return unwrap(await http.post('/session/start/', {
       character_id: characterId,
       is_secret: isSecret,
       lat: coords?.lat,
       lon: coords?.lon,
+      tts,                       // 음소거 사용자는 오프너 TTS 생성 스킵 (크레딧 절약)
     }))
   },
 
   /** 대화 턴 (텍스트 즉시 + tts_task_id로 오디오 폴링)
    *  image: data URL(선택) — 사진 첨부 시 멀티모달로 전달, 저장은 안 함 */
-  async sendChat(sessionId, message, characterId, isSecret, image = null) {
+  async sendChat(sessionId, message, characterId, isSecret, image = null, tts = true) {
     return unwrap(await http.post('/chat/', {
       session_id: sessionId,
       character_id: characterId,
       message,
       is_secret: isSecret,
       image,
+      tts,                       // 음소거 시 서버가 TTS 생성 자체를 건너뜀
     }))
   },
 
