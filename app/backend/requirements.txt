@@ -30,3 +30,4 @@ numpy>=1.24.0
 
 # ── TTS ──
 # ElevenLabs REST API (requests 사용, 별도 SDK 불필요)
+sentence-transformers>=2.2.0

@@ -150,12 +150,17 @@ def _norm_key(s: str) -> str:
 # 기쁨은 중간, 일상은 기본. 회상 정렬의 동순위 타이브레이커로 사용.
 _SALIENCE = {'sadness': 1.5, 'anger': 1.4, 'joy': 1.2}
 
+# ── 벡터 의미 검색 (2026-07-12) ──────────────────────────────
+VEC_INDEX = 'memory_vec'      # Neo4j 벡터 인덱스 이름 (Event.embedding, 768, cosine)
+VEC_RECALL_MIN = 0.33   # 실측 (memory_embed_bench): 무관질문 최고 0.32 < 정답 최저 0.35         # 질문↔기억 유사도 하한 — 초기값, 평가셋 스윕으로 보정 예정
+VEC_DEDUP_MIN = 0.93          # 저장 시 즉시 병합 임계값 — 보수적으로 높게 (오병합 방지), 스윕 예정
+
 # 만료 신호 힌트 — 이 패턴이 있는데 추출이 expired를 안 내면 1회 재시도 (2026-07-12 평가셋 변동성 보정)
 _EXPIRY_HINT = re.compile(
     r'헤어졌|헤어져|절교|이별|그만뒀|그만둠|그만둘|퇴사|취소|깨졌|파토|잊어줘|잊어버려|기억하지\s*마|지워줘')
 
 
-def _store(tx, uid: int, data: dict, salience: float = 1.0) -> None:
+def _store(tx, uid: int, data: dict, salience: float = 1.0, vectors: dict = None) -> None:
     tx.run('MERGE (u:User {uid:$uid})', uid=uid)
     this_turn_keys = []   # 이번 턴에 저장한 사건 키 — 만료에서 보호 (종결 기록 생존)
     for ev in (data.get('events') or []):
@@ -164,15 +169,17 @@ def _store(tx, uid: int, data: dict, salience: float = 1.0) -> None:
         if not key:
             continue
         this_turn_keys.append(key)
+        vec = (vectors or {}).get(name) or (vectors or {}).get((ev.get('name') or '').strip())
         tx.run(
             'MATCH (u:User {uid:$uid}) '
             'MERGE (e:Event {uid:$uid, key:$key}) '
             'ON CREATE SET e.name = $name '
             'SET e.date = coalesce($date, e.date) '
+            'SET e.embedding = coalesce(e.embedding, $vec) '   # 의미 검색용 벡터 (없으면 유지)
             'SET e.salience = CASE WHEN coalesce(e.salience, 0) < $sal '
             '                 THEN $sal ELSE e.salience END '
             'MERGE (u)-[:HAS_EVENT]->(e)',
-            uid=uid, key=key, name=name, date=ev.get('date'), sal=salience)
+            uid=uid, key=key, name=name, date=ev.get('date'), sal=salience, vec=vec)
         emo = (ev.get('emotion') or '').strip()
         if emo:
             tx.run(
@@ -296,8 +303,57 @@ def _capture(uid: int, message: str, emotion: str = None) -> None:
                 or data.get('preferences') or data.get('expired')):
             return   # expired 포함 — '잊어줘'만 있는 메시지도 저장돼야 함 (평가셋 F01 원인, 2026-07-12)
         sal = _SALIENCE.get(emotion or '', 1.0)
+        # 벡터 준비 (모델 없으면 전부 None → 기존 동작 그대로)
+        from chat import embedder
+        vectors = {}
+        for ev in (data.get('events') or []):
+            name = (ev.get('name') or '').strip()
+            if name:
+                vectors[name] = embedder.embed(name)
         with drv.session() as s:
-            s.execute_write(lambda tx: _store(tx, uid, data, salience=sal))
+            # dedup 2차 (즉시): 새 사건이 기존 사건과 의미상 같으면(코사인 ≥ VEC_DEDUP_MIN)
+            # 새로 만들지 않고 기존 노드로 병합 리다이렉트 — "발표 잘함" ≈ "발표 대박"
+            def _overlaps(a, b):
+                """만료 대상 이름과 병합 후보가 같은 사건을 가리키는지 (토큰 겹침)"""
+                na, nb = _norm_key(a), _norm_key(b)
+                if not na or not nb:
+                    return False
+                if na in nb or nb in na:
+                    return True
+                ta = {t for t in re.split(r'\s+', a.strip()) if len(t) >= 2}
+                tb = {t for t in re.split(r'\s+', b.strip()) if len(t) >= 2}
+                return bool(ta & tb)
+
+            expired_names = [(e.get('name') or '').strip()
+                             for e in (data.get('expired') or []) if e.get('name')]
+            for ev in (data.get('events') or []):
+                name = (ev.get('name') or '').strip()
+                vec = vectors.get(name)
+                if not vec:
+                    continue
+                # 종결 기록은 병합 금지 (S04 회귀, 2026-07-13): "영화 약속 취소"가
+                # "영화 보기"로 병합되면 종결 정보가 소실되고, 원본이 이번 턴
+                # keep 목록에 들어가 만료 도장까지 차단됨. 만료 신호가 있는
+                # 이벤트는 독립 노드로 남긴다.
+                if _EXPIRY_HINT.search(name):
+                    continue
+                try:
+                    hit = s.run(
+                        f'CALL db.index.vector.queryNodes("{VEC_INDEX}", 3, $vec) '
+                        'YIELD node, score '
+                        'WHERE node.uid = $uid AND score >= $min '
+                        'AND node.valid_until IS NULL AND node.name <> $name '
+                        'RETURN node.name AS name, score LIMIT 1',
+                        vec=vec, uid=uid, min=VEC_DEDUP_MIN, name=name).single()
+                    if hit and any(_overlaps(x, hit['name']) for x in expired_names):
+                        continue   # 병합 후보가 이번 턴 만료 대상 — 합치면 만료가 막힘
+                    if hit:
+                        print(f"[graph_memory] dedup2: '{name}' ≈ '{hit['name']}' "
+                              f"({hit['score']:.2f}) → 병합")
+                        ev['name'] = hit['name']   # MERGE가 기존 노드를 향하게
+                except Exception:
+                    pass   # 인덱스 미생성 등 — 병합 없이 진행
+            s.execute_write(lambda tx: _store(tx, uid, data, salience=sal, vectors=vectors))
     except Exception as e:
         print(f'[graph_memory] 캡처 실패: {e}')
 
@@ -371,17 +427,38 @@ def recall(user_id, limit: int = 6, message: str = None) -> str:
                 # 중복 방지는 key+name 이중으로 — 옛 노드(key=null)끼리 null==null 오판 방지 (실측 버그)
                 seen_keys = {r.get('key') for r in (coming + events) if r.get('key')}
                 seen_names = {r.get('name') for r in (coming + events) if r.get('name')}
-                asked = s.run(
-                    'MATCH (u:User {uid:$uid})-[:HAS_EVENT]->(e:Event) '
-                    'WHERE e.valid_until IS NULL AND size(e.name) >= 2 '
-                    'AND ($msg CONTAINS e.name '
-                    '     OR (size(e.key) >= 2 AND $msgnorm CONTAINS e.key) '
-                    '     OR any(t IN split(e.name, \' \') '
-                    '            WHERE size(t) >= 2 AND $msg CONTAINS t)) '
-                    'OPTIONAL MATCH (e)-[:FELT]->(m:Emotion) '
-                    'RETURN e.key AS key, e.name AS name, e.date AS date, '
-                    'collect(DISTINCT m.type) AS emotions LIMIT 4',
-                    uid=user_id, msg=message, msgnorm=msgnorm).data()
+                # ③-a 의미 검색 (2026-07-12): 질문을 벡터로 바꿔 뜻이 가까운 기억을 찾는다
+                #     "회사 옮기려던 거 기억나?" ≈ "이직 고민" — 단어가 안 겹쳐도 소환
+                asked = []
+                try:
+                    from chat import embedder
+                    qvec = embedder.embed(message)
+                    if qvec:
+                        asked = s.run(
+                            f'CALL db.index.vector.queryNodes("{VEC_INDEX}", 8, $vec) '
+                            'YIELD node, score '
+                            'WHERE node.uid = $uid AND node.valid_until IS NULL '
+                            'AND score >= $min '
+                            'OPTIONAL MATCH (node)-[:FELT]->(m:Emotion) '
+                            'RETURN node.key AS key, node.name AS name, node.date AS date, '
+                            'collect(DISTINCT m.type) AS emotions, score '
+                            'ORDER BY score DESC LIMIT 4',
+                            vec=qvec, uid=user_id, min=VEC_RECALL_MIN).data()
+                except Exception:
+                    asked = []   # 모델·인덱스 미준비 → 키워드 폴백
+                # ③-b 키워드 폴백: 임베딩이 못 찾았을 때 문자열 매칭으로 한 번 더
+                if not asked:
+                    asked = s.run(
+                        'MATCH (u:User {uid:$uid})-[:HAS_EVENT]->(e:Event) '
+                        'WHERE e.valid_until IS NULL AND size(e.name) >= 2 '
+                        'AND ($msg CONTAINS e.name '
+                        '     OR (size(e.key) >= 2 AND $msgnorm CONTAINS e.key) '
+                        '     OR any(t IN split(e.name, \' \') '
+                        '            WHERE size(t) >= 2 AND $msg CONTAINS t)) '
+                        'OPTIONAL MATCH (e)-[:FELT]->(m:Emotion) '
+                        'RETURN e.key AS key, e.name AS name, e.date AS date, '
+                        'collect(DISTINCT m.type) AS emotions LIMIT 4',
+                        uid=user_id, msg=message, msgnorm=msgnorm).data()
                 for r in asked:
                     if (r.get('key') and r['key'] in seen_keys) \
                             or (r.get('name') and r['name'] in seen_names):
