@@ -546,6 +546,10 @@ class MonthlyResultAndReportTests(TestCase):
             FakeQuestionResponse(3, 'SN q1', '구체적인 사례를 봅니다.', 'SN', datetime(2026, 6, 3, 9, 0)),
             FakeQuestionResponse(4, 'TF q1', '근거를 먼저 봅니다.', 'TF', datetime(2026, 6, 4, 9, 0)),
             FakeQuestionResponse(5, 'JP q1', '계획을 세웁니다.', 'JP', datetime(2026, 6, 5, 9, 0)),
+            FakeQuestionResponse(6, 'TF q2', '객관적인 기준이 필요합니다.', 'TF', datetime(2026, 6, 6, 9, 0)),
+            FakeQuestionResponse(7, 'TF q3', '먼저 따져보는 편입니다.', 'TF', datetime(2026, 6, 7, 9, 0)),
+            FakeQuestionResponse(8, 'TF q4', '근거가 있으면 납득됩니다.', 'TF', datetime(2026, 6, 8, 9, 0)),
+            FakeQuestionResponse(9, 'TF q5', '논리적으로 정리합니다.', 'TF', datetime(2026, 6, 9, 9, 0)),
         ]
         return build_monthly_question_batch(
             user_id=7,
@@ -667,6 +671,95 @@ class MonthlyResultAndReportTests(TestCase):
         ][0]
         self.assertEqual(tf_context['score_delta_from_previous_axis_avg'], 1.6)
         self.assertEqual(tf_context['absolute_score_delta'], 1.6)
+
+    def test_onboarding_only_does_not_open_monthly_analysis(self):
+        period_key, period_start, period_end = resolve_month_period(
+            period_key='2026-06',
+        )
+        batch = build_monthly_question_batch(
+            user_id=7,
+            period_key=period_key,
+            period_start=period_start,
+            period_end=period_end,
+            responses=[],
+        )
+
+        result = run_monthly_mbti_pipeline(
+            batch=batch,
+            onboarding_mbti_type='INFP',
+            scoring_client=FakeScoringClient(),
+            report_client=FakeReportClient(),
+        )
+
+        self.assertEqual(result.primary_opening.scoring_axes, ())
+        self.assertEqual(result.monthly_result.status, 'insufficient_data')
+        self.assertIsNone(result.monthly_result.estimated_mbti_type)
+
+    def test_under_primary_threshold_axes_stay_in_preparing_state(self):
+        period_key, period_start, period_end = resolve_month_period(
+            period_key='2026-06',
+        )
+        rows = [
+            FakeQuestionResponse(1, 'IE q1', 'a', 'IE', datetime(2026, 6, 1, 9, 0)),
+            FakeQuestionResponse(2, 'SN q1', 'a', 'SN', datetime(2026, 6, 2, 9, 0)),
+            FakeQuestionResponse(3, 'TF q1', 'a', 'TF', datetime(2026, 6, 3, 9, 0)),
+            FakeQuestionResponse(4, 'JP q1', 'a', 'JP', datetime(2026, 6, 4, 9, 0)),
+        ]
+        batch = build_monthly_question_batch(
+            user_id=7,
+            period_key=period_key,
+            period_start=period_start,
+            period_end=period_end,
+            responses=rows,
+        )
+
+        result = run_monthly_mbti_pipeline(
+            batch=batch,
+            onboarding_mbti_type='INFP',
+            scoring_client=FakeScoringClient(),
+            report_client=FakeReportClient(),
+        )
+
+        self.assertEqual(result.primary_opening.scoring_axes, ())
+        self.assertEqual(result.monthly_result.status, 'insufficient_data')
+        self.assertIsNone(result.monthly_result.estimated_mbti_type)
+
+    def test_one_primary_open_axis_opens_monthly_analysis_with_baseline_axes(self):
+        period_key, period_start, period_end = resolve_month_period(
+            period_key='2026-06',
+        )
+        rows = [
+            FakeQuestionResponse(
+                index,
+                f'IE q{index}',
+                '혼자 쉬는 편입니다.',
+                'IE',
+                datetime(2026, 6, index, 9, 0),
+            )
+            for index in range(1, 6)
+        ]
+        batch = build_monthly_question_batch(
+            user_id=7,
+            period_key=period_key,
+            period_start=period_start,
+            period_end=period_end,
+            responses=rows,
+        )
+
+        result = run_monthly_mbti_pipeline(
+            batch=batch,
+            onboarding_mbti_type='ENFP',
+            scoring_client=FakeScoringClient(),
+            report_client=FakeReportClient(),
+        )
+
+        self.assertEqual(result.primary_opening.scoring_axes, ('IE',))
+        self.assertEqual(result.monthly_result.status, 'complete')
+        self.assertEqual(result.monthly_result.estimated_mbti_type, 'INFP')
+        self.assertEqual(result.final_axis_results['IE'].data_status, 'current_month')
+        self.assertEqual(result.final_axis_results['SN'].data_status, 'carried_from_onboarding')
+        self.assertEqual(result.final_axis_results['TF'].data_status, 'carried_from_onboarding')
+        self.assertEqual(result.final_axis_results['JP'].data_status, 'carried_from_onboarding')
 
     def test_run_monthly_mbti_pipeline_connects_scoring_to_report_payload(self):
         period_key, period_start, period_end = resolve_month_period(

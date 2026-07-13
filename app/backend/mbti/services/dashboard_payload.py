@@ -3,6 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from django.core.exceptions import AppRegistryNotReady, ImproperlyConfigured
+from django.db import DatabaseError
+
 from mbti.services.baseline_sources import load_onboarding_snapshot
 from mbti.services.monthly_questions import MBTI_AXES
 from mbti.services.monthly_results import AXIS_TYPE_INDEX
@@ -188,7 +191,10 @@ def _axis_score_for_frontend(axis_result) -> int:
 
 
 def _onboarding_payload(user_id: int) -> dict[str, Any]:
-    onboarding = load_onboarding_snapshot(user_id=user_id)
+    try:
+        onboarding = load_onboarding_snapshot(user_id=user_id)
+    except (AppRegistryNotReady, ImproperlyConfigured, DatabaseError):
+        onboarding = None
     onboarding_type = _valid_mbti_type(onboarding.mbti_type if onboarding else None)
     description = MBTI_TYPE_DESCRIPTIONS.get(onboarding_type or '')
 
@@ -239,6 +245,12 @@ def build_frontend_payload_from_monthly_record(monthly_result) -> dict[str, Any]
     onboarding_payload = _onboarding_payload(monthly_result.user_id)
     onboarding_type = _valid_mbti_type(onboarding_payload['type'])
     current_type = _valid_mbti_type(monthly_result.estimated_mbti_type) or '----'
+    if monthly_result.status != 'complete' or current_type == '----':
+        return build_frontend_preparing_payload(
+            user_id=monthly_result.user_id,
+            period_key=monthly_result.period_key,
+        )
+
     stored_previous_type = _valid_mbti_type(monthly_result.previous_estimated_mbti_type)
     previous_type = stored_previous_type or onboarding_type or '----'
     previous_label = (

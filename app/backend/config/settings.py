@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'calendar_api',
     'game.tarot_api',
     'mindreport',
+    'mybook',
 ]
 
 MIDDLEWARE = [
@@ -110,6 +111,7 @@ REST_FRAMEWORK = {
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',  # Vue dev server
 ]
+CORS_ALLOW_CREDENTIALS = True
 
 FRONTEND_BASE_URL = os.environ.get('FRONTEND_BASE_URL', 'http://localhost:5173').rstrip('/')
 
