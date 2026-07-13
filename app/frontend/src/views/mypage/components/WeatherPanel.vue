@@ -98,7 +98,7 @@
                 <span>{{ item.level }}</span>
               </div>
               <div class="weather-guide-meter" aria-hidden="true">
-                <i :style="{ width: `${Math.max(0, Math.min(100, Number(item.score || 0)))}%`, background: getMeterColor(item.level) }"></i>
+                <i :style="{ width: `${getMeterWidth(item)}%`, background: getMeterColor(item.level) }"></i>
               </div>
               <p>{{ item.reason }}</p>
             </article>
@@ -214,6 +214,7 @@ export default {
       if (condition.includes("눈")) return "is-snow";
       if (condition.includes("비") || condition.includes("소나기")) return "is-rain";
       if (condition.includes("맑음")) return "is-sunny";
+      if (condition.includes("흐림")) return "is-overcast";
       return "is-cloudy";
     },
     timeOfDayClass() {
@@ -312,6 +313,13 @@ export default {
       if (level.includes("높음") || level.includes("경고") || level.includes("주의")) return "#ffa940";
       if (level.includes("보통") || level.includes("관심") || level.includes("낮음")) return "#73d13d";
       return "#8ea7ff";
+    },
+    getMeterWidth(item) {
+      const score = Number(item.score || 0);
+      if (item.label === "체감온도") {
+        return Math.max(0, Math.min(100, ((score + 20) / 60) * 100));
+      }
+      return Math.max(0, Math.min(100, score));
     },
     valueOrDash(value) {
       return value === null || value === undefined || value === "" ? "-" : value;

@@ -69,20 +69,38 @@ export async function fetchCurrentWeather(location = {}) {
   return response.json();
 }
 
-export async function fetchWardrobeRecommendation() {
-  const response = await fetch("/api/mywardrobe/recommendation/", {
-    cache: "no-store",
-    credentials: "include"
-  });
-  if (!response.ok) {
-    let detail = `Failed to fetch wardrobe recommendation: ${response.status}`;
+
+
+export async function fetchBookRecommendation(force = false) {
+  const queryParams = force ? "?force=true" : "";
+  const endpoints = [
+    `/api/mybook/recommendation/${queryParams}`,
+    `http://localhost:8000/api/mybook/recommendation/${queryParams}`
+  ];
+
+  let lastError = null;
+  for (const endpoint of endpoints) {
     try {
-      const data = await response.json();
-      detail = data.detail || detail;
-    } catch (error) {}
-    throw new Error(detail);
+      const response = await fetch(endpoint, {
+        cache: "no-store",
+        credentials: "include"
+      });
+      if (!response.ok) {
+        let detail = `Failed to fetch book recommendation: ${response.status}`;
+        try {
+          const data = await response.json();
+          detail = data.detail || data.error || detail;
+        } catch (error) {}
+        lastError = new Error(detail);
+        continue;
+      }
+      return response.json();
+    } catch (error) {
+      lastError = error;
+    }
   }
-  return response.json();
+
+  throw lastError || new Error("Book recommendation API is not reachable");
 }
 
 export async function saveOnboardingMbti(mbtiType) {

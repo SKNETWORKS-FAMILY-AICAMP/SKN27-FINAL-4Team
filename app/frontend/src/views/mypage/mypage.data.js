@@ -7,7 +7,7 @@ export const i18n = {
     profile: "프로필 조회",
     character: "캐릭터 정보",
     weather: "날씨 정보",
-    wardrobe: "오늘의 옷장",
+    book: "오늘의 책 추천",
     mbti: "MBTI 분석",
     taste: "취향 분석",
     settings: "설정"
@@ -20,7 +20,7 @@ export const i18n = {
     profile: "Profile",
     character: "Character Info",
     weather: "Weather",
-    wardrobe: "Wardrobe",
+    book: "Today's Book",
     mbti: "MBTI Analysis",
     taste: "Taste Analysis",
     settings: "Settings"
@@ -30,14 +30,17 @@ export const i18n = {
 export function createMypageState() {
   return {
     activePanel: null,
+    pendingPanel: null,
+    roomFocusTarget: "character",
+    roomMoveKey: 0,
     toast: "",
     weatherPayload: null,
     weatherLoading: false,
     weatherError: "",
     weatherLocation: null,
-    wardrobePayload: null,
-    wardrobeLoading: false,
-    wardrobeError: "",
+    bookPayload: null,
+    bookLoading: false,
+    bookError: "",
     weatherRegions: [
       "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종",
       "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"

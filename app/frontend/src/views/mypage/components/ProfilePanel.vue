@@ -1,8 +1,33 @@
 <template>
   <div class="panel-body">
-    <div class="profile-info-layout">      <section class="card">
-        <h3>프로필 정보</h3>
-        <div class="form-grid two">
+    <div class="profile-info-layout">
+      <section class="card profile-card">
+        <header class="profile-card-head">
+          <div class="profile-portrait" aria-hidden="true">
+            <img v-if="currentCharacter" :src="`/characters/${currentCharacter.id}/default.png`" :alt="currentCharacter.name" />
+            <span v-else>{{ profileInitial }}</span>
+          </div>
+          <div class="profile-title">
+            <span>ROOM PROFILE</span>
+            <h3>{{ profileName }}</h3>
+            <p>{{ profileCaption }}</p>
+            <div class="profile-badges" aria-label="프로필 요약">
+              <span>{{ profile.gender || '성별 미등록' }}</span>
+              <span>{{ profile.birthDate || '생년월일 미등록' }}</span>
+              <span>{{ currentCharacter?.name || '캐릭터 미선택' }}</span>
+              <span>취향 {{ totalTasteCount }}개</span>
+            </div>
+          </div>
+          <button class="profile-edit-button" type="button" @click="handleEditToggle">
+            {{ profileEdit ? '완료' : '수정' }}
+          </button>
+        </header>
+
+        <section class="profile-section">
+          <div class="profile-section-title">
+            <span>기본 정보</span>
+          </div>
+          <div class="form-grid two">
           <div class="field">
             <label for="profile-name">이름 또는 닉네임</label>
             <input id="profile-name" v-model="profile.name" :readonly="!profileEdit" placeholder="이름 또는 닉네임" @input="normalizeNicknameInput" />
@@ -32,7 +57,14 @@
             </div>
           </div>
         </div>
-        <div class="form-grid profile-extra-grid">
+        </section>
+
+        <section class="profile-section taste-section">
+          <div class="profile-section-title">
+            <span>취향 조각</span>
+            <strong>{{ totalTasteCount }}개 선택</strong>
+          </div>
+          <div class="form-grid profile-extra-grid">
           <section class="field interest-keyword-field picker-field" aria-label="관심분야 설정">
             <div class="interest-keyword-head">
               <label>관심분야 키워드</label>
@@ -121,9 +153,7 @@
             </div>
           </section>
         </div>
-        <div class="actions" style="justify-content: flex-end;">
-          <button class="primary-button" type="button" @click="handleEditToggle">{{ profileEdit ? '완료' : '수정' }}</button>
-        </div>
+        </section>
         <p v-if="profileSavedAt" class="notice">마지막 저장 시각: {{ profileSavedAt }}</p>
       </section>
     </div>
@@ -199,10 +229,10 @@ export default {
     profileOptions: { type: Object, required: true },
     profileEdit: { type: Boolean, required: true },
     profileSavedAt: { type: String, default: "" },
-    selectedCharacter: { type: String, required: true },
-    currentCharacter: { type: Object, required: true },
-    characters: { type: Array, required: true },
-    showCharacterPicker: { type: Boolean, required: true }
+    selectedCharacter: { type: String, default: "" },
+    currentCharacter: { type: Object, default: null },
+    characters: { type: Array, default: () => [] },
+    showCharacterPicker: { type: Boolean, default: false }
   },
   emits: [
     "open-character-picker",
@@ -216,6 +246,21 @@ export default {
       hobbyGroups: groupByCategory(parseKeywordCsv(hobbyCsv, "hobby")),
       interestGroups: groupByCategory(parseKeywordCsv(interestCsv, "interest"))
     };
+  },
+  computed: {
+    profileName() {
+      return String(this.profile?.name || "이름 미입력").trim();
+    },
+    profileInitial() {
+      return this.profileName.slice(0, 1).toUpperCase();
+    },
+    profileCaption() {
+      const job = String(this.profile?.job || "직업 미입력").trim();
+      return job;
+    },
+    totalTasteCount() {
+      return (this.profile?.interests?.length || 0) + (this.profile?.hobbies?.length || 0);
+    }
   },
   methods: {
     togglePicker(type) {
@@ -479,9 +524,152 @@ export default {
 .card h3 {
   font-size: 20px !important;
   color: #fff7df !important;
-  margin-bottom: 16px !important;
+  margin: 0 !important;
   font-weight: 850 !important;
   letter-spacing: -0.02em;
+}
+
+.profile-card {
+  display: grid;
+  gap: 14px;
+}
+
+.profile-card-head {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  min-height: 148px;
+  padding: 18px;
+  border: 1px solid rgba(255, 247, 223, 0.14);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 18% 20%, rgba(255, 211, 122, 0.2), transparent 28%),
+    linear-gradient(135deg, rgba(255, 129, 174, 0.18), rgba(156, 91, 255, 0.14)),
+    rgba(18, 16, 55, 0.42);
+  overflow: hidden;
+}
+
+.profile-portrait {
+  position: relative;
+  display: grid;
+  place-items: end center;
+  width: 112px;
+  height: 112px;
+  border: 1px solid rgba(255, 247, 223, 0.24);
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at 50% 78%, rgba(255, 211, 122, 0.24), transparent 36%),
+    linear-gradient(145deg, rgba(156, 91, 255, 0.72), rgba(32, 41, 105, 0.76));
+  color: #fff7df;
+  font-size: 34px;
+  font-weight: 950;
+  box-shadow: 0 12px 24px rgba(5, 2, 18, 0.24);
+  overflow: hidden;
+}
+
+.profile-portrait img {
+  max-width: 84%;
+  max-height: 92%;
+  object-fit: contain;
+  filter: drop-shadow(0 16px 18px rgba(5, 2, 18, 0.46));
+}
+
+.profile-title {
+  min-width: 0;
+}
+
+.profile-title span {
+  display: block;
+  color: #d7b7ff;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.profile-title h3 {
+  margin-top: 4px !important;
+  font-size: 24px !important;
+  line-height: 1.18;
+}
+
+.profile-title p {
+  margin: 4px 0 0;
+  color: rgba(255, 245, 230, 0.66);
+  font-size: 13px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.profile-badges span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(215, 183, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(15, 10, 49, 0.34);
+  color: rgba(255, 245, 230, 0.82);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.profile-edit-button {
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid rgba(215, 183, 255, 0.42);
+  border-radius: 12px;
+  background: rgba(42, 26, 98, 0.82);
+  color: #fff7df;
+  font-size: 14px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.profile-edit-button:hover,
+.profile-edit-button:focus-visible {
+  border-color: rgba(255, 247, 223, 0.58);
+  background: linear-gradient(135deg, rgba(156, 91, 255, 0.82), rgba(81, 103, 232, 0.72));
+}
+
+.profile-section {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(215, 183, 255, 0.14);
+  border-radius: 16px;
+  background: rgba(18, 16, 55, 0.26);
+}
+
+.profile-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.profile-section-title span {
+  color: #fff7df;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.profile-section-title strong {
+  padding: 4px 10px;
+  border: 1px solid rgba(215, 183, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(32, 41, 105, 0.44);
+  color: #d7b7ff;
+  font-size: 12px;
+  font-weight: 900;
 }
 
 /* Avatar Card Refinements */
@@ -551,9 +739,11 @@ export default {
 
 /* Interest Keywords */
 .interest-keyword-field {
-  margin-top: 8px;
-  padding-top: 12px;
-  border-top: 1px dashed rgba(255, 255, 255, 0.15);
+  margin-top: 0;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
 }
 .interest-keyword-head strong {
   color: #fff;
@@ -587,5 +777,25 @@ export default {
   min-height: 44px !important;
   padding: 0 24px !important;
   font-size: 15px !important;
+}
+
+@media (max-width: 640px) {
+  .profile-card-head {
+    grid-template-columns: 76px minmax(0, 1fr);
+    min-height: 0;
+    gap: 12px;
+  }
+
+  .profile-portrait {
+    width: 76px;
+    height: 76px;
+    border-radius: 20px;
+    font-size: 24px;
+  }
+
+  .profile-edit-button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
 }
 </style>

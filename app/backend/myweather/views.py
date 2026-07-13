@@ -115,10 +115,13 @@ def current_weather(request):
     from django.core.cache import cache
 
     cache_state = {
-        "version": 2, # Cache buster
+        "version": 3, # Cache buster updated
         "user_id": request.user.id,
         "base_date": weather.get("base_date"),
         "base_time": weather.get("base_time"),
+        "location_name": weather.get("location", {}).get("name"),
+        "condition": weather.get("condition"),
+        "temperature": weather.get("temperature"),
         "emotion": user_profile.get("today_emotion"),
         "hobbies": user_profile.get("hobbies"),
         "mbti": user_profile.get("mbti"),
