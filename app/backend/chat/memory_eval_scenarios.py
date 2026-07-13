@@ -25,6 +25,17 @@ NOISE_POOL = [
     '커피를 너무 많이 마셨나 잠이 안 와',
 ]
 
+# 날짜 있는 필러 6개 — 회상 '지난 기억'(날짜 DESC LIMIT 6)을 가득 채워
+# 목표 기억을 순위 밖으로 밀어내는 용도 (para 시나리오 전용)
+_DATE_FILLERS = [
+    '7월 1일에 미용실에서 머리 잘랐어',
+    '7월 3일에 집 대청소 했어',
+    '7월 6일에 화분에 새 꽃 심었어',
+    '7월 8일에 도서관에서 책 빌렸어',
+    '7월 10일에 자전거 타고 한강 갔어',
+    '7월 12일에 마트에서 장 봤어',
+]
+
 SCENARIOS = [
     # ── fact: 사실 회상 (6) ──
     dict(id='M01', type='fact',
@@ -34,7 +45,7 @@ SCENARIOS = [
     dict(id='M02', type='fact',
          plant=['7월 17일에 회사에서 최종 발표해'],
          noise=3, question='내 발표가 언제였지?',
-         grade='keywords', expect_any=[['7월 17', '07-17', '17일', '열이레']], forbid=[]),
+         grade='keywords', expect_any=[['7월 17', '07-17', '17일', '열이레', '열일곱']], forbid=[]),
     dict(id='M03', type='fact',
          plant=['우리집 강아지 이름은 콩이야. 3살 됐어'],
          noise=4, question='우리 강아지 이름 기억나?',
@@ -140,4 +151,29 @@ SCENARIOS = [
          plant=['헬스장 등록했어', '트레이너가 화요일마다 PT 하재'],
          noise=3, question='나 운동 관련해서 뭐 하고 있었지?',
          grade='keywords', expect_any=[['헬스', 'PT', '트레이너', '운동']], forbid=[]),
+
+    # ── para: 패러프레이즈 의미 검색 (3, 2026-07-13 임베딩 도입과 함께 추가) ──
+    # 설계: 질문과 기억의 단어가 안 겹치게 + 날짜 필러 6개로 목표 기억을
+    # 회상 상위 6위 밖으로 밀어냄 → "언급 기반 직접 검색"이 아니면 못 찾는 구조.
+    # 즉 이 3종의 성패가 곧 의미 검색의 기여도. (질문-기억 쌍은 memory_embed_bench
+    # 에서 ko-sroberta가 전부 맞힌 검증된 쌍) 키워드 대조 실행:
+    #   EMBED_MODEL=off python manage.py memory_eval --only P01,P02,P03
+    dict(id='P01', type='para',
+         plant=['나 6월 5일에 로또 5만원 당첨됐었어 ㅋㅋ'] + _DATE_FILLERS,
+         noise=2, question='나 복권 맞았던 거 기억나?',
+         grade='llm',
+         rubric='사용자는 로또 5만원 당첨을 말했다. ★답변이 기억에 없다/못 들었다/요약엔 없다/놓쳤다 취지로 말하면 무조건 fail★ '
+                '답변이 로또/당첨/5만원을 아는 사실로 떠올리면 pass.'),
+    dict(id='P02', type='para',
+         plant=['나 요즘 이직할까 고민이 많아'] + _DATE_FILLERS,
+         noise=2, question='나 회사 옮기려던 거 기억해?',
+         grade='llm',
+         rubric='사용자는 이직 고민을 말했다. ★답변이 기억에 없다/못 들었다/요약엔 없다/놓쳤다 취지로 말하면 무조건 fail★ '
+                '답변이 이직/직장 고민을 아는 사실로 떠올리면 pass.'),
+    dict(id='P03', type='para',
+         plant=['나 지난달에 치과에서 사랑니 뽑았어 진짜 아팠어'] + _DATE_FILLERS,
+         noise=2, question='나 이빨 때문에 고생했던 거 기억나?',
+         grade='llm',
+         rubric='사용자는 치과에서 사랑니를 뽑았다고 말했다. ★답변이 기억에 없다/못 들었다/요약엔 없다/놓쳤다 취지로 말하면 무조건 fail★ '
+                '답변이 사랑니/치과/발치를 아는 사실로 떠올리면 pass.'),
 ]

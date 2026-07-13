@@ -135,7 +135,8 @@ class Command(BaseCommand):
                 for j in range(sc.get('noise', 0)):
                     graph_memory._capture(uid, NOISE_POOL[j % len(NOISE_POOL)])
 
-                recall_text = graph_memory.recall(uid)
+                # 질문을 message로 전달 — 언급 기반 직접 검색(벡터·키워드)까지 평가 대상 (2026-07-13)
+                recall_text = graph_memory.recall(uid, message=sc['question'])
                 answer = _answer(recall_text, sc['question'])
 
                 if sc['grade'] == 'keywords':
@@ -176,7 +177,8 @@ class Command(BaseCommand):
           all_by_type.append(by_type)
         self.stdout.write('\n===== 결과 =====')
         label = dict(fact='사실 회상', supersede='모순 처리(supersede)',
-                     forget='잊어줘 준수', trap='환각 함정 방어', combo='조합·D-day')
+                     forget='잊어줘 준수', trap='환각 함정 방어', combo='조합·D-day',
+                     para='패러프레이즈(의미 검색)')
         n_sc = len(scenarios)
         for t in label:
             per_run = [sum(bt.get(t, [])) for bt in all_by_type if t in bt]
