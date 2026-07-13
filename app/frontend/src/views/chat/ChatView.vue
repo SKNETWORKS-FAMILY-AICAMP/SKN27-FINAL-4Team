@@ -85,10 +85,16 @@
           :class="msg.role"
         >
           <!-- 감정 라벨(슬픔 모드 등)은 화면에 표시하지 않음 — 친구 컨셉 (분석은 뒤에서만) -->
-          <div class="bubble" :class="msg.role === 'user' ? 'bubble-user' : 'bubble-char'">
+          <div v-if="msg.role === 'divider'" class="history-divider"><span>{{ msg.content }}</span></div>
+          <div v-else class="bubble" :class="msg.role === 'user' ? 'bubble-user' : 'bubble-char'">
             <img v-if="msg.image" :src="msg.image" class="bubble-img" alt="첨부 이미지" />
             <span v-if="msg.content" class="bubble-text">{{ (msg.displayed !== undefined ? msg.displayed : msg.content) || '…' }}</span>
           </div>
+          <!-- 대화 맥락 바로가기 칩 — 사용자가 관련 얘기를 꺼냈을 때만 (2026-07-12) -->
+          <button v-if="msg.suggestPage && msg.displayed === msg.content" class="suggest-chip"
+                  @click="router.push(msg.suggestPage === 'report' ? '/report' : '/mypage')">
+            {{ msg.suggestLabel }}
+          </button>
 
         </div>
 
@@ -111,6 +117,8 @@
         <button v-if="sttSupported" class="attach-btn stt-btn" :class="{ 'stt-recording': isRecording }"
                 :disabled="isTyping" @click="toggleStt"
                 :title="isRecording ? '음성 입력 중지' : '음성으로 입력'">🎤</button>
+        <button class="attach-btn tts-toggle" :class="{ 'tts-off': !ttsEnabled }" @click="toggleTtsPref"
+                :title="ttsEnabled ? '음성 끄기 (글자만 보기)' : '음성 켜기'">{{ ttsEnabled ? '🔊' : '🔇' }}</button>
         <textarea
           ref="inputRef"
           v-model="inputText"
@@ -273,6 +281,14 @@ const { secret: isSecret, setSecret } = useSecret()
 const { playTask, stop: ttsStop } = useTts()
 const { isSupported: sttSupported, isRecording, start: sttStart, stop: sttStop } = useStt()
 
+// 🔊 TTS 음소거 (2026-07-12) — 목소리 원치 않는 사용자 배려 + 음소거 시 서버가 생성 자체를 스킵(크레딧 0)
+const ttsEnabled = ref(localStorage.getItem('binteum_tts') !== 'off')
+function toggleTtsPref() {
+  ttsEnabled.value = !ttsEnabled.value
+  localStorage.setItem('binteum_tts', ttsEnabled.value ? 'on' : 'off')
+  if (!ttsEnabled.value) ttsStop()          // 재생 중이던 음성도 즉시 중단
+}
+
 // 🎤 음성 입력 (STT) — 말하면 입력창에 실시간으로 채워지고, 확인 후 전송 (2026-07-10)
 let sttBaseText = ''
 function toggleStt() {
@@ -376,29 +392,36 @@ function revealNow(m) {
 
 function pushAssistant(text, extra = {}) {
   const m = { _tempId: Date.now(), role: 'assistant', content: text, ...extra }
-  if (m.tts_task_id) {
+  if (m.tts_task_id && ttsEnabled.value) {
     m.displayed = ''                    // 음성 시작까지 잠깐 '…' 표시
     messages.value.push(m)
     const target = messages.value[messages.value.length - 1]   // 반응형 프록시로 조작
     playTask(m.tts_task_id, {
       onStart: (d, alignment, audioEl) => animateReveal(target, d, alignment, audioEl),
-      onFail: () => revealNow(target),
+      onFail: () => animateReveal(target, null, null, null),   // 실패해도 즉시 덤프 대신 타이핑 (2026-07-12)
     })
     setTimeout(() => {                  // 안전장치: TTS 생성이 8초+ 걸릴 수 있어 폴링 타임아웃(~28초)보다 늦게
       if (target.displayed !== target.content && !target._revealTimer) revealNow(target)
     }, 30000)
     return target
   }
+  // 음소거·TTS 없음 — 글자만이라도 생동감 있게 (균등 타이핑, 55ms/자)
+  m.displayed = ''
   messages.value.push(m)
-  return m
+  const target = messages.value[messages.value.length - 1]
+  animateReveal(target, null, null, null)
+  return target
 }
 
 // ── 세션 초기화: 콜드스타트 게이팅 (감정 선택지 먼저) ──
+// (대화 이어보기는 검토 후 불채택 — 2026-07-12. 만날 때마다 새 시작 컨셉 유지.
+//  과거는 화면이 아니라 챗봇의 기억(그래프)과 주간 리포트로만 남는다)
+
 async function initSession() {
   try {
     // 친구 컨셉: 감정 안 묻고 날씨/시간/닉네임 기반 첫인사로 시작
     const coords = await getCoordsOrNull()
-    const sess = await chatApi.startSession(character.value, isSecret.value, coords)
+    const sess = await chatApi.startSession(character.value, isSecret.value, coords, ttsEnabled.value)
     sessionId.value = sess.session_id
     coldStartDone.value = true
     userTurnCount.value = 0
@@ -514,11 +537,13 @@ async function sendMessage() {
   isTyping.value = true
   await scrollToBottom()
   try {
-    const res = await chatApi.sendChat(sessionId.value, content, character.value, isSecret.value, image)
+    const res = await chatApi.sendChat(sessionId.value, content, character.value, isSecret.value, image, ttsEnabled.value)
     const m = pushAssistant(res.message.text, {
       id: res.message_id ?? undefined,
       emotion_label: res.emotion_label,
       tts_task_id: res.tts_task_id,
+      suggestPage: res.ui?.suggest_page || null,     // 대화 맥락 바로가기 칩 (2026-07-12)
+      suggestLabel: res.ui?.suggest_label || null,
     })
     if (res.emotion_label) {
       currentEmotion.value = res.emotion_label
@@ -1162,5 +1187,60 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   0%, 100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.45); }
   50%      { box-shadow: 0 0 0 7px rgba(248, 113, 113, 0); }
 }
+
+
+/* 🔊 TTS 음소거 토글 */
+.tts-toggle.tts-off {
+  opacity: 0.55;
+  filter: grayscale(0.6);
+}
+
+
+/* 대화 맥락 바로가기 칩 */
+.suggest-chip {
+  margin: 6px 4px 0;
+  padding: 7px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(251, 191, 119, 0.55);
+  background: rgba(251, 191, 119, 0.14);
+  color: #FBBF77;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.suggest-chip:hover { background: rgba(251, 191, 119, 0.28); }
+
+
+/* 대화 이어보기 — 지난 대화와 오늘의 구분선 */
+.history-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 8px;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.78rem;
+}
+.history-divider::before,
+.history-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+
+.history-load-btn {
+  align-self: center;
+  margin: 4px auto 10px;
+  display: block;
+  padding: 6px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.history-load-btn:hover { background: rgba(255, 255, 255, 0.14); }
 
 </style>
