@@ -57,15 +57,23 @@ def _grade_keywords(answer: str, expect_any, forbid):
 
 
 def _grade_llm(answer: str, rubric: str, today: str, question: str = ''):
-    resp = _llm(temperature=0, max_tokens=10).invoke([
+    # 근거 먼저 → 판정은 마지막 줄 (2026-07-13): 한 단어 강제(max 10토큰)로는
+    # 명백한 정답을 fail로 찍는 오판이 잦았음 — 추론 후 결론이 더 정확하다
+    resp = _llm(temperature=0, max_tokens=150).invoke([
         ('system',
-         '채점자다. 기준을 문자 그대로 적용해 pass 또는 fail 한 단어만 출력하라. '
-         '기준이 pass로 규정한 답변 유형이면 반드시 pass다.\n'
+         '채점자다. 기준을 문자 그대로 적용하라.\n'
+         '1) 첫 줄: 답변이 기준의 fail 조건에 해당하는지 한 문장으로 판단 근거.\n'
+         '2) 마지막 줄: pass 또는 fail 한 단어만.\n'
+         '기준이 pass로 규정한 답변 유형이면 반드시 pass다. '
+         'fail은 fail 조건에 명확히 해당할 때만.\n'
          f'(오늘 날짜: {today})\n[기준]\n' + rubric),
         ('user', f'[질문]\n{question}\n\n[답변]\n{answer}'),
     ])
-    verdict = resp.content.strip().lower()
-    return ('pass' in verdict), verdict
+    text = (resp.content or '').strip().lower()
+    last = text.splitlines()[-1].strip() if text else ''
+    if 'pass' in last or 'fail' in last:
+        return ('pass' in last), last
+    return ('pass' in text and 'fail' not in text), text[-60:]   # 형식 미준수 폴백
 
 
 class Command(BaseCommand):
@@ -134,9 +142,15 @@ class Command(BaseCommand):
                     graph_memory._capture(uid, turn)
                 for j in range(sc.get('noise', 0)):
                     graph_memory._capture(uid, NOISE_POOL[j % len(NOISE_POOL)])
+                if sc.get('reflect'):   # 리플렉션 시나리오 — 심기 후 통찰 생성 (2026-07-13)
+                    rr = graph_memory.reflect(uid)
+                    if opts.get('debug'):
+                        self.stdout.write(f"    [리플렉션] {rr}")
 
                 # 질문을 message로 전달 — 언급 기반 직접 검색(벡터·키워드)까지 평가 대상 (2026-07-13)
                 recall_text = graph_memory.recall(uid, message=sc['question'])
+                if opts.get('debug'):
+                    self.stdout.write('    [recall]\n      ' + recall_text.replace('\n', '\n      '))
                 answer = _answer(recall_text, sc['question'])
 
                 if sc['grade'] == 'keywords':
@@ -178,7 +192,7 @@ class Command(BaseCommand):
         self.stdout.write('\n===== 결과 =====')
         label = dict(fact='사실 회상', supersede='모순 처리(supersede)',
                      forget='잊어줘 준수', trap='환각 함정 방어', combo='조합·D-day',
-                     para='패러프레이즈(의미 검색)')
+                     para='패러프레이즈(의미 검색)', reflect='리플렉션(통찰)')
         n_sc = len(scenarios)
         for t in label:
             per_run = [sum(bt.get(t, [])) for bt in all_by_type if t in bt]

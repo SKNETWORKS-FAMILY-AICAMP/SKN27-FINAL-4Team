@@ -100,17 +100,23 @@ def _extract(message: str):
         ('system',
          "사용자 메시지에서 '기억할 가치가 있는' 사건·인물·취향을 뽑아 JSON으로만 출력하라.\n"
          f"- 날짜 표현(내일, 다음주 화요일 등)은 오늘 {_today_kst()} 기준 실제 날짜(YYYY-MM-DD)로 변환.\n"
+         "- ★과거의 일(~했어, ~갔다 옴)도 기억할 가치가 있으면 events에 반드시 기록하라.★ "
+         "단 date 필드는 비워라 — date는 다가오는 일정이나 사용자가 날짜를 콕 집어 말했을 때만 넣는다. "
+         "(date를 비우라는 것이지 사건을 빼라는 뜻이 아니다)\n"
+         "- name은 맥락이 담기게 5~15자로 (예: '상사한테 혼남', '회사 발표 준비'). "
+         "'혼남', '야근'처럼 한 단어로 뭉개지 마라.\n"
          "- 사용자가 직접 말한 사실만. 추측 금지. 없으면 빈 배열.\n"
          "- 일회성 스몰토크(날씨·메뉴), 단순 감탄·맞장구는 제외.\n"
-         "- 관계의 끝(이별·절교·퇴사 등)이나 일정 취소를 말하면 expired에 기록하라. "
-         "예: '민수랑 헤어졌어' → expired에 민수(person) + events에 이별 사건. "
-         "'여행 취소됐어' → expired에 여행(event).\n"
+         "- 관계의 끝(이별·절교·퇴사 등)이나 일정 취소를 말하면 ★expired와 events 둘 다★ 기록하라 "
+         "— expired는 옛것의 만료용, events는 '끝났다는 사실' 기록용 (둘 중 하나만 내지 마라). "
+         "예: '민수랑 헤어졌어' → expired에 민수(person) + events에 '민수와 이별'. "
+         "'여행 취소됐어' → expired에 여행(event) + events에 '여행 취소'.\n"
          "- 사용자가 '잊어줘/기억하지 마/그 얘기 지워줘'라고 요청하면 그 대상을 expired에 기록하라 "
          "(reason: '사용자 요청'). 잊어달라는 요청 자체는 events로 저장하지 마라.\n"
          "- expired의 kind는 반드시 영문 소문자 person, event, preference 중 하나만 사용하라. "
          "name은 원래 저장됐을 이름 그대로 짧게 (예: '민트초코', '현우', '편의점 알바').\n"
          "형식(없는 키는 생략 가능, JSON 외 다른 말 금지):\n"
-         '{"events":[{"name":"면접","date":"2026-07-13","emotion":"불안","people":["엄마"]}],'
+         '{"events":[{"name":"회사 면접 예정","date":"2026-07-20","emotion":"불안","people":["엄마"]}],'
          '"people":[{"name":"엄마","relation":"가족"}],"preferences":["드라마"],'
          '"expired":[{"kind":"person","name":"민수","reason":"이별"}]}'),
         ('user', message),
@@ -174,6 +180,14 @@ _SALIENCE = {'sadness': 1.5, 'anger': 1.4, 'joy': 1.2}
 VEC_INDEX = 'memory_vec'      # Neo4j 벡터 인덱스 이름 (Event.embedding, 768, cosine)
 VEC_RECALL_MIN = 0.33   # 실측 (memory_embed_bench): 무관질문 최고 0.32 < 정답 최저 0.35         # 질문↔기억 유사도 하한 — 초기값, 평가셋 스윕으로 보정 예정
 VEC_DEDUP_MIN = 0.93          # 저장 시 즉시 병합 임계값 — 보수적으로 높게 (오병합 방지), 스윕 예정
+
+# ── 리플렉션 (2026-07-13) — 기억 군집 → 통찰 ──
+REFLECT_SIM_MIN = 0.22        # 실측 (memory_reflect_bench): 추출기 스타일(5~15자) 이름 기준 정답 재현 구간 0.19~0.25의 중앙값 — 이름 길이 규칙(추출 프롬프트)과 세트
+REFLECT_MIN_MEMORIES = 8      # 이보다 적으면 스킵 — 며칠 대화도 안 했는데 "요즘~" 아는 척 방지
+REFLECT_MIN_EVIDENCE = 3      # 통찰이 되려면 최소 증거 수 — 두 번은 우연, 세 번은 패턴
+REFLECT_MAX_SHOW = 3          # recall 노출 상한 (그래프엔 전부 저장)
+_NEG_EMOTIONS = ('sadness', 'anger', 'fear', 'anxiety', '슬픔', '분노', '불안')
+
 
 # 만료 신호 힌트 — 이 패턴이 있는데 추출이 expired를 안 내면 1회 재시도 (2026-07-12 평가셋 변동성 보정)
 _EXPIRY_HINT = re.compile(
@@ -322,6 +336,28 @@ def _capture(uid: int, message: str, emotion: str = None) -> None:
         if not (data.get('events') or data.get('people')
                 or data.get('preferences') or data.get('expired')):
             return   # expired 포함 — '잊어줘'만 있는 메시지도 저장돼야 함 (평가셋 F01 원인, 2026-07-12)
+        # 종결 기록 보증 (2026-07-13, S02~S04 회귀): 추출기가 expired만 내고 종결 사건을
+        # 빠뜨리면 코드가 합성 — "취소됐다"는 사실 자체가 기억이어야 나중에 답할 수 있다.
+        # LLM의 변덕에 빌지 않고 코드가 관용하는 원칙. 잊어줘 요청은 제외(요청 자체 무저장).
+        _CLOSURE_WORD = [(r'그만뒀|그만둠|그만둘|퇴사', '그만둠'),
+                         (r'취소|파토|깨졌|무산', '취소'),
+                         (r'헤어졌|헤어져|이별|절교', '이별')]
+        for ex in (data.get('expired') or []):
+            if not isinstance(ex, dict):
+                continue   # 추출기가 문자열로 낼 때 방어 — 가드가 캡처 전체를 죽이면 안 됨 (S01, 2026-07-13)
+            xname = (ex.get('name') or '').strip()
+            xreason = (ex.get('reason') or '').strip()
+            if not xname or (ex.get('kind') or '') != 'event':
+                continue
+            if re.search(r'요청|잊', xreason):
+                continue   # 잊어줘 — 종결 기록도 남기지 않음
+            nx = _norm_key(xname)
+            if any(nx and (_norm_key(ev.get('name') or '') and
+                           (nx in _norm_key(ev['name']) or _norm_key(ev['name']) in nx))
+                   for ev in (data.get('events') or [])):
+                continue   # 추출기가 이미 종결 사건을 냈음
+            word = next((w for p, w in _CLOSURE_WORD if re.search(p, xreason + ' ' + message)), '종료')
+            data.setdefault('events', []).append({'name': f'{xname} {word}'})
         sal = _SALIENCE.get(emotion or '', 1.0)
         # 벡터 준비 (모델 없으면 전부 None → 기존 동작 그대로)
         from chat import embedder
@@ -345,7 +381,8 @@ def _capture(uid: int, message: str, emotion: str = None) -> None:
                 return bool(ta & tb)
 
             expired_names = [(e.get('name') or '').strip()
-                             for e in (data.get('expired') or []) if e.get('name')]
+                             for e in (data.get('expired') or [])
+                             if isinstance(e, dict) and e.get('name')]
             for ev in (data.get('events') or []):
                 name = (ev.get('name') or '').strip()
                 vec = vectors.get(name)
@@ -390,6 +427,88 @@ def capture_async(user_id, message: str, emotion: str = None) -> None:
 
 # ── 회상 (서브그래프 → 텍스트) ───────────────────────────────
 
+def _label_cluster(names, emotions):
+    """군집 하나에 이름 붙이기 — LLM은 '이미 묶인 기억'만 보고 요약 (근거 선택 불가 → 환각 차단)."""
+    from ai.agents.llm import get_llm
+    try:
+        resp = get_llm(temperature=0, max_tokens=80).invoke([
+            ('system',
+             '아래는 한 사용자의 서로 관련된 기억 목록이다. 이 기억들을 관통하는 흐름을 '
+             '반말 한 문장(30자 이내)으로 요약하라. ★목록에 없는 사실을 추가하거나 '
+             '추측하지 마라★. 문장만 출력.'),
+            ('user', '기억: ' + ' / '.join(names)
+                     + ('\n느낀 감정: ' + ', '.join(emotions) if emotions else '')),
+        ])
+        text = (resp.content or '').strip().strip('"').strip()
+        return text[:60] if text else None
+    except Exception as e:
+        print(f'[graph_memory] 통찰 라벨링 실패: {e}')
+        return None
+
+
+def reflect(user_id):
+    """리플렉션 (2026-07-13) — 기억 임베딩을 계층 군집(θ=0.22 실측)으로 묶어
+    통찰(Insight) 노드 생성. 증거 선택은 결정적 알고리즘, LLM은 문장화만 (환각 구조 차단).
+    (User)-[:HAS_INSIGHT]->(Insight)-[:SUMMARIZES]->(근거 Event) — 모든 통찰 추적 가능.
+    재실행 시 기존 통찰 전량 갈아끼움 (통찰도 낡는다). 실패해도 챗봇 무영향."""
+    if not user_id or not is_enabled():
+        return {'status': 'disabled'}
+    try:
+        drv = _get_driver()
+        with drv.session() as s:
+            rows = s.run(
+                'MATCH (u:User {uid:$uid})-[:HAS_EVENT]->(e:Event) '
+                'WHERE e.valid_until IS NULL AND e.embedding IS NOT NULL '
+                'OPTIONAL MATCH (e)-[:FELT]->(m:Emotion) '
+                'RETURN e.name AS name, e.embedding AS vec, '
+                'collect(DISTINCT m.type) AS emotions', uid=user_id).data()
+        if len(rows) < REFLECT_MIN_MEMORIES:
+            with drv.session() as s:   # 기억이 줄었으면 낡은 통찰도 치움
+                s.run('MATCH (u:User {uid:$uid})-[:HAS_INSIGHT]->(i:Insight) DETACH DELETE i',
+                      uid=user_id)
+            return {'status': 'skipped', 'memories': len(rows), 'insights': []}
+
+        from sklearn.cluster import AgglomerativeClustering
+        import numpy as np
+        labels = AgglomerativeClustering(
+            n_clusters=None, distance_threshold=1.0 - REFLECT_SIM_MIN,
+            metric='cosine', linkage='average').fit_predict(np.array([r['vec'] for r in rows]))
+        groups = {}
+        for r, l in zip(rows, labels):
+            groups.setdefault(int(l), []).append(r)
+
+        insights = []
+        for g in groups.values():
+            if len(g) < REFLECT_MIN_EVIDENCE:
+                continue   # 증거 부족 — 우연일 수 있음
+            names = [x['name'] for x in g]
+            emos = sorted({e for x in g for e in (x['emotions'] or []) if e})
+            text = _label_cluster(names, emos)
+            if text:
+                insights.append(dict(text=text, size=len(g), emotions=emos, names=names))
+
+        with drv.session() as s:
+            s.run('MATCH (u:User {uid:$uid})-[:HAS_INSIGHT]->(i:Insight) DETACH DELETE i',
+                  uid=user_id)
+            today = _today_iso()
+            for ins in insights:
+                s.run(
+                    'MATCH (u:User {uid:$uid}) '
+                    'CREATE (i:Insight {uid:$uid, text:$text, size:$size, '
+                    'emotions:$emos, created:$today}) '
+                    'MERGE (u)-[:HAS_INSIGHT]->(i) '
+                    'WITH i MATCH (u2:User {uid:$uid})-[:HAS_EVENT]->(e:Event) '
+                    'WHERE e.name IN $names '
+                    'MERGE (i)-[:SUMMARIZES]->(e)',
+                    uid=user_id, text=ins['text'], size=ins['size'],
+                    emos=ins['emotions'], today=today, names=ins['names'])
+        return {'status': 'ok', 'memories': len(rows),
+                'insights': [(i['text'], i['size']) for i in insights]}
+    except Exception as e:
+        print(f'[graph_memory] 리플렉션 실패: {e}')
+        return {'status': 'error', 'error': str(e), 'insights': []}
+
+
 def recall(user_id, limit: int = 6, message: str = None) -> str:
     """사용자의 사건(감정·인물·날짜)과 취향을 그래프에서 꺼내 텍스트로. 비활성/실패 시 ''.
     message가 있으면 재강화(2026-07-12): 사용자가 '직접 언급한' 기억의 강도를 올린다
@@ -401,6 +520,20 @@ def recall(user_id, limit: int = 6, message: str = None) -> str:
         lines = []
         today = _today_iso()
         with drv.session() as s:
+            # ⓪ 요즘 흐름 (리플렉션 통찰, 2026-07-13) — 슬픔·분노 흐름 우선, 없으면 no-op
+            try:
+                ins = s.run(
+                    'MATCH (u:User {uid:$uid})-[:HAS_INSIGHT]->(i:Insight) '
+                    'RETURN i.text AS text, i.size AS size, i.emotions AS emotions',
+                    uid=user_id).data()
+                if ins:
+                    ins.sort(key=lambda r: (
+                        not any(x in _NEG_EMOTIONS for x in (r.get('emotions') or [])),
+                        -(r.get('size') or 0)))
+                    for r in ins[:REFLECT_MAX_SHOW]:
+                        lines.append(f"- 요즘 흐름: {r['text']} (관련 기억 {r['size']}개)")
+            except Exception:
+                pass
             # ① 다가오는 일 (선제 챙김 — "내일 면접이지?" 의 재료, 2026-07-12)
             coming = s.run(
                 'MATCH (u:User {uid:$uid})-[:HAS_EVENT]->(e:Event) '
