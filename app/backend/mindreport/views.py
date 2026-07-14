@@ -1,153 +1,224 @@
-"""
-기능: 프론트엔드(Vue)에서 마음 리포트와 관련된 API 요청(예: 리포트 보관함 조회, 리포트 생성 등)을 보냈을 때, 이를 처리하고 응답(JSON)을 반환하는 컨트롤러 역할을 하는 파일입니다.
-"""
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from __future__ import annotations
+
+import calendar
+from datetime import datetime, timedelta
+from typing import Any
+
+from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.utils import timezone
-from .services.criteria_service import ReportCriteriaService
-from .services.fallback_service import FallbackReportService
-from .services.flow import MindReportFlowService, format_for_frontend
+from rest_framework.authentication import SessionAuthentication
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from mindreport.models import MindReport
+from mindreport.services.graph_flow import MindReportSupervisorAgent
+
+
+class CsrfExemptSessionAuthentication(SessionAuthentication):
+    def enforce_csrf(self, request):
+        return
+
 
 class MindReportGenerateAPIView(APIView):
-    # 실제 연동 시에는 인증된 사용자만 접근 가능하도록 주석 해제 (테스트를 위해 잠시 주석 처리 가능)
-    # permission_classes = [IsAuthenticated]
-    
-    def get(self, request):
-        """
-        마음 리포트 생성 기준을 확인하고, 결과에 따라 정식 리포트 또는 데이터 부족 보완 리포트를 반환합니다.
-        월말(마지막 주)일 경우 주간과 월간 리포트를 동시에 반환합니다.
-        """
-        user = request.user
-        if not user.is_authenticated:
-            from django.contrib.auth import get_user_model
-            user = get_user_model().objects.first()
-            if not user:
-                return Response({"error": "DB에 유저가 없습니다."}, status=401)
-            
-        import calendar
-        from datetime import timedelta
-        
-        now = timezone.now()
-        target_date = now.date()
-        
-        # 이번 주가 월의 마지막 주인지 확인 (일요일이 다음 달로 넘어가거나, 오늘이 말일과 가까운지)
-        # 이번 주 일요일 계산
-        days_to_sunday = 6 - target_date.weekday()
-        sunday_date = target_date + timedelta(days=days_to_sunday)
-        
-        # 일요일의 월이 현재 월과 다르거나, 현재 월의 마지막 날짜인 경우 마지막 주로 간주
-        _, last_day_of_month = calendar.monthrange(target_date.year, target_date.month)
-        is_last_week = (sunday_date.month != target_date.month) or (sunday_date.day == last_day_of_month)
-        
-        from .models import MindReport
-        
-        generated_reports = []
-        
-        # ==========================================
-        # 1. 주간 리포트 처리
-        # ==========================================
-        weekly_criteria = ReportCriteriaService.check_weekly_report_eligibility(user)
-        if not weekly_criteria["is_eligible"]:
-            fallback_report = MindReport.objects.filter(user=user, is_fallback=True, report_type__contains="주간").order_by('-created_at').first()
-            if not fallback_report:
-                fallback_report = FallbackReportService.generate_and_save_fallback_report(
-                    user=user, 
-                    report_type="주간", 
-                    range_text=timezone.now().strftime("%Y.%m.%d") + " 생성"
-                )
-                
-            generated_reports.append({
-                "id": f"fallback-{fallback_report.id}",
-                "type": fallback_report.report_type,
-                "range": fallback_report.range_text,
-                "title": fallback_report.title,
-                "summary": fallback_report.summary,
-                "stressCauses": fallback_report.stress_causes,
-                "reliefCauses": fallback_report.relief_causes,
-                "emotions": fallback_report.emotions,
-                "analysis": fallback_report.analysis,
-                "recommendations": fallback_report.recommendations,
-                "is_fallback": fallback_report.is_fallback
-            })
-        else:
-            MindReport.objects.filter(user=user, is_fallback=True, report_type__contains="주간").delete()
-            
-            # --- 정식 파이프라인(대화수 충족 로직) 가동 ---
-            flow_service = MindReportFlowService()
-            flow_result = flow_service.run(user=user, period_type="week")
-            report_data = format_for_frontend(flow_result=flow_result, user_id=user.id, period_name="주간")
-            
-            final_report = MindReport.objects.create(
-                user=user,
-                report_type=report_data["type"],
-                range_text=report_data["range"],
-                title=report_data["title"],
-                summary=report_data["summary"],
-                stress_causes=report_data["stressCauses"],
-                relief_causes=report_data["reliefCauses"],
-                emotions=report_data["emotions"],
-                analysis=report_data["analysis"],
-                recommendations=report_data.get("recommendations", []),
-                is_fallback=False
-            )
-            report_data["id"] = f"weekly-{final_report.id}"
-            generated_reports.append(report_data)
+    authentication_classes = [CsrfExemptSessionAuthentication]
 
-        # ==========================================
-        # 2. 월간 리포트 처리 (마지막 주일 경우에만)
-        # ==========================================
-        if is_last_week:
-            monthly_criteria = ReportCriteriaService.check_monthly_report_eligibility(user)
-            if not monthly_criteria["is_eligible"]:
-                m_fallback = MindReport.objects.filter(user=user, is_fallback=True, report_type__contains="월간").order_by('-created_at').first()
-                if not m_fallback:
-                    m_fallback = FallbackReportService.generate_and_save_fallback_report(
-                        user=user, 
-                        report_type="월간", 
-                        range_text=timezone.now().strftime("%Y.%m") + " 월간 결산"
-                    )
-                
-                generated_reports.append({
-                    "id": f"fallback-m-{m_fallback.id}",
-                    "type": m_fallback.report_type,
-                    "range": m_fallback.range_text,
-                    "title": m_fallback.title,
-                    "summary": m_fallback.summary,
-                    "stressCauses": m_fallback.stress_causes,
-                    "reliefCauses": m_fallback.relief_causes,
-                    "emotions": m_fallback.emotions,
-                    "analysis": m_fallback.analysis,
-                    "recommendations": m_fallback.recommendations,
-                    "is_fallback": m_fallback.is_fallback
-                })
-            else:
-                MindReport.objects.filter(user=user, is_fallback=True, report_type__contains="월간").delete()
-                
-                # --- 정식 파이프라인(대화수 충족 로직) 가동 ---
-                flow_service = MindReportFlowService()
-                flow_result = flow_service.run(user=user, period_type="month")
-                report_data = format_for_frontend(flow_result=flow_result, user_id=user.id, period_name="월간")
-                
-                final_report = MindReport.objects.create(
-                    user=user,
-                    report_type=report_data["type"],
-                    range_text=report_data["range"],
-                    title=report_data["title"],
-                    summary=report_data["summary"],
-                    stress_causes=report_data["stressCauses"],
-                    relief_causes=report_data["reliefCauses"],
-                    emotions=report_data["emotions"],
-                    analysis=report_data["analysis"],
-                    recommendations=report_data.get("recommendations", []),
-                    is_fallback=False
-                )
-                report_data["id"] = f"monthly-{final_report.id}"
-                generated_reports.append(report_data)
+    def get(self, request):
+        user = self._resolve_user(request)
+        if not user:
+            return Response({'error': 'DB에 사용자가 없습니다.'}, status=401)
 
         return Response({
-            "status": "success", 
-            "message": "리포트 생성이 완료되었습니다.",
-            "reports": generated_reports
+            'status': 'success',
+            'message': '저장된 마음 리포트를 불러왔습니다.',
+            'reports': self._stored_reports(user),
         })
 
+    def post(self, request):
+        user = self._resolve_user(request)
+        if not user:
+            return Response({'error': 'DB에 사용자가 없습니다.'}, status=401)
+
+        now = timezone.now()
+        target_date = now.date()
+        self._generate_period_report(
+            user=user,
+            period_type='week',
+            period_name='주간',
+            target_date=target_date,
+        )
+
+        if self._is_last_week_of_month(target_date):
+            self._generate_period_report(
+                user=user,
+                period_type='month',
+                period_name='월간',
+                year=target_date.year,
+                month=target_date.month,
+            )
+
+        return Response({
+            'status': 'success',
+            'message': '최신 대화로 마음 리포트를 갱신했습니다.',
+            'reports': self._stored_reports(user),
+        })
+
+    def _generate_period_report(
+        self,
+        *,
+        user,
+        period_type: str,
+        period_name: str,
+        target_date=None,
+        year: int | None = None,
+        month: int | None = None,
+    ) -> dict[str, Any]:
+        state = MindReportSupervisorAgent().run(
+            user=user,
+            period_type=period_type,
+            period_name=period_name,
+            target_date=target_date,
+            year=year,
+            month=month,
+        )
+        report_data = self._payload_from_graph_state(state)
+        defaults = {
+            'report_type': report_data['type'],
+            'range_text': report_data['range'],
+            'title': report_data['title'],
+            'summary': report_data['summary'],
+            'stress_causes': report_data.get('stressCauses', []),
+            'relief_causes': report_data.get('reliefCauses', []),
+            'emotions': report_data.get('emotions', []),
+            'analysis': report_data.get('analysis', []),
+            'recommendations': report_data.get('recommendations', []),
+            'is_fallback': report_data.get('is_fallback', False),
+            'is_safety_response': report_data.get('is_safety_response', False),
+        }
+
+        period_reports = self._current_period_reports(
+            user=user,
+            period_type=period_type,
+            period_name=period_name,
+            target_date=target_date,
+            year=year,
+            month=month,
+        )
+        with transaction.atomic():
+            report = period_reports.first()
+            if report:
+                for field, value in defaults.items():
+                    setattr(report, field, value)
+                report.save(update_fields=list(defaults))
+                period_reports.exclude(pk=report.pk).delete()
+            else:
+                report = MindReport.objects.create(user=user, **defaults)
+
+        return self._serialize_report(report)
+
+    @staticmethod
+    def _resolve_user(request):
+        if request.user.is_authenticated:
+            return request.user
+        return get_user_model().objects.first()
+
+    @classmethod
+    def _stored_reports(cls, user) -> list[dict[str, Any]]:
+        reports = []
+        seen_periods = set()
+        for report in MindReport.objects.filter(user=user):
+            created_date = timezone.localtime(report.created_at).date()
+            if report.report_type.startswith('월간'):
+                period_key = ('month', created_date.year, created_date.month)
+            else:
+                week_start = created_date - timedelta(days=created_date.weekday())
+                period_key = ('week', week_start)
+            if period_key in seen_periods:
+                continue
+            seen_periods.add(period_key)
+            reports.append(cls._serialize_report(report))
+        return reports
+
+    @staticmethod
+    def _serialize_report(report: MindReport) -> dict[str, Any]:
+        prefix = 'monthly' if report.report_type.startswith('월간') else 'weekly'
+        if report.is_safety_response:
+            prefix = f'safety-{prefix}'
+        elif report.is_fallback:
+            prefix = f'fallback-{prefix}'
+        return {
+            'id': f'{prefix}-{report.id}',
+            'type': report.report_type,
+            'range': report.range_text,
+            'title': report.title,
+            'summary': report.summary,
+            'stressCauses': list(report.stress_causes),
+            'reliefCauses': list(report.relief_causes),
+            'emotions': list(report.emotions),
+            'analysis': list(report.analysis),
+            'recommendations': list(report.recommendations),
+            'is_fallback': report.is_fallback,
+            'is_safety_response': report.is_safety_response,
+        }
+
+    @staticmethod
+    def _current_period_reports(
+        *,
+        user,
+        period_type: str,
+        period_name: str,
+        target_date=None,
+        year: int | None = None,
+        month: int | None = None,
+    ):
+        if period_type == 'month':
+            start = datetime(year, month, 1)
+            if month == 12:
+                end = datetime(year + 1, 1, 1)
+            else:
+                end = datetime(year, month + 1, 1)
+        else:
+            start_date = target_date - timedelta(days=target_date.weekday())
+            start = datetime.combine(start_date, datetime.min.time())
+            end = start + timedelta(days=7)
+
+        start = timezone.make_aware(start)
+        end = timezone.make_aware(end)
+        return MindReport.objects.filter(
+            user=user,
+            report_type__startswith=period_name,
+            created_at__gte=start,
+            created_at__lt=end,
+        )
+
+    @staticmethod
+    def _payload_from_graph_state(state) -> dict[str, Any]:
+        if state.get('status') in {'completed', 'safety_ready'}:
+            payload = state.get('report_payload')
+        elif state.get('status') == 'fallback_ready':
+            payload = state.get('fallback_payload')
+        else:
+            payload = None
+
+        if not payload:
+            raise RuntimeError(
+                f"Mind report graph ended without a frontend payload: {state.get('status')}"
+            )
+
+        return {
+            **payload,
+            'stressCauses': list(payload.get('stressCauses', [])),
+            'reliefCauses': list(payload.get('reliefCauses', [])),
+            'emotions': list(payload.get('emotions', [])),
+            'analysis': list(payload.get('analysis', [])),
+            'recommendations': list(payload.get('recommendations', [])),
+            'is_fallback': bool(payload.get('is_fallback', False)),
+            'is_safety_response': bool(payload.get('is_safety_response', False)),
+        }
+
+    @staticmethod
+    def _is_last_week_of_month(target_date) -> bool:
+        days_to_sunday = 6 - target_date.weekday()
+        sunday_date = target_date + timedelta(days=days_to_sunday)
+        _, last_day = calendar.monthrange(target_date.year, target_date.month)
+        return sunday_date.month != target_date.month or sunday_date.day == last_day

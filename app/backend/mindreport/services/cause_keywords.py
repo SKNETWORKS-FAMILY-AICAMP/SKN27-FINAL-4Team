@@ -7,13 +7,11 @@ from typing import Any, Mapping, Protocol, Sequence
 
 from mindreport.services.keyword_candidates import KeywordCandidate
 from mindreport.services.emotion_flow import EmotionFlowResult
-from mindreport.services.scoring import EmotionScore, _extract_json_object
+from mindreport.services.scoring import EmotionScore, ReportSourceMessage, _extract_json_object
 
 
 CAUSE_STRESS = 'stress'
 CAUSE_RELIEF = 'relief'
-RULE_THRESHOLD = 10.0
-
 FLOW_SCORE_UPWARD = 'score_upward'
 FLOW_SCORE_MAINTENANCE = 'score_maintenance'
 FLOW_SCORE_VOLATILE = 'score_volatile'
@@ -65,98 +63,33 @@ class CauseKeywordClient(Protocol):
         ...
 
 
-def _score_average_for_candidate(
-    *,
-    candidate: KeywordCandidate,
-    score_by_date: Mapping[str, EmotionScore],
-) -> float | None:
-    scores = [
-        score_by_date[evidence_date].emotion_score
-        for evidence_date in candidate.evidence_dates
-        if evidence_date in score_by_date
-    ]
-    if not scores:
-        return None
-    return sum(scores) / len(scores)
-
-
-def _confidence(candidate_confidence: float, average_score: float) -> float:
-    score_weight = min(1.0, abs(average_score - 50.0) / 50.0)
-    return round(max(0.0, min(1.0, (candidate_confidence * 0.6) + (score_weight * 0.4))), 3)
-
-
-def classify_by_score_rule(
-    *,
-    candidates: Sequence[KeywordCandidate],
-    emotion_scores: Sequence[EmotionScore],
-) -> tuple[tuple[CauseKeyword, ...], tuple[KeywordCandidate, ...]]:
-    score_by_date = {score.source_date.isoformat(): score for score in emotion_scores}
-    classified: list[CauseKeyword] = []
-    unresolved: list[KeywordCandidate] = []
-
-    for candidate in candidates:
-        average_score = _score_average_for_candidate(
-            candidate=candidate,
-            score_by_date=score_by_date,
-        )
-        if average_score is None or abs(average_score - 50.0) < RULE_THRESHOLD:
-            unresolved.append(candidate)
-            continue
-
-        if average_score < 50:
-            cause_type = CAUSE_STRESS
-            rationale = '근거 메시지의 평균 감정 점수가 부정 구간이라 스트레스 원인으로 분류했습니다.'
-        else:
-            cause_type = CAUSE_RELIEF
-            rationale = '근거 메시지의 평균 감정 점수가 긍정 구간이라 이완 원인으로 분류했습니다.'
-
-        classified.append(
-            CauseKeyword(
-                keyword=candidate.keyword,
-                cause_type=cause_type,
-                confidence=_confidence(candidate.confidence, average_score),
-                evidence_message_ids=candidate.evidence_message_ids,
-                evidence_dates=candidate.evidence_dates,
-                rationale=rationale,
-                classified_by='score_rule',
-            )
-        )
-
-    return tuple(classified), tuple(unresolved)
-
-
 def build_cause_keyword_payload(
     *,
     candidates: Sequence[KeywordCandidate],
     emotion_scores: Sequence[EmotionScore],
     emotion_flow: EmotionFlowResult,
+    source_messages: Sequence[ReportSourceMessage] = (),
 ) -> dict[str, Any]:
-    score_by_date = {score.source_date.isoformat(): score for score in emotion_scores}
-    # Ambiguous candidates fall back to LLM until the future flow model is available.
+    source_by_id = {message.message_id: message for message in source_messages}
     return {
         'task': 'mind_report_cause_keyword_classification',
-        'emotion_flow': {
-            'flow_type': emotion_flow.flow_type,
-            'maintenance_type': emotion_flow.maintenance_type,
-            'tone_color': emotion_flow.tone_color,
-            'title': emotion_flow.title,
-            'action_direction': emotion_flow.action_direction,
-        },
         'candidates': [
             {
                 'keyword': candidate.keyword,
                 'candidate_confidence': candidate.confidence,
+                'evidence_type': candidate.evidence_type,
+                'relationship': candidate.relationship,
+                'counter_evidence': list(candidate.counter_evidence),
                 'evidence_message_ids': list(candidate.evidence_message_ids),
                 'evidence_dates': list(candidate.evidence_dates),
-                'evidence_daily_scores': [
+                'evidence_messages': [
                     {
-                        'source_date': evidence_date,
-                        'emotion_state': score_by_date[evidence_date].emotion_state,
-                        'emotion_score': score_by_date[evidence_date].emotion_score,
-                        'confidence': score_by_date[evidence_date].confidence,
+                        'message_id': message_id,
+                        'source_date': source_by_id[message_id].source_date.isoformat(),
+                        'content': source_by_id[message_id].content,
                     }
-                    for evidence_date in candidate.evidence_dates
-                    if evidence_date in score_by_date
+                    for message_id in candidate.evidence_message_ids
+                    if message_id in source_by_id
                 ],
             }
             for candidate in candidates
@@ -164,16 +97,22 @@ def build_cause_keyword_payload(
         'constraints': [
             '입력 후보 키워드 외의 새 키워드를 만들지 않는다.',
             '진단, 위험도, 성격 판정을 하지 않는다.',
-            'cause_type은 stress 또는 relief 중 하나만 사용한다.',
+            '후보별 근거 메시지를 직접 다시 읽고 후보 추출 결과에 동조하지 말고 독립적으로 판단한다.',
+            '일별 감정 점수나 같은 날짜에 등장했다는 사실을 원인 판정 근거로 사용하지 않는다.',
+            'stress는 소재가 부담, 긴장, 불편 또는 소진과 연결된 경우에만 사용한다.',
+            'relief는 소재가 편안함, 즐거움, 안정 또는 회복과 연결된 경우에만 사용한다.',
+            '단순 언급, 혼합된 방향, 불명확한 인과관계는 unresolved로 분류하고 publishable을 false로 반환한다.',
+            '모든 후보가 unresolved여도 정상이며 분류 개수를 채우지 않는다.',
             '반드시 유효한 JSON 객체만 반환한다.',
         ],
         'output_schema': {
             'cause_keywords': [
                 {
                     'keyword': 'same as input candidate',
-                    'cause_type': 'stress | relief',
+                    'cause_type': 'stress | relief | unresolved',
+                    'publishable': 'true only when the evidence supports showing this as a cause',
                     'confidence': '0.0 to 1.0',
-                    'rationale': 'short Korean reason',
+                    'rationale': 'short Korean evidence-based reason',
                 }
             ]
         },
@@ -191,8 +130,11 @@ class LangChainCauseKeywordClient:
                 SystemMessage(
                     content=(
                         '너는 마음리포트의 원인 키워드 분류기다. '
-                        '입력된 후보 키워드를 근거 메시지의 감정 점수와 날짜 맥락에 따라 '
-                        '스트레스 원인(stress) 또는 이완 원인(relief)으로만 분류한다. '
+                        '입력된 각 후보의 원본 근거 메시지를 독립적으로 다시 읽고 '
+                        '스트레스 원인(stress), 이완 원인(relief), 판단 보류(unresolved) 중 하나로 분류한다. '
+                        '단순 동시 등장이나 날짜 단위 점수를 인과 근거로 사용하지 않는다. '
+                        '불명확하면 unresolved를 선택하고 publishable을 false로 반환한다. '
+                        '모든 후보를 보류하거나 빈 결과를 반환해도 정상이다. '
                         '새 키워드를 만들지 말고 JSON 객체만 반환한다.'
                     )
                 ),
@@ -241,6 +183,8 @@ def parse_cause_keywords(
         cause_type = str(row.get('cause_type') or '').strip().lower()
         if cause_type not in {CAUSE_STRESS, CAUSE_RELIEF}:
             continue
+        if row.get('publishable') is not True:
+            continue
 
         try:
             confidence = float(row.get('confidence'))
@@ -274,25 +218,15 @@ class MindReportCauseClassifier:
         candidates: Sequence[KeywordCandidate],
         emotion_scores: Sequence[EmotionScore],
         emotion_flow: EmotionFlowResult,
+        source_messages: Sequence[ReportSourceMessage] = (),
+        revision_instructions: Sequence[str] = (),
     ) -> CauseKeywordResult:
-        if not candidates or not emotion_scores:
+        if not candidates:
             return CauseKeywordResult(
-                status='insufficient_data',
+                status='no_supported_causes',
                 cause_keywords=(),
-                unresolved_candidates=tuple(candidates),
-                message='원인 키워드를 분류할 후보 또는 감정 점수 결과가 부족합니다.',
-            )
-
-        rule_keywords, unresolved = classify_by_score_rule(
-            candidates=candidates,
-            emotion_scores=emotion_scores,
-        )
-        if not unresolved:
-            return CauseKeywordResult(
-                status='classified',
-                cause_keywords=rule_keywords,
                 unresolved_candidates=(),
-                message='감정 점수 Rule로 원인 키워드를 분류했습니다.',
+                message='표시할 만큼 충분히 뒷받침되는 원인 키워드가 없습니다.',
             )
 
         client = self.cause_client
@@ -301,28 +235,39 @@ class MindReportCauseClassifier:
 
         if client is None:
             return CauseKeywordResult(
-                status='partially_classified' if rule_keywords else 'cause_client_unavailable',
-                cause_keywords=rule_keywords,
-                unresolved_candidates=unresolved,
-                message='Rule로 확정하기 어려운 원인 키워드가 남았지만 LLM 분류 클라이언트가 설정되지 않았습니다.',
+                status='no_supported_causes',
+                cause_keywords=(),
+                unresolved_candidates=tuple(candidates),
+                message='원인 분류 LLM을 사용할 수 없어 원인 키워드를 표시하지 않습니다.',
             )
 
         cause_payload = build_cause_keyword_payload(
-            candidates=unresolved,
+            candidates=candidates,
             emotion_scores=emotion_scores,
             emotion_flow=emotion_flow,
+            source_messages=source_messages,
         )
+        if revision_instructions:
+            cause_payload['revision_instructions'] = list(revision_instructions)
         llm_keywords = parse_cause_keywords(
             payload=client.classify_keywords(payload=cause_payload),
-            candidates=unresolved,
+            candidates=candidates,
         )
-        classified_keywords = rule_keywords + llm_keywords
+        classified_keywords = llm_keywords
         unresolved_by_keyword = {
-            keyword.keyword for keyword in unresolved
+            keyword.keyword for keyword in candidates
         } - {keyword.keyword for keyword in llm_keywords}
         still_unresolved = tuple(
-            candidate for candidate in unresolved if candidate.keyword in unresolved_by_keyword
+            candidate for candidate in candidates if candidate.keyword in unresolved_by_keyword
         )
+
+        if not classified_keywords:
+            return CauseKeywordResult(
+                status='no_supported_causes',
+                cause_keywords=(),
+                unresolved_candidates=still_unresolved,
+                message='LLM 독립 검토에서 표시 가능한 원인 키워드가 확인되지 않았습니다.',
+            )
 
         return CauseKeywordResult(
             status='classified' if not still_unresolved else 'partially_classified',

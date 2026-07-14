@@ -238,7 +238,8 @@ export default {
     "open-character-picker",
     "close-character-picker",
     "toggle-profile-edit",
-    "choose-character"
+    "choose-character",
+    "update-profile-keywords"
   ],
   data() {
     return {
@@ -268,14 +269,23 @@ export default {
     },
     toggleKeyword(type, label) {
       if (!this.profileEdit) return;
-      const targetArray = type === "hobby" ? this.profile.hobbies : this.profile.interests;
-      const index = targetArray.indexOf(label);
+      const key = type === "hobby" ? "hobbies" : "interests";
+      const currentValues = Array.isArray(this.profile?.[key])
+        ? this.profile[key]
+        : [];
+      const index = currentValues.indexOf(label);
+      let nextValues = [];
       
       if (index > -1) {
-        targetArray.splice(index, 1);
+        nextValues = currentValues.filter((item) => item !== label);
       } else {
-        targetArray.push(label);
+        if (currentValues.length >= 3) {
+          alert("최대 3개까지 선택할 수 있어요.");
+          return;
+        }
+        nextValues = [...currentValues, label];
       }
+      this.$emit("update-profile-keywords", { type, values: nextValues });
     },
     getKeywordIcon(label, type) {
       const text = String(label || "");
