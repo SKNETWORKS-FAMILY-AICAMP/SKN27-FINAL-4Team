@@ -22,6 +22,10 @@ _PAST_CLAIM = re.compile(
 # (5회차 어순 구멍 실측 후 확장, 2026-07-14)
 _FREQ = re.compile(r'자주|많이|계속|맨날|종종|여러\s*번')
 _TALK = re.compile(r'얘기|이야기|말(했|하)')
+# 위기 발화 재인용 게이트 (F2, E2E 실측 2026-07-14): 요약에 남긴 위기 발화("죽고 싶다")를
+# 캐주얼한 답변(리포트 요약 등)이 원문 그대로 재인용하는 사고 차단. 사용자가 이번 턴에
+# 먼저 꺼낸 경우는 예외 (위로 연속성 — 요약에 위기를 남기는 이유 그 자체).
+_CRISIS_ECHO = re.compile(r'죽고\s*싶|자살|자해|사라지고\s*싶|끝내\s*버리고\s*싶')
 
 
 def _verify_llm(answer: str, evidence: str, question: str):
@@ -33,8 +37,14 @@ def _verify_llm(answer: str, evidence: str, question: str):
          "그 근거가 [컨텍스트]에 있는지 판정하라.\n"
          "- 근거 없는 단정이 있으면: 그 단정의 요지만 15자 이내로 출력.\n"
          "- 전부 근거가 있거나 단정이 없으면: '없음' 한 단어만 출력.\n"
-         "주의: '많이/자주 얘기했다'는 컨텍스트의 [요즘 흐름]에 있을 때만 근거 인정. "
-         "한 번 언급된 일을 자주라고 하면 근거 없음이다."),
+         "주의1: '많이/자주 얘기했다'는 ① [요즘 흐름]에 있거나 ② 컨텍스트에 같은 주제의 "
+         "기억이 3개 이상 나열돼 있으면 근거 인정. 한두 번 언급을 '자주'라고 하면 근거 없음이다.\n"
+         "주의2: 컨텍스트에 있는 사실을 표현만 바꿔 말한 것은 근거 있음이다 "
+         "('그만뒀어'→'그만둔 거 기억나', '먹기로 했어'→'먹기로 했잖아'). "
+         "자구가 달라도 같은 사실이면 통과시켜라 — 과잉 차단이 누락보다 나쁘다.\n"
+         "주의3(딱 한 가지 예외): 컨텍스트에 취향('좋아한다/빠져있다/시작했다')만 있는데 "
+         "답변이 그걸 '~하기로 했다/약속했다'는 계획으로 승격해 단정하면 근거 없음이다 "
+         "(취향≠계획 — 실측 날조 사례). 이 경우가 아니고 애매하면 '없음'을 출력하라."),
         ('user', f'[컨텍스트]\n{evidence}\n\n[사용자 질문]\n{question}\n\n[답변 초안]\n{answer}'),
     ])
     text = (resp.content or '').strip()
@@ -43,18 +53,22 @@ def _verify_llm(answer: str, evidence: str, question: str):
     return text[:30]
 
 
-def check_grounded(answer: str, evidence: str, question: str = ''):
-    """(통과 여부, 근거 없는 단정 요지) 반환."""
+def check_grounded(answer: str, evidence: str, question: str = '', crisis_turn: bool = False):
+    """(통과 여부, 근거 없는 단정 요지) 반환. crisis_turn=True면 위기 게이트 우회."""
+    # 위기 재인용은 최우선·결정적 (LLM 검증 불필요 — 인용 자체가 위반).
+    # 단 이번 턴이 위기로 분류됐으면 우회 (감사 P1-2): "다 끝내고 싶어"처럼 게이트 어휘를
+    # 벗어난 위기 표현에서 봇의 정당한 공감("죽고 싶을 만큼 힘들구나")을 막으면 안 된다.
+    if not crisis_turn and _CRISIS_ECHO.search(answer or '') and not _CRISIS_ECHO.search(question or ''):
+        print('[answer_guard] 위기 발화 재인용 감지 → 재생성 (완곡화 지시)')
+        return False, '위기 발화 재인용'
     freq_claim = bool(_FREQ.search(answer or '') and _TALK.search(answer or ''))
     past_claim = bool(_PAST_CLAIM.search(answer or ''))
     if not answer or not (freq_claim or past_claim):
         return True, None   # 과거 단정·빈도 주장 자체가 없음 — 비용 0 통과
-    # 빈도 주장은 결정적 판정 (2026-07-14): 설계상 빈도의 근거는 [요즘 흐름]뿐이다
-    # — 통찰 없이 '많이/자주 얘기했다'는 무조건 근거 없음. 검증 LLM의 관대함(3회차
-    # 실측)에 맡기지 않고 코드가 판정한다.
-    if freq_claim and '요즘 흐름' not in (evidence or ''):
-        print("[answer_guard] 빈도 주장인데 [요즘 흐름] 없음 → 재생성 (결정적 판정)")
-        return False, '많이/자주 얘기했다는 주장'
+    # 빈도 게이트 디커플 (감사 P2-3, 2026-07-14): 이전엔 [요즘 흐름] 없으면 무조건
+    # 재생성했지만, 통찰 생성이 확률적이라 "무슨 얘기 많이 했지?" 질문에서 봇이 구조적으로
+    # 못 이기는 게임이 됐다. 이제 빈도 주장도 LLM 검증으로 — 검증자가 '같은 주제 기억
+    # 3개 이상'을 근거로 인정할 수 있다 (R02식 한 번 언급 '자주' 뻥은 여전히 차단).
     try:
         offending = _verify_llm(answer, evidence or '(비어 있음)', question)
     except Exception as e:
@@ -68,6 +82,10 @@ def check_grounded(answer: str, evidence: str, question: str = ''):
 
 def retry_instruction(offending: str, attempt: int = 1) -> str:
     """재생성 시 주입할 지시문. 2차부터는 초강수 — 빈도·단정 표현 자체를 금지."""
+    if offending and '위기' in offending:
+        return ("★재작성 지시: '죽고 싶다' 같은 위기 발화 원문을 인용하지 마라. "
+                "그 시기는 '마음이 많이 무거웠던 때가 있었다' 정도로만 완곡하게 담고, "
+                "나머지 내용은 그대로 답하라.★")
     if attempt >= 2:
         return ("★재작성 지시(최종): '자주/많이/계속/맨날 얘기했다', '~했잖아/했었지' 같은 "
                 "표현을 한 글자도 쓰지 마라. 컨텍스트에 있는 일들을 그냥 나열만 하거나, "

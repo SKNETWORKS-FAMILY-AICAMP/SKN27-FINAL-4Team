@@ -98,8 +98,8 @@ def _grade_llm(answer: str, rubric: str, today: str, question: str = ''):
             votes.append(_grade_llm_once(answer, rubric, today, question, temperature=0.5))
         except Exception:
             votes.append(False)
-        if len(votes) == 2 and votes[0] == votes[1]:
-            break   # 만장일치 조기 종료
+        if len(votes) == 2 and votes[0] and votes[1]:
+            break   # pass 만장일치만 조기 종료 — F/F는 3표째로 구제 기회 (감사 P2-5)
     ok = votes.count(True) > len(votes) / 2
     detail = '표결 ' + '/'.join('P' if v else 'F' for v in votes)
     return ok, detail

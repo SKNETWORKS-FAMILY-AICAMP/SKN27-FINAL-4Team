@@ -506,7 +506,8 @@ def resp_prep_node(state: ChatState) -> dict:
             evidence_parts.append(f"{m['role']}: {m['content']}")
         evidence = '\n'.join(evidence_parts)
         for attempt in (1, 2):   # 재생성도 재검사 — 1차가 또 어기면 2차는 초강수 (2026-07-14)
-            ok, offending = check_grounded(text, evidence, state.get('user_message', ''))
+            ok, offending = check_grounded(text, evidence, state.get('user_message', ''),
+                                           crisis_turn=bool(state.get('crisis')))
             if ok:
                 break
             retry_messages = [('system', '\n\n'.join(system_parts)

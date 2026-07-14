@@ -153,6 +153,27 @@ class CaptureGuardTests(TestCase):
         self.assertEqual(self.captured['events'][0]['name'], '발표 잘함')
 
 
+class ReviveTests(TestCase):
+    """부활 — 취소했던 일정을 같은 이름+미래 날짜로 다시 심으면 만료 해제"""
+
+    def test_replant_future_date_clears_expiry_stamp(self):
+        log = []
+        session = _make_session(run_log=log)
+        gm._store(session, 1, {'events': [{'name': '제주 여행', 'date': '2099-01-01'}]})
+        q, params = next((q, p) for q, p in log if 'MERGE (e:Event' in q)
+        self.assertIn('valid_until = CASE', q)     # 부활 절 존재
+        self.assertEqual(params.get('date'), '2099-01-01')
+        self.assertTrue(params.get('today'))       # 미래 판정 기준 전달
+
+    def test_empty_date_never_revives(self):
+        """빈 문자열 date는 None으로 정규화 — 회고성 언급으로 부활 금지"""
+        log = []
+        session = _make_session(run_log=log)
+        gm._store(session, 1, {'events': [{'name': '제주 여행', 'date': ''}]})
+        q, params = next((q, p) for q, p in log if 'MERGE (e:Event' in q)
+        self.assertIsNone(params.get('date'))
+
+
 class VectorExpireTests(TestCase):
     """만료 벡터 4단 — 오폭 방어 3종"""
 
@@ -191,6 +212,28 @@ class VectorExpireTests(TestCase):
 class AnswerGuardTests(TestCase):
     """접지 검증 — 게이트·결정적 판정·무해 폴백"""
 
+    def test_crisis_echo_blocked(self):
+        """F2 (E2E 실측): 요약 속 위기 발화를 캐주얼 답변이 재인용 → LLM 없이 결정적 차단"""
+        ok, why = ag.check_grounded(
+            '가끔 죽고 싶다는 생각도 든다고 했고, 빵 먹으면서 기분이 나아지길 바란다고 했지.',
+            '요약: (위기 시기 포함)', '내 감정 리포트 보고 싶어')
+        self.assertFalse(ok)
+        self.assertIn('위기', why)
+
+    def test_crisis_echo_allowed_when_user_raises(self):
+        """사용자가 먼저 그 얘기를 꺼낸 턴은 비발동 — 위로 연속성 보존"""
+        ok, _ = ag.check_grounded(
+            '그때 진짜 죽고 싶을 만큼 힘들었구나… 지금은 좀 어때?',
+            '요약: (위기 시기 포함)', '나 그때 죽고 싶다고 말했던 거 기억나?')
+        self.assertTrue(ok)
+
+    def test_crisis_echo_bypassed_on_crisis_turn(self):
+        """위기로 분류된 턴은 게이트 우회 (감사 P1-2) — 어휘 밖 위기 표현에서 공감 보존"""
+        ok, _ = ag.check_grounded(
+            '죽고 싶을 만큼 힘들구나… 내가 옆에 있을게.',
+            '요약', '요즘 너무 힘들어서 다 끝내고 싶어', crisis_turn=True)
+        self.assertTrue(ok)
+
     def test_gate_skips_plain_answers(self):
         """평범한 답변은 LLM 0회로 통과 (비용 0)"""
         with mock.patch.object(ag, '_verify_llm') as v:
@@ -211,12 +254,20 @@ class AnswerGuardTests(TestCase):
         self.assertTrue(ok)
         v.assert_not_called()
 
-    def test_frequency_without_insight_fails_deterministically(self):
-        """빈도 주장 + [요즘 흐름] 없음 → LLM 없이 즉시 위반 (검증자 관대함 배제)"""
-        with mock.patch.object(ag, '_verify_llm') as v:
-            ok, off = ag.check_grounded('한강 얘기를 많이 했어', '- 한강 자전거 여행', 'q')
+    def test_frequency_without_insight_goes_to_llm(self):
+        """빈도 게이트 디커플 (감사 P2-3): [요즘 흐름] 없어도 즉시 fail이 아니라 LLM 검증으로.
+        같은 주제 3개면 통과 가능 — 리플렉션 실패 회차에도 봇이 이길 길이 있다."""
+        with mock.patch.object(ag, '_verify_llm', return_value=None) as v:
+            ok, _ = ag.check_grounded('요즘 회사 얘기 많이 했네',
+                                      '- 발표 준비\n- 야근\n- 상사한테 혼남', 'q')
+        self.assertTrue(ok)
+        v.assert_called_once()
+
+    def test_frequency_bluff_still_blocked(self):
+        """한 번 언급을 '자주'라 하는 뻥은 검증자가 여전히 차단 (R02 보호선 유지)"""
+        with mock.patch.object(ag, '_verify_llm', return_value='자주 얘기했다는 주장'):
+            ok, _ = ag.check_grounded('한강 얘기를 많이 했어', '- 한강 자전거 여행', 'q')
         self.assertFalse(ok)
-        v.assert_not_called()
 
     def test_frequency_with_insight_goes_to_llm(self):
         """[요즘 흐름] 있으면 LLM 검증 경유 — 근거 있으면 통과"""

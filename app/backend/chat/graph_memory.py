@@ -98,25 +98,29 @@ def _extract(message: str):
     from ai.agents.llm import get_llm
     resp = get_llm(temperature=0, max_tokens=300).invoke([
         ('system',
-         "사용자 메시지에서 '기억할 가치가 있는' 사건·인물·취향을 뽑아 JSON으로만 출력하라.\n"
-         f"- 날짜 표현(내일, 다음주 화요일 등)은 오늘 {_today_kst()} 기준 실제 날짜(YYYY-MM-DD)로 변환.\n"
-         "- ★과거의 일(~했어, ~갔다 옴)도 기억할 가치가 있으면 events에 반드시 기록하라.★ "
-         "단 date 필드는 비워라 — date는 다가오는 일정이나 사용자가 날짜를 콕 집어 말했을 때만 넣는다. "
-         "(date를 비우라는 것이지 사건을 빼라는 뜻이 아니다)\n"
-         "- name은 맥락이 담기게 5~15자로 (예: '상사한테 혼남', '회사 발표 준비'). "
-         "'혼남', '야근'처럼 한 단어로 뭉개지 마라.\n"
+         "사용자 메시지에서 '기억할 가치가 있는' 것을 뽑아 JSON으로만 출력하라.\n"
+         "[반드시 기록 — 최우선 규칙. 아래 항목은 일상처럼 보여도 기록한다]\n"
+         "- 계획·약속, 사건(과거의 일 포함), 관계·이름 소개(가족·친구·반려동물), 취향, 구매.\n"
+         "- ★한 메시지에 사실이 여러 개면 하나도 빼지 말고 각각 기록★ "
+         "(예: '20일에 병원 가고, 갔다 와서 엄마랑 맛있는 거 먹기로 했어' → "
+         "events에 '병원 방문'(date 있음) + '엄마와 외식 약속' 2개).\n"
+         "- 반려동물 이름은 people에. 예: '우리집 강아지 이름은 콩이야' → "
+         'people에 {"name":"콩이","relation":"반려동물(강아지)"}.\n'
+         "[버릴 것 — 위 기록 대상에 해당하지 않을 때만]\n"
+         "- 일회성 일상 보고(오늘 뭐 먹었다·날씨·버스 늦음)와 단순 감탄·맞장구.\n"
+         "[name·date 규칙]\n"
+         "- name은 맥락 있게 5~15자 ('혼남' 말고 '상사한테 혼남'). 사용자가 말한 구체적 "
+         "이름 그대로 — '포항 여행'을 '여행'으로 뭉개면 다른 기억까지 잘못 만료된다.\n"
+         f"- date는 다가오는 일정·사용자가 콕 집은 날짜만, 오늘 {_today_kst()} 기준 YYYY-MM-DD로 변환. "
+         "과거의 일은 사건은 기록하되 date는 항상 비워라.\n"
+         "[끝난 것 — expired]\n"
+         "- 이별·절교·퇴사·일정 취소는 ★expired와 events 둘 다★ 기록 — expired엔 옛것(만료용), "
+         "events엔 '끝났다는 사실'. 예: '민수랑 헤어졌어' → expired 민수(person) + events '민수와 이별'. "
+         "'제주 여행 취소됐어' → expired '제주 여행'(event) + events '제주 여행 취소'.\n"
+         "- '잊어줘/기억하지 마' 요청은 그 대상을 expired에 (reason: '사용자 요청'). "
+         "잊어달라는 요청 자체는 events로 저장 금지.\n"
+         "- expired의 kind는 영문 소문자 person|event|preference 중 하나.\n"
          "- 사용자가 직접 말한 사실만. 추측 금지. 없으면 빈 배열.\n"
-         "- 일회성 스몰토크(날씨·메뉴), 단순 감탄·맞장구는 제외.\n"
-         "- 관계의 끝(이별·절교·퇴사 등)이나 일정 취소를 말하면 ★expired와 events 둘 다★ 기록하라 "
-         "— expired는 옛것의 만료용, events는 '끝났다는 사실' 기록용 (둘 중 하나만 내지 마라). "
-         "예: '민수랑 헤어졌어' → expired에 민수(person) + events에 '민수와 이별'. "
-         "'제주 여행 취소됐어' → expired에 '제주 여행'(event) + events에 '제주 여행 취소'.\n"
-         "- ★expired·종결 events의 name은 사용자가 말한 구체적 이름 그대로★ "
-         "('포항 여행'을 '여행'으로 뭉개지 마라 — 뭉개면 다른 기억까지 잘못 만료된다).\n"
-         "- 사용자가 '잊어줘/기억하지 마/그 얘기 지워줘'라고 요청하면 그 대상을 expired에 기록하라 "
-         "(reason: '사용자 요청'). 잊어달라는 요청 자체는 events로 저장하지 마라.\n"
-         "- expired의 kind는 반드시 영문 소문자 person, event, preference 중 하나만 사용하라. "
-         "name은 원래 저장됐을 이름 그대로 짧게 (예: '민트초코', '현우', '편의점 알바').\n"
          "형식(없는 키는 생략 가능, JSON 외 다른 말 금지):\n"
          '{"events":[{"name":"회사 면접 예정","date":"2026-07-20","emotion":"불안","people":["엄마"]}],'
          '"people":[{"name":"엄마","relation":"가족"}],"preferences":["드라마"],'
@@ -186,6 +190,10 @@ VEC_DEDUP_MIN = 0.93          # 저장 시 즉시 병합 임계값 — 보수적
 EXPIRE_VEC_MIN = 0.60         # 만료 벡터 폴백 (memory_expire_bench 실측): 무관 최고 0.42 대비
                               # 오폭 여유 0.18의 보수 운용 — 확실할 때만 만료, 미스는 현상 유지
 _CLOSURE_NAME = re.compile(r'취소|그만둠|그만뒀|이별|절교|퇴사|무산|파토|종료|깨짐|끝남')
+# 끝단 앵커판 (2026-07-14 감사 P1-1): '다가오는 일' 제외·'끝난 일' 태깅은 이름이 종결어로
+# ★끝날 때만★ — '퇴사 면담 예정'/'프로젝트 종료 발표회' 같은 정당한 미래 일정 오폭 방지.
+# (합성 종결 기록은 구조상 항상 '… 취소/이별'로 끝난다)
+_CLOSURE_TAIL = re.compile(r'(취소|그만둠|그만뒀|이별|절교|퇴사|무산|파토|종료|깨짐|끝남)\s*$')
 
 # ── 리플렉션 (2026-07-13) — 기억 군집 → 통찰 ──
 REFLECT_SIM_MIN = 0.22        # 실측 (memory_reflect_bench): 추출기 스타일(5~15자) 이름 기준 정답 재현 구간 0.19~0.25의 중앙값 — 이름 길이 규칙(추출 프롬프트)과 세트
@@ -216,11 +224,18 @@ def _store(tx, uid: int, data: dict, salience: float = 1.0, vectors: dict = None
             'MERGE (e:Event {uid:$uid, key:$key}) '
             'ON CREATE SET e.name = $name '
             'SET e.date = coalesce($date, e.date) '
+            # 부활 (2026-07-14): 취소했던 일정을 같은 이름+미래 날짜로 다시 심으면 만료 해제.
+            # 미래 날짜 조건 덕에 "취소된 거 아쉽다" 같은 회고(날짜 없음)로는 부활하지 않는다.
+            'SET e.valid_until = CASE WHEN $date IS NOT NULL AND $date >= $today '
+            '    THEN null ELSE e.valid_until END '
+            'SET e.ended_reason = CASE WHEN $date IS NOT NULL AND $date >= $today '
+            '    THEN null ELSE e.ended_reason END '
             'SET e.embedding = coalesce(e.embedding, $vec) '   # 의미 검색용 벡터 (없으면 유지)
             'SET e.salience = CASE WHEN coalesce(e.salience, 0) < $sal '
             '                 THEN $sal ELSE e.salience END '
             'MERGE (u)-[:HAS_EVENT]->(e)',
-            uid=uid, key=key, name=name, date=ev.get('date'), sal=salience, vec=vec)
+            uid=uid, key=key, name=name, date=(ev.get('date') or '').strip() or None,
+            today=_today_iso(), sal=salience, vec=vec)
         emo = (ev.get('emotion') or '').strip()
         if emo:
             tx.run(
@@ -607,6 +622,8 @@ def recall(user_id, limit: int = 6, message: str = None) -> str:
                 'ORDER BY e.date ASC LIMIT 3',
                 uid=user_id, today=today).data()
             for c in coming:
+                if _CLOSURE_TAIL.search((c.get('name') or '').strip()):
+                    continue   # 종결 기록(…취소/…이별)은 '다가오는 일'이 아니다 (F3 · 끝단 앵커 P1-1)
                 d = _dday(c.get('date') or '', today)
                 parts = [f"{c['name']} ({c['date']}" + (f' · {d}' if d else '') + ')']
                 ppl = [x for x in (c.get('people') or []) if x]
@@ -638,7 +655,7 @@ def recall(user_id, limit: int = 6, message: str = None) -> str:
                 # 종결 기록은 단언 렌더링 (2026-07-13, S05): "운동 레슨 취소"를 예정으로
                 # 오독해 "다음 주에 가기로 했잖아"라고 뒤집는 사고 방지 — S01 '지난 인연'
                 # 문장 단언과 동일 처방. LLM 해석에 맡기지 않고 문장이 못을 박는다.
-                if _CLOSURE_NAME.search(e['name'] or ''):
+                if _CLOSURE_TAIL.search((e['name'] or '').strip()):
                     parts.append('★이미 끝난 일 — 예정 아님★')
                 lines.append('- ' + ' '.join(parts))
             # ②-1 지난 일정 단언 (2026-07-13, S05): 만료된 사건을 통째로 숨기면
@@ -794,6 +811,8 @@ def upcoming(user_id, days: int = 7, limit: int = 2) -> str:
                 uid=user_id, today=today, limit=limit).data()
         out = []
         for r in rows:
+            if _CLOSURE_TAIL.search((r.get('name') or '').strip()):
+                continue   # 종결 기록은 오프너 선제 챙김 대상 아님 (F3 · 끝단 앵커 P1-1)
             d = _dday(r.get('date') or '', today)
             try:
                 gap = (datetime.date.fromisoformat(r['date'])
