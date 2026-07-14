@@ -496,6 +496,21 @@ def resp_prep_node(state: ChatState) -> dict:
     try:
         resp = _llm(temperature=0.7, max_tokens=300).invoke(messages)
         text = resp.content.strip()
+        # 접지 검증 (2026-07-14): 근거 없는 '전에 말했잖아' 단정 차단 — R02·F02 실측 결함.
+        # 게이트 통과(대부분) 시 비용 0, 위반 시에만 1회 재생성.
+        from ai.agents.answer_guard import check_grounded, retry_instruction
+        evidence_parts = []
+        if state.get('memory_summary'):
+            evidence_parts.append(state['memory_summary'])
+        for m in state.get('recent_history', [])[-6:]:
+            evidence_parts.append(f"{m['role']}: {m['content']}")
+        ok, offending = check_grounded(text, '\n'.join(evidence_parts),
+                                       state.get('user_message', ''))
+        if not ok:
+            retry_messages = [('system', '\n\n'.join(system_parts)
+                               + '\n\n' + retry_instruction(offending))] + messages[1:]
+            resp = _llm(temperature=0.5, max_tokens=300).invoke(retry_messages)
+            text = resp.content.strip() or text
     except Exception as e:
         print(f'[resp_prep_node] LLM 실패: {e}')
         text = '지금 잠깐 생각이 꼬였어요. 한 번만 다시 말해줄래요?'
