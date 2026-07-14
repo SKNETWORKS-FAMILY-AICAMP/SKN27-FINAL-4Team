@@ -43,7 +43,18 @@ def _answer(recall_text: str, question: str) -> str:
         ('system', COMMON_RULES + '\n\n' + memory_block),
         ('user', question),
     ])
-    return resp.content.strip()
+    text = resp.content.strip()
+    # 접지 검증 — 운영(resp_prep_node)과 동일 가드 (2026-07-14)
+    from ai.agents.answer_guard import check_grounded, retry_instruction
+    ok, offending = check_grounded(text, recall_text, question)
+    if not ok:
+        resp = _llm(temperature=0.3, max_tokens=150).invoke([
+            ('system', COMMON_RULES + '\n\n' + memory_block
+             + '\n\n' + retry_instruction(offending)),
+            ('user', question),
+        ])
+        text = resp.content.strip() or text
+    return text
 
 
 def _grade_keywords(answer: str, expect_any, forbid):
@@ -56,16 +67,40 @@ def _grade_keywords(answer: str, expect_any, forbid):
     return True, ''
 
 
-def _grade_llm(answer: str, rubric: str, today: str, question: str = ''):
-    resp = _llm(temperature=0, max_tokens=10).invoke([
+def _grade_llm_once(answer: str, rubric: str, today: str, question: str,
+                    temperature: float):
+    resp = _llm(temperature=temperature, max_tokens=150).invoke([
         ('system',
-         '채점자다. 기준을 문자 그대로 적용해 pass 또는 fail 한 단어만 출력하라. '
-         '기준이 pass로 규정한 답변 유형이면 반드시 pass다.\n'
+         '채점자다. 기준을 문자 그대로 적용하라.\n'
+         '1) 첫 줄: 답변이 기준의 fail 조건에 해당하는지 한 문장으로 판단 근거.\n'
+         '2) 마지막 줄: pass 또는 fail 한 단어만.\n'
+         '기준이 pass로 규정한 답변 유형이면 반드시 pass다. '
+         'fail은 fail 조건에 명확히 해당할 때만.\n'
          f'(오늘 날짜: {today})\n[기준]\n' + rubric),
         ('user', f'[질문]\n{question}\n\n[답변]\n{answer}'),
     ])
-    verdict = resp.content.strip().lower()
-    return ('pass' in verdict), verdict
+    text = (resp.content or '').strip().lower()
+    last = text.splitlines()[-1].strip() if text else ''
+    if 'pass' in last or 'fail' in last:
+        return 'pass' in last
+    return 'pass' in text and 'fail' not in text   # 형식 미준수 폴백
+
+
+def _grade_llm(answer: str, rubric: str, today: str, question: str = ''):
+    # 다수결 3표 (2026-07-14): 채점자 1명은 명백한 정답도 가끔 fail로 찍음
+    # (S01·S02·S05에서 실측). temp 0.5로 표를 다양화해 3표 다수결 — 개별 표는
+    # 흔들려도 다수결은 안정 (앙상블). 첫 2표가 일치하면 3표째 생략(비용 절감).
+    votes = []
+    for i in range(3):
+        try:
+            votes.append(_grade_llm_once(answer, rubric, today, question, temperature=0.5))
+        except Exception:
+            votes.append(False)
+        if len(votes) == 2 and votes[0] == votes[1]:
+            break   # 만장일치 조기 종료
+    ok = votes.count(True) > len(votes) / 2
+    detail = '표결 ' + '/'.join('P' if v else 'F' for v in votes)
+    return ok, detail
 
 
 class Command(BaseCommand):
@@ -134,9 +169,15 @@ class Command(BaseCommand):
                     graph_memory._capture(uid, turn)
                 for j in range(sc.get('noise', 0)):
                     graph_memory._capture(uid, NOISE_POOL[j % len(NOISE_POOL)])
+                if sc.get('reflect'):   # 리플렉션 시나리오 — 심기 후 통찰 생성 (2026-07-13)
+                    rr = graph_memory.reflect(uid)
+                    if opts.get('debug'):
+                        self.stdout.write(f"    [리플렉션] {rr}")
 
                 # 질문을 message로 전달 — 언급 기반 직접 검색(벡터·키워드)까지 평가 대상 (2026-07-13)
                 recall_text = graph_memory.recall(uid, message=sc['question'])
+                if opts.get('debug'):
+                    self.stdout.write('    [recall]\n      ' + recall_text.replace('\n', '\n      '))
                 answer = _answer(recall_text, sc['question'])
 
                 if sc['grade'] == 'keywords':
@@ -178,7 +219,7 @@ class Command(BaseCommand):
         self.stdout.write('\n===== 결과 =====')
         label = dict(fact='사실 회상', supersede='모순 처리(supersede)',
                      forget='잊어줘 준수', trap='환각 함정 방어', combo='조합·D-day',
-                     para='패러프레이즈(의미 검색)')
+                     para='패러프레이즈(의미 검색)', reflect='리플렉션(통찰)')
         n_sc = len(scenarios)
         for t in label:
             per_run = [sum(bt.get(t, [])) for bt in all_by_type if t in bt]
