@@ -85,7 +85,7 @@
           :class="msg.role"
         >
           <!-- 감정 라벨(슬픔 모드 등)은 화면에 표시하지 않음 — 친구 컨셉 (분석은 뒤에서만) -->
-          <div v-else class="bubble" :class="msg.role === 'user' ? 'bubble-user' : 'bubble-char'">
+          <div class="bubble" :class="msg.role === 'user' ? 'bubble-user' : 'bubble-char'">
             <img v-if="msg.image" :src="msg.image" class="bubble-img" alt="첨부 이미지" />
             <span v-if="msg.content" class="bubble-text">{{ (msg.displayed !== undefined ? msg.displayed : msg.content) || '…' }}</span>
           </div>

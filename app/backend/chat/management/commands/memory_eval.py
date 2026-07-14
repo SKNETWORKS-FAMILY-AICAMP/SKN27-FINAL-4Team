@@ -43,7 +43,18 @@ def _answer(recall_text: str, question: str) -> str:
         ('system', COMMON_RULES + '\n\n' + memory_block),
         ('user', question),
     ])
-    return resp.content.strip()
+    text = resp.content.strip()
+    # 접지 검증 — 운영(resp_prep_node)과 동일 가드 (2026-07-14)
+    from ai.agents.answer_guard import check_grounded, retry_instruction
+    ok, offending = check_grounded(text, recall_text, question)
+    if not ok:
+        resp = _llm(temperature=0.3, max_tokens=150).invoke([
+            ('system', COMMON_RULES + '\n\n' + memory_block
+             + '\n\n' + retry_instruction(offending)),
+            ('user', question),
+        ])
+        text = resp.content.strip() or text
+    return text
 
 
 def _grade_keywords(answer: str, expect_any, forbid):
