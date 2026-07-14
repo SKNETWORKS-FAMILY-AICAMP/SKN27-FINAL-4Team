@@ -20,7 +20,7 @@ openai>=1.3.0
 langchain>=0.3.0
 langchain-core
 langchain-openai>=0.2.0
-langchain-groq>=0.2.0           # 책 추천 에이전트 (mybook)
+langchain-groq>=0.2.0
 langgraph>=0.3.0
 requests>=2.31.0                # 외부 API (날씨, ElevenLabs TTS — 별도 SDK 불필요)
 

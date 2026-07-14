@@ -15,6 +15,11 @@ from mindreport.services.criteria_service import ReportCriteriaService
 PERIOD_WEEK = 'week'
 PERIOD_MONTH = 'month'
 SUPPORTED_PERIODS = {PERIOD_WEEK, PERIOD_MONTH}
+AFFECT_SCORING_METHOD = 'independent-affect-balance-v2'
+AFFECT_DIMENSION_MIN = 0
+AFFECT_DIMENSION_MAX = 4
+AFFECT_BALANCE_POINT_VALUE = 12.5
+CONFIDENCE_LEVELS = (0.0, 0.25, 0.5, 0.75, 1.0)
 
 
 @dataclass(frozen=True)
@@ -36,6 +41,10 @@ class EmotionScore:
     total_message_count: int
     evidence_message_ids: tuple[int, ...]
     rationale: str
+    positive_affect: float | None = None
+    negative_affect: float | None = None
+    activation: float | None = None
+    scoring_method: str = 'legacy-llm-direct'
 
 
 @dataclass(frozen=True)
@@ -143,23 +152,60 @@ def build_emotion_scoring_payload(
     messages: Sequence[ReportSourceMessage],
 ) -> dict[str, Any]:
     grouped = _group_messages_by_date(messages)
-    # Temporary implementation: LLM daily scoring stands in for the planned emotion scorer.
     return {
         'task': 'mind_report_daily_emotion_score_analysis',
         'period_type': period_type,
-        'score_contract': {
-            '0-24': 'strong negative emotion',
-            '25-44': 'mild negative emotion',
-            '45-55': 'neutral or weak emotional evidence',
-            '56-75': 'mild positive emotion',
-            '76-100': 'strong positive emotion',
+        'scoring_method': AFFECT_SCORING_METHOD,
+        'method_scope': (
+            'Non-diagnostic internal affect index. The dimensions are informed by '
+            'PANAS and the valence/arousal model, but this is not a validated '
+            'clinical or patient-reported outcome scale.'
+        ),
+        'affect_dimension_contract': {
+            'positive_affect': {
+                '0': 'no positive affect evidence',
+                '1': 'weak or indirect positive affect evidence',
+                '2': 'clear positive affect evidence',
+                '3': 'strong positive affect evidence',
+                '4': 'repeated or dominant strong positive affect evidence',
+            },
+            'negative_affect': {
+                '0': 'no negative affect evidence',
+                '1': 'weak or indirect negative affect evidence',
+                '2': 'clear negative affect evidence',
+                '3': 'strong negative affect evidence',
+                '4': 'repeated or dominant strong negative affect evidence',
+            },
+            'activation': {
+                '0': 'no activation evidence or calm',
+                '1': 'low activation',
+                '2': 'moderate activation',
+                '3': 'high activation',
+                '4': 'very high activation',
+            },
+        },
+        'score_formula': {
+            'expression': '50 + 12.5 * (positive_affect - negative_affect)',
+            'range': 'clamped to 0..100 by server code',
+            'important': 'Do not return or calculate emotion_score.',
+        },
+        'confidence_contract': {
+            '0.00': 'no usable emotional evidence',
+            '0.25': 'weak, ambiguous, or mostly inferred evidence',
+            '0.50': 'one clear item of evidence',
+            '0.75': 'multiple consistent items of evidence',
+            '1.00': 'repeated, explicit, and consistent evidence',
         },
         'allowed_emotion_states': ['positive', 'neutral', 'negative'],
         'constraints': [
             'Do not make medical diagnoses, risk ratings, or personality judgments.',
             'Do not assume every message contains emotional evidence.',
             'Use only messages with emotional evidence in evidence_message_ids.',
-            'Return one daily score per source_date on a 0 to 100 scale.',
+            'Rate positive and negative affect independently; both may be high.',
+            'Use only integer dimension values from 0 through 4.',
+            'Use only the confidence values defined in confidence_contract.',
+            'If there is no emotional evidence, return zero for all dimensions and confidence.',
+            'Return one dimension assessment per source_date.',
             'Return only a valid JSON object.',
         ],
         'daily_groups': [
@@ -182,9 +228,10 @@ def build_emotion_scoring_payload(
                 {
                     'source_date': 'YYYY-MM-DD',
                     'emotion_label': 'joy | normal | sadness | anger | anxiety | hurt | panic | etc',
-                    'emotion_state': 'positive | neutral | negative',
-                    'emotion_score': '0 to 100 integer',
-                    'confidence': '0.0 to 1.0',
+                    'positive_affect': 'integer 0 to 4',
+                    'negative_affect': 'integer 0 to 4',
+                    'activation': 'integer 0 to 4',
+                    'confidence': '0.00 | 0.25 | 0.50 | 0.75 | 1.00',
                     'emotional_evidence_count': 'number of messages used as emotional evidence',
                     'evidence_message_ids': ['message ids used as evidence'],
                     'rationale': 'short Korean reason for the daily score',
@@ -225,10 +272,12 @@ class LangChainEmotionScoreClient:
             messages=[
                 SystemMessage(
                     content=(
-                        '너는 마음리포트의 일 단위 감정 점수 분석기다. '
-                        '하루의 사용자 발화를 묶어서 마음리포트 내부 분석용 대표 감정 상태와 0~100점 점수로 변환한다. '
+                        '너는 마음리포트의 일 단위 감정 근거 분류기다. '
+                        '하루의 사용자 발화에서 긍정 정서, 부정 정서, 각성도를 각각 독립적으로 분류한다. '
                         '모든 발화에 감정이 있다고 보지 말고, 감정 근거가 있는 발화만 근거로 삼는다. '
-                        '점수는 진단이나 평가가 아니라 이후 날짜별 감정 흐름 분석의 입력값이다. '
+                        '긍정과 부정이 함께 드러나면 둘 다 점수를 부여한다. '
+                        '0~100 최종 점수는 서버가 계산하므로 직접 생성하지 않는다. '
+                        '이 결과는 진단이나 평가가 아니라 날짜별 감정 흐름 분석의 입력값이다. '
                         '입력 근거 밖의 사실을 만들지 말고 JSON 객체만 반환한다.'
                     )
                 ),
@@ -260,6 +309,34 @@ def _state_from_score(score: float) -> str:
     return 'neutral'
 
 
+def _parse_affect_dimension(row: Mapping[str, Any], key: str) -> float | None:
+    if key not in row:
+        return None
+    try:
+        value = round(float(row[key]))
+    except (TypeError, ValueError):
+        return 0.0
+    return float(max(AFFECT_DIMENSION_MIN, min(AFFECT_DIMENSION_MAX, value)))
+
+
+def _nearest_confidence_level(value: Any) -> float:
+    try:
+        parsed = max(0.0, min(1.0, float(value)))
+    except (TypeError, ValueError):
+        return 0.0
+    return min(CONFIDENCE_LEVELS, key=lambda level: abs(level - parsed))
+
+
+def _score_from_affect_dimensions(
+    positive_affect: float,
+    negative_affect: float,
+) -> float:
+    score = 50.0 + AFFECT_BALANCE_POINT_VALUE * (
+        positive_affect - negative_affect
+    )
+    return round(max(0.0, min(100.0, score)), 1)
+
+
 def parse_emotion_scores(
     *,
     payload: Mapping[str, Any],
@@ -286,27 +363,49 @@ def parse_emotion_scores(
         if source_date is None or source_date not in total_by_date:
             continue
 
-        try:
-            emotion_score = float(row.get('emotion_score'))
-        except (TypeError, ValueError):
-            emotion_score = 50.0
-        emotion_score = max(0.0, min(100.0, emotion_score))
-
-        emotion_state = str(row.get('emotion_state') or '').strip().lower()
-        if emotion_state not in {'positive', 'neutral', 'negative'}:
-            emotion_state = _state_from_score(emotion_score)
-
-        try:
-            confidence = float(row.get('confidence'))
-        except (TypeError, ValueError):
-            confidence = 0.0
-        confidence = max(0.0, min(1.0, confidence))
-
         evidence_ids = _parse_evidence_ids(
             row=row,
             source_date=source_date,
             source_by_id=source_by_id,
         )
+        positive_affect = _parse_affect_dimension(row, 'positive_affect')
+        negative_affect = _parse_affect_dimension(row, 'negative_affect')
+        activation = _parse_affect_dimension(row, 'activation')
+        uses_affect_dimensions = (
+            positive_affect is not None and negative_affect is not None
+        )
+
+        if uses_affect_dimensions:
+            if not evidence_ids:
+                positive_affect = 0.0
+                negative_affect = 0.0
+                activation = 0.0
+            emotion_score = _score_from_affect_dimensions(
+                positive_affect,
+                negative_affect,
+            )
+            emotion_state = _state_from_score(emotion_score)
+            confidence = (
+                _nearest_confidence_level(row.get('confidence'))
+                if evidence_ids
+                else 0.0
+            )
+            scoring_method = AFFECT_SCORING_METHOD
+        else:
+            try:
+                emotion_score = float(row.get('emotion_score'))
+            except (TypeError, ValueError):
+                emotion_score = 50.0
+            emotion_score = max(0.0, min(100.0, emotion_score))
+            emotion_state = str(row.get('emotion_state') or '').strip().lower()
+            if emotion_state not in {'positive', 'neutral', 'negative'}:
+                emotion_state = _state_from_score(emotion_score)
+            try:
+                confidence = float(row.get('confidence'))
+            except (TypeError, ValueError):
+                confidence = 0.0
+            confidence = max(0.0, min(1.0, confidence))
+            scoring_method = 'legacy-llm-direct'
         try:
             emotional_evidence_count = int(row.get('emotional_evidence_count'))
         except (TypeError, ValueError):
@@ -331,6 +430,10 @@ def parse_emotion_scores(
                 total_message_count=total_by_date[source_date],
                 evidence_message_ids=evidence_ids,
                 rationale=str(row.get('rationale') or ''),
+                positive_affect=positive_affect,
+                negative_affect=negative_affect,
+                activation=activation,
+                scoring_method=scoring_method,
             )
         )
 
@@ -407,6 +510,7 @@ class MindReportScoringService:
         year: int | None = None,
         month: int | None = None,
         collection_result=None,
+        revision_instructions: Sequence[str] = (),
     ) -> MindReportScoringResult:
         if period_type not in SUPPORTED_PERIODS:
             raise ValueError(f'Unsupported mindreport period_type: {period_type}')
@@ -462,6 +566,8 @@ class MindReportScoringService:
             period_type=period_type,
             messages=source_messages,
         )
+        if revision_instructions:
+            scoring_payload['revision_instructions'] = list(revision_instructions)
         scores = parse_emotion_scores(
             payload=client.score_messages(payload=scoring_payload),
             source_messages=source_messages,

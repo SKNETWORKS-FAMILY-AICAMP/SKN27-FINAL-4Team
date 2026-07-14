@@ -53,6 +53,7 @@
           </div>
           <h4>{{ currentBook.title || "제목 정보 없음" }}</h4>
           <p class="book-meta">
+            <span v-if="currentBook.genre" class="book-genre">{{ currentBook.genre }}</span>
             {{ currentBook.author || "저자 정보 없음" }}
             <span v-if="currentBook.publisher"> · {{ currentBook.publisher }}</span>
           </p>
@@ -60,7 +61,7 @@
             <span v-for="tag in basisTags" :key="tag">{{ tag }}</span>
           </div>
           <section class="review-box">
-            <span>추천 서평</span>
+            <span>{{ currentBook.genre ? `${currentBook.genre} 추천 서평` : "추천 서평" }}</span>
             <p>{{ currentReview }}</p>
           </section>
         </div>
@@ -228,7 +229,8 @@ export default {
 .book-context { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 4px; }
 .book-context span { display: inline-flex; align-items: center; min-height: 24px; padding: 0 8px; border-radius: 999px; background: rgba(15,10,49,.34); color: rgba(215,183,255,.86); font-size: 11px; font-weight: 900; }
 .book-copy h4 { margin: 5px 0; color: #fff7df; font-size: 19px; line-height: 1.25; word-break: keep-all; }
-.book-meta { margin: 0 0 9px; color: rgba(255,245,230,.68); font-size: 13px; line-height: 1.35; }
+.book-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 0 0 9px; color: rgba(255,245,230,.68); font-size: 13px; line-height: 1.35; }
+.book-genre { flex: 0 0 auto; padding: 3px 7px; border: 1px solid rgba(255,211,122,.24); border-radius: 999px; background: rgba(255,211,122,.1); color: #ffd37a; font-size: 11px; font-weight: 900; }
 .review-box { margin: 0; max-height: 128px; overflow: auto; padding: 10px 12px; border-left: 3px solid #d7b7ff; background: rgba(15,10,49,.28); }
 .review-box span { display: block; margin-bottom: 6px; color: #d7b7ff; font-size: 12px; font-weight: 900; }
 .review-box p { margin: 0; color: rgba(255,245,230,.9); font-size: 13px; line-height: 1.52; word-break: keep-all; }
