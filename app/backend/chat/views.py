@@ -162,6 +162,11 @@ def chat_turn(request):
         if len(image_data_url) > 5_000_000:   # base64 ~3.7MB 초과 차단
             return _err('IMAGE_TOO_LARGE', '이미지가 너무 큽니다. 더 작게 보내주세요.')
 
+    # PII 마스킹 (2026-07-15 팀 안건): 입구에서 완전 제거 — 이후의 LLM 전송·원본 저장·
+    # 요약·그래프가 전부 자동으로 안전. 값은 [종류] 태그로 치환 (0비트 보존, pii_mask.py).
+    from . import pii_mask
+    message, pii_found = pii_mask.mask(message)
+
     user = _session_user(request, session)
     session_mode = 'secret' if session.is_secret else 'normal'
 
@@ -212,6 +217,13 @@ def chat_turn(request):
     emotion_label = result.get('emotion_label')          # MBTI 답변 턴이면 None
     is_mbti_answer = bool(result.get('is_mbti_answer'))
     image_caption = (result.get('image_caption') or '').strip()   # 사진 캡션 (저장·리포트·기억용)
+
+    # PII 감지 턴엔 투명성 안내 한 줄 — 조용히 가리면 "봇이 기억 못 함"이 고장처럼 보임.
+    # 결정적 문자열(LLM에 안 맡김) — 안내 자체도 환각 0.
+    if pii_found:
+        _pii_note = pii_mask.notice(pii_found)
+        final_response += _pii_note
+        tagged_response += _pii_note
 
     # ── MBTI 질문을 대화 흐름에 자연스럽게 엮기 (유휴 타이머 대신) ──
     #  트리거가 '침묵(초)'이 아니라 '방금 사용자가 한 말'이 되도록 이 턴 안에서 판단.
