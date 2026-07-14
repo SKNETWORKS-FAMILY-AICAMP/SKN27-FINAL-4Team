@@ -180,6 +180,9 @@ _SALIENCE = {'sadness': 1.5, 'anger': 1.4, 'joy': 1.2}
 VEC_INDEX = 'memory_vec'      # Neo4j 벡터 인덱스 이름 (Event.embedding, 768, cosine)
 VEC_RECALL_MIN = 0.33   # 실측 (memory_embed_bench): 무관질문 최고 0.32 < 정답 최저 0.35         # 질문↔기억 유사도 하한 — 초기값, 평가셋 스윕으로 보정 예정
 VEC_DEDUP_MIN = 0.93          # 저장 시 즉시 병합 임계값 — 보수적으로 높게 (오병합 방지), 스윕 예정
+EXPIRE_VEC_MIN = 0.60         # 만료 벡터 폴백 (memory_expire_bench 실측): 무관 최고 0.42 대비
+                              # 오폭 여유 0.18의 보수 운용 — 확실할 때만 만료, 미스는 현상 유지
+_CLOSURE_NAME = re.compile(r'취소|그만둠|그만뒀|이별|절교|퇴사|무산|파토|종료|깨짐|끝남')
 
 # ── 리플렉션 (2026-07-13) — 기억 군집 → 통찰 ──
 REFLECT_SIM_MIN = 0.22        # 실측 (memory_reflect_bench): 추출기 스타일(5~15자) 이름 기준 정답 재현 구간 0.19~0.25의 중앙값 — 이름 길이 규칙(추출 프롬프트)과 세트
@@ -194,7 +197,8 @@ _EXPIRY_HINT = re.compile(
     r'헤어졌|헤어져|절교|이별|그만뒀|그만둠|그만둘|퇴사|취소|깨졌|파토|잊어줘|잊어버려|기억하지\s*마|지워줘')
 
 
-def _store(tx, uid: int, data: dict, salience: float = 1.0, vectors: dict = None) -> None:
+def _store(tx, uid: int, data: dict, salience: float = 1.0, vectors: dict = None,
+           expired_vectors: dict = None) -> None:
     tx.run('MERGE (u:User {uid:$uid})', uid=uid)
     this_turn_keys = []   # 이번 턴에 저장한 사건 키 — 만료에서 보호 (종결 기록 생존)
     for ev in (data.get('events') or []):
@@ -311,10 +315,36 @@ def _store(tx, uid: int, data: dict, salience: float = 1.0, vectors: dict = None
         declared = (ex.get('kind') or '').strip().lower()
         order = [declared] if declared in ('person', 'event', 'preference') else []
         order += [k for k in ('person', 'event', 'preference') if k not in order]
+        total_stamped = 0
         for k in order:
             stamped = _expire_one(k, xkey, xname, reason)
+            total_stamped += stamped or 0
             if stamped and not is_forget:
                 break   # supersede만 중단 — 잊어줘는 전 종류 계속
+        # 4단(2026-07-13): 문자열 3단 전멸 시 벡터 폴백 — "운동 레슨"→"헬스 PT 등록".
+        # EXPIRE_VEC_MIN=0.60 보수 운용 (벤치: 단일 임계값 분리 불가 → 고문턱만 채택,
+        # 무관 최고 0.42와 여유 0.18). 미스 비용=현상 유지, 오폭 비용=기억 실종의 비대칭.
+        vec = (expired_vectors or {}).get(ex.get('name') or '')
+        if total_stamped == 0 and vec:
+            try:
+                hit = tx.run(
+                    f'CALL db.index.vector.queryNodes("{VEC_INDEX}", 4, $vec) '
+                    'YIELD node, score '
+                    'WHERE node.uid = $uid AND node.valid_until IS NULL '
+                    'AND NOT node.key IN $keep '   # 이번 턴 종결 기록이 1등으로 잡히는 자폭 방지
+                    'AND score >= $min '
+                    'RETURN node.key AS key, node.name AS name, score '
+                    'ORDER BY score DESC LIMIT 1',
+                    vec=vec, uid=uid, keep=this_turn_keys, min=EXPIRE_VEC_MIN).single()
+                if hit:
+                    tx.run('MATCH (u:User {uid:$uid})-[:HAS_EVENT]->(e:Event {key:$key}) '
+                           'SET e.valid_until = $today, '
+                           '    e.ended_reason = coalesce($reason, e.ended_reason)',
+                           uid=uid, key=hit['key'], today=today, reason=reason)
+                    print(f"[graph_memory] 만료 벡터 매칭: '{ex.get('name')}' ≈ "
+                          f"'{hit['name']}' ({hit['score']:.2f}) → 만료")
+            except Exception:
+                pass   # 인덱스 미생성 등 — 폴백 없이 현상 유지
 
 
 
@@ -366,6 +396,11 @@ def _capture(uid: int, message: str, emotion: str = None) -> None:
             name = (ev.get('name') or '').strip()
             if name:
                 vectors[name] = embedder.embed(name)
+        # 만료 대상 임베딩 (4단 벡터 폴백용 — Event kind만)
+        expired_vectors = {}
+        for ex in (data.get('expired') or []):
+            if isinstance(ex, dict) and (ex.get('kind') or '') == 'event' and ex.get('name'):
+                expired_vectors[ex['name']] = embedder.embed(ex['name'])
         with drv.session() as s:
             # dedup 2차 (즉시): 새 사건이 기존 사건과 의미상 같으면(코사인 ≥ VEC_DEDUP_MIN)
             # 새로 만들지 않고 기존 노드로 병합 리다이렉트 — "발표 잘함" ≈ "발표 대박"
@@ -410,7 +445,8 @@ def _capture(uid: int, message: str, emotion: str = None) -> None:
                         ev['name'] = hit['name']   # MERGE가 기존 노드를 향하게
                 except Exception:
                     pass   # 인덱스 미생성 등 — 병합 없이 진행
-            s.execute_write(lambda tx: _store(tx, uid, data, salience=sal, vectors=vectors))
+            s.execute_write(lambda tx: _store(tx, uid, data, salience=sal, vectors=vectors,
+                                               expired_vectors=expired_vectors))
     except Exception as e:
         print(f'[graph_memory] 캡처 실패: {e}')
 
@@ -571,7 +607,33 @@ def recall(user_id, limit: int = 6, message: str = None) -> str:
                 ppl = [x for x in (e.get('people') or []) if x]
                 if ppl:
                     parts.append('· 함께: ' + ', '.join(ppl))
+                # 종결 기록은 단언 렌더링 (2026-07-13, S05): "운동 레슨 취소"를 예정으로
+                # 오독해 "다음 주에 가기로 했잖아"라고 뒤집는 사고 방지 — S01 '지난 인연'
+                # 문장 단언과 동일 처방. LLM 해석에 맡기지 않고 문장이 못을 박는다.
+                if _CLOSURE_NAME.search(e['name'] or ''):
+                    parts.append('★이미 끝난 일 — 예정 아님★')
                 lines.append('- ' + ' '.join(parts))
+            # ②-1 지난 일정 단언 (2026-07-13, S05): 만료된 사건을 통째로 숨기면
+            # "다음 주에 뭐 있었지?"에 봇이 답할 근거가 없다 — supersede는 역사 보존이
+            # 원칙이므로 최근 만료분은 '끝났다는 사실'로 단언해 준다.
+            # 잊어줘(사용자 요청) 만료는 제외 — 잊어달란 건 재노출 금지 (F03 교훈).
+            try:
+                recent = (datetime.date.fromisoformat(today)
+                          - datetime.timedelta(days=14)).isoformat()
+                gone = s.run(
+                    'MATCH (u:User {uid:$uid})-[:HAS_EVENT]->(e:Event) '
+                    'WHERE e.valid_until IS NOT NULL '
+                    "AND coalesce(e.ended_reason, '') <> '사용자 요청' "
+                    'AND e.valid_until >= $recent '
+                    'RETURN e.name AS name, e.date AS date, e.ended_reason AS reason '
+                    'ORDER BY e.valid_until DESC LIMIT 3',
+                    uid=user_id, recent=recent).data()
+                for g in gone:
+                    d = f" ({g['date']})" if g.get('date') else ''
+                    why = g.get('reason') or '종결'
+                    lines.append(f"- ★{g['name']}{d}은(는) {why}됨 — 이제 없는 일정임★")
+            except Exception:
+                pass
             # ③ 언급 기반 직접 검색 (2026-07-12) — "너 그거 기억나?" 커버.
             #    회상 창(상위 N개) 밖으로 밀린 옛 기억도, 사용자가 이름을 부르면
             #    창과 무관하게 그래프에서 직접 찾아온다. 만료된 기억은 제외(잊은 건 잊은 것).
