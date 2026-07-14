@@ -119,6 +119,10 @@ def _extract(message: str):
          "'제주 여행 취소됐어' → expired '제주 여행'(event) + events '제주 여행 취소'.\n"
          "- '잊어줘/기억하지 마' 요청은 그 대상을 expired에 (reason: '사용자 요청'). "
          "잊어달라는 요청 자체는 events로 저장 금지.\n"
+         "- expired의 name은 끝난 '대상'의 이름이다 — '편의점 알바'(O), "
+         "'편의점 알바 그만두기'(X, 행위로 쓰지 마라). 그만둔 이유·배경으로만 언급된 "
+         "사람(사장 등)을 관계 종결로 확대 해석하지 마라 — 사용자가 그 관계를 끝냈다고 "
+         "직접 말한 대상만 expired에 넣는다.\n"
          "- expired의 kind는 영문 소문자 person|event|preference 중 하나.\n"
          "- 사용자가 직접 말한 사실만. 추측 금지. 없으면 빈 배열.\n"
          "형식(없는 키는 생략 가능, JSON 외 다른 말 금지):\n"
@@ -189,7 +193,10 @@ VEC_RECALL_MIN = 0.33   # 실측 (memory_embed_bench): 무관질문 최고 0.32 
 VEC_DEDUP_MIN = 0.93          # 저장 시 즉시 병합 임계값 — 보수적으로 높게 (오병합 방지), 스윕 예정
 EXPIRE_VEC_MIN = 0.60         # 만료 벡터 폴백 (memory_expire_bench 실측): 무관 최고 0.42 대비
                               # 오폭 여유 0.18의 보수 운용 — 확실할 때만 만료, 미스는 현상 유지
-_CLOSURE_NAME = re.compile(r'취소|그만둠|그만뒀|이별|절교|퇴사|무산|파토|종료|깨짐|끝남')
+_CLOSURE_NAME = re.compile(r'취소|그만두|그만둠|그만뒀|이별|절교|퇴사|무산|파토|종료|깨짐|끝남')
+# '그만두' 어간 추가 (2026-07-14, S03 부산물): 추출기가 '그만두기'로 내면 둠/뒀와 부분
+# 매칭이 안 돼 이중 접미('그만두기 그만둠')가 생겼음. TAIL엔 미추가 — '다음 달에 알바
+# 그만두기로 했어' 같은 미래 계획을 다가오는 일에서 오폭 제외하지 않기 위함.
 # 끝단 앵커판 (2026-07-14 감사 P1-1): '다가오는 일' 제외·'끝난 일' 태깅은 이름이 종결어로
 # ★끝날 때만★ — '퇴사 면담 예정'/'프로젝트 종료 발표회' 같은 정당한 미래 일정 오폭 방지.
 # (합성 종결 기록은 구조상 항상 '… 취소/이별'로 끝난다)
@@ -428,6 +435,11 @@ def _capture(uid: int, message: str, emotion: str = None) -> None:
                    and (nx in _norm_key(ev['name']) or _norm_key(ev['name']) in nx)
                    for ev in (data.get('events') or []) if isinstance(ev, dict)):
                 continue   # 추출기가 진짜 종결 사건(종결어 포함)을 이미 냈음
+            if _CLOSURE_NAME.search(xname):
+                # 이름에 이미 종결어가 있으면 그대로 기록 — "그만두기 그만둠" 이중 접미 방지 (S03 부산물, 2026-07-14)
+                data.setdefault('events', []).append({'name': xname})
+                print(f'[graph_memory] 종결 기록 합성(이름 그대로): {xname} (kind={xkind or "없음"})')
+                continue
             word = next((w for p, w in _CLOSURE_WORD if re.search(p, xreason + ' ' + message)), '종료')
             data.setdefault('events', []).append({'name': f'{xname} {word}'})
             print(f'[graph_memory] 종결 기록 합성: {xname} {word} (kind={xkind or "없음"})')

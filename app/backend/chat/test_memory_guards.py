@@ -123,6 +123,14 @@ class CaptureGuardTests(TestCase):
         names = [e['name'] for e in self.captured.get('events', [])]
         self.assertEqual(names, ['민수와 이별'])
 
+    def test_closure_word_not_doubled(self):
+        """expired 이름에 이미 종결어가 있으면 그대로 기록 — '그만두기 그만둠' 방지 (S03 부산물)"""
+        self._capture_with({'expired': [{'kind': 'event', 'name': '편의점 알바 그만두기'}]},
+                           '편의점 알바 그만뒀어')
+        names = [e['name'] for e in self.captured.get('events', [])]
+        self.assertIn('편의점 알바 그만두기', names)
+        self.assertFalse(any('그만두기 그만둠' in n for n in names))
+
     def test_closure_synthesis_skips_forget(self):
         """잊어줘 요청은 종결 기록도 남기지 않는다 (재노출 금지)"""
         self._capture_with({'expired': [{'kind': 'event', 'name': '복권 구매',
