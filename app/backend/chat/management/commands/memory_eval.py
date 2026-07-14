@@ -46,11 +46,13 @@ def _answer(recall_text: str, question: str) -> str:
     text = resp.content.strip()
     # 접지 검증 — 운영(resp_prep_node)과 동일 가드 (2026-07-14)
     from ai.agents.answer_guard import check_grounded, retry_instruction
-    ok, offending = check_grounded(text, recall_text, question)
-    if not ok:
+    for attempt in (1, 2):   # 운영(resp_prep_node)과 동일한 2단 재생성 루프
+        ok, offending = check_grounded(text, recall_text, question)
+        if ok:
+            break
         resp = _llm(temperature=0.3, max_tokens=150).invoke([
             ('system', COMMON_RULES + '\n\n' + memory_block
-             + '\n\n' + retry_instruction(offending)),
+             + '\n\n' + retry_instruction(offending, attempt)),
             ('user', question),
         ])
         text = resp.content.strip() or text
