@@ -113,3 +113,6 @@ etl/data/raw/
 ai/emotion/artifacts*/
 
 # 
+# RAGAS 교차 검증 전용 venv (프로젝트 venv와 분리 — 절대 커밋 금지)
+.venv-ragas/
+ragas_results.json
