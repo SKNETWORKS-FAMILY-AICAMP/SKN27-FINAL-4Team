@@ -85,7 +85,6 @@
           :class="msg.role"
         >
           <!-- 감정 라벨(슬픔 모드 등)은 화면에 표시하지 않음 — 친구 컨셉 (분석은 뒤에서만) -->
-          <div v-if="msg.role === 'divider'" class="history-divider"><span>{{ msg.content }}</span></div>
           <div v-else class="bubble" :class="msg.role === 'user' ? 'bubble-user' : 'bubble-char'">
             <img v-if="msg.image" :src="msg.image" class="bubble-img" alt="첨부 이미지" />
             <span v-if="msg.content" class="bubble-text">{{ (msg.displayed !== undefined ? msg.displayed : msg.content) || '…' }}</span>
@@ -1210,37 +1209,5 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
 }
 .suggest-chip:hover { background: rgba(251, 191, 119, 0.28); }
 
-
-/* 대화 이어보기 — 지난 대화와 오늘의 구분선 */
-.history-divider {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 14px 8px;
-  color: rgba(255, 255, 255, 0.45);
-  font-size: 0.78rem;
-}
-.history-divider::before,
-.history-divider::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: rgba(255, 255, 255, 0.18);
-}
-
-
-.history-load-btn {
-  align-self: center;
-  margin: 4px auto 10px;
-  display: block;
-  padding: 6px 14px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.07);
-  color: rgba(255, 255, 255, 0.65);
-  font-size: 0.78rem;
-  cursor: pointer;
-}
-.history-load-btn:hover { background: rgba(255, 255, 255, 0.14); }
 
 </style>
