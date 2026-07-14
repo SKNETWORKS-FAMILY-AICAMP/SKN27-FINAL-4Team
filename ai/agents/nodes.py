@@ -504,12 +504,14 @@ def resp_prep_node(state: ChatState) -> dict:
             evidence_parts.append(state['memory_summary'])
         for m in state.get('recent_history', [])[-6:]:
             evidence_parts.append(f"{m['role']}: {m['content']}")
-        ok, offending = check_grounded(text, '\n'.join(evidence_parts),
-                                       state.get('user_message', ''))
-        if not ok:
+        evidence = '\n'.join(evidence_parts)
+        for attempt in (1, 2):   # 재생성도 재검사 — 1차가 또 어기면 2차는 초강수 (2026-07-14)
+            ok, offending = check_grounded(text, evidence, state.get('user_message', ''))
+            if ok:
+                break
             retry_messages = [('system', '\n\n'.join(system_parts)
-                               + '\n\n' + retry_instruction(offending))] + messages[1:]
-            resp = _llm(temperature=0.5, max_tokens=300).invoke(retry_messages)
+                               + '\n\n' + retry_instruction(offending, attempt))] + messages[1:]
+            resp = _llm(temperature=0.3 if attempt >= 2 else 0.5, max_tokens=300).invoke(retry_messages)
             text = resp.content.strip() or text
     except Exception as e:
         print(f'[resp_prep_node] LLM 실패: {e}')
