@@ -110,7 +110,9 @@ def _extract(message: str):
          "- 관계의 끝(이별·절교·퇴사 등)이나 일정 취소를 말하면 ★expired와 events 둘 다★ 기록하라 "
          "— expired는 옛것의 만료용, events는 '끝났다는 사실' 기록용 (둘 중 하나만 내지 마라). "
          "예: '민수랑 헤어졌어' → expired에 민수(person) + events에 '민수와 이별'. "
-         "'여행 취소됐어' → expired에 여행(event) + events에 '여행 취소'.\n"
+         "'제주 여행 취소됐어' → expired에 '제주 여행'(event) + events에 '제주 여행 취소'.\n"
+         "- ★expired·종결 events의 name은 사용자가 말한 구체적 이름 그대로★ "
+         "('포항 여행'을 '여행'으로 뭉개지 마라 — 뭉개면 다른 기억까지 잘못 만료된다).\n"
          "- 사용자가 '잊어줘/기억하지 마/그 얘기 지워줘'라고 요청하면 그 대상을 expired에 기록하라 "
          "(reason: '사용자 요청'). 잊어달라는 요청 자체는 events로 저장하지 마라.\n"
          "- expired의 kind는 반드시 영문 소문자 person, event, preference 중 하나만 사용하라. "
@@ -142,7 +144,8 @@ def _extract_expired(message: str):
             ('system',
              "사용자 메시지에서 '끝났거나 무효가 된 것'만 찾아 JSON 배열로 출력하라.\n"
              "- 관계의 끝(이별·절교·퇴사), 일정 취소, '잊어줘/기억하지 마' 요청이 대상.\n"
-             "- kind는 person|event|preference 중 하나(영문 소문자), name은 대상 이름 짧게.\n"
+             "- kind는 person|event|preference 중 하나(영문 소문자), name은 사용자가 말한 "
+             "구체적 이름 그대로 ('포항 여행'을 '여행'으로 뭉개지 마라).\n"
              "- 없으면 빈 배열 []. JSON 외 다른 말 금지.\n"
              '예: [{"kind":"person","name":"민수","reason":"이별"}]'),
             ('user', message),
@@ -272,20 +275,20 @@ def _store(tx, uid: int, data: dict, salience: float = 1.0, vectors: dict = None
             'person': ('MATCH (u:User {uid:$uid})-[:KNOWS]->(p:Person) '
                        'WHERE p.key = $xkey OR p.name = $xname '
                        'OR (size($xkey) >= 2 AND (p.key CONTAINS $xkey OR $xkey CONTAINS p.key)) '
-                       'OR any(t IN $tokens WHERE p.key CONTAINS t OR p.name CONTAINS t) '
+                       'OR (size($tokens) > 0 AND all(t IN $tokens WHERE p.key CONTAINS t OR p.name CONTAINS t)) '
                        'SET p.valid_until = $today, '
                        '    p.ended_reason = coalesce($reason, p.ended_reason)'),
             'event': ('MATCH (u:User {uid:$uid})-[:HAS_EVENT]->(e:Event) '
                       'WHERE NOT e.key IN $keep '   # 이번 턴 사건(이별·취소 등 종결 기록) 보호 — 과잉 만료 방지
                       'AND (e.key = $xkey OR e.name CONTAINS $xname '
                       'OR (size($xkey) >= 2 AND (e.key CONTAINS $xkey OR $xkey CONTAINS e.key)) '
-                      'OR any(t IN $tokens WHERE e.key CONTAINS t OR e.name CONTAINS t)) '
+                      'OR (size($tokens) > 0 AND all(t IN $tokens WHERE e.key CONTAINS t OR e.name CONTAINS t))) '
                       'SET e.valid_until = $today, '
                       '    e.ended_reason = coalesce($reason, e.ended_reason)'),
             'preference': ('MATCH (u:User {uid:$uid})-[:PREFERS]->(f:Preference) '
                            'WHERE f.key = $xkey OR f.name = $xname '
                            'OR (size($xkey) >= 2 AND (f.key CONTAINS $xkey OR $xkey CONTAINS f.key)) '
-                       'OR any(t IN $tokens WHERE f.key CONTAINS t OR f.name CONTAINS t) '
+                       'OR (size($tokens) > 0 AND all(t IN $tokens WHERE f.key CONTAINS t OR f.name CONTAINS t)) '
                            'SET f.valid_until = $today, '
                            '    f.ended_reason = coalesce($reason, f.ended_reason)'),
         }[kind_]
@@ -372,22 +375,47 @@ def _capture(uid: int, message: str, emotion: str = None) -> None:
         _CLOSURE_WORD = [(r'그만뒀|그만둠|그만둘|퇴사', '그만둠'),
                          (r'취소|파토|깨졌|무산', '취소'),
                          (r'헤어졌|헤어져|이별|절교', '이별')]
+        # 맹탕 파편 제거 (2026-07-14, E2E 부산·강릉 재현): 취소 발화에서 추출기가
+        # "여행" 같은 일반명사 파편을 사건으로 함께 내면 ① 아래 합성 가드가
+        # "이미 종결 사건을 냈다"로 오인해 스킵 ② 파편이 keep 보호로 생존해
+        # 맹탕 노드가 쌓임 — 두 결함의 공통 원인. 만료 대상 이름에 통째로
+        # 포함되는(진부분) 종결어 없는 사건은 버린다. ("여행" ⊂ "강릉 여행")
+        _xnames = [_norm_key(ex.get('name') or '') for ex in (data.get('expired') or [])
+                   if isinstance(ex, dict)]
+        if _xnames and data.get('events'):
+            data['events'] = [
+                ev for ev in data['events']
+                if not (isinstance(ev, dict)
+                        and _norm_key(ev.get('name') or '')
+                        and not _CLOSURE_NAME.search(ev.get('name') or '')
+                        and any(x and _norm_key(ev['name']) != x
+                                and _norm_key(ev['name']) in x for x in _xnames))]
         for ex in (data.get('expired') or []):
             if not isinstance(ex, dict):
                 continue   # 추출기가 문자열로 낼 때 방어 — 가드가 캡처 전체를 죽이면 안 됨 (S01, 2026-07-13)
             xname = (ex.get('name') or '').strip()
             xreason = (ex.get('reason') or '').strip()
-            if not xname or (ex.get('kind') or '') != 'event':
+            # kind 검사 완화 (2026-07-14, E2E 속초 3연속): 추출기가 kind를 'Event'·'여행'·
+            # 생략으로 내면 만료는 폴백으로 성공하는데 합성만 조용히 스킵되던 구멍.
+            # person·preference로 '명시된' 것만 제외하고 나머지는 전부 사건으로 취급
+            # — 만료 쪽 폴백과 같은 관용 원칙.
+            xkind = (ex.get('kind') or '').strip().lower()
+            if not xname or xkind in ('person', 'preference'):
                 continue
             if re.search(r'요청|잊', xreason):
                 continue   # 잊어줘 — 종결 기록도 남기지 않음
             nx = _norm_key(xname)
-            if any(nx and (_norm_key(ev.get('name') or '') and
-                           (nx in _norm_key(ev['name']) or _norm_key(ev['name']) in nx))
-                   for ev in (data.get('events') or [])):
-                continue   # 추출기가 이미 종결 사건을 냈음
+            # '이미 냈다' 인정 조건 강화 (2026-07-14, E2E 부산·강릉): 이름이 겹치는
+            # 것만으론 부족 — 종결어(취소·이별 등)까지 있어야 진짜 종결 사건.
+            # "여행" 같은 파편이 합성을 막던 구멍의 직접 봉인 (위 파편 필터와 2중).
+            if any(nx and _norm_key(ev.get('name') or '')
+                   and _CLOSURE_NAME.search(ev.get('name') or '')
+                   and (nx in _norm_key(ev['name']) or _norm_key(ev['name']) in nx)
+                   for ev in (data.get('events') or []) if isinstance(ev, dict)):
+                continue   # 추출기가 진짜 종결 사건(종결어 포함)을 이미 냈음
             word = next((w for p, w in _CLOSURE_WORD if re.search(p, xreason + ' ' + message)), '종료')
             data.setdefault('events', []).append({'name': f'{xname} {word}'})
+            print(f'[graph_memory] 종결 기록 합성: {xname} {word} (kind={xkind or "없음"})')
         sal = _SALIENCE.get(emotion or '', 1.0)
         # 벡터 준비 (모델 없으면 전부 None → 기존 동작 그대로)
         from chat import embedder

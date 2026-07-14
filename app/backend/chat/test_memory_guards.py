@@ -84,6 +84,45 @@ class CaptureGuardTests(TestCase):
         names = [e['name'] for e in self.captured.get('events', [])]
         self.assertIn('제주도 여행 취소', names)
 
+    def test_closure_synthesis_despite_fragment_event(self):
+        """E2E 부산·강릉 실측 (2026-07-14): 추출기가 '여행' 같은 맹탕 파편을
+        사건으로 함께 내도 ① 파편은 버려지고 ② 종결 기록은 합성돼야 한다.
+        (파편이 '이미 종결 사건을 냈다'로 오인돼 합성이 스킵되던 구멍)"""
+        self._capture_with({'events': [{'name': '여행'}],
+                            'expired': [{'kind': 'event', 'name': '강릉 여행'}]},
+                           '아 근데 강릉 여행 취소됐어 ㅠㅠ')
+        names = [e['name'] for e in self.captured.get('events', [])]
+        self.assertIn('강릉 여행 취소', names)
+        self.assertNotIn('여행', names)   # 파편은 저장 금지 (keep 오염 방지)
+
+    def test_real_closure_event_not_duplicated(self):
+        """추출기가 진짜 종결 사건('강릉 여행 취소')을 직접 내면 합성은 안 한다 (중복 방지)"""
+        self._capture_with({'events': [{'name': '강릉 여행 취소'}],
+                            'expired': [{'kind': 'event', 'name': '강릉 여행'}]},
+                           '강릉 여행 취소됐어')
+        names = [e['name'] for e in self.captured.get('events', [])]
+        self.assertEqual(names.count('강릉 여행 취소'), 1)
+
+    def test_closure_synthesis_tolerates_kind_variants(self):
+        """E2E 속초 3연속 (2026-07-14): 추출기가 kind를 'Event'·'여행'·생략으로 내도
+        합성돼야 한다 — 만료는 폴백으로 성공하는데 합성만 스킵되던 구멍"""
+        for kind in ('Event', '여행', None):
+            self.captured.clear()
+            ex = {'name': '양양 여행'}
+            if kind is not None:
+                ex['kind'] = kind
+            self._capture_with({'expired': [ex]}, '양양 여행 취소됐어 ㅠㅠ')
+            names = [e['name'] for e in self.captured.get('events', [])]
+            self.assertIn('양양 여행 취소', names, f'kind={kind!r}에서 합성 실패')
+
+    def test_closure_synthesis_still_skips_person_pref(self):
+        """person·preference로 명시된 만료는 합성 안 함 (이별 사건은 추출기 몫)"""
+        self._capture_with({'events': [{'name': '민수와 이별'}],
+                            'expired': [{'kind': 'person', 'name': '민수', 'reason': '이별'}]},
+                           '민수랑 헤어졌어')
+        names = [e['name'] for e in self.captured.get('events', [])]
+        self.assertEqual(names, ['민수와 이별'])
+
     def test_closure_synthesis_skips_forget(self):
         """잊어줘 요청은 종결 기록도 남기지 않는다 (재노출 금지)"""
         self._capture_with({'expired': [{'kind': 'event', 'name': '복권 구매',
