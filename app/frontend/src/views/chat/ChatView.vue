@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 <template>
   <div class="chat-page" :class="[sceneMoodClass, timeSceneClass, { 'is-secret': isSecret }]"
        @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="onDropImage">

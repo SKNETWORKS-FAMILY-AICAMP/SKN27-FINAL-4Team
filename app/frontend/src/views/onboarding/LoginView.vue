@@ -5,6 +5,8 @@ import { userApi } from "../../api/user.js";
 import googleLogo from "../../assets/auth/google-logo.png";
 import kakaoLogo from "../../assets/auth/kakao-logo.png";
 import naverLogo from "../../assets/auth/naver-logo.png";
+import pageBackground from "../../assets/bg-main.png";
+import brandLogo from "../../assets/brand-logo.png";
 
 const router = useRouter();
 const route = useRoute();
@@ -12,16 +14,17 @@ const loadingProvider = ref("");
 const errorMessage = ref("");
 
 const providers = [
-  { id: "kakao", label: "카카오로 계속하기", icon: kakaoLogo, text: "카카오로 계속하기" },
-  { id: "naver", label: "네이버로 계속하기", icon: naverLogo, text: "네이버로 계속하기" },
-  { id: "google", label: "구글로 계속하기", icon: googleLogo, text: "구글로 계속하기" },
+  { id: "kakao", label: "카카오로 계속하기", icon: kakaoLogo },
+  { id: "naver", label: "네이버로 계속하기", icon: naverLogo },
+  { id: "google", label: "구글로 계속하기", icon: googleLogo },
 ];
 
+
 const featureItems = [
-  { icon: "💬", label: "마음 대화" },
-  { icon: "🧾", label: "감정 기록" },
-  { icon: "✨", label: "타로 카드" },
-  { icon: "🗓", label: "마음 캘린더" },
+  { icon: "●", label: "마음 대화" },
+  { icon: "▤", label: "감정 기록" },
+  { icon: "✦", label: "타로 카드" },
+  { icon: "▣", label: "마음 캘린더" },
 ];
 
 onMounted(async () => {
@@ -31,7 +34,7 @@ onMounted(async () => {
       router.replace(getSafeRedirect() || data.user?.next_path || "/home");
     }
   } catch {
-    // 세션 확인 실패 시 로그인 화면을 그대로 보여준다.
+    // 세션 확인 실패 시 로그인 화면을 유지한다.
   }
 });
 
@@ -40,10 +43,15 @@ async function continueWithProvider(provider) {
   errorMessage.value = "";
 
   try {
-    const { authorization_url } = await userApi.getSocialLoginUrl(provider, getSafeRedirect() || "/home");
+    const { authorization_url } = await userApi.getSocialLoginUrl(
+      provider,
+      getSafeRedirect() || "/home",
+    );
     window.location.assign(authorization_url);
   } catch (error) {
-    errorMessage.value = error?.response?.data?.error || "로그인 준비 중 문제가 생겼어요. 설정을 확인한 뒤 다시 시도해주세요.";
+    errorMessage.value =
+      error?.response?.data?.error ||
+      "로그인 준비 중 문제가 생겼어요. 설정을 확인한 뒤 다시 시도해주세요.";
     loadingProvider.value = "";
   }
 }
@@ -55,334 +63,507 @@ function getSafeRedirect() {
 </script>
 
 <template>
-  <section class="social-login-page" aria-labelledby="login-title">
-    <section class="login-card__intro" aria-label="서비스 소개">
-      <button class="login-card__back" type="button" @click="router.push('/home')">
-        <span aria-hidden="true">‹</span>
-        돌아가기
-      </button>
+  <div
+    class="login-screen"
+    :style="{ '--login-page-background': `url(${pageBackground})` }"
+  >
 
-      <p class="login-card__brand">빈틈사이</p>
-      <h1 id="login-title">
-        <span class="title-line">하루의 빈틈 사이,</span>
-        <span class="title-line">이 곳에서 대화로</span>
-        <span class="title-line">마음을 정리해보세요</span>
-      </h1>
-      <p class="login-card__description">
-        소셜 계정으로 간편하게 시작하고, <br>마음 대화·감정 기록·마음 리포트로 <br>감정을 천천히 돌아보세요.
-      </p>
-
-      <div class="mascot-stage image-area">
-        <img src="/characters/redpanda/default.png" alt="" aria-hidden="true">
-      </div>
-
-      <div class="feature-strip" aria-label="주요 기능">
-        <span v-for="item in featureItems" :key="item.label">
-          <i>{{ item.icon }}</i>{{ item.label }}
-        </span>
-      </div>
-    </section>
-
-    <article class="login-card__form">
-      <header class="login-form__copy text-area">
-        <h2>환영해요!</h2>
-        <p>간편 로그인으로 빈틈사이의 모든 서비스를 이용해보세요.</p>
-      </header>
-
-      <section class="social-login-list" aria-label="소셜 로그인">
-        <button
-          v-for="provider in providers"
-          :key="provider.id"
-          class="social-login-button"
-          :class="provider.id"
-          type="button"
-          :aria-label="provider.label"
-          :disabled="Boolean(loadingProvider)"
-          @click="continueWithProvider(provider.id)"
-        >
-          <template v-if="provider.id === 'google'">
-            <img class="google-login-icon" :src="provider.icon" alt="" aria-hidden="true">
-            <span class="social-login-text">{{ provider.text }}</span>
-          </template>
-
-          <template v-else>
-            <img class="social-login-icon" :src="provider.icon" alt="" aria-hidden="true">
-            <span class="social-login-text">{{ provider.text }}</span>
-          </template>
-
-          <span v-if="loadingProvider === provider.id" class="provider-loading">
-            연결 중...
+    <header class="gnav">
+      <div class="gnav-inner">
+        <router-link to="/home" class="brand">
+          <span class="brand-mark" aria-hidden="true">
+            <img :src="brandLogo" alt="">
           </span>
-        </button>
+          <span class="brand-name">빈틈사이</span>
+        </router-link>
 
-        <p v-if="errorMessage" class="auth-error" role="alert">{{ errorMessage }}</p>
-      </section>
+        <nav class="nav-links" aria-label="주요 메뉴">
+          <router-link to="/home">홈</router-link>
+          <router-link to="/chat">대화</router-link>
+          <router-link to="/report">마음 리포트</router-link>
+          <router-link to="/mypage">마이페이지</router-link>
+          <router-link to="/calendar">캘린더</router-link>
+        </nav>
 
-      <p class="login-notice">
-        로그인하면 빈틈사이의 이용약관 및 개인정보 처리방침에 동의하게 됩니다.
-      </p>
-    </article>
-  </section>
+        <div class="nav-right">
+          <router-link to="/login" class="nav-login" aria-current="page">
+            로그인
+          </router-link>
+        </div>
+      </div>
+    </header>
+
+    <main class="login-main" aria-labelledby="login-title">
+      <div class="login-main__inner">
+        <section class="login-intro" aria-label="서비스 소개">
+          <button
+            class="login-intro__back"
+            type="button"
+            @click="router.push('/home')"
+          >
+            <span aria-hidden="true">‹</span>
+            돌아가기
+          </button>
+
+          <div class="login-intro__copy">
+            <p class="login-intro__brand">빈틈사이</p>
+
+            <h1 id="login-title">
+              <span>하루의 빈틈 사이,</span>
+              <span>이 곳에서 대화로</span>
+              <span>마음을 정리해보세요</span>
+            </h1>
+
+            <p class="login-intro__description">
+              소셜 계정으로 간편하게 시작하고,<br>
+              마음 대화·감정 기록·마음 리포트로<br>
+              감정을 천천히 돌아보세요.
+            </p>
+          </div>
+
+          <div class="login-intro__mascot" aria-hidden="true">
+            <img src="/characters/redpanda/default.png" alt="">
+          </div>
+
+          <div class="feature-strip" aria-label="주요 기능">
+            <span v-for="item in featureItems" :key="item.label">
+              <i aria-hidden="true">{{ item.icon }}</i>
+              {{ item.label }}
+            </span>
+          </div>
+        </section>
+
+        <article class="login-panel">
+          <header class="login-panel__header">
+            <h2>환영해요!</h2>
+            <p>간편 로그인으로 빈틈사이의 모든 서비스를 이용해보세요.</p>
+          </header>
+
+          <section class="social-login-list" aria-label="소셜 로그인">
+            <button
+              v-for="provider in providers"
+              :key="provider.id"
+              class="social-login-button"
+              :class="provider.id"
+              type="button"
+              :aria-label="provider.label"
+              :disabled="Boolean(loadingProvider)"
+              @click="continueWithProvider(provider.id)"
+            >
+              <img
+                class="social-login-icon"
+                :src="provider.icon"
+                alt=""
+                aria-hidden="true"
+              >
+              <span>{{ provider.label }}</span>
+
+              <span
+                v-if="loadingProvider === provider.id"
+                class="provider-loading"
+              >
+                연결 중...
+              </span>
+            </button>
+
+            <p v-if="errorMessage" class="auth-error" role="alert">
+              {{ errorMessage }}
+            </p>
+          </section>
+
+          <p class="login-notice">
+            로그인하면 빈틈사이의 이용약관 및 개인정보 처리방침에 동의하게 됩니다.
+          </p>
+        </article>
+      </div>
+    </main>
+  </div>
 </template>
 
 <style scoped>
-.social-login-page {
+.login-screen,
+.login-screen * {
+  box-sizing: border-box;
+}
 
+.login-screen {
   position: relative;
-  isolation: isolate;
-  min-height: calc(100dvh - var(--bt-header-h));
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 520px);
-  align-items: center;
-  gap: clamp(42px, 6vw, 110px);
-  width: 100%;
-  margin: 0 auto;
-  padding: clamp(44px, 6vh, 74px) clamp(44px, 7vw, 96px);
-  word-break: keep-all;
-  overflow-wrap: break-word;
-}
-
-.social-login-page::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background:
-    linear-gradient(90deg, rgba(50, 24, 73, 0.78), transparent 42%, rgba(50, 24, 73, 0.58)),
-    radial-gradient(circle at 50% 42%, rgba(255, 247, 223, 0.08), transparent 38%);
-  pointer-events: none;
-}
-
-.login-card__intro {
-  min-width: 0;
-  display: grid;
-  align-content: center;
-  grid-template-columns: minmax(280px, 0.9fr) minmax(220px, 0.7fr);
-  column-gap: clamp(28px, 4vw, 64px);
-  row-gap: 28px;
+  left: 50%;
+  width: 100vw;
+  min-height: 100dvh;
+  margin-left: -50vw;
+  overflow-x: clip;
   color: #fff7df;
+  font-family: var(--font-ui, "Noto Sans KR", "Apple SD Gothic Neo", sans-serif);
 }
 
-.login-card__back {
-  grid-column: 1 / -1;
-  justify-self: start;
-  min-height: 44px;
+
+.gnav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  min-height: var(--bt-header-h);
+  background: rgba(23, 11, 41, 1);
+  border-bottom: 1px solid rgba(231, 62, 101, 0.28);
+  backdrop-filter: blur(22px);
+}
+
+.gnav-inner {
+  width: min(var(--bt-page-max), calc(100% - (var(--bt-page-x) * 2)));
+  min-height: var(--bt-header-h);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: clamp(20px, 3vw, 52px);
+}
+
+.gnav a {
+  text-decoration: none;
+}
+
+.brand {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 18px;
-  border: 1px solid rgba(255, 211, 122, 0.36);
+  gap: 14px;
+  flex: 0 0 auto;
+  color: #fff;
+}
+
+.brand-mark {
+  width: 46px;
+  height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #e73e65, #ee5d5f 48%, #e77e6e);
+  overflow: hidden;
+  box-shadow: 0 0 26px rgba(231, 62, 101, 0.36);
+}
+
+.brand-mark img {
+  display: block;
+  width: 86%;
+  height: 86%;
+  object-fit: contain;
+}
+
+.brand-name {
+  color: #fff;
+  font-size: clamp(24px, 1.8vw, 32px);
+  font-weight: 950;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.nav-links {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: clamp(10px, 1.4vw, 24px);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.nav-links::-webkit-scrollbar {
+  display: none;
+}
+
+.nav-links a {
+  flex: 0 0 auto;
+  padding: 12px clamp(14px, 1.2vw, 24px);
   border-radius: 999px;
-  background: rgba(255, 248, 220, 0.08);
-  color: #fff7df;
-  font-size: 15px;
+  color: rgba(255, 245, 250, 0.7);
+  font-size: 16px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.nav-links a:hover,
+.nav-links a.router-link-active,
+.nav-links a.active {
+  color: #fff;
+  background: rgba(231, 62, 101, 0.16);
+}
+
+.nav-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+.nav-login {
+  min-width: 104px;
+  padding: 13px 24px;
+  border-radius: 999px;
+  color: #fff !important;
+  text-align: center;
   font-weight: 900;
   cursor: pointer;
-  transition: transform 0.14s ease, background 0.14s ease;
+  background: linear-gradient(135deg, #e73e65, #ee5d5f 48%, #e77e6e);
+  box-shadow: 0 0 28px rgba(231, 62, 101, 0.3);
 }
 
-.login-card__back:hover {
-  transform: translateY(-1px);
-  background: rgba(255, 248, 220, 0.14);
+.login-main {
+  width: 100%;
+  min-height: calc(100dvh - var(--bt-header-h, 88px));
+  background:
+    linear-gradient(
+      90deg,
+      rgba(28, 9, 46, 0.72) 0%,
+      rgba(45, 16, 58, 0.38) 43%,
+      rgba(32, 8, 52, 0.64) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(44, 11, 57, 0.08) 0%,
+      rgba(27, 7, 46, 0.28) 100%
+    ),
+    var(--login-page-background) center 54% / cover no-repeat;
 }
 
-.login-card__back span {
-  font-size: 28px;
+.login-main__inner {
+  width: min(1304px, calc(100% - 48px));
+  min-height: calc(100dvh - 80px);
+  margin: 0 auto;
+  padding: 55px 0 70px;
+  display: grid;
+  grid-template-columns: 650px 466px;
+  align-items: start;
+  justify-content: space-between;
+  column-gap: 110px;
+}
+
+.login-intro {
+  display: grid;
+  grid-template-columns: 455px 175px;
+  grid-template-rows: auto auto auto auto;
+  column-gap: 20px;
+  color: #fff6dc;
+}
+
+.login-intro__back {
+  grid-column: 1 / -1;
+  justify-self: start;
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 17px;
+  border: 1px solid rgba(255, 232, 194, 0.42);
+  border-radius: 999px;
+  background: rgba(255, 248, 234, 0.07);
+  color: #fff7e8;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.login-intro__back span {
+  font-size: 27px;
   line-height: 0;
+  transform: translateY(-1px);
 }
 
-.login-card__brand {
+.login-intro__copy {
   grid-column: 1;
-  margin: 0 0 -10px;
-  color: #ffd37a;
-  font-size: 24px;
+  margin-top: 20px;
+}
+
+.login-intro__brand {
+  margin: 0 0 21px;
+  color: #ffd166;
+  font-size: 21px;
   font-weight: 950;
 }
 
-.login-card__intro h1 {
-  grid-column: 1;
+#login-title {
   margin: 0;
-  color: #fff7df;
-  font-size: clamp(44px, 5vw, 76px);
-  line-height: 1.16;
-  letter-spacing: 0;
+  font-family: var(--font-display, "Gmarket Sans", "Noto Sans KR", sans-serif);
+  color: #fff7dc;
+  font-size: 54px;
+  font-weight: 900;
+  line-height: 1.18;
+  letter-spacing: -0.045em;
+  text-shadow: 0 8px 26px rgba(40, 8, 52, 0.2);
 }
 
-.login-card__description {
-  grid-column: 1;
-  max-width: 440px;
-  margin: -4px 0 0;
+#login-title span {
+  display: block;
+  white-space: nowrap;
+}
+
+.login-intro__description {
+  margin: 22px 0 0;
   color: rgba(255, 245, 230, 0.82);
-  font-size: clamp(17px, 1.25vw, 21px);
-  font-weight: 750;
-  line-height: 1.72;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.75;
 }
 
-.mascot-stage {
+.login-intro__mascot {
   grid-column: 2;
-  grid-row: 2 / 5;
+  grid-row: 2 / 4;
   align-self: center;
   justify-self: center;
-  width: min(100%, 320px);
-  min-height: 300px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: transparent;
+  width: 175px;
+  transform: translateY(28px);
 }
 
-.mascot-stage img {
+.login-intro__mascot img {
   display: block;
-  width: min(100%, 250px);
-  max-height: 260px;
+  width: 100%;
+  height: auto;
   object-fit: contain;
-  filter: drop-shadow(0 18px 24px rgba(7, 4, 24, 0.44));
+  filter: drop-shadow(0 17px 22px rgba(20, 4, 34, 0.44));
 }
 
 .feature-strip {
   grid-column: 1 / -1;
-  width: min(100%, 680px);
+  width: 650px;
+  min-height: 84px;
+  margin-top: 38px;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0;
-  margin-top: 18px;
-  padding: 14px 8px;
-  border: 1px solid rgba(255, 211, 122, 0.26);
+  border: 1px solid rgba(255, 217, 164, 0.34);
   border-radius: 18px;
-  background: rgba(255, 248, 232, 0.08);
-  backdrop-filter: blur(10px);
+  background: rgba(255, 242, 224, 0.09);
+  backdrop-filter: blur(11px);
+  -webkit-backdrop-filter: blur(11px);
+  overflow: hidden;
 }
 
 .feature-strip span {
   min-width: 0;
-  min-height: 58px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 9px;
-  padding: 0 12px;
-  color: rgba(255, 245, 230, 0.88);
-  font-size: 14px;
+  padding: 0 13px;
+  color: rgba(255, 246, 233, 0.86);
+  font-size: 15px;
   font-weight: 900;
-  line-height: 1.35;
-  text-align: center;
+  white-space: nowrap;
 }
 
 .feature-strip span + span {
-  border-left: 1px dashed rgba(255, 211, 122, 0.24);
+  border-left: 1px dashed rgba(255, 222, 180, 0.28);
 }
 
 .feature-strip i {
+  color: #f4dfef;
+  font-size: 18px;
   font-style: normal;
-  font-size: 20px;
+  line-height: 1;
 }
 
-.login-card__form {
-  width: min(100%, 520px);
-  min-height: 610px;
-  display: grid;
-  align-content: center;
-  gap: 28px;
-  padding: 58px 54px 46px;
-  border: 1px solid rgba(255, 211, 122, 0.32);
-  border-radius: 26px;
-  background: rgba(255, 253, 246, 0.94);
-  color: #251207;
-  box-shadow: 0 28px 80px rgba(15, 5, 28, 0.28);
+.login-panel {
+  width: 466px;
+  min-height: 548px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 56px 42px 42px;
+  border: 1px solid rgba(126, 76, 63, 0.16);
+  border-radius: 25px;
+  background: rgba(200, 149, 218, 0.92);
+  color: #211108;
+  box-shadow: 0 26px 70px rgba(22, 5, 34, 0.26);
 }
 
-.login-form__copy {
+.login-panel__header {
   text-align: center;
 }
 
-.login-form__copy h2 {
+.login-panel__header h2 {
   margin: 0;
-  color: #1b0c05;
-  font-size: clamp(32px, 3vw, 44px);
-  font-weight: 950;
-  line-height: 1.18;
-  letter-spacing: 0;
+  font-family: var(--font-display, "Gmarket Sans", "Noto Sans KR", sans-serif);
+  color: #1e0d06;
+  font-size: 34px;
+  font-weight: 900;
+  line-height: 1.15;
+  letter-spacing: -0.04em;
 }
 
-.login-form__copy p {
-  margin: 22px 0 0;
-  color: #6c4026;
-  font-size: 17px;
+.login-panel__header p {
+  margin: 24px 0 0;
+  color: #72472e;
+  font-size: 14px;
   font-weight: 800;
   line-height: 1.55;
 }
 
 .social-login-list {
-  display: grid;
-  gap: 18px;
   width: 100%;
-  margin: 20px auto 0;
+  margin-top: 51px;
+  display: grid;
+  gap: 16px;
 }
 
 .social-login-button {
-  width: 100%;
-  min-height: 64px;
   position: relative;
+  width: 100%;
+  min-height: 74px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  padding: 0;
+  gap: 15px;
+  padding: 0 20px;
   border: 0;
-  border-radius: 14px;
-  background: transparent;
+  border-radius: 16px;
+  font: inherit;
+  font-size: 23px;
+  font-weight: 900;
+  letter-spacing: -0.035em;
   cursor: pointer;
   overflow: hidden;
-  transition: transform 0.14s ease, filter 0.14s ease, box-shadow 0.14s ease;
+  transition: transform 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease;
 }
 
 .social-login-button:hover {
   transform: translateY(-1px);
   filter: brightness(1.02);
+  box-shadow: 0 10px 22px rgba(34, 16, 42, 0.12);
 }
 
 .social-login-button:disabled {
   cursor: wait;
-  opacity: 0.72;
+  opacity: 0.74;
 }
 
-.provider-image {
-  display: block;
-  width: 100%;
-  height: auto;
-  object-fit: contain;
+.social-login-button.kakao {
+  background: #fee500;
+  color: #211d1d;
 }
 
-/* 구글 버튼: 이미지 전체가 아니라 G 로고 + 한글 텍스트로 직접 구성 */
+.social-login-button.naver {
+  background: #03c75a;
+  color: #fff;
+}
+
 .social-login-button.google {
-  min-height: 64px;
-  border: 0;
-  border-radius: 14px;
-  background: #f1f3f4;
-  color: #222222;
-  font-family: "Roboto", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
-  font-size: clamp(22px, 2.2vw, 34px);
-  font-weight: 800;
-  letter-spacing: -0.04em;
+  border: 1px solid #edf0f2;
+  background: #f3f5f6;
+  color: #222;
 }
 
-.social-login-button.google:hover {
-  background: #e9ecef;
-  box-shadow: 0 10px 24px rgba(30, 20, 50, 0.12);
-}
-
-.google-login-icon {
-  width: clamp(34px, 4vw, 52px);
-  height: clamp(34px, 4vw, 52px);
-  flex-shrink: 0;
+.social-login-icon {
+  width: 31px;
+  height: 31px;
+  flex: 0 0 31px;
   object-fit: contain;
 }
 
-.social-login-text {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.social-login-button.google .social-login-icon {
+  width: 28px;
+  height: 28px;
+  flex-basis: 28px;
 }
 
 .provider-loading {
@@ -390,89 +571,123 @@ function getSafeRedirect() {
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.78);
   color: #321849;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 950;
 }
 
 .auth-error {
   margin: 0;
-  color: #c2410c;
-  font-size: 14px;
+  color: #b53f21;
+  font-size: 13px;
   font-weight: 850;
+  line-height: 1.55;
   text-align: center;
 }
 
 .login-notice {
-  margin: 4px 0 0;
-  color: #6c4026;
-  font-size: 13px;
+  margin: auto 0 0;
+  padding-top: 31px;
+  color: #795039;
+  font-size: 11px;
   font-weight: 800;
-  line-height: 1.75;
+  line-height: 1.65;
   text-align: center;
 }
 
-@media (max-width: 1180px) {
-  .social-login-page {
-    grid-template-columns: minmax(0, 1fr) minmax(330px, 410px);
-    gap: 34px;
-    padding: 34px 30px;
+@media (max-width: 1320px) {
+  .login-main__inner {
+    grid-template-columns: minmax(0, 650px) 430px;
+    column-gap: 48px;
   }
 
-  .login-card__intro {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .mascot-stage {
-    grid-column: 1;
-    grid-row: auto;
-    min-height: 180px;
-    justify-self: start;
-  }
-
-  .mascot-stage img {
-    width: 170px;
-    max-height: 180px;
-  }
-
-  .login-card__form {
-    width: min(100%, 410px);
-    min-height: 455px;
-    padding: 42px 36px 38px;
+  .login-panel {
+    width: 430px;
   }
 }
 
-@media (max-width: 720px) {
-  .social-login-page {
-    grid-template-columns: minmax(0, 1fr);
-    padding: 22px 16px 34px;
-    align-items: start;
+@media (max-width: 1120px) {
+  .login-main__inner {
+    width: min(920px, calc(100% - 40px));
+    grid-template-columns: 1fr;
+    justify-items: center;
+    row-gap: 42px;
+    padding-top: 42px;
   }
 
-  .login-card__intro {
-    row-gap: 18px;
+  .login-intro {
+    width: min(650px, 100%);
+  }
+
+  .login-panel {
+    width: min(466px, 100%);
+  }
+}
+
+
+@media (max-width: 920px) {
+  .gnav-inner {
+    width: calc(100% - 28px);
+    gap: 12px;
+  }
+
+  .brand-name {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .login-main__inner {
+    width: min(100%, calc(100% - 28px));
+    padding: 28px 0 40px;
+  }
+
+  .login-intro {
+    grid-template-columns: 1fr;
+  }
+
+  .login-intro__copy {
+    grid-column: 1;
+  }
+
+  #login-title {
+    font-size: clamp(36px, 11vw, 48px);
+  }
+
+  #login-title span {
+    white-space: normal;
+  }
+
+  .login-intro__mascot {
+    grid-column: 1;
+    grid-row: auto;
+    width: 145px;
+    margin-top: 8px;
+    transform: none;
   }
 
   .feature-strip {
+    width: 100%;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .feature-strip span {
+    min-height: 58px;
   }
 
   .feature-strip span + span {
     border-left: 0;
   }
 
+  .login-panel {
+    min-height: 510px;
+    padding: 42px 24px 32px;
+  }
+
   .social-login-button {
-    min-height: 58px;
-  }
-
-  .provider-image {
-    max-height: 58px;
-  }
-
-  .google-login-icon {
-    width: 36px;
-    height: 36px;
+    min-height: 62px;
+    font-size: 19px;
   }
 }
 </style>

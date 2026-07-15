@@ -1,0 +1,340 @@
+# 빈틈사이 온보딩 ERD
+
+기준 화면: 메인페이지, 밸런스게임, 로그인, 캐릭터 설정, 사용자 정보 입력, 밸런스게임 결과, 카드 운세, 캘린더
+
+이번 수정본은 카드 운세 기능에서 **생년월일 기반 운세 계산**, **천간/지지/오행 기반 간이 프로필**, **관계/재물/성공/직업운 4개 카테고리 결과**, **카드 선택 결과**, **LLM 조언 로그**, **안전 필터 상태**를 저장할 수 있도록 확장한다.
+
+```mermaid
+erDiagram
+  USER {
+    bigint user_id PK "사용자 ID"
+    string email UK "대표 이메일"
+    string nickname "표시 닉네임"
+    string status "active inactive deleted"
+    boolean onboarding_completed "첫 설정 완료 여부"
+    datetime created_at "가입일"
+    datetime updated_at "수정일"
+  }
+
+  AUTH_ACCOUNT {
+    bigint auth_account_id PK "인증 계정 ID"
+    bigint user_id FK "사용자 ID"
+    string provider "kakao google email"
+    string provider_user_id "외부 계정 식별자"
+    datetime connected_at "연결일"
+    datetime last_login_at "최근 로그인"
+  }
+
+  USER_PROFILE {
+    bigint profile_id PK "프로필 ID"
+    bigint user_id FK "사용자 ID"
+    string display_name "이름 또는 닉네임"
+    int age "나이"
+    date birthday "생년월일"
+    string birth_calendar_type "solar lunar unknown"
+    string birth_time "출생 시간 nullable"
+    boolean lunar_leap_month "윤달 여부 nullable"
+    string gender "성별"
+    string job_context "직업 또는 현재 상황"
+    string current_state "현재 상태"
+    boolean sensitive_consent "민감 정보 사용 동의"
+    datetime updated_at "수정일"
+  }
+
+  ONBOARDING_SESSION {
+    bigint onboarding_session_id PK "온보딩 세션 ID"
+    bigint user_id FK "사용자 ID nullable"
+    string entry_route "home balance fortune"
+    string current_step "login character userinfo complete"
+    boolean completed "완료 여부"
+    datetime started_at "시작일"
+    datetime completed_at "완료일"
+  }
+
+  USER_ACTIVITY_EVENT {
+    bigint event_id PK "이벤트 ID"
+    bigint user_id FK "사용자 ID nullable"
+    string route "home balance login fortune calendar"
+    string action "view click submit save"
+    string target "CTA 또는 UI 요소"
+    json metadata "추가 맥락"
+    datetime created_at "발생일"
+  }
+
+  CHARACTER {
+    bigint character_id PK "캐릭터 ID"
+    string code UK "haeon dalkong geureung"
+    string name "캐릭터명"
+    string role "위로형 코치형 직면형"
+    string default_tone "기본 대화 톤"
+    text description "캐릭터 설명"
+    boolean active "사용 여부"
+  }
+
+  CHARACTER_EXPRESSION {
+    bigint expression_id PK "표정 ID"
+    bigint character_id FK "캐릭터 ID"
+    string code "calm bright deep playful"
+    string label "표정명"
+    string prompt_hint "대화 톤 힌트"
+  }
+
+  USER_PERSONA_SETTING {
+    bigint persona_setting_id PK "사용자 페르소나 설정 ID"
+    bigint user_id FK "사용자 ID"
+    bigint character_id FK "캐릭터 ID"
+    bigint expression_id FK "표정 ID"
+    string conversation_tone "선택 대화 톤"
+    boolean is_current "현재 사용 여부"
+    datetime created_at "설정일"
+  }
+
+  INTEREST_KEYWORD {
+    bigint keyword_id PK "관심사 키워드 ID"
+    string label UK "산책 음악 관계 등"
+    string category "life work wellness"
+    boolean active "사용 여부"
+  }
+
+  USER_INTEREST {
+    bigint user_interest_id PK "사용자 관심사 ID"
+    bigint user_id FK "사용자 ID"
+    bigint keyword_id FK "키워드 ID"
+    datetime selected_at "선택일"
+  }
+
+  BALANCE_GAME {
+    bigint balance_game_id PK "밸런스게임 ID"
+    string title "게임 제목"
+    string version "질문 세트 버전"
+    boolean active "사용 여부"
+    datetime created_at "생성일"
+  }
+
+  BALANCE_QUESTION {
+    bigint question_id PK "질문 ID"
+    bigint balance_game_id FK "밸런스게임 ID"
+    int question_order "질문 순서"
+    string category "관계 취미 휴식 종합"
+    text question_text "질문 문구"
+  }
+
+  BALANCE_OPTION {
+    bigint option_id PK "선택지 ID"
+    bigint question_id FK "질문 ID"
+    string option_key "A B"
+    text option_text "선택지 문구"
+    json score_payload "성향 점수 가중치"
+  }
+
+  BALANCE_ATTEMPT {
+    bigint attempt_id PK "사용자 응답 세트 ID"
+    bigint user_id FK "사용자 ID nullable"
+    bigint balance_game_id FK "밸런스게임 ID"
+    string status "in_progress completed abandoned"
+    int progress_count "응답한 질문 수"
+    datetime started_at "시작일"
+    datetime completed_at "완료일"
+  }
+
+  BALANCE_RESPONSE {
+    bigint response_id PK "밸런스 응답 ID"
+    bigint attempt_id FK "응답 세트 ID"
+    bigint question_id FK "질문 ID"
+    bigint option_id FK "선택지 ID"
+    datetime answered_at "응답일"
+  }
+
+  BALANCE_RESULT {
+    bigint result_id PK "밸런스 결과 ID"
+    bigint attempt_id FK "응답 세트 ID"
+    bigint user_id FK "사용자 ID nullable"
+    string result_type "대표 성향 타입"
+    text summary "결과 요약"
+    json graph_data "성향 그래프 데이터"
+    json keywords "핵심 키워드"
+    datetime created_at "생성일"
+  }
+
+  FORTUNE_CATEGORY {
+    bigint category_id PK "운세 카테고리 ID"
+    string code UK "relationship money success job"
+    string label "관계 재물 성공 직업운"
+    string result_focus "카테고리 해석 초점"
+    boolean active "사용 여부"
+  }
+
+  FORTUNE_CARD {
+    bigint card_id PK "카드 ID"
+    bigint category_id FK "카테고리 ID nullable"
+    string code UK "카드 코드"
+    string title "카드명"
+    string symbol "카드 상징"
+    text meaning "기본 의미"
+    string image_key "카드 이미지 키"
+    boolean active "사용 여부"
+  }
+
+  FORTUNE_PROFILE {
+    bigint fortune_profile_id PK "운세 계산 프로필 ID"
+    bigint user_id FK "사용자 ID nullable"
+    date birthday_snapshot "계산 기준 생년월일"
+    string birth_calendar_type "solar lunar unknown"
+    string birth_time_snapshot "출생 시간 nullable"
+    date reading_date "운세 날짜"
+    string formula_version "계산식 버전"
+    string year_stem "연간 천간"
+    string year_branch "연지 지지"
+    string year_ganji "연주 간지"
+    string main_element "wood fire earth metal water"
+    string tone "calm active careful open"
+    int seed_value "카드/문구 선택 seed"
+    json calculation_payload "계산 상세값"
+    datetime created_at "생성일"
+  }
+
+  FORTUNE_CATEGORY_RESULT {
+    bigint category_result_id PK "카테고리별 운세 결과 ID"
+    bigint fortune_profile_id FK "운세 계산 프로필 ID"
+    bigint category_id FK "운세 카테고리 ID"
+    int score "카테고리 흐름 점수"
+    text flow_summary "오늘 흐름"
+    text caution "주의사항"
+    json keyword_payload "카테고리 키워드"
+    datetime created_at "생성일"
+  }
+
+  FORTUNE_READING {
+    bigint reading_id PK "운세 결과 ID"
+    bigint user_id FK "사용자 ID nullable"
+    bigint fortune_profile_id FK "운세 계산 프로필 ID"
+    bigint category_result_id FK "카테고리별 결과 ID"
+    bigint category_id FK "카테고리 ID"
+    bigint card_id FK "선택 카드 ID"
+    date reading_date "운세 날짜"
+    text card_meaning "선택 카드 의미"
+    text today_flow "오늘의 흐름"
+    text caution "주의사항"
+    text advice_text "최종 조언"
+    text companion_comment "동행자 조언"
+    string llm_status "success fallback skipped"
+    string safety_status "safe filtered safety_guidance"
+    boolean deterministic_filter_applied "확정 표현 필터 적용"
+    boolean saved_to_calendar "캘린더 저장 여부"
+    datetime created_at "생성일"
+  }
+
+  FORTUNE_ADVICE_LOG {
+    bigint advice_log_id PK "LLM 조언 로그 ID"
+    bigint reading_id FK "운세 결과 ID nullable"
+    bigint user_id FK "사용자 ID nullable"
+    string request_type "fortune_advice"
+    json prompt_context "성향 관심사 카드 계산 context"
+    text raw_response "LLM 원문 nullable"
+    text final_advice "필터링 후 조언"
+    string status "success fallback safety_guidance"
+    string safety_reason "위험 신호 또는 필터 사유 nullable"
+    datetime created_at "생성일"
+  }
+
+  EMOTION_RECORD {
+    bigint emotion_record_id PK "감정 기록 ID"
+    bigint user_id FK "사용자 ID"
+    date record_date "기록 날짜"
+    string emotion_label "감정 라벨"
+    string emoji_code "감정 캐릭터 코드"
+    text one_line_note "감정 한줄평"
+    datetime created_at "생성일"
+  }
+
+  CHAT_SESSION {
+    bigint chat_session_id PK "대화 세션 ID"
+    bigint user_id FK "사용자 ID"
+    bigint persona_setting_id FK "사용자 페르소나 설정 ID"
+    date session_date "대화 날짜"
+    string summary_title "대화 요약 제목"
+    text summary "대화 요약"
+    datetime started_at "시작일"
+    datetime ended_at "종료일"
+  }
+
+  CALENDAR_ENTRY {
+    bigint calendar_entry_id PK "캘린더 항목 ID"
+    bigint user_id FK "사용자 ID"
+    date entry_date "표시 날짜"
+    string entry_type "emotion fortune chat balance_result"
+    bigint source_id "원본 데이터 ID"
+    string source_type "원본 타입"
+    string title "캘린더 표시 제목"
+    text summary "상세 요약"
+    datetime created_at "생성일"
+  }
+
+  USER ||--o{ AUTH_ACCOUNT : has
+  USER ||--|| USER_PROFILE : owns
+  USER ||--o{ ONBOARDING_SESSION : starts
+  USER ||--o{ USER_ACTIVITY_EVENT : creates
+  USER ||--o{ USER_PERSONA_SETTING : configures
+  USER ||--o{ USER_INTEREST : selects
+  USER ||--o{ BALANCE_ATTEMPT : plays
+  USER ||--o{ BALANCE_RESULT : receives
+  USER ||--o{ FORTUNE_PROFILE : calculates
+  USER ||--o{ FORTUNE_READING : receives
+  USER ||--o{ FORTUNE_ADVICE_LOG : requests
+  USER ||--o{ EMOTION_RECORD : records
+  USER ||--o{ CHAT_SESSION : chats
+  USER ||--o{ CALENDAR_ENTRY : owns
+
+  CHARACTER ||--o{ CHARACTER_EXPRESSION : has
+  CHARACTER ||--o{ USER_PERSONA_SETTING : selected_as
+  CHARACTER_EXPRESSION ||--o{ USER_PERSONA_SETTING : selected_as
+  USER_PERSONA_SETTING ||--o{ CHAT_SESSION : used_by
+
+  INTEREST_KEYWORD ||--o{ USER_INTEREST : selected_as
+
+  BALANCE_GAME ||--o{ BALANCE_QUESTION : contains
+  BALANCE_QUESTION ||--o{ BALANCE_OPTION : has
+  BALANCE_GAME ||--o{ BALANCE_ATTEMPT : attempted_by
+  BALANCE_ATTEMPT ||--o{ BALANCE_RESPONSE : contains
+  BALANCE_QUESTION ||--o{ BALANCE_RESPONSE : answered_for
+  BALANCE_OPTION ||--o{ BALANCE_RESPONSE : chosen_as
+  BALANCE_ATTEMPT ||--o| BALANCE_RESULT : produces
+
+  FORTUNE_CATEGORY ||--o{ FORTUNE_CARD : groups
+  FORTUNE_CATEGORY ||--o{ FORTUNE_CATEGORY_RESULT : classifies
+  FORTUNE_CATEGORY ||--o{ FORTUNE_READING : categorizes
+  FORTUNE_PROFILE ||--o{ FORTUNE_CATEGORY_RESULT : produces
+  FORTUNE_PROFILE ||--o{ FORTUNE_READING : based_on
+  FORTUNE_CATEGORY_RESULT ||--o{ FORTUNE_READING : selected_for
+  FORTUNE_CARD ||--o{ FORTUNE_READING : selected_as
+  FORTUNE_READING ||--o{ FORTUNE_ADVICE_LOG : logs
+
+  EMOTION_RECORD ||--o{ CALENDAR_ENTRY : appears_as
+  FORTUNE_READING ||--o{ CALENDAR_ENTRY : appears_as
+  CHAT_SESSION ||--o{ CALENDAR_ENTRY : appears_as
+  BALANCE_RESULT ||--o{ CALENDAR_ENTRY : appears_as
+
+```
+
+## 설계 메모
+
+- `USER_ACTIVITY_EVENT`는 메인페이지 CTA, 상단바 캘린더 진입, 카드 운세 저장 같은 온보딩 행동 로그를 남기기 위한 선택 테이블이다.
+- `ONBOARDING_SESSION`은 첫 로그인 플로우의 현재 단계와 완료 여부를 관리한다.
+- `USER_PERSONA_SETTING`은 캐릭터 설정 화면에서 선택한 동행자, 표정, 대화 톤을 저장한다.
+- `BALANCE_ATTEMPT`와 `BALANCE_RESPONSE`는 밸런스게임 진행 중 임시 저장을 지원하고, 완료 시 `BALANCE_RESULT`를 생성한다.
+- `USER_PROFILE`에는 카드 운세 계산에 필요한 `birthday`, `birth_calendar_type`, `birth_time`, `lunar_leap_month`를 저장한다. MVP에서는 `birthday`만 필수로 사용하고, 정교한 만세력 계산으로 확장할 때 나머지 필드를 활용한다.
+- `FORTUNE_PROFILE`은 생년월일, 운세 날짜, 계산식 버전, 연간/연지/오행, seed 값을 저장한다. 같은 사용자가 같은 날짜에 다시 운세를 볼 때 재현 가능한 결과를 만들기 위한 기준 데이터다.
+- `FORTUNE_CATEGORY_RESULT`는 하나의 `FORTUNE_PROFILE`에서 파생된 관계/재물/성공/직업운 4개 카테고리 결과를 저장한다.
+- `FORTUNE_CARD`는 공통 카드 또는 카테고리 전용 카드로 사용할 수 있도록 `category_id`를 nullable로 둔다.
+- `FORTUNE_READING`은 사용자가 실제로 선택한 카테고리와 카드, 최종 결과 문구, LLM 상태, 안전 필터 상태, 캘린더 저장 여부를 저장한다.
+- `FORTUNE_ADVICE_LOG`는 `POST /fortune/advice` 통합 테스트와 운영 디버깅을 위해 LLM context, 원문 응답, fallback 여부, safety 안내 여부를 기록한다.
+- `CALENDAR_ENTRY`는 감정 기록, 운세 결과, 대화 요약, 밸런스게임 결과를 날짜별로 모아 보여주는 집계 테이블이다.
+
+## 카드 운세 구현 기준
+
+- 카테고리 code는 `relationship`, `money`, `success`, `job` 네 가지만 허용한다.
+- 생년월일 기반 계산은 MVP에서 `연간/연지 + 오행 + seed` 기반 간이 계산으로 시작하고, `formula_version`으로 이후 절기/만세력 계산식으로 교체 가능하게 한다.
+- 카테고리 선택 후 `FORTUNE_CATEGORY_RESULT`와 `FORTUNE_CARD`를 조합해 4~5장의 카드를 반환한다.
+- 카드 선택 후 결과 contract는 `card_meaning`, `today_flow`, `caution`, `advice_text`를 반드시 포함한다.
+- LLM 조언은 1~3문장으로 제한하고, 실패하면 기본 조언 템플릿을 반환한다.
+- 확정적 예언 표현이나 위험 신호가 감지되면 `safety_status`와 `deterministic_filter_applied`로 남긴다.
