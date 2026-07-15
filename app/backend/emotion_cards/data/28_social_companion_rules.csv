@@ -1,12 +1,12 @@
 rule_id,social_context,companion_type,companion_count_max,visual_prompt,privacy_note,weight,enabled
 SCR-01,ALONE,COMPANION_NONE,0,character alone in the scene,-,35,True
-SCR-02,FRIENDS,ANONYMOUS_FRIENDS,2,1-2 anonymous friend silhouettes nearby at a warm friendly distance,실제 얼굴·실명 금지·익명 실루엣만,35,True
-SCR-03,PARTNER,ANONYMOUS_PARTNER,1,one anonymous partner silhouette at a comfortable close distance,실제 얼굴·실명 금지,35,True
-SCR-04,FAMILY,ANONYMOUS_FAMILY,2,1-2 anonymous family silhouettes in a warm home setting,실제 얼굴 금지,35,True
-SCR-05,COLLEAGUES,ANONYMOUS_COLLEAGUES,2,1-2 anonymous colleague silhouettes at a neutral workspace distance,실제 얼굴·회사명 금지,35,True
-SCR-06,CLASSMATES,ANONYMOUS_CLASSMATES,2,1-2 anonymous classmate silhouettes,실제 얼굴·학교명 금지,35,True
-SCR-07,GROUP,ANONYMOUS_GROUP,2,small anonymous group of silhouettes in soft background,조롱하는 군중 표현 금지,35,True
-SCR-08,CROWD,ANONYMOUS_CROWD_DISTANT,0,distant blurred anonymous crowd silhouettes with the character emotionally set apart,조롱하는 군중 표현 금지,35,True
+SCR-02,FRIENDS,ANONYMOUS_FRIENDS,2,"1-2 friends fully illustrated in the same art style as the main character (not a flat shadow or silhouette) - warm, friendly expression, but with deliberately generic, non-identifying facial features, at a warm friendly distance",실제 얼굴·실명 금지·특정인 식별 불가한 일반적 인물로만 표현,35,True
+SCR-03,PARTNER,ANONYMOUS_PARTNER,1,"one partner fully illustrated in the same art style as the main character (not a flat shadow or silhouette) - warm, affectionate expression, but with deliberately generic, non-identifying facial features, at a comfortable close distance",실제 얼굴·실명 금지·특정인 식별 불가한 일반적 인물로만 표현,35,True
+SCR-04,FAMILY,ANONYMOUS_FAMILY,2,"1-2 family members fully illustrated in the same art style as the main character (not a flat shadow or silhouette) - warm expression, deliberately generic non-identifying features, in a warm home setting",실제 얼굴 금지·특정인 식별 불가한 일반적 인물로만 표현,35,True
+SCR-05,COLLEAGUES,ANONYMOUS_COLLEAGUES,2,"1-2 colleagues fully illustrated in the same art style as the main character (not a flat shadow or silhouette) - neutral friendly expression, deliberately generic non-identifying features, at a neutral workspace distance",실제 얼굴·회사명 금지·특정인 식별 불가한 일반적 인물로만 표현,35,True
+SCR-06,CLASSMATES,ANONYMOUS_CLASSMATES,2,"1-2 classmates fully illustrated in the same art style as the main character (not a flat shadow or silhouette) - friendly expression, deliberately generic non-identifying features",실제 얼굴·학교명 금지·특정인 식별 불가한 일반적 인물로만 표현,35,True
+SCR-07,GROUP,ANONYMOUS_GROUP,2,"a small group of people fully illustrated in the same art style as the main character (not flat shadows or silhouettes), deliberately generic non-identifying features, soft background",조롱하는 군중 표현 금지·특정인 식별 불가,35,True
+SCR-08,CROWD,ANONYMOUS_CROWD_DISTANT,0,"a distant, softly blurred crowd of people (painterly and out of focus, not stark black silhouettes) with the character emotionally set apart",조롱하는 군중 표현 금지·특정인 식별 불가,35,True
 SCR-09,ONLINE,SYMBOL_PHONE_LIGHT,0,no physical companion; a phone or a soft glowing light symbolizes an online connection,실제 프로필·대화 내용 금지,35,True
-SCR-10,PET,ANONYMOUS_PET_COMPANION,1,one small companion animal silhouette with a generalized species,실제 반려동물 종·외형 임의 확정 금지,35,True
+SCR-10,PET,ANONYMOUS_PET_COMPANION,1,one small companion animal fully illustrated in the same art style as the main character with a generalized non-specific species and appearance (not a real pet's exact likeness),실제 반려동물 종·외형 임의 확정 금지,35,True
 SCR-11,NOT_DISCLOSED,COMPANION_NONE,0,no companion implied; focus stays on the character alone,-,35,True

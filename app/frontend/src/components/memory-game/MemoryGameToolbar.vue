@@ -3,6 +3,7 @@ const props = defineProps({
   progressLabel: { type: String, required: true },
   formattedTime: { type: String, required: true },
   remainingSeconds: { type: Number, required: true },
+  isPreview: { type: Boolean, default: false },
 });
 
 defineEmits(["back", "restart"]);
@@ -20,8 +21,9 @@ function timerUrgency() {
       ←
     </button>
     <strong class="memory-toolbar-title">캐릭터 카드 짝 맞추기</strong>
-    <span class="memory-toolbar-progress" aria-live="polite">{{ progressLabel }}</span>
-    <span class="memory-toolbar-timer" :class="timerUrgency()" aria-live="polite">{{ formattedTime }}</span>
+    <span v-if="isPreview" class="memory-toolbar-progress memory-toolbar-preview" aria-live="polite">카드를 기억하세요!</span>
+    <span v-else class="memory-toolbar-progress" aria-live="polite">{{ progressLabel }}</span>
+    <span class="memory-toolbar-timer" :class="isPreview ? '' : timerUrgency()" aria-live="polite">{{ isPreview ? '준비 중' : formattedTime }}</span>
     <button type="button" class="memory-toolbar-restart" @click="$emit('restart')">처음부터</button>
   </div>
 </template>

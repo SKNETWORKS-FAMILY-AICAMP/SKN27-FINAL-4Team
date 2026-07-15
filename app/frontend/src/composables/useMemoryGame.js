@@ -8,6 +8,7 @@ import { getMissingMemoryGameAssets, memoryGameAssets, memoryGameCardBack } from
 export const GAME_STATUS = Object.freeze({
   IDLE: "IDLE",
   LOADING: "LOADING",
+  PREVIEW: "PREVIEW",
   PLAYING: "PLAYING",
   WON: "WON",
   TIMEOUT: "TIMEOUT",
@@ -15,6 +16,10 @@ export const GAME_STATUS = Object.freeze({
 });
 
 const GAME_DURATION_MS = 90000;
+// 게임 시작 전, 전체 카드 위치/그림을 잠깐 보여주는 미리보기 시간.
+const PREVIEW_DURATION_MS = 5000;
+// 마지막 짝을 맞춘 뒤, 다 맞춰진 보드를 잠깐 보여주고서 결과창을 띄우기까지의 지연.
+const WIN_REVEAL_DELAY_MS = 500;
 const MISMATCH_DELAY_MS = 700;
 // 두 카드가 동시에 딱 맞춰 닫히면 기계적으로 보이므로 살짝 시간차를 둔다.
 const MISMATCH_FLIP_STAGGER_MS = 90;
@@ -120,6 +125,8 @@ export function useMemoryGame() {
   let countdownTimerId = null;
   let mismatchTimerId = null;
   let mismatchStaggerTimerId = null;
+  let previewTimerId = null;
+  let winRevealTimerId = null;
 
   const remainingSeconds = computed(() => Math.ceil(state.remainingMs / 1000));
   const formattedTime = computed(() => {
@@ -147,6 +154,20 @@ export function useMemoryGame() {
     if (mismatchStaggerTimerId !== null) {
       clearTimeout(mismatchStaggerTimerId);
       mismatchStaggerTimerId = null;
+    }
+  }
+
+  function clearPreviewTimer() {
+    if (previewTimerId !== null) {
+      clearTimeout(previewTimerId);
+      previewTimerId = null;
+    }
+  }
+
+  function clearWinRevealTimer() {
+    if (winRevealTimerId !== null) {
+      clearTimeout(winRevealTimerId);
+      winRevealTimerId = null;
     }
   }
 
@@ -189,6 +210,8 @@ export function useMemoryGame() {
     const sessionAtStart = state.sessionId;
     clearCountdownTimer();
     clearMismatchTimer();
+    clearPreviewTimer();
+    clearWinRevealTimer();
     resetSelection();
     state.boardLocked = false;
     state.matchedPairCount = 0;
@@ -225,8 +248,21 @@ export function useMemoryGame() {
     }
 
     state.cards = buildDeck(uniqueAssets);
-    state.gameStatus = GAME_STATUS.PLAYING;
-    startTimer();
+
+    // 카드를 나눠주기 전, 전체 배치와 그림을 잠깐 보여준 뒤 뒤집어서 시작한다.
+    state.cards.forEach((card) => { card.isFlipped = true; });
+    state.boardLocked = true;
+    state.gameStatus = GAME_STATUS.PREVIEW;
+
+    previewTimerId = setTimeout(() => {
+      previewTimerId = null;
+      if (state.sessionId !== sessionAtStart) return;
+
+      state.cards.forEach((card) => { card.isFlipped = false; });
+      state.boardLocked = false;
+      state.gameStatus = GAME_STATUS.PLAYING;
+      startTimer();
+    }, PREVIEW_DURATION_MS);
   }
 
   function restartGame() {
@@ -279,7 +315,16 @@ export function useMemoryGame() {
 
       // 마지막 짝과 시간 종료가 겹치는 경계 상황을 안전하게 처리한다.
       if (state.matchedPairCount >= UNIQUE_PAIRS_TARGET && state.remainingMs > 0) {
-        endGame(GAME_STATUS.WON);
+        // 결과창을 바로 띄우지 않고, 다 맞춰진 보드를 잠깐 보여준 뒤 결과창을 띄운다.
+        clearCountdownTimer();
+        state.boardLocked = true;
+        const sessionAtWin = state.sessionId;
+        clearWinRevealTimer();
+        winRevealTimerId = setTimeout(() => {
+          winRevealTimerId = null;
+          if (state.sessionId !== sessionAtWin) return;
+          endGame(GAME_STATUS.WON);
+        }, WIN_REVEAL_DELAY_MS);
       }
       return;
     }
@@ -327,6 +372,8 @@ export function useMemoryGame() {
   function goToIdle() {
     clearCountdownTimer();
     clearMismatchTimer();
+    clearPreviewTimer();
+    clearWinRevealTimer();
     resetSelection();
     state.gameStatus = GAME_STATUS.IDLE;
   }
@@ -334,6 +381,8 @@ export function useMemoryGame() {
   onBeforeUnmount(() => {
     clearCountdownTimer();
     clearMismatchTimer();
+    clearPreviewTimer();
+    clearWinRevealTimer();
     document.removeEventListener("visibilitychange", handleVisibilityChange);
   });
 

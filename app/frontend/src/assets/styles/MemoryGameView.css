@@ -172,6 +172,11 @@
   font-size: 14px;
 }
 
+.memory-toolbar-preview {
+  color: var(--accent-gold);
+  font-weight: 700;
+}
+
 .memory-toolbar-timer.warn {
   border-color: var(--accent-gold);
   color: var(--accent-gold);

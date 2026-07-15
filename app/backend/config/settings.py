@@ -4,8 +4,11 @@ import sys
 from dotenv import dotenv_values, load_dotenv
 
 # 프로젝트 루트 기준으로 .env 로드 (config/ → backend/ → app/ → 루트)
+# override=True: 터미널/IDE 실행 설정 등에 이미 같은 이름의 OS 환경변수가 남아있어도
+# 항상 이 .env 파일 값이 우선 적용되게 한다. (예: EMOTION_CARD_MAX_DAILY_GENERATIONS가
+# 예전 값으로 OS 환경변수에 박혀 있으면 override 없이는 .env를 고쳐도 반영되지 않는다.)
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
-load_dotenv(_PROJECT_ROOT / '.env')
+load_dotenv(_PROJECT_ROOT / '.env', override=True)
 
 # ai/, etl/ 등 루트 패키지를 import 가능하게
 if str(_PROJECT_ROOT) not in sys.path:
@@ -15,10 +18,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = BASE_DIR.parent.parent
 
 # app/backend/.env 가 있으면 추가 로드 (OAuth 시크릿 등 로컬 전용 키)
-load_dotenv(BASE_DIR / ".env", override=True)
+load_dotenv(BASE_DIR / ".env", override=False)
 
 backend_env = dotenv_values(BASE_DIR / '.env')
-for key in ('KAKAO_CLIENT_SECRET', 'NAVER_CLIENT_SECRET', 'GOOGLE_CLIENT_SECRET'):
+for key in ('DJANGO_SECRET_KEY', 'KAKAO_CLIENT_SECRET', 'NAVER_CLIENT_SECRET', 'GOOGLE_CLIENT_SECRET'):
     if not os.environ.get(key) and backend_env.get(key):
         os.environ[key] = backend_env[key]
 
@@ -186,7 +189,7 @@ OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
 # ── 마음카드(emotion_cards) ──
 # 기본은 외부 이미지 API를 호출하지 않는 안전한 개발 모드.
 EMOTION_CARD_ENABLE_REAL_IMAGE_API = os.environ.get('EMOTION_CARD_ENABLE_REAL_IMAGE_API', 'False').lower() == 'true'
-EMOTION_CARD_MAX_DAILY_GENERATIONS = int(os.environ.get('EMOTION_CARD_MAX_DAILY_GENERATIONS', '2'))
+EMOTION_CARD_MAX_DAILY_GENERATIONS = int(os.environ.get('EMOTION_CARD_MAX_DAILY_GENERATIONS', '10'))
 # 텍스트 구조화 분석: 공유 LLM 공급자(ai/agents/llm). 키 없으면 자동 키워드 폴백. 테스트는 자동 오프라인.
 EMOTION_CARD_ENABLE_LLM_ANALYSIS = os.environ.get('EMOTION_CARD_ENABLE_LLM_ANALYSIS', 'True').lower() == 'true'
 # 학습된 감정 분류기(ai/emotion) 확신도 게이트. 이하이면 LLM/키워드로 폴백.

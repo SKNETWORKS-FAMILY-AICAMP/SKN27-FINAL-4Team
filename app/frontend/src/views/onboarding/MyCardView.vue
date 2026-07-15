@@ -4,6 +4,14 @@ import { useRoute, useRouter } from 'vue-router'
 import { emotionCardsApi } from '../../api/emotionCards.js'
 import { userApi } from '../../api/user.js'
 import cardThumb from '../../assets/icons/my-card-feature.png'
+import style3d from '../../assets/styles-preview/style-3d.jpg'
+import styleWatercolor from '../../assets/styles-preview/style-watercolor.jpg'
+import styleGhibli from '../../assets/styles-preview/style-ghibli.jpg'
+import styleCartoon from '../../assets/styles-preview/style-cartoon.jpg'
+import styleRomanceFantasy from '../../assets/styles-preview/style-romance-fantasy.jpg'
+import styleRetro from '../../assets/styles-preview/style-retro.jpg'
+import stylePopArt from '../../assets/styles-preview/style-pop-art.jpg'
+import styleTraditionalPainting from '../../assets/styles-preview/style-traditional-painting.jpg'
 
 const router = useRouter()
 const route = useRoute()
@@ -16,7 +24,8 @@ const card = ref(null)
 const selectedStyle = ref('STYLE_3D')
 const feedbackSaved = ref(false)
 const imagePreviewError = ref(false)
-const usage = reactive({ used: 0, limit: 2 })
+const usage = reactive({ used: 0, limit: 10 })
+const resettingUsage = ref(false)
 const generation = reactive({ status: 'PENDING', progress: 0 })
 const showExitModal = ref(false)
 const showRegenerationModal = ref(false)
@@ -24,7 +33,16 @@ let timer = null
 
 const form = reactive({ memory_text: '' })
 // 그림체 프리셋(11_style_presets.csv와 동일). generate 시 백엔드가 available_styles로 재검증한다.
-const styles = [['STYLE_3D','3D 렌더'],['STYLE_WATERCOLOR','수채화'],['STYLE_ANIME_FILM','지브리풍 애니'],['STYLE_CARTOON','카툰'],['STYLE_ROMANCE_FANTASY','로맨스 판타지'],['STYLE_OIL','유화'],['STYLE_STORYBOOK','동화 그림책'],['STYLE_PASTEL','파스텔 크레용']]
+const styles = [
+  ['STYLE_3D', '3D 렌더', style3d],
+  ['STYLE_WATERCOLOR', '수채화', styleWatercolor],
+  ['STYLE_ANIME_FILM', '지브리', styleGhibli],
+  ['STYLE_CARTOON', '카툰', styleCartoon],
+  ['STYLE_ROMANCE_FANTASY', '로맨스판타지', styleRomanceFantasy],
+  ['STYLE_RETRO', '레트로', styleRetro],
+  ['STYLE_POP_ART', '팝아트', stylePopArt],
+  ['STYLE_TRADITIONAL_PAINTING', '채색화', styleTraditionalPainting],
+]
 const stageCopy = {
   INPUT: ['오늘의 마음을 카드로 남겨요', '오늘 하루를 짧게 적고 그림체를 고르면, 바로 한 장의 마음카드로 만들어드려요.'],
   GENERATING: ['카드를 그리고 있어요', '오늘의 마음을 해석해 한 장의 카드로 다듬고 있어요.'],
@@ -49,6 +67,19 @@ function confirmExit() { showExitModal.value = false; router.push('/home') }
 function reset() { Object.assign(form, { memory_text:'' }); analysis.value=null; scene.value=null; card.value=null; feedbackSaved.value=false; imagePreviewError.value=false; errorMessage.value=''; stage.value='INPUT'; router.replace({ query:{} }) }
 
 async function loadUsage() { try { const data = await emotionCardsApi.today(); Object.assign(usage, data.daily_generation_count || usage); if (data.card) { card.value = data.card; imagePreviewError.value = false } } catch { /* 로그인 가드와 API 오류는 화면에서만 안내 */ } }
+async function resetUsage() {
+  if (resettingUsage.value) return
+  resettingUsage.value = true
+  errorMessage.value = ''
+  try {
+    const data = await emotionCardsApi.resetTodayUsage()
+    Object.assign(usage, data.daily_generation_count || { used: 0, limit: 10 })
+  } catch (error) {
+    errorMessage.value = errorOf(error)
+  } finally {
+    resettingUsage.value = false
+  }
+}
 
 // 한 화면 입력 -> 분석 -> 장면 -> 생성까지 한 번에 진행(중간 검증·미리보기 단계 없음).
 async function createCard() {
@@ -123,7 +154,7 @@ onBeforeUnmount(()=>{if(timer) clearTimeout(timer)})
           <small>오늘 있었던 일과 마음을 편하게 적어주세요. LLM이 감정과 장면을 분석해 카드로 만들어요.</small>
           <textarea v-model="form.memory_text" maxlength="500" placeholder="오늘의 장면을 짧게 적어보세요." />
         </label>
-        <div class="wide style-block"><span class="block-title">어떤 그림체로 그릴까요?</span><div class="style-grid"><button v-for="item in styles" :key="item[0]" :class="{chosen:selectedStyle===item[0]}" type="button" @click="selectedStyle=item[0]"><span>✦</span>{{ item[1] }}</button></div></div>
+        <div class="wide style-block"><span class="block-title">어떤 그림체로 그릴까요?</span><div class="style-grid"><button v-for="item in styles" :key="item[0]" :class="{chosen:selectedStyle===item[0]}" type="button" @click="selectedStyle=item[0]"><span class="style-thumb-wrap"><img :src="item[2]" :alt="`${item[1]} 예시`" class="style-thumb" /></span>{{ item[1] }}</button></div></div>
         <button class="primary-cta wide" type="button" :disabled="!canCreate" @click="createCard">오늘의 카드 만들기</button>
         <p class="generation-count wide">{{ usageLabel }}</p>
       </section>
@@ -148,7 +179,7 @@ onBeforeUnmount(()=>{if(timer) clearTimeout(timer)})
         </div>
       </section>
 
-      <div class="shell-footer"><p>{{ usageLabel }}</p><p>{{ summary }}</p></div><p v-if="errorMessage" class="error-message" role="alert">{{ errorMessage }}</p>
+      <div class="shell-footer"><div class="generation-controls"><p class="generation-count">{{ usageLabel }}</p><button class="usage-reset-button" type="button" :disabled="resettingUsage" @click="resetUsage">{{ resettingUsage ? '초기화 중...' : '사용량 초기화' }}</button></div><p>{{ summary }}</p></div><p v-if="errorMessage" class="error-message" role="alert">{{ errorMessage }}</p>
     </section>
 
     <aside class="card-preview-panel" aria-live="polite">
@@ -160,7 +191,7 @@ onBeforeUnmount(()=>{if(timer) clearTimeout(timer)})
         <img v-if="hasGeneratedImage" :src="cardImageSource" :alt="thumbAlt" @error="imagePreviewError = true" />
         <div v-else class="card-preview-empty">
           <img :src="cardThumb" alt="마음카드 미리보기 안내" />
-          <p v-if="stage === 'GENERATING'">{{ generation.progress }}% · 오늘의 장면을 그리고 있어요</p>
+          <p v-if="stage === 'GENERATING'">· 오늘의 장면을 그리고 있어요</p>
           <p v-else>오늘의 마음을 적고<br />카드를 만들어보세요.</p>
         </div>
       </div>
@@ -303,10 +334,18 @@ textarea { min-height: 82px; resize: vertical; }
 .ai-loading-caption { color: #c9b2d9; font-size: 12px; }
 
 .style-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-.style-grid button { min-height: 84px; border: 1px solid rgba(237, 183, 177, .3); border-radius: 14px; background: rgba(28, 10, 48, .65); color: #f4e7e8; font: inherit; font-weight: 800; cursor: pointer; }
-.style-grid span { display: block; margin-bottom: 8px; color: #ffbd75; font-size: 20px; }
+.style-grid button { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 8px; min-height: 148px; padding: 8px 8px 10px; border: 1px solid rgba(237, 183, 177, .3); border-radius: 14px; background: rgba(28, 10, 48, .65); color: #f4e7e8; font: inherit; font-weight: 800; cursor: pointer; overflow: hidden; }
+.style-thumb-wrap { position: relative; width: 100%; aspect-ratio: 1 / 1; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255, 255, 255, .12); }
+.style-thumb-wrap::after { content: ''; position: absolute; inset: 0; background: rgba(12, 4, 22, .32); pointer-events: none; }
+.style-thumb { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 12%; }
 .style-grid .chosen { border-color: #ffb576; background: linear-gradient(145deg, rgba(243, 81, 144, .6), rgba(255, 147, 96, .5)); box-shadow: 0 0 0 1px rgba(255, 190, 112, .45); }
-.generation-count { margin: 6px 0 0; color: #bfaec8; font-size: 12px; text-align: center; }
+.style-grid .chosen .style-thumb-wrap { border-color: rgba(255, 214, 173, .7); }
+.style-grid .chosen .style-thumb-wrap::after { background: rgba(12, 4, 22, .18); }
+.generation-controls { display: flex; align-items: center; gap: 10px; }
+.generation-count { margin: 0; color: #bfaec8; font-size: 12px; text-align: center; }
+.usage-reset-button { min-height: 28px; padding: 0 12px; border: 1px solid rgba(255, 190, 112, .38); border-radius: 999px; background: rgba(255, 190, 112, .08); color: #ffd6a3; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
+.usage-reset-button:hover:not(:disabled) { background: rgba(255, 190, 112, .16); border-color: rgba(255, 190, 112, .62); }
+.usage-reset-button:disabled { cursor: wait; opacity: .65; }
 
 .result-card { display: grid; grid-template-columns: minmax(240px, .8fr) minmax(0, 1.2fr); gap: 25px; }
 .result-image-button { display: block; overflow: hidden; padding: 0; border: 0; border-radius: 14px; background: transparent; cursor: zoom-in; }

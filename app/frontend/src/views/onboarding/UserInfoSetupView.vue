@@ -1801,7 +1801,7 @@ function formatBirthDateForDisplay(value) {
 .preference-heading p {
   margin: 8px 0 0;
   color: rgba(255, 245, 230, 0.66);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.45;
 }
 
@@ -1852,7 +1852,7 @@ function formatBirthDateForDisplay(value) {
 .preference-limit {
   margin: auto 0 0;
   color: rgba(255, 245, 230, 0.58);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.45;
 }
 
@@ -1862,7 +1862,7 @@ function formatBirthDateForDisplay(value) {
 
 .preference-heading > span {
   padding-top: 6px;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .preference-tabs {
@@ -1876,7 +1876,7 @@ function formatBirthDateForDisplay(value) {
 .preference-tabs button {
   min-height: 48px;
   border-radius: 12px;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .preference-category-row {
@@ -1886,7 +1886,7 @@ function formatBirthDateForDisplay(value) {
 .preference-category-row button {
   min-height: 32px;
   padding: 0 12px;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .preference-chip-grid {
@@ -1934,7 +1934,7 @@ function formatBirthDateForDisplay(value) {
   padding: 0 10px 0 13px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.045);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .preference-choice-placeholder {
@@ -1950,7 +1950,7 @@ function formatBirthDateForDisplay(value) {
 }
 
 .preference-choice-chip strong {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 850;
   overflow: visible;
   text-overflow: clip;
@@ -1965,7 +1965,7 @@ function formatBirthDateForDisplay(value) {
   justify-self: end;
   width: 18px;
   height: 18px;
-  font-size: 11px;
+  font-size: 12px;
   transform: none;
 }
 
@@ -1993,7 +1993,7 @@ function formatBirthDateForDisplay(value) {
 
 .preference-choice-box-header strong {
   color: #fff7df;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 950;
 }
 
@@ -2007,7 +2007,7 @@ function formatBirthDateForDisplay(value) {
   border-radius: 999px;
   background: rgba(255, 211, 122, 0.09);
   color: #ffd37a;
-  font-size: 12px;
+  font-size: 13px;
   font-style: normal;
   font-weight: 950;
   white-space: nowrap;
@@ -2036,20 +2036,20 @@ function formatBirthDateForDisplay(value) {
 .selected-fragments h4 {
   margin: 0;
   color: #fff7df;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 950;
 }
 
 .selected-fragments p {
   margin: 4px 0 0;
   color: rgba(255, 245, 230, 0.62);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.45;
 }
 
 .selected-fragments header > span {
   color: #ffd37a;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 900;
   line-height: 1.45;
   text-align: right;
@@ -2065,7 +2065,7 @@ function formatBirthDateForDisplay(value) {
   border-color: rgba(255, 211, 122, 0.22);
   background: rgba(255, 255, 255, 0.065);
   color: rgba(255, 245, 230, 0.88);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .selected-fragments .selected-keyword-pill span {

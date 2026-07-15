@@ -30,7 +30,7 @@ function goHome() {
 <template>
   <section class="memory-game-view">
     <MemoryGameIntro
-      v-if="state.gameStatus === GAME_STATUS.IDLE || state.gameStatus === GAME_STATUS.LOADING || state.gameStatus === GAME_STATUS.ERROR"
+      v-if="state.gameStatus === GAME_STATUS.IDLE || state.gameStatus === GAME_STATUS.ERROR || (state.gameStatus === GAME_STATUS.LOADING && state.cards.length === 0)"
       :back-image="cardBackImage"
       :is-loading="state.gameStatus === GAME_STATUS.LOADING"
       :error-message="state.assetLoadError"
@@ -44,6 +44,7 @@ function goHome() {
           :progress-label="progressLabel"
           :formatted-time="formattedTime"
           :remaining-seconds="remainingSeconds"
+          :is-preview="state.gameStatus === GAME_STATUS.PREVIEW"
           @back="goHome"
           @restart="restartGame"
         />

@@ -19,6 +19,7 @@ from .models import (
     EmotionCardAnalysis,
     EmotionCardJob,
     EmotionCardScene,
+    EmotionCardUsageReset,
     FeatureCode,
     GeneratedEmotionCard,
     RuleEntry,
@@ -27,6 +28,18 @@ from .models import (
 
 
 logger = logging.getLogger('emotion_cards')
+
+
+def daily_generation_queryset(user):
+    """현재 사용량에 포함되는 오늘의 이미지 생성 카드만 반환한다."""
+    queryset = GeneratedEmotionCard.objects.filter(
+        user=user,
+        created_at__date=timezone.localdate(),
+    ).exclude(image_url='')
+    reset = EmotionCardUsageReset.objects.filter(user=user).first()
+    if reset:
+        queryset = queryset.filter(created_at__gt=reset.reset_at)
+    return queryset
 
 
 EMOTION_LABELS = {'JOY': '기쁨', 'SADNESS': '슬픔', 'ANGER': '화남', 'ANXIETY': '불안'}
@@ -47,14 +60,25 @@ SOCIAL_CONTEXTS = {'ALONE', 'FRIENDS', 'PARTNER', 'FAMILY', 'COLLEAGUES', 'CLASS
 # 부정 감정 장면에 반드시 넣는 안전 신호.
 SAFE_SIGNAL = 'a small warm light source (lamp, window glow, or clearing sky) as a gentle sign of hope'
 
-# 마음카드는 사용자 프로필 캐릭터와 분리해, 매번 새로운 장면의 동행자를 고른다.
-# 이미지 모델이 내부 코드만 보고 고양이로 해석하지 않도록 종과 외형을 프롬프트에 함께 둔다.
-CARD_CHARACTERS = {
-    'kkami': 'Kkami, a small navy-black cat mascot with a purple collar',
-    'yeoul': 'Yeoul, a small round white bird mascot with soft gray wing tips',
-    'toto': 'Toto, a gentle small lavender otter mascot',
-    'pori': 'Pori, a cheerful small red panda mascot with orange fur and a striped tail',
+# 마음카드 인물 — 동물 마스코트는 표면 디테일(머리카락/옷/장신구)이 거의 없어
+# 그림체별 렌더링 기법이 잘 드러나지 않는다는 점이 확인되어(2026-07-15) 사람 캐릭터로 전환한다.
+# 성별은 사용자 프로필 성별을 따르고, 미설정/"선택 안 함"이면 매번 무작위로 고른다.
+HUMAN_CHARACTERS = {
+    'MALE': 'a warm, gentle young man in his 20s wearing a simple modern casual outfit, short neat hair, kind calm expression',
+    'FEMALE': 'a warm, gentle young woman in her 20s wearing a simple modern casual outfit, soft shoulder-length hair, kind calm expression',
 }
+
+# UserInfoSetupView.vue / ProfilePanel.vue의 genderOptions와 동일한 한글 값 매핑.
+GENDER_TO_CARD_GENDER = {'남': 'MALE', '여': 'FEMALE'}
+
+
+def _card_gender_for_user(user):
+    """마음카드 인물의 성별 결정. 프로필 성별이 명확하면 그대로, '선택 안 함'/미설정이면 매번 무작위."""
+    gender_value = ''
+    profile = getattr(user, 'profile', None) if user else None
+    if profile is not None:
+        gender_value = (profile.gender or '').strip()
+    return GENDER_TO_CARD_GENDER.get(gender_value) or random.choice(('MALE', 'FEMALE'))
 
 
 def _running_tests():
@@ -457,7 +481,7 @@ def build_scene(analysis):
         'message': message, 'memory_focus': memory_focus,
         'primary_emotion': emotion, 'energy_code': energy, 'need_code': need,
         'event_type': event_id, 'social_context': social,
-        'character': random.choice(tuple(CARD_CHARACTERS)), 'avoid_visuals': avoid, 'safe_signal': safe_signal,
+        'character': _card_gender_for_user(analysis.user), 'avoid_visuals': avoid, 'safe_signal': safe_signal,
         'mapping_reason_codes': [c for c in (
             emotion_rule.get('rule_id'), event_rule.get('rule_id'),
             need_rule.get('rule_id'), energy_rule.get('rule_id'),
@@ -478,15 +502,38 @@ def build_scene(analysis):
 
 # 이미지 생성
 def _build_image_prompt(spec, style_id):
-    character_id = spec.get('character')
-    character_description = CARD_CHARACTERS.get(
-        character_id,
-        'a small gentle animal mascot with clear, consistent anatomy',
+    character_gender = spec.get('character')
+    character_description = HUMAN_CHARACTERS.get(
+        character_gender,
+        'a warm, gentle young person with a simple friendly appearance and a calm expression',
     )
+
+    # 그림체별 상세 프롬프트(11_style_presets.csv → CatalogEntry)를 실제로 반영한다.
+    # 과거엔 style_id 코드 문자열("STYLE_3D" 등)만 그대로 넣어서 모델이 스타일을
+    # 사실상 인식하지 못했고, 그래서 그림체를 바꿔도 결과가 비슷했다(2026-07-15 수정).
+    style_entry = _catalog('style', style_id)
+    style_meta = style_entry.metadata if style_entry else {}
+    style_prompt = (style_entry.visual_prompt if style_entry else '') or f'{style_id} illustration style'
+    line_style = style_meta.get('line_style', '')
+    texture = style_meta.get('texture', '')
+    color_modifier = style_meta.get('color_modifier', '')
+    style_negative_items = [v for v in (style_meta.get('negative_prompt') or '').split('|') if v]
+
     parts = [
         "Create a safe, gentle, text-free emotional illustration for a daily mood card.",
-        f"Art style: {style_id}.",
-        f"Main character: {character_description}. Keep this exact mascot species and appearance consistent.",
+        f"Art style: {style_prompt}.",
+    ]
+    if line_style:
+        parts.append(f"Line style: {line_style}.")
+    if texture:
+        parts.append(f"Texture/rendering: {texture}.")
+    if color_modifier:
+        parts.append(f"Color palette: {color_modifier}.")
+    parts += [
+        f"Main character: {character_description}. This is an original illustrated character — not a photo, not any specific "
+        "real or famous person, fully clothed and non-sexualized, friendly and safe for all ages. "
+        "Apply the full art style described above (linework, shading technique, color palette) to the character itself as "
+        "strongly as to the background — do not render the character in a flatter or more generic style than the scene.",
         f"Weather/sky: {spec['weather'].get('visual_prompt') or spec['weather'].get('label')}.",
         f"Location: {spec['location'].get('visual_prompt') or spec['location'].get('label')}.",
         f"Lighting: {spec.get('lighting', {}).get('visual_prompt') or ''}.",
@@ -501,7 +548,7 @@ def _build_image_prompt(spec, style_id):
         parts.append(f"Companion: {companion['visual_prompt']}.")
     if spec.get('safe_signal'):
         parts.append(f"Always include {spec['safe_signal']}.")
-    avoid = ', '.join(spec.get('avoid_visuals', []))
+    avoid = ', '.join(dict.fromkeys([*spec.get('avoid_visuals', []), *style_negative_items]))
     parts.append(
         "Do not include real people, faces of identifiable individuals, readable text, logos, "
         "watermarks, brand names, violence, weapons, gore, self-harm, or additional/distorted limbs."
@@ -641,8 +688,8 @@ def create_generation_job(scene, style_id, user, idempotency_key=None):
         if scene.user_id != user.id or scene.invalidated or scene.safety_status != 'SAFE':
             raise ValueError('EMOTION_CARD_SCENE_BLOCKED')
         # EMOTION_CARD_MAX_DAILY_GENERATIONS=0(또는 음수)이면 무제한. 1 이상이면 그 수만큼 하루 제한.
-        daily_limit = int(getattr(settings, 'EMOTION_CARD_MAX_DAILY_GENERATIONS', 2))
-        if daily_limit > 0 and GeneratedEmotionCard.objects.filter(user=user, created_at__date=timezone.localdate()).exclude(image_url='').count() >= daily_limit:
+        daily_limit = int(getattr(settings, 'EMOTION_CARD_MAX_DAILY_GENERATIONS', 10))
+        if daily_limit > 0 and daily_generation_queryset(user).count() >= daily_limit:
             raise ValueError('EMOTION_CARD_RATE_LIMITED')
         if style_id not in {style['code'] for style in scene.available_styles}:
             raise ValueError('EMOTION_CARD_STYLE_NOT_FOUND')

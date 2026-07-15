@@ -7,9 +7,9 @@ from rest_framework.decorators import api_view, authentication_classes, permissi
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import EmotionCardAnalysis, EmotionCardJob, EmotionCardScene, GeneratedEmotionCard
+from .models import EmotionCardAnalysis, EmotionCardJob, EmotionCardScene, EmotionCardUsageReset, GeneratedEmotionCard
 from .serializers import AnalysisPatchSerializer, AnalysisRequestSerializer, FeedbackSerializer, GenerationSerializer
-from .services import analyze, build_scene, create_generation_job, ensure_card_image, update_analysis
+from .services import analyze, build_scene, create_generation_job, daily_generation_queryset, ensure_card_image, update_analysis
 
 
 class EmotionCardSessionAuthentication(SessionAuthentication):
@@ -161,6 +161,19 @@ def card_feedback(request, card_id):
 @permission_classes([IsAuthenticated])
 def today_card(request):
     card = GeneratedEmotionCard.objects.filter(user=request.user, created_at__date=timezone.localdate()).select_related('scene').order_by('-created_at').first()
-    used = GeneratedEmotionCard.objects.filter(user=request.user, created_at__date=timezone.localdate()).exclude(image_url='').count()
-    limit = int(getattr(settings, 'EMOTION_CARD_MAX_DAILY_GENERATIONS', 2))
+    used = daily_generation_queryset(request.user).count()
+    limit = int(getattr(settings, 'EMOTION_CARD_MAX_DAILY_GENERATIONS', 10))
     return Response({'card': _card_payload(card) if card else None, 'daily_generation_count': {'used': used, 'limit': limit}})
+
+
+@api_view(['POST'])
+@authentication_classes([EmotionCardSessionAuthentication])
+@permission_classes([IsAuthenticated])
+def reset_today_usage(request):
+    """오늘 이미지 생성 사용량을 현재 시점부터 다시 계산하도록 초기화한다."""
+    EmotionCardUsageReset.objects.update_or_create(
+        user=request.user,
+        defaults={'reset_at': timezone.now()},
+    )
+    limit = int(getattr(settings, 'EMOTION_CARD_MAX_DAILY_GENERATIONS', 10))
+    return Response({'daily_generation_count': {'used': 0, 'limit': limit}})

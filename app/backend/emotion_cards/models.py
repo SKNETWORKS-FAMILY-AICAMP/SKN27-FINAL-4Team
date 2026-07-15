@@ -113,3 +113,10 @@ class GeneratedEmotionCard(models.Model):
     class Meta:
         ordering = ['-created_at']
         indexes = [models.Index(fields=['user', 'created_at'])]
+
+
+class EmotionCardUsageReset(models.Model):
+    """사용자가 오늘의 이미지 생성 사용량을 초기화한 시점을 보관한다."""
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='emotion_card_usage_reset')
+    reset_at = models.DateTimeField()

@@ -3,6 +3,8 @@ from django.test import TestCase, override_settings
 
 from user.models import User
 
+from .models import EmotionCardUsageReset
+
 
 @override_settings(EMOTION_CARD_ENABLE_REAL_IMAGE_API=False)
 class EmotionCardApiTests(TestCase):
@@ -47,3 +49,16 @@ class EmotionCardApiTests(TestCase):
         self.client.logout()
         response = self.client.post('/api/emotion-cards/analyze/', {'emotion_text': '오늘은 괜찮아.'}, content_type='application/json')
         self.assertEqual(response.status_code, 401)
+
+    @override_settings(EMOTION_CARD_MAX_DAILY_GENERATIONS=10)
+    def test_today_reports_configured_daily_generation_limit(self):
+        response = self.client.get('/api/emotion-cards/today/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['daily_generation_count']['limit'], 10)
+
+    @override_settings(EMOTION_CARD_MAX_DAILY_GENERATIONS=10)
+    def test_today_usage_can_be_reset(self):
+        response = self.client.post('/api/emotion-cards/today/reset/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['daily_generation_count'], {'used': 0, 'limit': 10})
+        self.assertTrue(EmotionCardUsageReset.objects.filter(user=self.user).exists())
