@@ -92,8 +92,13 @@
           <!-- 감정 라벨(슬픔 모드 등)은 화면에 표시하지 않음 — 친구 컨셉 (분석은 뒤에서만) -->
           <div class="bubble" :class="msg.role === 'user' ? 'bubble-user' : 'bubble-char'">
             <img v-if="msg.image" :src="msg.image" class="bubble-img" alt="첨부 이미지" />
-            <span v-if="msg.content" class="bubble-text">{{ msg.content }}</span>
+            <span v-if="msg.content" class="bubble-text">{{ (msg.displayed !== undefined ? msg.displayed : msg.content) || '…' }}</span>
           </div>
+          <!-- 대화 맥락 바로가기 칩 — 사용자가 관련 얘기를 꺼냈을 때만 (2026-07-12) -->
+          <button v-if="msg.suggestPage && msg.displayed === msg.content" class="suggest-chip"
+                  @click="router.push(msg.suggestPage === 'report' ? '/report' : '/mypage')">
+            {{ msg.suggestLabel }}
+          </button>
 
         </div>
 
@@ -113,6 +118,11 @@
       <div class="input-bar">
         <input ref="fileInputRef" type="file" accept="image/*" class="file-hidden" @change="onPickImage" />
         <button class="attach-btn" :disabled="isTyping" @click="fileInputRef?.click()" title="사진 첨부">📷</button>
+        <button v-if="sttSupported" class="attach-btn stt-btn" :class="{ 'stt-recording': isRecording }"
+                :disabled="isTyping" @click="toggleStt"
+                :title="isRecording ? '음성 입력 중지' : '음성으로 입력'">🎤</button>
+        <button class="attach-btn tts-toggle" :class="{ 'tts-off': !ttsEnabled }" @click="toggleTtsPref"
+                :title="ttsEnabled ? '음성 끄기 (글자만 보기)' : '음성 켜기'">{{ ttsEnabled ? '🔊' : '🔇' }}</button>
         <textarea
           ref="inputRef"
           v-model="inputText"
@@ -139,6 +149,7 @@ import { chatApi } from '../../api/chat.js'
 import chatBg from '../../assets/chat-bg.png'
 import { useSecret } from '../../composables/useSecret.js'
 import { useTts } from '../../composables/useTts.js'
+import { useStt } from '../../composables/useStt.js'
 
 const router = useRouter()
 const route  = useRoute()
@@ -272,6 +283,30 @@ const displayCharacterId = ref(normalizeCharacterId(route.query.character || sto
 const selectedExpression = ref('default')
 const { secret: isSecret, setSecret } = useSecret()
 const { playTask, stop: ttsStop } = useTts()
+const { isSupported: sttSupported, isRecording, start: sttStart, stop: sttStop } = useStt()
+
+// 🔊 TTS 음소거 (2026-07-12) — 목소리 원치 않는 사용자 배려 + 음소거 시 서버가 생성 자체를 스킵(크레딧 0)
+const ttsEnabled = ref(localStorage.getItem('binteum_tts') !== 'off')
+function toggleTtsPref() {
+  ttsEnabled.value = !ttsEnabled.value
+  localStorage.setItem('binteum_tts', ttsEnabled.value ? 'on' : 'off')
+  if (!ttsEnabled.value) ttsStop()          // 재생 중이던 음성도 즉시 중단
+}
+
+// 🎤 음성 입력 (STT) — 말하면 입력창에 실시간으로 채워지고, 확인 후 전송 (2026-07-10)
+let sttBaseText = ''
+function toggleStt() {
+  if (isRecording.value) { sttStop(); return }
+  sttBaseText = inputText.value ? inputText.value.replace(/\s+$/, '') + ' ' : ''
+  sttStart({
+    onInterim: (t) => { inputText.value = (sttBaseText + t).slice(0, 300) },
+    onFinal:   (t) => {
+      inputText.value = (sttBaseText + t).slice(0, 300)
+      sttBaseText = inputText.value.replace(/\s+$/, '') + ' '
+    },
+    onEnd: () => { nextTick(() => autoResize()) },
+  })
+}
 const sessionId      = ref(null)
 const coldStartDone  = ref(false)
 const showExitModal  = ref(false)
@@ -365,19 +400,82 @@ const userTurnCount = ref(0)      // 대화 턴 통계용 (MBTI 게이트로는 
 function clearIdleTimer() {}
 
 // ── 어시스턴트 말풍선 push + TTS 자동 1회 재생 (재생 후 서버에서 파기) ──
+// 음성이 있으면 재생 시작에 맞춰 텍스트를 음성 길이만큼 타이핑(동기 자막).
+// 음성 실패·자동재생 차단·지연(7초) 시엔 텍스트 전체를 즉시 표시.
+function animateReveal(m, durationSec, alignment, audioEl) {
+  if (m.displayed === m.content) return
+  if (m._revealTimer) clearInterval(m._revealTimer)
+
+  // ── 정밀 모드: ElevenLabs 글자별 타임스탬프 + 오디오 현재 시각으로 1:1 동기 ──
+  // TTS로 보낸 텍스트와 화면 텍스트가 같아야 성립 — 다르면 균등 타이핑 폴백.
+  const canSync = alignment && Array.isArray(alignment.chars) && alignment.chars.length > 0
+    && audioEl && alignment.chars.join('') === m.content
+  if (canSync) {
+    const starts = alignment.starts
+    m._revealTimer = setInterval(() => {
+      const t = audioEl.currentTime
+      if (audioEl.ended || (audioEl.paused && t === 0)) {   // 종료·중단 → 전체 표시
+        clearInterval(m._revealTimer); m._revealTimer = null
+        m.displayed = m.content
+        return
+      }
+      let idx = 0
+      while (idx < starts.length && starts[idx] <= t + 0.12) idx++   // 120ms 선행(읽기 편하게)
+      m.displayed = m.content.slice(0, idx)
+      scrollToBottom()
+      if (idx >= m.content.length) { clearInterval(m._revealTimer); m._revealTimer = null }
+    }, 45)
+    return
+  }
+
+  // ── 폴백: 음성 길이에 맞춘 균등 타이핑 ──
+  const total = m.content.length
+  const durMs = Math.max(800, (durationSec ? durationSec * 1000 : total * 55) * 0.93)
+  const t0 = performance.now()
+  m._revealTimer = setInterval(() => {
+    const p = Math.min(1, (performance.now() - t0) / durMs)
+    m.displayed = m.content.slice(0, Math.ceil(total * p))
+    scrollToBottom()
+    if (p >= 1) { clearInterval(m._revealTimer); m._revealTimer = null }
+  }, 50)
+}
+function revealNow(m) {
+  if (m._revealTimer) { clearInterval(m._revealTimer); m._revealTimer = null }
+  m.displayed = m.content
+}
+
 function pushAssistant(text, extra = {}) {
   const m = { _tempId: Date.now(), role: 'assistant', content: text, ...extra }
+  if (m.tts_task_id && ttsEnabled.value) {
+    m.displayed = ''                    // 음성 시작까지 잠깐 '…' 표시
+    messages.value.push(m)
+    const target = messages.value[messages.value.length - 1]   // 반응형 프록시로 조작
+    playTask(m.tts_task_id, {
+      onStart: (d, alignment, audioEl) => animateReveal(target, d, alignment, audioEl),
+      onFail: () => animateReveal(target, null, null, null),   // 실패해도 즉시 덤프 대신 타이핑 (2026-07-12)
+    })
+    setTimeout(() => {                  // 안전장치: TTS 생성이 8초+ 걸릴 수 있어 폴링 타임아웃(~28초)보다 늦게
+      if (target.displayed !== target.content && !target._revealTimer) revealNow(target)
+    }, 30000)
+    return target
+  }
+  // 음소거·TTS 없음 — 글자만이라도 생동감 있게 (균등 타이핑, 55ms/자)
+  m.displayed = ''
   messages.value.push(m)
-  if (m.tts_task_id) playTask(m.tts_task_id)
-  return m
+  const target = messages.value[messages.value.length - 1]
+  animateReveal(target, null, null, null)
+  return target
 }
 
 // ── 세션 초기화: 콜드스타트 게이팅 (감정 선택지 먼저) ──
+// (대화 이어보기는 검토 후 불채택 — 2026-07-12. 만날 때마다 새 시작 컨셉 유지.
+//  과거는 화면이 아니라 챗봇의 기억(그래프)과 주간 리포트로만 남는다)
+
 async function initSession() {
   try {
     // 친구 컨셉: 감정 안 묻고 날씨/시간/닉네임 기반 첫인사로 시작
     const coords = await getCoordsOrNull()
-    const sess = await chatApi.startSession(character.value, isSecret.value, coords, route.query.checkinId || null)
+    const sess = await chatApi.startSession(character.value, isSecret.value, coords, route.query.checkinId || null, ttsEnabled.value)
     sessionId.value = sess.session_id
     coldStartDone.value = true
     userTurnCount.value = 0
@@ -493,11 +591,13 @@ async function sendMessage() {
   isTyping.value = true
   await scrollToBottom()
   try {
-    const res = await chatApi.sendChat(sessionId.value, content, character.value, isSecret.value, image)
+    const res = await chatApi.sendChat(sessionId.value, content, character.value, isSecret.value, image, ttsEnabled.value)
     const m = pushAssistant(res.message.text, {
       id: res.message_id ?? undefined,
       emotion_label: res.emotion_label,
       tts_task_id: res.tts_task_id,
+      suggestPage: res.ui?.suggest_page || null,     // 대화 맥락 바로가기 칩 (2026-07-12)
+      suggestLabel: res.ui?.suggest_label || null,
     })
     if (res.emotion_label) {
       currentEmotion.value = res.emotion_label
@@ -1131,6 +1231,37 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* 🎤 음성 입력 (STT) */
+.stt-btn.stt-recording {
+  background: rgba(248, 113, 113, 0.25);
+  border-color: rgba(248, 113, 113, 0.8);
+  animation: sttPulse 1.2s ease-in-out infinite;
+}
+@keyframes sttPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.45); }
+  50%      { box-shadow: 0 0 0 7px rgba(248, 113, 113, 0); }
+}
+
+/* 🔊 TTS 음소거 토글 */
+.tts-toggle.tts-off {
+  opacity: 0.55;
+  filter: grayscale(0.6);
+}
+
+/* 대화 맥락 바로가기 칩 */
+.suggest-chip {
+  margin: 6px 4px 0;
+  padding: 7px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(251, 191, 119, 0.55);
+  background: rgba(251, 191, 119, 0.14);
+  color: #FBBF77;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.suggest-chip:hover { background: rgba(251, 191, 119, 0.28); }
 
 /* 🎉 기쁨 감정 축하 (폭죽/Confetti) 효과 */
 .joy-celebration-overlay {

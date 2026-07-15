@@ -145,10 +145,11 @@ class MindReportFlowService:
                 candidates=keyword_result.candidates,
                 emotion_scores=scoring_result.emotion_scores,
                 emotion_flow=emotion_flow,
+                source_messages=scoring_result.source_messages,
             )
             if emotion_flow is not None
             and keyword_result is not None
-            and keyword_result.status == 'extracted'
+            and keyword_result.status in {'extracted', 'no_supported_candidates'}
             else None
         )
         label_result = (
@@ -158,7 +159,11 @@ class MindReportFlowService:
             )
             if emotion_flow is not None
             and cause_result is not None
-            and cause_result.status in {'classified', 'partially_classified'}
+            and cause_result.status in {
+                'classified',
+                'partially_classified',
+                'no_supported_causes',
+            }
             else None
         )
         narrative_result = (
@@ -552,7 +557,7 @@ class MindReportFlowService:
         if (
             scoring_result.status != 'scored'
             or keyword_result is None
-            or keyword_result.status != 'extracted'
+            or keyword_result.status not in {'extracted', 'no_supported_candidates'}
         ):
             return MindReportFlowStep(
                 step=STEP_CAUSE_KEYWORDS,
@@ -569,7 +574,11 @@ class MindReportFlowService:
                 payload={},
             )
 
-        if cause_result.status not in {'classified', 'partially_classified'}:
+        if cause_result.status not in {
+            'classified',
+            'partially_classified',
+            'no_supported_causes',
+        }:
             return MindReportFlowStep(
                 step=STEP_CAUSE_KEYWORDS,
                 status='blocked',
@@ -580,7 +589,7 @@ class MindReportFlowService:
         return MindReportFlowStep(
             step=STEP_CAUSE_KEYWORDS,
             status='completed'
-            if cause_result.status == 'classified'
+            if cause_result.status in {'classified', 'no_supported_causes'}
             else 'partial',
             message=cause_result.message,
             payload={

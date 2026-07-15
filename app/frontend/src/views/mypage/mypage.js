@@ -240,14 +240,6 @@ createApp({
           <button class="hotspot reports" type="button" :aria-label="t.reports" @click="openPanel('reports')"></button>
           <button class="hotspot settings" type="button" :aria-label="t.settings" @click="openPanel('settings')"></button>
         </div>
-        <nav class="legend" aria-label="기능 바로가기">
-          <button type="button" @click="openPanel('profile')">{{ t.profile }}</button>
-          <button type="button" @click="openPanel('mbti')">{{ t.mbti }}</button>
-          <button type="button" @click="openPanel('taste')">{{ t.taste }}</button>
-          <button type="button" @click="openPanel('reports')">{{ t.reports }}</button>
-          <button type="button" @click="openPanel('settings')">{{ t.settings }}</button>
-        </nav>
-
         <transition name="fade">
           <section v-if="activePanel" class="modal-backdrop" @click.self="closePanel">
             <article class="modal" :class="activePanel + '-modal'" role="dial og" aria-modal="true" :aria-label="currentPanelTitle">

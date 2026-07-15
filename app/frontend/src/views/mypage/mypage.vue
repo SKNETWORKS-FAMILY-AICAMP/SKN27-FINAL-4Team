@@ -1,7 +1,119 @@
 <template>
   <main class="app-shell">
-    <MypageRoom :labels="t" @open-panel="openPanel">
-      <MypageModal
+    <section class="mypage-home" aria-label="마이페이지 홈">
+      <aside class="home-left-panel" aria-label="마이홈 대시보드">
+        <article class="identity-card">
+          <div class="identity-avatar">
+            <img :src="`/characters/${currentCharacter.id}/default.png`" :alt="currentCharacter.name" />
+          </div>
+          <div class="identity-copy">
+            <span class="dashboard-kicker">ROOM PLATE</span>
+            <h1>{{ displayName }}님의 공간</h1>
+            <p>{{ homeStatusMessage }}</p>
+            <div class="identity-chips">
+              <span>{{ todayEmotionLabel }}</span>
+              <span>{{ currentCharacter.name }}</span>
+              <span>{{ profileMbtiLabel }}</span>
+            </div>
+          </div>
+          <button class="dashboard-primary" type="button" @click="openPanel('profile')">
+            프로필 관리
+            <span aria-hidden="true">↗</span>
+          </button>
+        </article>
+
+        <nav class="quick-actions" aria-label="마이룸 기능 메뉴">
+          <div class="quick-actions-heading">
+            <div>
+              <span class="dashboard-kicker">EXPLORE MY ROOM</span>
+              <strong>기능 메뉴</strong>
+            </div>
+            <span class="quick-actions-count">5</span>
+          </div>
+          <button type="button" @click="openPanel('mbti')">
+            <span class="menu-index">01</span>
+            <span class="menu-object" aria-hidden="true">◑</span>
+            <span class="menu-copy"><strong>MBTI 분석</strong><small>월간 성향과 변화 확인</small></span>
+            <span class="menu-arrow" aria-hidden="true">→</span>
+          </button>
+          <button type="button" @click="openPanel('weather')">
+            <span class="menu-index">02</span>
+            <span class="menu-object" aria-hidden="true">⌑</span>
+            <span class="menu-copy"><strong>날씨 정보</strong><small>현재 날씨와 컨디션 추천</small></span>
+            <span class="menu-arrow" aria-hidden="true">→</span>
+          </button>
+          <button type="button" @click="openPanel('book')">
+            <span class="menu-index">03</span>
+            <span class="menu-object" aria-hidden="true">▤</span>
+            <span class="menu-copy"><strong>오늘의 책 추천</strong><small>프로필 기반 추천 도서</small></span>
+            <span class="menu-arrow" aria-hidden="true">→</span>
+          </button>
+          <button class="memory-action" type="button" @click="openPanel('memory')">
+            <span class="menu-index">04</span>
+            <span class="menu-object" aria-hidden="true">◇</span>
+            <span class="menu-copy"><strong>기억 보관함</strong><small>저장된 대화 기억 관리</small></span>
+            <span class="menu-arrow" aria-hidden="true">→</span>
+          </button>
+          <button class="character-action" type="button" @click="openPanel('character')">
+            <span class="menu-index">05</span>
+            <span class="menu-object" aria-hidden="true">●</span>
+            <span class="menu-copy"><strong>캐릭터 정보</strong><small>캐릭터 선택 및 정보 확인</small></span>
+            <span class="menu-arrow" aria-hidden="true">→</span>
+          </button>
+        </nav>
+
+        <aside class="home-sidebar" aria-label="오늘의 상태판">
+          <div class="panel-caption">
+            <span class="dashboard-kicker">ROOM NOTE</span>
+            <strong>방 안 상태판</strong>
+          </div>
+          <section class="summary-grid" aria-label="내 상태 요약">
+            <button class="summary-card" type="button" @click="goToReport">
+              <span>오늘 기분</span>
+              <strong>{{ todayEmotionLabel }}</strong>
+              <small>마음 리포트에서 확인</small>
+            </button>
+            <button class="summary-card" type="button" @click="openPanel('mbti')">
+              <span>MBTI</span>
+              <strong>{{ profileMbtiLabel }}</strong>
+              <small>{{ mbtiSummaryText }}</small>
+            </button>
+            <button class="summary-card" type="button" @click="openPanel('profile')">
+              <span>관심사</span>
+              <strong>{{ interestPreview }}</strong>
+              <small>프로필 기준</small>
+            </button>
+            <button class="summary-card" type="button" @click="openPanel('profile')">
+              <span>취미</span>
+              <strong>{{ hobbyPreview }}</strong>
+              <small>개인화 보정</small>
+            </button>
+          </section>
+        </aside>
+      </aside>
+
+      <section class="room-section" aria-label="내 공간">
+        <header class="room-section-heading">
+          <div>
+            <span class="dashboard-kicker">MY ROOM</span>
+            <h2>{{ displayName }}님의 미니룸</h2>
+          </div>
+          <p>책장, 창문, 액자처럼 방 안 오브젝트가 오늘의 기록과 연결됩니다.</p>
+        </header>
+        <MypageRoom
+          :labels="t"
+          :current-character="currentCharacter"
+          :focus-target="roomFocusTarget"
+          :move-key="roomMoveKey"
+          @open-panel="openPanelFromRoom"
+          @open-chat="goToChat"
+          @open-report="goToReport"
+          @arrived="activatePanelAfterRoomMove"
+        />
+      </section>
+    </section>
+
+    <MypageModal
         :active-panel="activePanel"
         :title="currentPanelTitle"
         :description="currentPanelDescription"
@@ -13,14 +125,16 @@
           :profile-options="profileOptions"
           :profile-edit="profileEdit"
           :profile-saved-at="profileSavedAt"
+          :current-character="currentCharacter"
+          @toggle-profile-edit="toggleProfileEdit"
+          @update-profile-keywords="updateProfileKeywords"
+        />
+
+        <CharacterPanel
+          v-if="activePanel === 'character'"
           :selected-character="selectedCharacter"
           :current-character="currentCharacter"
           :characters="characters"
-          :show-character-picker="showCharacterPicker"
-          @open-character-picker="showCharacterPicker = true"
-          @close-character-picker="showCharacterPicker = false"
-          @toggle-profile-edit="toggleProfileEdit"
-          @toggle-interest-keyword="toggleInterestKeyword"
           @choose-character="chooseCharacter"
         />
 
@@ -33,6 +147,38 @@
           @refresh="refreshMbtiDemoData"
           @set-view="setMbtiView"
           @save-mbti="saveMbti"
+        />
+
+        <WeatherPanel
+          v-if="activePanel === 'weather'"
+          :payload="weatherPayload"
+          :loading="weatherLoading"
+          :error="weatherError"
+          :location="weatherLocation"
+          :regions="weatherRegions"
+          @refresh="loadWeatherData()"
+          @change-region="setWeatherRegion"
+          @close="closePanel"
+        />
+
+        <BookPanel
+          v-if="activePanel === 'book'"
+          :payload="bookPayload"
+          :loading="bookLoading"
+          :error="bookError"
+          @refresh="loadBookData"
+          @close="closePanel"
+        />
+
+        <MemoryPanel
+          v-if="activePanel === 'memory'"
+          :payload="memoryPayload"
+          :loading="memoryLoading"
+          :error="memoryError"
+          :notice="memoryNotice"
+          @refresh="loadMemoryData(true)"
+          @delete-memory="deleteMemoryItems([$event])"
+          @delete-selected="deleteMemoryItems"
         />
 
         <TastePanel
@@ -48,34 +194,61 @@
           @show-toast="showToast"
           @reset-settings="resetSettings"
         />
-      </MypageModal>
-    </MypageRoom>
+    </MypageModal>
 
     <transition name="fade">
       <div v-if="toast" class="toast" role="status">{{ toast }}</div>
+    </transition>
+
+    <transition name="fade">
+      <section
+        v-if="navigationConfirm"
+        class="navigation-confirm-backdrop"
+        role="presentation"
+        @click.self="cancelNavigationConfirm"
+      >
+        <article class="navigation-confirm" role="dialog" aria-modal="true" :aria-label="navigationConfirm.title">
+          <h2>{{ navigationConfirm.title }}</h2>
+          <p>{{ navigationConfirm.message }}</p>
+          <div class="navigation-confirm-actions">
+            <button class="navigation-cancel-button" type="button" @click="cancelNavigationConfirm">취소</button>
+            <button class="navigation-confirm-button" type="button" @click="confirmNavigation">
+              이동하기
+            </button>
+          </div>
+        </article>
+      </section>
     </transition>
   </main>
 </template>
 
 <script>
-import { fetchMbtiDemoPayload, fetchMyProfile, updateMyProfile, saveOnboardingMbti } from "./mypage.api";
+import { fetchCurrentWeather, fetchMbtiDemoPayload, fetchMyProfile, updateMyProfile, saveOnboardingMbti, fetchBookRecommendation, fetchMemoryVault, deleteMemoryVaultItem } from "./mypage.api";
 import { createMypageState, i18n } from "./mypage.data";
+import CharacterPanel from "./components/CharacterPanel.vue";
 import MbtiPanel from "./components/MbtiPanel.vue";
 import MypageModal from "./components/MypageModal.vue";
 import MypageRoom from "./components/MypageRoom.vue";
 import ProfilePanel from "./components/ProfilePanel.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import TastePanel from "./components/TastePanel.vue";
+import WeatherPanel from "./components/WeatherPanel.vue";
+import BookPanel from "./components/BookPanel.vue";
+import MemoryPanel from "./components/MemoryPanel.vue";
 
 export default {
   name: "MypageView",
   components: {
+    CharacterPanel,
     MbtiPanel,
     MypageModal,
     MypageRoom,
     ProfilePanel,
     SettingsPanel,
-    TastePanel
+    TastePanel,
+    WeatherPanel,
+    BookPanel,
+    MemoryPanel
   },
   async beforeRouteEnter(to, from, next) {
     try {
@@ -101,7 +274,11 @@ export default {
     },
     currentPanelDescription() {
       const descriptions = {
+        book: "프로필의 관심사와 취미, 오늘의 감정을 바탕으로 지금 읽어볼 만한 책을 추천합니다.",
+        memory: "챗봇이 보관한 기억을 확인하고 필요 없는 기억을 삭제합니다.",
         profile: "사전 정보 입력 화면에서 설정한 기본 정보와 관심분야 키워드를 조회하고, 수정합니다.",
+        character: "방 안의 동행 캐릭터를 고르고, 캐릭터의 말투와 성향을 확인합니다.",
+        weather: "창문 밖 현재 날씨와 오늘의 컨디션 관리 추천을 확인합니다.",
         mbti: "대화 중 자연스럽게 나눈 성향 답변을 바탕으로, 내가 요즘 어떤 방식으로 생각하고 소통하는지 MBTI 유형으로 돌아봐요.",
         taste: "최근 30일 대화 로그에서 반복적으로 나타난 관심사·취향 키워드를 집계해 보여줍니다. 일정 횟수 이상 등장한 키워드만 대시보드에 표시됩니다.",
         settings: "계정 기본 정보와 언어, 접근성 설정을 관리합니다."
@@ -111,7 +288,41 @@ export default {
     currentCharacter() {
       const found = this.characters.find(character => character.id === this.selectedCharacter);
       return found || this.characters[0];
-    }
+    },
+    displayName() {
+      return this.profile?.name || this.profile?.nickname || "사용자";
+    },
+    homeStatusMessage() {
+      const emotion = this.todayEmotionLabel;
+      if (emotion && emotion !== "대화 후 반영") {
+        return `${emotion}의 결을 담아 오늘의 추천과 프로필 취향을 정리했어요.`;
+      }
+      return "대화와 프로필을 바탕으로 오늘의 기분과 추천을 정리하는 개인 홈입니다.";
+    },
+    profileMbtiLabel() {
+      const current = this.mbtiData?.current?.type;
+      const onboarding = this.mbtiData?.onboarding?.type;
+      return (current && current !== "----" ? current : onboarding) || this.profile?.mbti || "미등록";
+    },
+    mbtiSummaryText() {
+      const previous = this.mbtiData?.previous?.type;
+      if (previous && previous !== this.profileMbtiLabel) {
+        return `${previous} -> ${this.profileMbtiLabel}`;
+      }
+      return "최근 분석 기준";
+    },
+    todayEmotionLabel() {
+      return this.bookPayload?.profile_basis?.today_emotion || "대화 후 반영";
+    },
+    profileInterestCount() {
+      return this.normalizeList(this.profile?.interests).length;
+    },
+    interestPreview() {
+      return this.previewList(this.profile?.interests, "관심사 미등록");
+    },
+    hobbyPreview() {
+      return this.previewList(this.profile?.hobbies, "취미 미등록");
+    },
   },
   watch: {
     settings: {
@@ -137,6 +348,71 @@ export default {
     this.loadProfileData();
   },
   methods: {
+    normalizeList(value) {
+      if (Array.isArray(value)) return value.filter(Boolean);
+      if (!value) return [];
+      return String(value)
+        .split(",")
+        .map(item => item.trim())
+        .filter(Boolean);
+    },
+    previewList(value, fallback) {
+      const list = this.normalizeList(value);
+      if (!list.length) return fallback;
+      const visible = list.slice(0, 2).join(", ");
+      return list.length > 2 ? `${visible} 외 ${list.length - 2}` : visible;
+    },
+    goToReport() {
+      this.pendingPanel = null;
+      this.pendingChatNavigation = false;
+      this.pendingReportNavigation = true;
+      this.roomFocusTarget = "wardrobe";
+      this.roomMoveKey += 1;
+    },
+    goToChat() {
+      this.pendingPanel = null;
+      this.pendingReportNavigation = false;
+      this.pendingChatNavigation = true;
+      this.roomFocusTarget = "door";
+      this.roomMoveKey += 1;
+    },
+    completeReportNavigation() {
+      this.pendingPanel = null;
+      this.pendingReportNavigation = false;
+      this.closePanel();
+      this.requestNavigationConfirm("report");
+    },
+    completeChatNavigation() {
+      this.pendingPanel = null;
+      this.pendingChatNavigation = false;
+      this.pendingReportNavigation = false;
+      this.closePanel();
+      this.requestNavigationConfirm("chat");
+    },
+    requestNavigationConfirm(type) {
+      const options = {
+        chat: {
+          title: "대화하러 갈까요?",
+          message: "현재 마이룸을 벗어나 대화 페이지로 이동합니다.",
+          path: "/chat"
+        },
+        report: {
+          title: "마음리포트를 볼까요?",
+          message: "현재 마이룸을 벗어나 마음리포트 페이지로 이동합니다.",
+          path: "/report"
+        }
+      };
+      this.navigationConfirm = options[type] || null;
+    },
+    cancelNavigationConfirm() {
+      this.navigationConfirm = null;
+    },
+    confirmNavigation() {
+      if (!this.navigationConfirm?.path) return;
+      const path = this.navigationConfirm.path;
+      this.navigationConfirm = null;
+      this.$router.push(path);
+    },
     async loadProfileData() {
       try {
         const data = await fetchMyProfile();
@@ -162,15 +438,57 @@ export default {
       }
     },
     openPanel(panel) {
+      this.pendingPanel = null;
+      this.pendingChatNavigation = false;
+      this.pendingReportNavigation = false;
+      this.activatePanel(panel);
+    },
+    openPanelFromRoom(panel) {
+      this.pendingChatNavigation = false;
+      this.pendingReportNavigation = false;
+      if (this.shouldMoveBeforeOpen(panel)) {
+        this.pendingPanel = panel;
+        this.roomFocusTarget = panel;
+        this.roomMoveKey += 1;
+        return;
+      }
+      this.activatePanel(panel);
+    },
+    shouldMoveBeforeOpen(panel) {
+      return ["profile", "mbti", "weather", "book", "memory", "character", "settings"].includes(panel);
+    },
+    activatePanel(panel) {
+      this.pendingPanel = null;
+      this.pendingChatNavigation = false;
+      this.pendingReportNavigation = false;
       this.activePanel = panel;
-      this.showCharacterPicker = false;
       if (panel === "mbti") {
         this.loadMbtiDemoData();
       }
+      if (panel === "weather") {
+        this.loadWeatherData();
+      }
+      if (panel === "book") {
+        this.loadBookData();
+      }
+      if (panel === "memory") {
+        this.loadMemoryData();
+      }
+    },
+    activatePanelAfterRoomMove(panel) {
+      if (this.pendingChatNavigation && panel === "door") {
+        this.completeChatNavigation();
+        return;
+      }
+      if (this.pendingReportNavigation && panel === "wardrobe") {
+        this.completeReportNavigation();
+        return;
+      }
+      if (!this.pendingPanel || panel !== this.pendingPanel) return;
+      this.activatePanel(panel);
     },
     closePanel() {
       this.activePanel = null;
-      this.showCharacterPicker = false;
     },
     async toggleProfileEdit() {
       if (this.profileEdit) {
@@ -195,18 +513,17 @@ export default {
       }
       this.profileEdit = !this.profileEdit;
     },
-    toggleInterestKeyword(keyword) {
+    updateProfileKeywords({ type, values }) {
       if (!this.profileEdit) return;
-      if (this.profile.interests.includes(keyword)) {
-        this.profile.interests = this.profile.interests.filter(item => item !== keyword);
-        return;
+      if (type === 'hobby') {
+        this.profile.hobbies = values;
+      } else if (type === 'interest') {
+        this.profile.interests = values;
       }
-      this.profile.interests = [...this.profile.interests, keyword];
     },
     async chooseCharacter(id) {
       const oldChar = this.selectedCharacter;
       this.selectedCharacter = id;
-      this.showCharacterPicker = false;
       try {
         await updateMyProfile({ selectedCharacter: id });
         localStorage.setItem('binteumsaiCharacter', JSON.stringify({ characterId: id }));
@@ -217,6 +534,162 @@ export default {
         this.showToast("캐릭터 교체에 실패했습니다.");
       }
     },
+    getSavedWeatherLocation() {
+      try {
+        return JSON.parse(localStorage.getItem("mindroom-weather-location") || "null");
+      } catch (error) {
+        return null;
+      }
+    },
+    saveWeatherLocation(location) {
+      this.weatherLocation = location;
+      localStorage.setItem("mindroom-weather-location", JSON.stringify(location));
+    },
+    getBrowserLocation() {
+      return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+          reject(new Error("geolocation unavailable"));
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          (position) => resolve({
+            mode: "auto",
+            region: "현재 위치",
+            lat: position.coords.latitude,
+            lon: position.coords.longitude
+          }),
+          reject,
+          { enableHighAccuracy: false, timeout: 5000, maximumAge: 10 * 60 * 1000 }
+        );
+      });
+    },
+    async resolveWeatherLocation(force = false) {
+      const saved = this.getSavedWeatherLocation();
+      if (!force && saved) {
+        this.weatherLocation = saved;
+        return saved;
+      }
+      try {
+        const browserLocation = await this.getBrowserLocation();
+        this.saveWeatherLocation(browserLocation);
+        return browserLocation;
+      } catch (error) {
+        const fallback = saved || { mode: "manual", region: "서울" };
+        this.saveWeatherLocation(fallback);
+        return fallback;
+      }
+    },
+    async loadWeatherData(force = false) {
+      this.weatherLoading = true;
+      this.weatherError = "";
+      try {
+        const location = await this.resolveWeatherLocation(force);
+        const requestLocation = location.mode === "auto"
+          ? { lat: location.lat, lon: location.lon, region: location.region }
+          : { region: location.region || "서울" };
+        this.weatherPayload = await fetchCurrentWeather(requestLocation);
+      } catch (error) {
+        console.error(error);
+        this.weatherError = error.message || "날씨 정보를 불러오지 못했습니다.";
+      } finally {
+        this.weatherLoading = false;
+      }
+    },
+    async setWeatherRegion(region) {
+      if (region === "현재 위치") {
+        localStorage.removeItem("mindroom-weather-location");
+        await this.loadWeatherData(true);
+        return;
+      }
+      this.saveWeatherLocation({ mode: "manual", region });
+      await this.loadWeatherData();
+    },
+    async loadBookData(force = false) {
+      this.bookLoading = true;
+      this.bookError = "";
+      try {
+        this.bookPayload = await fetchBookRecommendation(force);
+      } catch (error) {
+        console.error(error);
+        this.bookError = error.message || "책 추천 정보를 불러오지 못했습니다.";
+      } finally {
+        this.bookLoading = false;
+      }
+    },
+    async loadMemoryData(force = false) {
+      this.memoryLoading = true;
+      this.memoryError = "";
+      this.memoryNotice = "";
+      try {
+        this.memoryPayload = await fetchMemoryVault(force);
+      } catch (error) {
+        console.warn(error);
+        if (!this.memoryPayload) {
+          this.memoryPayload = this.createMemoryPreviewPayload();
+        }
+        this.memoryNotice = "기억 API 연결 전이라 미리보기 데이터로 표시합니다.";
+      } finally {
+        this.memoryLoading = false;
+      }
+    },
+    createMemoryPreviewPayload() {
+      return {
+        source: "preview",
+        memories: [
+          {
+            id: "preview-career-worry",
+            title: "커리어 전환 고민",
+            content: "최근 대화에서 직무 전환과 준비 방향에 대한 고민이 반복적으로 언급되었습니다.",
+            saved_at: new Date().toISOString(),
+            last_used_at: new Date().toISOString()
+          },
+          {
+            id: "preview-relationship",
+            title: "관계에서 느끼는 부담",
+            content: "가까운 관계에서 기대와 거리감 사이를 조절하고 싶다는 이야기가 있었습니다.",
+            saved_at: new Date().toISOString(),
+            last_used_at: ""
+          },
+          {
+            id: "preview-routine",
+            title: "혼자 정리하는 습관",
+            content: "기분이 복잡할 때 산책, 기록, 음악으로 생각을 정리하는 경향이 있습니다.",
+            saved_at: new Date().toISOString(),
+            last_used_at: new Date().toISOString()
+          }
+        ]
+      };
+    },
+    async deleteMemoryItems(ids = []) {
+      const targetIds = ids.filter(Boolean).map(String);
+      if (!targetIds.length) return;
+      const previousPayload = this.memoryPayload;
+      const idSet = new Set(targetIds);
+      const currentMemories = Array.isArray(this.memoryPayload)
+        ? this.memoryPayload
+        : this.memoryPayload?.memories || this.memoryPayload?.items || [];
+
+      if (Array.isArray(this.memoryPayload)) {
+        this.memoryPayload = currentMemories.filter(item => !idSet.has(String(item.id || item.memory_id || item.key)));
+      } else {
+        this.memoryPayload = {
+          ...(this.memoryPayload || {}),
+          memories: currentMemories.filter(item => !idSet.has(String(item.id || item.memory_id || item.key)))
+        };
+      }
+
+      this.memoryNotice = "";
+      try {
+        const realIds = targetIds.filter(id => !id.startsWith("preview-"));
+        await Promise.all(realIds.map(id => deleteMemoryVaultItem(id)));
+        this.showToast(`${targetIds.length}개의 기억을 삭제했습니다.`);
+      } catch (error) {
+        console.warn(error);
+        this.memoryPayload = previousPayload;
+        this.memoryError = "삭제 API 호출에 실패했습니다. 잠시 후 다시 시도해주세요.";
+      }
+    },
+
     setMbtiView(viewKey) {
       this.mbtiViewMode = viewKey;
       this.showToast(`${this.currentMbtiView.title} 화면으로 전환했습니다.`);

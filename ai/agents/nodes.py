@@ -5,11 +5,48 @@
           joy·sadness·anger·normal_agent / resp_prep
 콜드스타트와 TTS·저장(비동기)은 그래프 밖(뷰 레이어)에서 처리한다.
 """
-from ai.agents.personas import EMOTION_AGENT_GUIDES, COMMON_RULES
+import re
+
+from ai.agents.personas import CRISIS_GUIDE, EMOTION_AGENT_GUIDES, COMMON_RULES
 from ai.agents.state import ChatState
 
 EMOTION_KO2EN = {'기쁨': 'joy', '슬픔': 'sadness', '분노': 'anger', '일반': 'normal'}
 VALID_EMOTIONS = ('joy', 'sadness', 'anger', 'normal')
+
+# ── 위기 감지 1차 룰 (2026-07-10 심사위원 피드백) ─────────────
+# recall 우선 — 과탐지는 2차 LLM 확인이 거른다.
+# '죽겠다' 단독은 관용구(힘들어 죽겠다/배고파 죽겠다)가 많아 제외, '죽고 싶다' 계열만 매칭.
+_CRISIS_PATTERNS = [re.compile(p) for p in (
+    r'죽\s*고\s*싶', r'죽어\s*버리', r'죽을래', r'죽어야\s*겠',
+    r'자살', r'자해', r'유서',
+    r'살\s*기\s*싫', r'살고\s*싶지\s*않', r'그만\s*살',
+    r'사라지고\s*싶', r'없어지고\s*싶',
+    r'다\s*끝내\s*(버리)?고\s*싶', r'끝내\s*버리고\s*싶',
+    r'손목\s*(을|에)?\s*(긋|그어)', r'목\s*을?\s*매\s*(고|달|려)',
+    r'뛰어\s*내리고\s*싶',
+)]
+
+
+def _crisis_check(message: str, history: list) -> bool:
+    """위기 신호 2단 감지: ① 룰 매칭(빠름·recall 우선) ② LLM 맥락 확인(관용구·타인 얘기 구분).
+    룰에 걸린 상태에서 LLM 확인이 실패하면 위기로 간주(안전 우선)."""
+    if not message or not any(p.search(message) for p in _CRISIS_PATTERNS):
+        return False
+    try:
+        context = '\n'.join(
+            f"{'사용자' if m['role'] == 'user' else '챗봇'}: {m['content']}"
+            for m in (history or [])[-4:])
+        resp = _llm(temperature=0, max_tokens=5).invoke([
+            ('system',
+             "사용자의 마지막 메시지가 자살·자해 등 '본인의 실제 위기 신호'인지 판단하세요.\n"
+             "과장·관용 표현(예: '힘들어 죽겠다', '웃겨 죽을래')이거나 "
+             "영화·게임·뉴스·타인 이야기면 no, 본인의 위기 신호로 보이면 yes만 출력하세요.\n"
+             "애매하면 yes를 출력하세요(안전 우선)."),
+            ('user', f"[최근 대화]\n{context}\n\n[마지막 메시지]\n{message}"),
+        ])
+        return 'yes' in resp.content.strip().lower()
+    except Exception:
+        return True   # 룰에 걸렸는데 확인 불가 → 안전 우선
 
 
 def _llm(temperature: float = 0.7, max_tokens: int = 300):
@@ -102,7 +139,11 @@ def mbti_save_node(state: ChatState) -> dict:
 CONF_GATE = 0.70   # 모델 확신이 이 미만이면 '찍지 말고' 문맥 아는 LLM으로 재분류
                    # (0.55→0.70 상향, 2026-07-05 — 파인튜닝 모델 확률 보정: 채팅체 150 스윕에서
                    #  채택률 82.7%·채택분 정확도 0.831, calibrate_gate.py 근거)
-SHORT_LEN = 10     # 이 미만의 초단문("응 ㅋㅋ")은 분석 스킵, 직전 감정 유지
+SHORT_LEN = 10     # 이 미만의 초단문("응 ㅋㅋ")은 원칙적으로 직전 감정 유지
+SHORT_OVERRIDE = 0.90  # 단, 초단문이어도 모델 확신이 이 이상이면 감정 급변 반영
+                       # ("짜증나!" 4자 → 표정 안 바뀌던 문제 보정, 2026-07-09)
+# (복합 감정은 절 분할 방식으로 감지 — _split_contrast/_clause_emotions 참고.
+#  분포 기반 SECONDARY_MIN 방식은 파인튜닝 모델 과확신(뒤 절 0.96~0.999) 실측으로 폐기, 2026-07-10)
 
 
 def _describe_image(image_url: str) -> tuple:
@@ -136,6 +177,73 @@ def _describe_image(image_url: str) -> tuple:
         return '', 'normal'
 
 
+_CONTRAST_SPLIT = re.compile(
+    r',?\s*(?:그런데|근데|하지만|그렇지만|그래도)\s*'
+    r'|(?<=는데)[,\s]+|(?<=은데)[,\s]+|(?<=지만)[,\s]+')
+
+
+def _split_contrast(message: str):
+    """대조 연결어 기준 절 분할 (2026-07-10 실측 재설계).
+    파인튜닝 모델이 복합 문장에서 뒤 절 감정에 0.99로 과확신하는 문제 실측 →
+    분포 기반 감지 폐기, 절을 쪼개 '모델이 잘하는 단일 감정 문제 2개'로 변환.
+    유효하면 (앞절, 뒷절), 아니면 None."""
+    parts = [p.strip() for p in _CONTRAST_SPLIT.split(message) if p and p.strip()]
+    if len(parts) < 2:
+        return None
+    a, b = parts[0], parts[-1]
+    if len(a) < 4 or len(b) < 4:
+        return None
+    return a, b
+
+
+CLAUSE_CONF_MIN = 0.30   # 절 분류 확신도 하한 (실측: "팀장한테 혼나서 열받았는데" 0.38)
+
+
+def _clause_emotions(a: str, b: str):
+    """절 2개를 각각 분류 — (앞절 한글라벨|None, 뒷절 한글라벨|None). 로컬 추론이라 비용 미미."""
+    from ai.emotion.emotion_model import predict_emotion_full
+    out = []
+    for clause in (a, b):
+        try:
+            ko, conf, _ = predict_emotion_full(clause)
+            out.append(ko if ko and (conf is None or conf >= CLAUSE_CONF_MIN) else None)
+        except Exception:
+            out.append(None)
+    return out[0], out[1]
+
+
+def _llm_mixed_emotion(message: str, history: list, cand_ko: list):
+    """복합 감정 LLM 판정 (2026-07-10) — '문장 전체 맥락에서 어느 감정이 더 중대한가'.
+    기준: 이별·실직처럼 중대·지속적인 사건의 감정 > 음식·소소한 재미 같은 일시적 감정.
+    반환 (primary_en, secondary_en|None). 실패 시 (None, None) → 모델 top1/top2 폴백."""
+    try:
+        context = '\n'.join(
+            f"{'사용자' if m['role'] == 'user' else '챗봇'}: {m['content']}"
+            for m in (history or [])[-4:])
+        resp = _llm(temperature=0, max_tokens=20).invoke([
+            ('system',
+             "사용자의 마지막 메시지에 여러 감정이 섞여 있습니다. "
+             f"후보 감정: {', '.join(cand_ko)}\n"
+             "문장 전체 맥락에서 어떤 감정이 더 '중대하고 오래가는 사건'에서 나왔는지 판단해 "
+             "주감정과 부감정을 고르세요.\n"
+             "기준: 이별·실직·관계 갈등처럼 중대하고 지속적인 사건의 감정이 주감정입니다. "
+             "음식·소소한 재미처럼 일시적인 위로·기분은 부감정입니다.\n"
+             "다음 형식으로만 출력: primary: <joy|sadness|anger|normal> / "
+             "secondary: <joy|sadness|anger|normal|none>"),
+            ('user', f"[최근 대화]\n{context}\n\n[마지막 메시지]\n{message}"),
+        ])
+        text = resp.content.strip().lower()
+        pm = re.search(r'primary\s*:\s*(joy|sadness|anger|normal)', text)
+        sm = re.search(r'secondary\s*:\s*(joy|sadness|anger|normal|none)', text)
+        p = pm.group(1) if pm else None
+        s = sm.group(1) if sm else None
+        if s in (p, 'none'):
+            s = None
+        return p, s
+    except Exception:
+        return None, None
+
+
 def _text_emotion(state: ChatState) -> dict:
     """텍스트 기반 4감정 분류 — 원칙: 애매할 땐 찍지 않는다.
     ① 초단문 → 직전 감정 유지 ② 학습 모델 고확신 → 채택
@@ -143,21 +251,55 @@ def _text_emotion(state: ChatState) -> dict:
     message = (state.get('user_message') or '').strip()
     prev = state.get('prev_emotion')
 
-    # ① 초단문 바이패스
-    if len(message) < SHORT_LEN and prev in VALID_EMOTIONS:
-        return {'emotion_label': prev, 'emotion_source': 'short_bypass'}
-
-    # ② 학습 모델 + 확신도
-    label, conf = None, None
+    # ② 학습 모델 + 확신도 + 확률분포 (초단문도 일단 예측 — 로컬 추론이라 비용 미미)
+    label, conf, probs, ko = None, None, None, None
     try:
-        from ai.emotion.emotion_model import predict_emotion_with_confidence
-        ko, conf = predict_emotion_with_confidence(message)
+        from ai.emotion.emotion_model import predict_emotion_full
+        ko, conf, probs = predict_emotion_full(message)
         if ko:
             label = EMOTION_KO2EN.get(ko, ko if ko in VALID_EMOTIONS else None)
     except Exception:
         label = None
 
-    if label in VALID_EMOTIONS and (conf is None or conf >= CONF_GATE):
+    # ① 초단문 처리 — 단, 모델이 매우 확신하는 감정 초단문("짜증나!" 0.97)은 반영
+    #    직전 감정이 없는 첫 턴 초단문("몰라"→분노 0.84 함정)은 모델을 믿지 않고
+    #    문맥 LLM 재분류(③)에 위임 — 오프너 질문까지 보고 무기력/심드렁을 구분 (2026-07-10 실측 보정)
+    short_cold = False
+    if len(message) < SHORT_LEN:
+        if label in VALID_EMOTIONS and conf is not None and conf >= SHORT_OVERRIDE and label != 'normal':
+            return {'emotion_label': label, 'emotion_source': 'short_override'}
+        if prev in VALID_EMOTIONS:
+            return {'emotion_label': prev, 'emotion_source': 'short_bypass'}
+        short_cold = True   # 첫 턴 초단문 — 아래 모델 게이트 건너뛰고 ③으로
+
+    # ②-1 복합 감정 감지 (2026-07-10 심사위원 피드백 — "이별+빵" · 절 분할 방식)
+    #     실측: 파인튜닝 모델은 복합 문장에서 뒤 절 감정에 0.96~0.999로 과확신 →
+    #     분포로는 감지 불가. 대조 연결어로 절을 쪼개 각각 분류하고,
+    #     절끼리 감정이 다르면 LLM이 '문장 전체 맥락에서 더 중대한 감정'을 주감정으로 판정.
+    clauses = _split_contrast(message)
+    if clauses:
+        ko_a, ko_b = _clause_emotions(*clauses)
+        en_a, en_b = EMOTION_KO2EN.get(ko_a or ''), EMOTION_KO2EN.get(ko_b or '')
+        # 두 절 모두 분류 성공 + 서로 다른 감정 + 한쪽 이상이 non-normal → 복합
+        if (en_a in VALID_EMOTIONS and en_b in VALID_EMOTIONS and en_a != en_b
+                and (en_a != 'normal' or en_b != 'normal')):
+            p, s = _llm_mixed_emotion(
+                message, state.get('recent_history', []), [ko_a, ko_b])
+            if p in VALID_EMOTIONS:
+                out = {'emotion_label': p, 'emotion_source': 'mixed_llm'}
+                if s in VALID_EMOTIONS and s != 'normal':
+                    out['emotion_secondary'] = s
+                return out
+            # LLM 판정 실패 → 부정 감정 우선 휴리스틱 (복합 발화는 대개 '부정 사건 + 소소한 긍정')
+            neg = next((e for e in (en_a, en_b) if e in ('sadness', 'anger')), None)
+            if neg:
+                other = en_b if neg == en_a else en_a
+                out = {'emotion_label': neg, 'emotion_source': 'mixed_model'}
+                if other != 'normal':
+                    out['emotion_secondary'] = other
+                return out
+
+    if not short_cold and label in VALID_EMOTIONS and (conf is None or conf >= CONF_GATE):
         return {'emotion_label': label, 'emotion_source': 'model'}
 
     # ③ 문맥 포함 LLM 재분류 (load_context가 먼저 실행돼 recent_history 사용 가능)
@@ -179,7 +321,8 @@ def _text_emotion(state: ChatState) -> dict:
         pass
 
     # ④ 최종 폴백: 모델 저확신값 → 직전 감정 → 콜드스타트 선택 → normal
-    for fb in (label, prev, state.get('selected_emotion')):
+    #    (첫 턴 초단문은 모델값 폴백 제외 — "몰라" 분노 0.84로 도로 찍히는 것 방지)
+    for fb in ((None if short_cold else label), prev, state.get('selected_emotion')):
         if fb in VALID_EMOTIONS:
             return {'emotion_label': fb, 'emotion_source': 'fallback'}
     return {'emotion_label': 'normal', 'emotion_source': 'fallback'}
@@ -187,9 +330,15 @@ def _text_emotion(state: ChatState) -> dict:
 
 def analysis_node(state: ChatState) -> dict:
     """4감정 분류 (흐름도 EMOTION) — 글 우선 + 사진 보완(방법 3).
+    · 위기 신호가 감지되면 최우선: 감정은 슬픔으로 고정(표정·TTS 톤 일관), crisis 에이전트로 라우팅
     · 글이 확신 있게 '감정적'이면 글 채택 (사람이 말로 표현한 게 우선)
     · 글이 밍밍/없는데 사진이 있으면 사진 감정으로 메꿈 (애매하면 normal)
     하류(캐릭터 표정·TTS·마음리포트)는 emotion_label을 그대로 소비하므로 추가 배선 불필요."""
+    # ── 위기 감지 (다른 모든 분류보다 우선, 2026-07-10) ──
+    if _crisis_check((state.get('user_message') or '').strip(),
+                     state.get('recent_history', [])):
+        return {'emotion_label': 'sadness', 'emotion_source': 'crisis', 'crisis': True}
+
     image_url = state.get('image_data_url')
     if not image_url:
         return _text_emotion(state)   # 텍스트 전용 — 기존 흐름 그대로
@@ -250,7 +399,8 @@ def load_context_node(state: ChatState) -> dict:
             # 그래프(구조화 관계) 기억 병행 회상 — Neo4j 미설정 시 '' 이라 영향 없음
             try:
                 from chat.graph_memory import recall as graph_recall
-                g = graph_recall(state['user_id'])
+                g = graph_recall(state['user_id'],
+                                 message=state.get('user_message'))   # 재강화: 언급된 기억만 강화
                 if g:
                     summary = (summary + '\n\n[관계 기억]\n' + g).strip()
             except Exception:
@@ -274,6 +424,12 @@ anger_agent_node = _make_emotion_agent('anger')
 normal_agent_node = _make_emotion_agent('normal')
 
 
+def crisis_agent_node(state: ChatState) -> dict:
+    """위기 대응 에이전트 (2026-07-10) — 슬픔 톤 위에 위기 지침을 최우선으로 얹는다.
+    이번 턴은 깊은 위로에만 집중. (기관 안내·플래그 저장·이력 기록은 범위 제외 — 팀 결정)"""
+    return {'agent_guide': CRISIS_GUIDE + '\n\n' + EMOTION_AGENT_GUIDES['sadness']}
+
+
 # (Plan Agent(Tavily 장소 추천)는 기능 폐기로 제거 — 2026-07-05)
 
 
@@ -283,10 +439,11 @@ normal_agent_node = _make_emotion_agent('normal')
 # 태그는 TTS 전용 — 화면 표시 전에 views에서 제거된다.
 TTS_ACTING_RULES = (
     "[음성 연기 지시 — 태그는 화면에 안 보이고 목소리 연기에만 쓰입니다]\n"
-    "- 응답 문장 사이 자연스러운 위치에 아래 태그 중 0~2개만 삽입하세요 (과용 금지):\n"
-    "  [sighs](한숨) [laughs](웃음) [whispers](속삭임) [excited](들뜸) [curious](궁금)\n"
-    "- 위로할 땐 문장 앞에 [sighs], 축하할 땐 [laughs] 처럼 감정 흐름에 맞게.\n"
-    "- 호흡이 필요한 곳엔 말줄임표(…)를 쓰세요. 차분한 일상 대화면 태그를 안 써도 됩니다."
+    "- 기쁨/슬픔/분노가 실린 응답이면 문장 사이 자연스러운 위치에 태그를 반드시 1~2개 넣으세요:\n"
+    "  기쁨: [excited] [laughs] · 슬픔: [sighs] [sad] · 화나는 얘기에 공감: [frustrated] [sighs]\n"
+    "  그 외: [whispers](비밀 얘기) [curious](궁금할 때)\n"
+    "- 위로할 땐 문장 앞에 [sighs], 축하할 땐 [excited] 처럼 감정 흐름에 맞게.\n"
+    "- 호흡이 필요한 곳엔 말줄임표(…)를 쓰세요. 담담한 일상 대화만 태그 없이 갑니다."
 )
 
 
@@ -299,6 +456,17 @@ def resp_prep_node(state: ChatState) -> dict:
     system_parts = [guide, COMMON_RULES, TTS_ACTING_RULES]
     if state.get('memory_summary'):
         system_parts.append(f"[사용자에 대한 기억 요약]\n{state['memory_summary']}")
+
+    # 복합 감정 (2026-07-10): 주감정 먼저 충분히, 부감정도 한 문장 인정, 무거운 것 → 가벼운 것 순서
+    secondary = state.get('emotion_secondary')
+    if secondary:
+        _ko = {'joy': '기쁨', 'sadness': '슬픔', 'anger': '분노', 'normal': '일반'}
+        system_parts.append(
+            f"[감정 분석] 주감정: {_ko.get(state.get('emotion_label'), '일반')} / "
+            f"부감정: {_ko.get(secondary, secondary)}\n"
+            "- 지금 친구 마음엔 두 감정이 섞여 있어. 주감정을 먼저 충분히 공감해주고, "
+            "부감정도 꼭 한 문장으로 인정해줘 (무시하면 서운해함).\n"
+            "- 순서는 무거운 감정 먼저, 가벼운·긍정 쪽으로 마무리해서 회복 방향으로 닫아줘.")
 
     image_url = state.get('image_data_url')
     if image_url:
@@ -328,6 +496,23 @@ def resp_prep_node(state: ChatState) -> dict:
     try:
         resp = _llm(temperature=0.7, max_tokens=300).invoke(messages)
         text = resp.content.strip()
+        # 접지 검증 (2026-07-14): 근거 없는 '전에 말했잖아' 단정 차단 — R02·F02 실측 결함.
+        # 게이트 통과(대부분) 시 비용 0, 위반 시에만 1회 재생성.
+        from ai.agents.answer_guard import check_grounded, retry_instruction
+        evidence_parts = []
+        if state.get('memory_summary'):
+            evidence_parts.append(state['memory_summary'])
+        for m in state.get('recent_history', [])[-6:]:
+            evidence_parts.append(f"{m['role']}: {m['content']}")
+        evidence = '\n'.join(evidence_parts)
+        for attempt in (1, 2):   # 재생성도 재검사 — 1차가 또 어기면 2차는 초강수 (2026-07-14)
+            ok, offending = check_grounded(text, evidence, state.get('user_message', ''))
+            if ok:
+                break
+            retry_messages = [('system', '\n\n'.join(system_parts)
+                               + '\n\n' + retry_instruction(offending, attempt))] + messages[1:]
+            resp = _llm(temperature=0.3 if attempt >= 2 else 0.5, max_tokens=300).invoke(retry_messages)
+            text = resp.content.strip() or text
     except Exception as e:
         print(f'[resp_prep_node] LLM 실패: {e}')
         text = '지금 잠깐 생각이 꼬였어요. 한 번만 다시 말해줄래요?'

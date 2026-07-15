@@ -8,7 +8,7 @@ LLM_PROVIDER=groq           → GROQ_API_KEY + GROQ_MODEL(기본 llama-3.3-70b-v
 """
 import os
 
-OPENAI_DEFAULT_MODEL = 'gpt-5.4-mini'      # 저렴+한국어 안정. 구형 계정이면 gpt-4o-mini로 교체
+OPENAI_DEFAULT_MODEL = 'gpt-4o-mini'      # A/B 실측 채택 (2026-07-14): 기억 평가 26종×3회 96%(편차0) vs gpt-5.4-mini 94%(편차有·비용 6배) — 파이프라인이 이 모델 기준으로 보정됨. 교체 시 전체 재측정 필수
 GROQ_DEFAULT_MODEL = 'llama-3.3-70b-versatile'
 
 

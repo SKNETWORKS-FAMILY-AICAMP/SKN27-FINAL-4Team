@@ -17,7 +17,7 @@ http.interceptors.request.use((config) => {
 })
 
 export const reportApi = {
-  async generateReport() {
+  async getReports() {
     const { data } = await http.get('/report/generate/')
     return data
   },
@@ -34,5 +34,10 @@ export const reportApi = {
       helpfulness,
     })
     return data?.data ?? data
+  },
+
+  async refreshReports() {
+    const { data } = await http.post('/report/generate/')
+    return data
   }
 }

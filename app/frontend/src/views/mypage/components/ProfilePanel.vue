@@ -1,27 +1,36 @@
 <template>
   <div class="panel-body">
-    <div class="grid-2">
-      <section class="card avatar-card" aria-label="캐릭터 미리보기">
-        <div class="character-preview-wrapper" style="display: flex; align-items: center; justify-content: center; gap: 16px;">
-          <button v-if="characterEditMode" type="button" class="nav-arrow" @click="prevCharacter">❮</button>
-          <div class="character-image-wrapper">
-            <img :src="`/characters/${displayCharacter.id}/default.png`" :alt="displayCharacter.name" style="max-width: 100%; height: 215px; object-fit: contain; filter: drop-shadow(0 18px 22px rgba(5, 2, 18, 0.38)); transform-origin: center bottom; transform: scale(1.1);" />
+    <div class="profile-info-layout">
+      <section class="card profile-card">
+        <header class="profile-card-head">
+          <div class="profile-portrait" aria-hidden="true">
+            <img v-if="currentCharacter" :src="`/characters/${currentCharacter.id}/default.png`" :alt="currentCharacter.name" />
+            <span v-else>{{ profileInitial }}</span>
           </div>
-          <button v-if="characterEditMode" type="button" class="nav-arrow" @click="nextCharacter">❯</button>
-        </div>
-        <div class="character-name">
-          {{ displayCharacter.name }} · {{ displayCharacter.role || displayCharacter.desc }}
-        </div>
-        <button v-if="!characterEditMode" class="secondary-button" type="button" @click="startCharacterEdit">캐릭터 변경</button>
-        <button v-else class="primary-button" type="button" @click="finishCharacterEdit" style="margin-top: 12px; min-width: 120px;">변경 완료</button>
-      </section>
+          <div class="profile-title">
+            <span>ROOM PROFILE</span>
+            <h3>{{ profileName }}</h3>
+            <p>{{ profileCaption }}</p>
+            <div class="profile-badges" aria-label="프로필 요약">
+              <span>{{ profile.gender || '성별 미등록' }}</span>
+              <span>{{ profile.birthDate || '생년월일 미등록' }}</span>
+              <span>{{ currentCharacter?.name || '캐릭터 미선택' }}</span>
+              <span>취향 {{ totalTasteCount }}개</span>
+            </div>
+          </div>
+          <button class="profile-edit-button" type="button" @click="handleEditToggle">
+            {{ profileEdit ? '완료' : '수정' }}
+          </button>
+        </header>
 
-      <section class="card">
-        <h3>프로필 정보</h3>
-        <div class="form-grid two">
+        <section class="profile-section">
+          <div class="profile-section-title">
+            <span>기본 정보</span>
+          </div>
+          <div class="form-grid two">
           <div class="field">
             <label for="profile-name">이름 또는 닉네임</label>
-            <input id="profile-name" v-model="profile.name" :readonly="!profileEdit" placeholder="이름 또는 닉네임" />
+            <input id="profile-name" v-model="profile.name" :readonly="!profileEdit" placeholder="이름 또는 닉네임" @input="normalizeNicknameInput" />
           </div>
           <div class="field">
             <label for="profile-job">직업</label>
@@ -29,7 +38,7 @@
           </div>
           <div class="field">
             <label for="profile-birthdate">생년월일</label>
-            <input id="profile-birthdate" v-model="profile.birthDate" placeholder="YYYY.MM.DD" :readonly="!profileEdit" />
+            <input id="profile-birthdate" v-model="profile.birthDate" placeholder="YYYY.MM.DD" :readonly="!profileEdit" @input="normalizeBirthDateInput" />
           </div>
           <div class="field">
             <label>성별</label>
@@ -48,7 +57,14 @@
             </div>
           </div>
         </div>
-        <div class="form-grid profile-extra-grid">
+        </section>
+
+        <section class="profile-section taste-section">
+          <div class="profile-section-title">
+            <span>취향 조각</span>
+            <strong>{{ totalTasteCount }}개 선택</strong>
+          </div>
+          <div class="form-grid profile-extra-grid">
           <section class="field interest-keyword-field picker-field" aria-label="관심분야 설정">
             <div class="interest-keyword-head">
               <label>관심분야 키워드</label>
@@ -60,7 +76,7 @@
                 :key="keyword"
                 class="interest-chip active"
               >
-                {{ keyword }}
+                {{ getKeywordIcon(keyword, 'interest') }} {{ keyword }}
               </span>
               <button 
                 v-if="profileEdit"
@@ -85,7 +101,7 @@
                              class="interest-chip"
                              :class="{ active: profile.interests.includes(item.label) }"
                              @click.prevent="toggleKeyword('interest', item.label)">
-                       {{ item.label }}
+                       {{ getKeywordIcon(item.label, 'interest') }} {{ item.label }}
                      </button>
                   </div>
                 </div>
@@ -104,7 +120,7 @@
                 :key="keyword"
                 class="interest-chip active hobby-chip"
               >
-                {{ keyword }}
+                {{ getKeywordIcon(keyword, 'hobby') }} {{ keyword }}
               </span>
               <button 
                 v-if="profileEdit"
@@ -129,7 +145,7 @@
                              class="interest-chip hobby-chip"
                              :class="{ active: profile.hobbies.includes(item.label) }"
                              @click.prevent="toggleKeyword('hobby', item.label)">
-                       {{ item.label }}
+                       {{ getKeywordIcon(item.label, 'hobby') }} {{ item.label }}
                      </button>
                   </div>
                 </div>
@@ -137,9 +153,7 @@
             </div>
           </section>
         </div>
-        <div class="actions" style="justify-content: flex-end;">
-          <button class="primary-button" type="button" @click="$emit('toggle-profile-edit')">{{ profileEdit ? '완료' : '수정' }}</button>
-        </div>
+        </section>
         <p v-if="profileSavedAt" class="notice">마지막 저장 시각: {{ profileSavedAt }}</p>
       </section>
     </div>
@@ -215,32 +229,38 @@ export default {
     profileOptions: { type: Object, required: true },
     profileEdit: { type: Boolean, required: true },
     profileSavedAt: { type: String, default: "" },
-    selectedCharacter: { type: String, required: true },
-    currentCharacter: { type: Object, required: true },
-    characters: { type: Array, required: true },
-    showCharacterPicker: { type: Boolean, required: true }
+    selectedCharacter: { type: String, default: "" },
+    currentCharacter: { type: Object, default: null },
+    characters: { type: Array, default: () => [] },
+    showCharacterPicker: { type: Boolean, default: false }
   },
   emits: [
     "open-character-picker",
     "close-character-picker",
     "toggle-profile-edit",
-    "choose-character"
+    "choose-character",
+    "update-profile-keywords"
   ],
   data() {
     return {
       activePicker: null,
       hobbyGroups: groupByCategory(parseKeywordCsv(hobbyCsv, "hobby")),
-      interestGroups: groupByCategory(parseKeywordCsv(interestCsv, "interest")),
-      characterEditMode: false,
-      previewCharacterIndex: 0
+      interestGroups: groupByCategory(parseKeywordCsv(interestCsv, "interest"))
     };
   },
   computed: {
-    displayCharacter() {
-      if (this.characterEditMode && this.characters && this.characters.length > 0) {
-        return this.characters[this.previewCharacterIndex] || this.currentCharacter;
-      }
-      return this.currentCharacter;
+    profileName() {
+      return String(this.profile?.name || "이름 미입력").trim();
+    },
+    profileInitial() {
+      return this.profileName.slice(0, 1).toUpperCase();
+    },
+    profileCaption() {
+      const job = String(this.profile?.job || "직업 미입력").trim();
+      return job;
+    },
+    totalTasteCount() {
+      return (this.profile?.interests?.length || 0) + (this.profile?.hobbies?.length || 0);
     }
   },
   methods: {
@@ -249,36 +269,80 @@ export default {
     },
     toggleKeyword(type, label) {
       if (!this.profileEdit) return;
-      const targetArray = type === "hobby" ? this.profile.hobbies : this.profile.interests;
-      const index = targetArray.indexOf(label);
+      const key = type === "hobby" ? "hobbies" : "interests";
+      const currentValues = Array.isArray(this.profile?.[key])
+        ? this.profile[key]
+        : [];
+      const index = currentValues.indexOf(label);
+      let nextValues = [];
       
       if (index > -1) {
-        targetArray.splice(index, 1);
+        nextValues = currentValues.filter((item) => item !== label);
       } else {
-        if (targetArray.length >= 3) {
-          alert(`최대 3개까지만 선택할 수 있습니다.`);
+        if (currentValues.length >= 3) {
+          alert("최대 3개까지 선택할 수 있어요.");
           return;
         }
-        targetArray.push(label);
+        nextValues = [...currentValues, label];
       }
+      this.$emit("update-profile-keywords", { type, values: nextValues });
     },
-    startCharacterEdit() {
-      this.previewCharacterIndex = this.characters.findIndex(c => c.id === this.selectedCharacter);
-      if (this.previewCharacterIndex === -1) this.previewCharacterIndex = 0;
-      this.characterEditMode = true;
+    getKeywordIcon(label, type) {
+      const text = String(label || "");
+      if (/음악|K-POP|발라드|재즈|콘서트|악기|연주/.test(text)) return "🎧";
+      if (/산책|러닝|운동|헬스|요가|등산|스포츠/.test(text)) return "🚶";
+      if (/카페|커피|차|맛집|요리|베이킹/.test(text)) return "☕";
+      if (/영화|드라마|웹툰|예능|애니|콘텐츠|유튜브/.test(text)) return "🎬";
+      if (/게임|디지털|트렌드/.test(text)) return "🎮";
+      if (/독서|글쓰기|자기계발|학습|심리/.test(text)) return "📚";
+      if (/사진|전시|문화|공연|창작|드로잉|표현/.test(text)) return "🖼️";
+      if (/반려|동물|식물|가드닝|자연/.test(text)) return "🐾";
+      if (/여행|외출|공간|팝업|캠핑/.test(text)) return "🧭";
+      if (/패션|뷰티|인테리어|쇼핑/.test(text)) return "✨";
+      return type === "hobby" ? "💫" : "🔖";
     },
-    finishCharacterEdit() {
-      this.characterEditMode = false;
-      const chosen = this.characters[this.previewCharacterIndex];
-      if (chosen && chosen.id !== this.selectedCharacter) {
-        this.$emit('choose-character', chosen.id);
+    normalizeNicknameInput() {
+      if (!this.profileEdit) return;
+      this.profile.name = String(this.profile.name || "").replace(/[^A-Za-z가-힣]/g, "");
+    },
+    normalizeBirthDateInput() {
+      if (!this.profileEdit) return;
+      const digits = String(this.profile.birthDate || "").replace(/\D/g, "").slice(0, 8);
+      const parts = [];
+
+      if (digits.length > 0) parts.push(digits.slice(0, 4));
+      if (digits.length > 4) parts.push(digits.slice(4, 6));
+      if (digits.length > 6) parts.push(digits.slice(6, 8));
+
+      this.profile.birthDate = parts.join(".");
+    },
+    handleEditToggle() {
+      if (!this.profileEdit) {
+        this.$emit('toggle-profile-edit');
+        return;
       }
-    },
-    prevCharacter() {
-      this.previewCharacterIndex = (this.previewCharacterIndex - 1 + this.characters.length) % this.characters.length;
-    },
-    nextCharacter() {
-      this.previewCharacterIndex = (this.previewCharacterIndex + 1) % this.characters.length;
+      
+      const name = String(this.profile.name || "").trim();
+      const birth = String(this.profile.birthDate || "").trim();
+      
+      if (!name || !birth) {
+        alert("이름 또는 닉네임, 생년월일을 꼭 입력해 주세요.");
+        return;
+      }
+      
+      const match = birth.match(/^(\d{4})\.(\d{2})\.(\d{2})$/);
+      if (!match) {
+        alert("생년월일은 YYYY.MM.DD 형식으로 입력해 주세요.");
+        return;
+      }
+      
+      const totalChips = (this.profile.hobbies?.length || 0) + (this.profile.interests?.length || 0);
+      if (totalChips < 3) {
+        alert("취향 조각(관심분야, 취미)을 합쳐서 3개 이상 선택해 주세요.");
+        return;
+      }
+      
+      this.$emit('toggle-profile-edit');
     }
   },
   watch: {
@@ -470,9 +534,152 @@ export default {
 .card h3 {
   font-size: 20px !important;
   color: #fff7df !important;
-  margin-bottom: 16px !important;
+  margin: 0 !important;
   font-weight: 850 !important;
   letter-spacing: -0.02em;
+}
+
+.profile-card {
+  display: grid;
+  gap: 14px;
+}
+
+.profile-card-head {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  min-height: 148px;
+  padding: 18px;
+  border: 1px solid rgba(255, 247, 223, 0.14);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 18% 20%, rgba(255, 211, 122, 0.2), transparent 28%),
+    linear-gradient(135deg, rgba(255, 129, 174, 0.18), rgba(156, 91, 255, 0.14)),
+    rgba(18, 16, 55, 0.42);
+  overflow: hidden;
+}
+
+.profile-portrait {
+  position: relative;
+  display: grid;
+  place-items: end center;
+  width: 112px;
+  height: 112px;
+  border: 1px solid rgba(255, 247, 223, 0.24);
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at 50% 78%, rgba(255, 211, 122, 0.24), transparent 36%),
+    linear-gradient(145deg, rgba(156, 91, 255, 0.72), rgba(32, 41, 105, 0.76));
+  color: #fff7df;
+  font-size: 34px;
+  font-weight: 950;
+  box-shadow: 0 12px 24px rgba(5, 2, 18, 0.24);
+  overflow: hidden;
+}
+
+.profile-portrait img {
+  max-width: 84%;
+  max-height: 92%;
+  object-fit: contain;
+  filter: drop-shadow(0 16px 18px rgba(5, 2, 18, 0.46));
+}
+
+.profile-title {
+  min-width: 0;
+}
+
+.profile-title span {
+  display: block;
+  color: #d7b7ff;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.profile-title h3 {
+  margin-top: 4px !important;
+  font-size: 24px !important;
+  line-height: 1.18;
+}
+
+.profile-title p {
+  margin: 4px 0 0;
+  color: rgba(255, 245, 230, 0.66);
+  font-size: 13px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.profile-badges span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(215, 183, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(15, 10, 49, 0.34);
+  color: rgba(255, 245, 230, 0.82);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.profile-edit-button {
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid rgba(215, 183, 255, 0.42);
+  border-radius: 12px;
+  background: rgba(42, 26, 98, 0.82);
+  color: #fff7df;
+  font-size: 14px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.profile-edit-button:hover,
+.profile-edit-button:focus-visible {
+  border-color: rgba(255, 247, 223, 0.58);
+  background: linear-gradient(135deg, rgba(156, 91, 255, 0.82), rgba(81, 103, 232, 0.72));
+}
+
+.profile-section {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(215, 183, 255, 0.14);
+  border-radius: 16px;
+  background: rgba(18, 16, 55, 0.26);
+}
+
+.profile-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.profile-section-title span {
+  color: #fff7df;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.profile-section-title strong {
+  padding: 4px 10px;
+  border: 1px solid rgba(215, 183, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(32, 41, 105, 0.44);
+  color: #d7b7ff;
+  font-size: 12px;
+  font-weight: 900;
 }
 
 /* Avatar Card Refinements */
@@ -542,9 +749,11 @@ export default {
 
 /* Interest Keywords */
 .interest-keyword-field {
-  margin-top: 8px;
-  padding-top: 12px;
-  border-top: 1px dashed rgba(255, 255, 255, 0.15);
+  margin-top: 0;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
 }
 .interest-keyword-head strong {
   color: #fff;
@@ -578,5 +787,25 @@ export default {
   min-height: 44px !important;
   padding: 0 24px !important;
   font-size: 15px !important;
+}
+
+@media (max-width: 640px) {
+  .profile-card-head {
+    grid-template-columns: 76px minmax(0, 1fr);
+    min-height: 0;
+    gap: 12px;
+  }
+
+  .profile-portrait {
+    width: 76px;
+    height: 76px;
+    border-radius: 20px;
+    font-size: 24px;
+  }
+
+  .profile-edit-button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
 }
 </style>

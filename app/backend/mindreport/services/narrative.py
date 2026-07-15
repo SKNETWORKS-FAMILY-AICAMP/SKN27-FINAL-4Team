@@ -5,7 +5,7 @@ import json
 import os
 from typing import Any, Mapping, Protocol, Sequence
 
-from mindreport.services.alternatives import AlternativePlanResult, alternative_plan_to_payload
+from mindreport.services.alternatives import AlternativePlanResult
 from mindreport.services.cause_keywords import CauseKeywordResult, LabelDisplayResult
 from mindreport.services.emotion_flow import EmotionFlowResult
 from mindreport.services.scoring import (
@@ -19,6 +19,8 @@ from mindreport.services.scoring import (
 class MindReportNarrative:
     analysis_sentences: tuple[str, ...]
     action_recommendations: tuple[str, ...]
+    title: str = '이번 기록에서 발견한 작은 단서'
+    summary: str = ''
 
 
 @dataclass(frozen=True)
@@ -42,80 +44,75 @@ def build_narrative_payload(
     cause_result: CauseKeywordResult,
     label_result: LabelDisplayResult,
 ) -> dict[str, Any]:
-    score_by_date = {score.source_date.isoformat(): score for score in emotion_scores}
-    # LLM is responsible only for wording; upstream analysis decides causes and labels.
+    # Internal scores select useful context, but are never exposed to the writer.
     return {
         'task': 'mind_report_analysis_and_action_generation',
-        'emotion_flow': {
-            'flow_type': emotion_flow.flow_type,
-            'maintenance_type': emotion_flow.maintenance_type,
-            'tone_color': emotion_flow.tone_color,
-            'title': emotion_flow.title,
-            'interpretation': emotion_flow.interpretation,
+        'editorial_guidance': {
             'action_direction': emotion_flow.action_direction,
             'suggestions': list(emotion_flow.suggestions),
+            'use_as_private_writing_context_only': True,
         },
-        'alternative_plan': alternative_plan_to_payload(alternative_plan),
+        'alternative_plan': {
+            'action_direction': alternative_plan.action_direction,
+            'candidates': [
+                {
+                    'title': candidate.title,
+                    'category': candidate.category,
+                    'rationale': candidate.rationale,
+                }
+                for candidate in alternative_plan.candidates
+            ],
+        },
         'cause_keywords': [
             {
                 'keyword': keyword.keyword,
                 'cause_type': keyword.cause_type,
-                'confidence': keyword.confidence,
                 'evidence_message_ids': list(keyword.evidence_message_ids),
                 'evidence_dates': list(keyword.evidence_dates),
                 'rationale': keyword.rationale,
             }
             for keyword in cause_result.cause_keywords
         ],
-        'label_display': {
-            'emotion_flow_type': label_result.policy.emotion_flow_type,
-            'stress_label_size': label_result.policy.stress_label_size,
-            'relief_label_size': label_result.policy.relief_label_size,
-            'labels': list(label_result.labels),
-        },
-        'daily_scores': [
-            {
-                'source_date': score.source_date.isoformat(),
-                'emotion_label': score.emotion_label,
-                'emotion_state': score.emotion_state,
-                'emotion_score': score.emotion_score,
-                'confidence': score.confidence,
-                'emotional_evidence_count': score.emotional_evidence_count,
-                'total_message_count': score.total_message_count,
-                'evidence_message_ids': list(score.evidence_message_ids),
-                'rationale': score.rationale,
-            }
-            for score in emotion_scores
-        ],
+        'cause_evidence_status': (
+            'supported_causes_found'
+            if cause_result.cause_keywords
+            else 'no_supported_causes'
+        ),
+        'display_keywords': list(label_result.labels),
         'evidence_messages': [
             {
                 'message_id': message.message_id,
                 'source_date': message.source_date.isoformat(),
                 'content': message.content,
-                'daily_emotion_state': score_by_date.get(
-                    message.source_date.isoformat()
-                ).emotion_state
-                if score_by_date.get(message.source_date.isoformat())
-                else None,
-                'daily_emotion_score': score_by_date.get(
-                    message.source_date.isoformat()
-                ).emotion_score
-                if score_by_date.get(message.source_date.isoformat())
-                else None,
             }
             for message in source_messages
         ],
         'constraints': [
             '의학적 진단, 위험도, 성격 판정을 하지 않는다.',
             '입력된 분석 결과와 근거 메시지 밖의 사실을 만들지 않는다.',
-            '마치 다정한 친구나 친절한 가이드가 말을 건네는 것처럼 이모지(✨, 🎁, 🥺, 📝 등)를 적극 사용하여 친근하고 따뜻한 대화체(해요체)로 작성한다.',
-            '실천 대안은 사용자가 바로 해볼 수 있는 짧은 행동으로 다정하게 제안한다.',
+            '점수, 백분율, 긍정·부정·중립 상태, 상승·하락·유지·변동 같은 내부 분류를 절대 언급하지 않는다.',
+            '현재 상태를 확정하거나 예단하지 않고, 기록에서 관찰된 말과 상황을 가능성의 언어로 연결한다.',
+            '당신은 또는 현재 상태는 같은 판정형 문장을 사용하지 않는다.',
+            '대화 원문을 따옴표로 직접 인용하거나 그대로 복사하지 않고, 맥락을 훼손하지 않는 간접화법으로 요약한다.',
+            '기록에서 보인 표현을 언급할 때는 ~에 관한 이야기가 이어졌어요, ~이 부담으로 작용했을 수 있어요처럼 관찰과 가능성을 구분한다.',
+            '제목과 요약은 내부 분석 용어 없이 기록의 구체적인 주제를 자연스럽게 담는다.',
+            '상단 요약은 핵심 맥락만 담은 35~80자 한 문장으로 작성하고 자세한 설명은 분석 문단으로 보낸다.',
+            '분석은 실제 대화의 주제, 반복 맥락, 부담 또는 도움이 된 장면, 서로 연결되는 이유를 충분히 설명한다.',
+            'cause_evidence_status가 no_supported_causes이면 원인을 새로 만들거나 특정 소재를 원인으로 단정하지 않는다.',
+            '분석 문단은 3개 이상 작성하고 각 문단은 2~3문장으로 구성한다.',
+            '첫 문단은 주요 맥락, 둘째 문단은 부담과 도움이 된 요소의 관계, 셋째 문단은 일상에서 살펴볼 단서를 다룬다.',
+            '마치 다정한 친구나 친절한 가이드가 말을 건네는 것처럼 친근하고 따뜻한 해요체로 작성한다.',
+            '이모지는 문단 전체에서 최대 2개만 사용하고 내용 대신 장식으로 남발하지 않는다.',
+            '실천 대안은 무엇을, 언제, 어느 정도로 시작할지 포함해 구체적으로 제안한다.',
+            '각 실천 대안은 추천 이유와 바로 시작할 수 있는 작은 방법을 2문장 이상으로 설명한다.',
             '실천 대안은 alternative_plan.candidates 안의 후보를 우선 사용한다.',
             '반드시 유효한 JSON 객체만 반환한다.',
         ],
         'output_schema': {
-            'analysis_sentences': ['2 to 4 concise Korean sentences'],
-            'action_recommendations': ['2 to 4 short Korean action suggestions'],
+            'title': '구체적이지만 상태를 판정하지 않는 한국어 제목 1개',
+            'summary': '기록의 핵심 맥락만 담은 35~80자 한국어 한 문장',
+            'analysis_sentences': ['3 to 4 substantial Korean paragraphs, each containing 2 to 3 sentences'],
+            'action_recommendations': ['2 to 3 concrete Korean action paragraphs, each containing a reason and a small starting method'],
         },
     }
 
@@ -131,8 +128,11 @@ class LangChainNarrativeClient:
                 SystemMessage(
                     content=(
                         '너는 마음리포트의 분석 문장과 실천 대안을 전달하는 다정하고 친절한 가이드다. '
-                        '입력된 감정 흐름, 원인 키워드, 라벨 정책, 근거 메시지만 바탕으로 '
-                        '사용자에게 따뜻하게 공감하며 읽기 쉬운 분석 문장과 부담 낮은 실천 대안을 다정한 말투로 만든다. '
+                        '입력된 대화 근거, 원인 후보, 행동 방향만 바탕으로 사용자에게 읽기 쉬운 '
+                        '제목, 요약, 충분한 분석 문장과 부담 낮은 실천 대안을 만든다. '
+                        '내부 점수나 상태 분류를 드러내지 말고, 사용자의 현재 상태를 확정하지 않는다. '
+                        '대화 원문은 직접 인용하지 않고 관찰된 맥락을 간접화법으로 풀어 쓴다. '
+                        '짧은 조언으로 끝내지 말고 맥락, 연결 이유, 살펴볼 단서와 구체적인 시작 방법까지 충분히 설명한다. '
                         '새 원인 판단이나 진단을 하지 말고 JSON 객체만 반환한다.'
                     )
                 ),
@@ -171,15 +171,20 @@ def _parse_string_list(value: Any, *, limit: int) -> tuple[str, ...]:
 
 
 def parse_narrative(payload: Mapping[str, Any]) -> MindReportNarrative:
+    analysis_sentences = _parse_string_list(
+        payload.get('analysis_sentences'),
+        limit=4,
+    )
+    title = str(payload.get('title') or '').strip()
+    summary = str(payload.get('summary') or '').strip()
     return MindReportNarrative(
-        analysis_sentences=_parse_string_list(
-            payload.get('analysis_sentences'),
-            limit=4,
-        ),
+        analysis_sentences=analysis_sentences,
         action_recommendations=_parse_string_list(
             payload.get('action_recommendations'),
             limit=4,
         ),
+        title=title or '이번 기록에서 발견한 작은 단서',
+        summary=summary or (analysis_sentences[0] if analysis_sentences else ''),
     )
 
 
@@ -196,8 +201,9 @@ class MindReportNarrativeGenerator:
         alternative_plan: AlternativePlanResult,
         cause_result: CauseKeywordResult,
         label_result: LabelDisplayResult,
+        revision_instructions: Sequence[str] = (),
     ) -> MindReportNarrativeResult:
-        if not source_messages or not emotion_scores or not cause_result.cause_keywords:
+        if not source_messages or not emotion_scores:
             return MindReportNarrativeResult(
                 status='insufficient_data',
                 narrative=None,
@@ -223,6 +229,8 @@ class MindReportNarrativeGenerator:
             cause_result=cause_result,
             label_result=label_result,
         )
+        if revision_instructions:
+            narrative_payload['revision_instructions'] = list(revision_instructions)
         narrative = parse_narrative(
             client.generate_narrative(payload=narrative_payload)
         )
