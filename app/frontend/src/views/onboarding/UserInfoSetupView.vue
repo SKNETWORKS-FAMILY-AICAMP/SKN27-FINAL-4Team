@@ -1,8 +1,8 @@
 <script setup>
 import { computed, ref } from "vue";
 import { userApi } from "../../api/user.js";
-import hobbyCsv from "../../assets/data/onboarding/preference_hobbies.csv?raw";
-import interestCsv from "../../assets/data/onboarding/preference_interests.csv?raw";
+import hobbyCsv from "../../assets/data/preference_hobbies.csv?raw";
+import interestCsv from "../../assets/data/preference_interests.csv?raw";
 import {
   AGREEMENT_VERSION,
   privacyCollectionContent,
@@ -13,8 +13,6 @@ const emit = defineEmits(["navigate"]);
 
 const MIN_PREFERENCE_COUNT = 3;
 const PREFERENCE_GRID_SLOT_COUNT = 16;
-const HOBBY_CATEGORIES = ["전체", "스포츠", "외출·공간", "콘텐츠·몰입", "음악·표현", "라이프스타일", "소셜·체험", "성장"];
-const INTEREST_CATEGORIES = ["전체", "콘텐츠", "음악·문화", "공간·취향", "라이프스타일", "관계·성장", "감성·표현", "트렌드"];
 
 const hobbyItems = parseKeywordCsv(hobbyCsv, "hobby");
 const interestItems = parseKeywordCsv(interestCsv, "interest");
@@ -45,7 +43,6 @@ const selectedInterests = ref(initialInterests);
 const isSaving = ref(false);
 const saveError = ref("");
 const activePreferenceType = ref("hobby");
-const activePreferenceCategory = ref("전체");
 const termsOfServiceAgreed = ref(false);
 const privacyCollectionAgreed = ref(false);
 const activeAgreementModal = ref(null);
@@ -56,21 +53,14 @@ const selectedPreferenceItems = computed(() => [
   ...selectedInterests.value.map((label) => ({ ...getKeywordItem(label, "interest"), type: "interest" })),
 ]);
 const activePreferenceItems = computed(() => activePreferenceType.value === "hobby" ? hobbyItems : interestItems);
-const activeCategoryOptions = computed(() => activePreferenceType.value === "hobby" ? HOBBY_CATEGORIES : INTEREST_CATEGORIES);
 const activePreferenceTitle = computed(() => activePreferenceType.value === "hobby" ? "취미/활동" : "관심 주제");
-const visiblePreferenceItems = computed(() => {
-  const items = activePreferenceItems.value;
-  const filtered = activePreferenceCategory.value === "전체"
-    ? items
-    : items.filter((item) => item.onboardingCategory === activePreferenceCategory.value);
-  return filtered;
-});
+const visiblePreferenceItems = computed(() => activePreferenceItems.value);
 const preferenceGridItems = computed(() => {
   const slots = visiblePreferenceItems.value.map((item) => ({ ...item, placeholder: false }));
 
   while (slots.length < PREFERENCE_GRID_SLOT_COUNT) {
     slots.push({
-      id: `preference-placeholder-${activePreferenceType.value}-${activePreferenceCategory.value}-${slots.length}`,
+      id: `preference-placeholder-${activePreferenceType.value}-${slots.length}`,
       placeholder: true,
     });
   }
@@ -193,17 +183,75 @@ function getOnboardingCategory(raw, type) {
 
 function getKeywordIcon(label, type) {
   const text = String(label || "");
-  if (/음악|K-POP|발라드|재즈|콘서트|악기|연주/.test(text)) return "🎧";
-  if (/산책|러닝|운동|헬스|요가|등산|스포츠/.test(text)) return "🚶";
+  if (/드라마/.test(text)) return "📺";
+  if (/홈트레이닝/.test(text)) return "🏠";
+  if (/국내여행|해외여행|캠핑/.test(text)) return "🚅";
+  if (/웹툰 보기|웹툰/.test(text)) return "📖";
+  if (/유튜브 시청|OTT 시청|OTT시청/.test(text)) return "📺";
+  if (/꽃꽂이|꽃꽃이/.test(text)) return "🌸";
+  if (/외국어|자격증/.test(text)) return "📚";
+  if (/독서/.test(text)) return "📕";
+  if (/낚시/.test(text)) return "🎣";
+  if (/동호회|봉사 활동|봉사활동/.test(text)) return "👨‍👩‍👧‍👦";
+  if (/원데이 클래스|원데이클래스|공방체험|공방 체험/.test(text)) return "🎨";
+  if (/수집/.test(text)) return "📁";
+  if (/패션 코디/.test(text)) return "🥼";
+  if (/인테리어 꾸미기/.test(text)) return "🪄";
+  if (/쇼핑/.test(text)) return "🛍️";
+  if (/SNS/.test(text)) return "📱";
+
+  if (/판타지/.test(text)) return "🧚";
+  if (/호러|오컬트/.test(text)) return "👻";
+  if (/홈라이프|홈 라이프/.test(text)) return "🏠";
+  if (/K[- ]?POP/i.test(text)) return "🎤";
+  if (/힙합|R&B/i.test(text)) return "🎵";
+  if (/콘서트|페스티벌/.test(text)) return "🎪";
+  if (/클래식|재즈/.test(text)) return "🎷";
+  if (/다큐멘터리/.test(text)) return "🎞️";
+  if (/레트로|뉴트로/.test(text)) return "📻";
+  if (/로맨스/.test(text)) return "💕";
+  if (/루틴|습관/.test(text)) return "🔁";
+  if (/모임|소셜/.test(text)) return "🫂";
+  if (/뮤지컬/.test(text)) return "🎭";
+  if (/반려동물/.test(text)) return "🐾";
+  if (/뷰티/.test(text)) return "💄";
+  if (/여행/.test(text)) return "✈️";
+  if (/연애/.test(text)) return "💘";
+  if (/유튜브|유트브/.test(text)) return "💻";
+  if (/팝업스토어|팝업 스토어/.test(text)) return "🎪";
+  if (/인테리어/.test(text)) return "🛋️";
+  if (/자기관리/.test(text)) return "💪";
+
+  if (/자전거|사이클|라이딩/.test(text)) return "🚲";
+  if (/골프/.test(text)) return "🏌️";
+  if (/배드민턴/.test(text)) return "🏸";
+  if (/테니스/.test(text)) return "🎾";
+  if (/볼링/.test(text)) return "🎳";
+  if (/축구|풋살/.test(text)) return "⚽";
+  if (/농구/.test(text)) return "🏀";
+  if (/수영/.test(text)) return "🏊";
+  if (/클라이밍/.test(text)) return "🧗";
+  if (/헬스|근력|웨이트/.test(text)) return "🏋️";
+  if (/필라테스|요가/.test(text)) return "🧘";
+  if (/러닝|달리기/.test(text)) return "🏃";
+  if (/리본|댄스/.test(text)) return "💃";
+  if (/노래 부르기/.test(text)) return "🎤";
+  if (/음악|K-POP|발라드|재즈|콘서트/.test(text)) return "🎧";
+  if (/악기|연주/.test(text)) return "🎸";
+  if (/산책|러닝|운동|요가|등산|스포츠/.test(text)) return "🚶";
   if (/카페|커피|차|맛집|요리|베이킹/.test(text)) return "☕";
-  if (/영화|드라마|웹툰|예능|애니|콘텐츠|유튜브/.test(text)) return "🎬";
-  if (/게임|디지털|트렌드/.test(text)) return "🎮";
+  if (/영화|드라마|웹툰|예능|애니|콘텐츠|유튜브|OTT시청/.test(text)) return "🎬";
+  if (/게임|디지털|트렌드|방탈출/.test(text)) return "🎮";
   if (/독서|글쓰기|자기계발|학습|심리/.test(text)) return "📚";
-  if (/사진|전시|문화|공연|창작|드로잉|표현/.test(text)) return "🖼️";
-  if (/반려|동물|식물|가드닝|자연/.test(text)) return "🐾";
-  if (/여행|외출|공간|팝업|캠핑/.test(text)) return "🧭";
-  if (/패션|뷰티|인테리어|쇼핑/.test(text)) return "✨";
-  return type === "hobby" ? "💫" : "🔖";
+  if (/전시|문화|공연/.test(text)) return "🎟️";
+  if (/창작|드로잉|표현/.test(text)) return "🖋️";
+  if (/사진/.test(text)) return "📷";
+  if (/영상촬영/.test(text)) return "📽️";
+  if (/반려|동물/.test(text)) return "🐾";
+  if (/식물|가드닝|자연/.test(text)) return "🌱";
+  if (/국내여행|외출|공간|팝업스토어 방문|캠핑|해외여행/.test(text)) return "🚅";
+  if (/패션|뷰티|인테리어|쇼핑/.test(text)) return "🛍️";
+  if (/낚시/.test(text)) return "🎣";
 }
 
 function splitRelatedKeywords(value) {
@@ -226,6 +274,7 @@ function getKeywordItem(label, type) {
     id: `${type}-${label}`,
     type,
     label,
+    category: "기타",
     onboardingCategory: type === "hobby" ? "라이프스타일" : "라이프스타일",
     icon: getKeywordIcon(label, type),
     searchText: label.toLowerCase(),
@@ -281,6 +330,12 @@ function toggleKeywordItem(item) {
 
   saveError.value = "";
   selected.value = [...selected.value, item.label];
+}
+
+function resetPreferences() {
+  selectedHobbies.value = [];
+  selectedInterests.value = [];
+  saveError.value = "";
 }
 
 function removeSelectedKeyword(label, type) {
@@ -460,8 +515,7 @@ function formatBirthDateForDisplay(value) {
 
       <header class="userinfo-heading">
         <div class="text-area">
-          <h2>기본 정보와 취향 조각 수집하기</h2>
-          <span class="sparkle-mark" aria-hidden="true">✨</span>
+          <div class="heading-title"><h2>기본 정보와 취향 조각 수집하기</h2><span class="sparkle-mark" aria-hidden="true">✨</span></div>
           <p>당신에게 맞는 대화를 위해 필요한 정보만 가볍게 입력해 주세요.</p>
         </div>
 
@@ -538,21 +592,24 @@ function formatBirthDateForDisplay(value) {
                 <h3>취미와 관심 분야</h3>
                 <p>좋아하거나 관심 있는 활동을 자유롭게 골라주세요.</p>
               </div>
-              <span>선택한 태그 {{ selectedPreferenceLabels.length }}개</span>
+              <div class="preference-heading-actions">
+                <span>선택한 태그 {{ selectedPreferenceLabels.length }}개</span>
+                <button class="preference-reset-button" type="button" @click="resetPreferences">초기화</button>
+              </div>
             </header>
 
             <div class="preference-tabs" role="tablist" aria-label="취향 종류">
               <button
                 type="button"
                 :class="{ active: activePreferenceType === 'hobby' }"
-                @click="activePreferenceType = 'hobby'; activePreferenceCategory = '전체'"
+                @click="activePreferenceType = 'hobby'"
               >
                 취미/활동
               </button>
               <button
                 type="button"
                 :class="{ active: activePreferenceType === 'interest' }"
-                @click="activePreferenceType = 'interest'; activePreferenceCategory = '전체'"
+                @click="activePreferenceType = 'interest'"
               >
                 관심 주제
               </button>
@@ -561,19 +618,6 @@ function formatBirthDateForDisplay(value) {
             <div class="preference-choice-box">
               <div class="preference-choice-box-header">
                 <strong>{{ activePreferenceTitle }} 항목</strong>
-                <em>{{ activePreferenceCategory }}</em>
-              </div>
-
-              <div class="preference-category-row" :aria-label="`${activePreferenceTitle} 카테고리`">
-                <button
-                  v-for="category in activeCategoryOptions"
-                  :key="category"
-                  type="button"
-                  :class="{ active: activePreferenceCategory === category }"
-                  @click="activePreferenceCategory = category"
-                >
-                  {{ category }}
-                </button>
               </div>
 
               <div class="preference-chip-grid" :aria-label="`${activePreferenceTitle} 선택 목록`">
@@ -603,10 +647,9 @@ function formatBirthDateForDisplay(value) {
               <header>
                 <div>
                   <h4>선택한 취향 조각</h4>
-                  <p>{{ selectedPreferenceLabels.length }}개 선택 완료!</p>
+                  <p>{{ selectedPreferenceItems.length }}개 선택 완료!</p>
                 </div>
               </header>
-
               <div v-if="selectedPreferenceItems.length" class="selected-keyword-row">
                 <button
                   v-for="item in selectedPreferenceItems"
@@ -620,9 +663,9 @@ function formatBirthDateForDisplay(value) {
                   <i aria-hidden="true">×</i>
                 </button>
               </div>
-
               <p v-else class="empty-selected-message">아직 선택한 조각이 없어요. 위 항목에서 취향을 골라주세요.</p>
             </section>
+
           </section>
         </div>
 
@@ -1045,6 +1088,30 @@ function formatBirthDateForDisplay(value) {
   font-size: 14px;
   font-weight: 950;
   white-space: nowrap;
+}
+
+.preference-heading-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.preference-reset-button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 211, 122, 0.38);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffe0a4;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.preference-reset-button:hover {
+  border-color: rgba(255, 211, 122, 0.74);
+  background: rgba(255, 211, 122, 0.14);
 }
 
 .preference-tabs {
@@ -1653,13 +1720,27 @@ function formatBirthDateForDisplay(value) {
   letter-spacing: 0;
 }
 
+.heading-title {
+  white-space: nowrap;
+}
+
+.heading-title h2 {
+  display: inline;
+  max-width: none;
+}
+
 .sparkle-mark {
-  display: block;
-  margin-top: 10px;
+  display: inline-block;
+  margin-left: 8px;
   color: #ffcf72;
   font-size: clamp(36px, 4vw, 52px);
   line-height: 1;
   filter: drop-shadow(0 0 18px rgba(255, 142, 87, 0.38));
+}
+
+.userinfo-heading .text-area :is(h2, p, .sparkle-mark) {
+  cursor: default;
+  user-select: none;
 }
 
 .mascot-card {
@@ -1809,12 +1890,12 @@ function formatBirthDateForDisplay(value) {
 }
 
 .preference-chip-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  grid-auto-rows: 38px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(44px, auto);
   gap: 9px;
   align-content: start;
-  min-height: calc((38px * 4) + (9px * 3));
-  max-height: calc((38px * 4) + (9px * 3));
+  min-height: 330px;
+  max-height: 330px;
   overflow-x: hidden;
   overflow-y: auto;
   padding-top: 2px;
@@ -1824,7 +1905,7 @@ function formatBirthDateForDisplay(value) {
 }
 
 :global(#app .userinfo-setup-view .preference-chip-grid) {
-  max-height: calc((38px * 4) + (9px * 3)) !important;
+  max-height: 330px !important;
   overflow-x: hidden !important;
   overflow-y: auto !important;
 }
@@ -1845,9 +1926,12 @@ function formatBirthDateForDisplay(value) {
 
 .preference-choice-chip {
   width: 100%;
-  height: 38px;
-  min-height: 38px;
-  padding: 0 34px 0 13px;
+  height: auto;
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 18px;
+  align-items: center;
+  padding: 0 10px 0 13px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.045);
   font-size: 12px;
@@ -1856,7 +1940,7 @@ function formatBirthDateForDisplay(value) {
 .preference-choice-placeholder {
   display: block;
   width: 100%;
-  height: 38px;
+  min-height: 44px;
   visibility: hidden;
   pointer-events: none;
 }
@@ -1868,13 +1952,21 @@ function formatBirthDateForDisplay(value) {
 .preference-choice-chip strong {
   font-size: 12px;
   font-weight: 850;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  word-break: keep-all;
+  line-height: 1.32;
 }
 
 .preference-choice-chip i {
-  right: 9px;
+  position: static;
+  right: auto;
+  justify-self: end;
   width: 18px;
   height: 18px;
   font-size: 11px;
+  transform: none;
 }
 
 .preference-choice-box {

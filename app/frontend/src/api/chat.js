@@ -32,10 +32,11 @@ export const chatApi = {
 
   /** 세션 시작 — 친구 컨셉: 날씨/시간/닉네임 첫인사(opener) 반환.
    *  coords={lat,lon} 있으면 날씨 반영 (없어도 시간대 인사로 정상 동작) */
-  async startSession(characterId, isSecret, coords = null) {
+  async startSession(characterId, isSecret, coords = null, checkinId = null) {
     return unwrap(await http.post('/session/start/', {
       character_id: characterId,
       is_secret: isSecret,
+      checkin_id: checkinId,
       lat: coords?.lat,
       lon: coords?.lon,
     }))

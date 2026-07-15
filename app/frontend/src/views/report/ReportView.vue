@@ -31,6 +31,10 @@
             </button>
           </div>
 
+          <p v-if="!isLoading && !hasReports" class="empty-report-note">
+            아직 생성된 마음 리포트가 없어요.
+          </p>
+
           <button
             v-for="period in filteredReports"
             :key="period.id"
@@ -48,7 +52,7 @@
           <div class="panel-head">
             <p>감정 일기</p>
           </div>
-          <div class="emotion-strip" :class="{ 'emotion-strip--monthly': currentReport.emotions.length > 7 }">
+          <div v-if="currentReport" class="emotion-strip" :class="{ 'emotion-strip--monthly': currentReport.emotions.length > 7 }">
             <article
               v-for="day in currentReport.emotions"
               :key="day.day"
@@ -59,10 +63,29 @@
               <span>{{ day.day }}</span>
             </article>
           </div>
+          <p v-else class="empty-report-note">감정 기록이 더 쌓이면 이곳에 흐름이 표시돼요.</p>
         </section>
       </aside>
 
-      <section class="report-card">
+      <section v-if="isLoading" class="report-card report-empty-state">
+        <span class="eyebrow">마음 리포트</span>
+        <h1>리포트를 확인하고 있어요</h1>
+        <p>대화 기록을 살펴보고 데이터가 충분한지 판단하는 중입니다.</p>
+      </section>
+
+      <section v-else-if="!currentReport" class="report-card report-empty-state">
+        <span class="eyebrow">데이터 부족</span>
+        <h1>아직 마음 리포트를 만들 만큼의 기록이 부족해요</h1>
+        <p>
+          아직 표시할 마음 리포트가 없습니다.
+          대화를 조금 더 나누면 주간/월간 마음 리포트가 생성돼요.
+        </p>
+        <div class="report-meta">
+          <span>감정 기록 0일</span>
+        </div>
+      </section>
+
+      <section v-else class="report-card">
         <header class="report-header">
           <div>
             <span class="eyebrow">{{ currentReport.range }} · {{ currentReport.type }}</span>
@@ -74,14 +97,14 @@
           </div>
         </header>
 
-        <section class="report-section" v-if="!currentReport.is_fallback">
+        <section class="report-section">
           <h2>스트레스 주요 원인.</h2>
           <div class="tag-row danger">
             <span v-for="item in currentReport.stressCauses" :key="item">{{ item }}</span>
           </div>
         </section>
 
-        <section class="report-section" v-if="!currentReport.is_fallback">
+        <section class="report-section">
           <h2>스트레스 이완 주요 원인</h2>
           <div class="tag-row calm">
             <span v-for="item in currentReport.reliefCauses" :key="item">{{ item }}</span>
@@ -106,6 +129,34 @@
           <button type="button" class="secondary-button">이미지 저장</button>
           <button type="button" class="primary-button">공유</button>
         </footer>
+
+        <section v-if="todayAction" class="report-action-feedback" aria-labelledby="action-feedback-title">
+          <div>
+            <span class="eyebrow">오늘의 나 돌아보기</span>
+            <h2 id="action-feedback-title">추천 행동은 어땠나요?</h2>
+            <p><strong>{{ todayAction.title }}</strong>을(를) 해본 뒤, 감정 완화에 도움이 된 정도를 남겨주세요.</p>
+          </div>
+          <div class="report-action-score-row">
+            <button
+              v-for="option in feedbackOptions"
+              :key="option.value"
+              type="button"
+              class="report-action-score"
+              :class="{ active: actionFeedbackValue === option.value }"
+              :aria-pressed="actionFeedbackValue === option.value"
+              @click="actionFeedbackValue = option.value"
+            >
+              <strong>{{ option.value }}</strong>
+              <span>{{ option.label }}</span>
+            </button>
+          </div>
+          <div class="report-action-feedback-footer">
+            <span v-if="actionFeedbackMessage" class="report-action-feedback-message">{{ actionFeedbackMessage }}</span>
+            <button type="button" class="primary-button" :disabled="isFeedbackSaving || !actionFeedbackValue" @click="saveActionFeedback">
+              {{ isFeedbackSaving ? '저장 중…' : '평가 저장' }}
+            </button>
+          </div>
+        </section>
       </section>
     </section>
   </main>
@@ -116,77 +167,21 @@ import { computed, ref, watch, onMounted } from 'vue'
 import { reportApi } from '../../api/report.js'
 import reportBg from '../../assets/report-bg.png'
 
-const monthlyEmotionIcons = [
-  '🙂', '🥹', '😣', '😐', '😳', '😄', '😌', '😮‍💨', '🙂', '😣',
-  '😐', '😊', '😌', '😄', '🥲', '😳', '🙂', '😔', '😐', '😌',
-  '😄', '😊', '😣', '😮‍💨', '🙂', '😌', '😄', '😊', '🙂', '😌',
+const reports = ref([])
+const todayCheckin = ref(null)
+const actionFeedbackValue = ref(null)
+const actionFeedbackMessage = ref('')
+const isFeedbackSaving = ref(false)
+const feedbackOptions = [
+  { value: 1, label: '별로 도움 안 됨' },
+  { value: 2, label: '조금 아쉬움' },
+  { value: 3, label: '보통' },
+  { value: 4, label: '도움 됨' },
+  { value: 5, label: '완전 도움 됨' },
 ]
 
-const monthlyEmotions = monthlyEmotionIcons.map((icon, index) => ({
-  day: `${index + 1}일`,
-  icon,
-}))
-
-const reports = ref([
-  {
-    id: 'monthly-202605',
-    type: '월간',
-    range: '2026.05.01 ~ 2026.05.31',
-    title: '2026년 5월 월간 마음 리포트',
-    summary: '관계 피로와 프로젝트 긴장이 함께 오른 달',
-    stressCauses: ['대학교 친구', '프로젝트 경험', '부모님의 잔소리'],
-    reliefCauses: ['포켓몬', '네이버웹툰', '절친'],
-    emotions: monthlyEmotions,
-    analysis: [
-      '최근 감정의 변동은 프로젝트로 인한 학업적 긴장감과 대학교 친구 및 부모님의 잔소리에서 비롯된 관계적 피로도가 겹칠 때 주로 나타나고 있었어요. 하지만 이를 완화하기 위해 나름의 두 가지 방식의 휴식으로 감정의 균형을 잘 찾아가는 모습이 확인됩니다.',
-      '포켓몬이나 네이버웹툰을 통해 개인적인 몰입의 시간을 갖거나, 절친과의 교류를 통해 안전한 소통을 하는 방식이죠. 스트레스 요인이 집중되는 날에는 이런 편안한 콘텐츠 소비 시간을 조금 더 늘리거나, 편안한 관계에 에너지를 온전히 쓰는 것이 감정 회복에 도움이 될 것으로 예상됩니다.',
-    ],
-  },
-  {
-    id: 'weekly-20260601',
-    type: '주간',
-    range: '2026.06.01 ~ 2026.06.07',
-    title: '2026년 6월 1주차 마음 리포트',
-    summary: '마감 일정 이후 회복 리듬을 찾은 주',
-    stressCauses: ['과제 마감', '수면 부족', '팀 회의'],
-    reliefCauses: ['산책', '따뜻한 차', '짧은 낮잠'],
-    emotions: [
-      { day: '1일', icon: '😐' },
-      { day: '2일', icon: '😣' },
-      { day: '3일', icon: '😮‍💨' },
-      { day: '4일', icon: '🙂' },
-      { day: '5일', icon: '😌' },
-      { day: '6일', icon: '😄' },
-      { day: '7일', icon: '🙂' },
-    ],
-    analysis: [
-      '이번 주에는 과제 마감과 팀 회의가 겹치면서 초반 피로도가 높게 나타났어요. 특히 잠이 부족한 날에는 사소한 일정도 크게 부담으로 느껴지는 흐름이 보였습니다.',
-      '후반으로 갈수록 산책과 짧은 낮잠처럼 몸을 바로 쉬게 해주는 행동이 감정 회복에 도움이 되었어요. 다음 주에도 긴 일정 전후에는 작은 휴식 시간을 먼저 확보하는 편이 좋겠습니다.',
-    ],
-  },
-  {
-    id: 'weekly-20260608',
-    type: '주간',
-    range: '2026.06.08 ~ 2026.06.14',
-    title: '2026년 6월 2주차 마음 리포트',
-    summary: '발표와 진로 고민을 정리해간 주',
-    stressCauses: ['발표 준비', '진로 고민', '가족 대화'],
-    reliefCauses: ['음악 감상', '웹툰 보기', '친구와 통화'],
-    emotions: [
-      { day: '8일', icon: '😳' },
-      { day: '9일', icon: '😣' },
-      { day: '10일', icon: '😐' },
-      { day: '11일', icon: '🙂' },
-      { day: '12일', icon: '😌' },
-      { day: '13일', icon: '😄' },
-      { day: '14일', icon: '😊' },
-    ],
-    analysis: [
-      '발표 준비와 진로 고민이 함께 올라오면서 미래에 대한 압박감이 자주 감지됐어요. 가족과의 대화에서는 조언을 받는 상황이 때때로 평가처럼 느껴져 긴장감이 커진 것으로 보입니다.',
-      '음악 감상과 웹툰 보기처럼 혼자 호흡을 정리하는 시간이 안정감을 주었고, 친구와의 통화는 생각을 정리하는 데 도움이 되었어요. 부담이 커질 때는 먼저 감정을 말로 꺼내는 루틴을 만들어보면 좋겠습니다.',
-    ],
-  },
-])
+const isLoading = ref(true)
+const fetchError = ref('')
 
 const getReportStartDate = (report) => {
   if (!report || !report.range) return new Date()
@@ -202,11 +197,12 @@ const formatMonthLabel = (month) => {
   return `${year}년 ${Number(value)}월`
 }
 
+const hasReports = computed(() => reports.value.length > 0)
 const reportsByNewest = computed(() => [...reports.value].sort((a, b) => getReportStartDate(b) - getReportStartDate(a)))
 const latestMonth = computed(() => getReportMonth(reportsByNewest.value[0]))
 const isMonthFilterOpen = ref(false)
 const selectedMonth = ref(latestMonth.value)
-const selectedReportId = ref(reportsByNewest.value[0].id)
+const selectedReportId = ref(reportsByNewest.value[0]?.id)
 
 const monthOptions = computed(() => {
   const months = [...new Set(reportsByNewest.value.map(getReportMonth))]
@@ -223,30 +219,60 @@ const filteredReports = computed(() => (
 const currentReport = computed(
   () => filteredReports.value.find((report) => report.id === selectedReportId.value) ?? filteredReports.value[0],
 )
+const todayAction = computed(() => todayCheckin.value?.selected_action ?? null)
 
 watch(selectedMonth, () => {
   selectedReportId.value = filteredReports.value[0]?.id
 })
 
 watch(latestMonth, (newMonth) => {
-  selectedMonth.value = newMonth
+  if (newMonth) {
+    selectedMonth.value = newMonth
+  }
 })
 
 onMounted(async () => {
   try {
     const data = await reportApi.generateReport()
     if (data && data.reports && data.reports.length > 0) {
-      data.reports.forEach(report => {
-        reports.value.push(report)
-      })
+      reports.value = data.reports
       // 기본적으로 가장 첫 번째 리포트를 선택
-      selectedMonth.value = getReportMonth(data.reports[0])
-      selectedReportId.value = data.reports[0].id
+      const firstReport = reportsByNewest.value[0]
+      if (firstReport) {
+        selectedMonth.value = getReportMonth(firstReport)
+        selectedReportId.value = firstReport.id
+      }
     }
   } catch (error) {
+    fetchError.value = error?.message ?? 'Failed to fetch generated report'
     console.error('Failed to fetch generated report:', error)
+  } finally {
+    isLoading.value = false
+  }
+
+  try {
+    const data = await reportApi.getTodayCheckin()
+    todayCheckin.value = data?.checkin ?? null
+    actionFeedbackValue.value = data?.action_feedback?.helpfulness ?? null
+  } catch (error) {
+    // 리포트 본문은 오늘의 나 기록이 없어도 계속 표시합니다.
+    console.warn('Failed to fetch today check-in:', error)
   }
 })
+
+async function saveActionFeedback() {
+  if (!todayCheckin.value?.id || !todayAction.value?.id || !actionFeedbackValue.value || isFeedbackSaving.value) return
+  isFeedbackSaving.value = true
+  actionFeedbackMessage.value = ''
+  try {
+    await reportApi.saveActionFeedback(todayCheckin.value.id, todayAction.value.id, actionFeedbackValue.value)
+    actionFeedbackMessage.value = '평가를 저장했어요. 다음 행동 추천에 참고할게요.'
+  } catch (error) {
+    actionFeedbackMessage.value = error?.response?.data?.error?.message ?? '평가를 저장하지 못했어요. 잠시 후 다시 시도해주세요.'
+  } finally {
+    isFeedbackSaving.value = false
+  }
+}
 
 const emotionToneClass = (day) => {
   if (['😣', '😔'].includes(day.icon)) return 'emotion-day--very-low'
@@ -324,6 +350,13 @@ const emotionToneClass = (day) => {
   margin-top: 3px;
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.empty-report-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .period-card {
@@ -515,6 +548,27 @@ const emotionToneClass = (day) => {
   padding: 24px;
 }
 
+.report-empty-state {
+  display: grid;
+  align-content: center;
+  min-height: 380px;
+}
+
+.report-empty-state h1 {
+  margin: 8px 0 0;
+  color: var(--text-primary);
+  font-size: 26px;
+  line-height: 1.35;
+}
+
+.report-empty-state p {
+  max-width: 620px;
+  margin: 14px 0 0;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 15px;
+  line-height: 1.8;
+}
+
 .report-header {
   padding-bottom: 18px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.14);
@@ -640,6 +694,90 @@ const emotionToneClass = (day) => {
   color: #BFF8EF;
 }
 
+.report-action-feedback {
+  display: grid;
+  gap: 16px;
+  margin-top: 26px;
+  padding: 20px;
+  border: 1px solid rgba(255, 180, 140, 0.28);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(255, 164, 116, 0.1), rgba(94, 234, 212, 0.06));
+}
+
+.report-action-feedback h2 {
+  margin: 4px 0 6px;
+  color: #fff7ee;
+  font-size: 18px;
+}
+
+.report-action-feedback p {
+  margin: 0;
+  color: rgba(255, 245, 238, 0.72);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.report-action-feedback p strong {
+  color: #ffd39d;
+}
+
+.report-action-score-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.report-action-score {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  min-height: 62px;
+  padding: 9px 6px;
+  border: 1px solid rgba(255, 190, 151, 0.32);
+  border-radius: 12px;
+  color: rgba(255, 236, 224, 0.75);
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  transition: 0.18s ease;
+}
+
+.report-action-score strong {
+  color: #fff2dc;
+  font-size: 18px;
+}
+
+.report-action-score span {
+  font-size: 10px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.report-action-score:hover,
+.report-action-score.active {
+  border-color: rgba(255, 211, 157, 0.8);
+  background: linear-gradient(135deg, rgba(231, 62, 101, 0.72), rgba(231, 126, 110, 0.64));
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.report-action-feedback-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.report-action-feedback-message {
+  color: #bff8ef;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.report-action-feedback button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 @media (max-width: 760px) {
   .archive-page {
     padding: 20px 12px;
@@ -668,6 +806,19 @@ const emotionToneClass = (day) => {
 
   .report-actions button {
     flex: 1;
+  }
+
+  .report-action-score-row {
+    gap: 5px;
+  }
+
+  .report-action-score span {
+    font-size: 9px;
+  }
+
+  .report-action-feedback-footer {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 </style>

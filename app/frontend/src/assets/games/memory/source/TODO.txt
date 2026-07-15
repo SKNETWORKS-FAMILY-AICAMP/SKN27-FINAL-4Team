@@ -1,0 +1,18 @@
+이 폴더는 카드 짝 맞추기 게임용 원본 이미지를 보관하는 곳입니다.
+
+넣어야 할 파일:
+- 캐릭터 카드 원본 24장 (포리/까미/토토/여울 각 6장)
+- 카드 뒷면 원본 1장
+
+원본을 넣은 뒤, scripts/prepare_memory_card_assets.py (또는 동등한 전처리 스크립트)로
+../front/ 와 ../back/ 폴더에 아래 규칙으로 파생 이미지를 생성합니다.
+
+1. 카드 뒷면 원본의 실제 픽셀 크기(W x H)를 먼저 측정한다.
+2. 캐릭터 카드 24장을 모두 W x H 크기로 맞춘다(중앙 기준 cover crop + Lanczos 리사이즈,
+   필요 시 파일별 focal point 지정). 비율을 강제로 늘리거나 눌러 찌그러뜨리지 않는다.
+3. 결과 파일명은 src/data/memoryGameCards.js 의 CHARACTER_ASSETS.files 및
+   BACK_FILENAME 과 반드시 일치해야 한다(다르면 그 목록을 실제 파일명에 맞게 수정).
+
+../front/ : pori_01.webp ~ pori_06.webp, kkami_01.webp ~ kkami_06.webp,
+            toto_01.webp ~ toto_06.webp, yeoul_01.webp ~ yeoul_06.webp
+../back/  : card-back.webp

@@ -28,6 +28,7 @@ class CsrfExemptSessionAuthentication(SessionAuthentication):
         return
 
 VALID_CHARACTERS = {'pori', 'kkami', 'toto', 'yeoul'}
+BACKEND_CHARACTER_BY_ASSET = {'redpanda': 'pori', 'cat': 'kkami', 'otter': 'toto', 'bird': 'yeoul'}
 
 
 # ── 공통 헬퍼 ────────────────────────────────────────────────
@@ -64,6 +65,10 @@ def _strip_tags(text: str) -> str:
     return re.sub(r'\s{2,}', ' ', _TAG_RE.sub('', text)).strip()
 
 
+def _normalize_character_id(value):
+    return BACKEND_CHARACTER_BY_ASSET.get(value or '', value or 'pori')
+
+
 # ═════════════════════════════════════════════════════════════
 # 1. 세션 시작 (친구 첫인사)
 # ═════════════════════════════════════════════════════════════
@@ -75,7 +80,7 @@ def session_start(request):
     """세션 시작 — 친구 컨셉: 감정 안 묻고 날씨·시간·닉네임으로 먼저 말 건다.
 
     (구 콜드스타트 감정 선택지는 폐지. cold_start_done은 항상 True로 시작.)"""
-    character = request.data.get('character_id', 'pori')
+    character = _normalize_character_id(request.data.get('character_id', 'pori'))
     is_secret = bool(request.data.get('is_secret', False))
     if character not in VALID_CHARACTERS:
         return _err('INVALID_CHARACTER', '유효하지 않은 캐릭터입니다.')
@@ -93,6 +98,26 @@ def session_start(request):
     # 기억 기반 첫인사는 일반 모드 전용 (시크릿에서 지난 대화 언급 금지)
     memory_uid = user.id if (user and not is_secret) else None
     opener = generate_opener(nickname, lat, lon, user_id=memory_uid)
+
+    # 오늘의 나 찾기에서 이미 고른 내용을 첫 대사에 이어 붙인다.
+    # checkin_id만 전달받고 실제 내용은 로그인 사용자 본인의 기록에서 조회한다.
+    checkin_id = request.data.get('checkin_id')
+    if checkin_id and user:
+        try:
+            from checkin.models import DailyCheckin
+            checkin = DailyCheckin.objects.select_related('reflection', 'cause', 'need', 'selected_action').get(
+                id=int(checkin_id), user=user, completed_at__isnull=False,
+            )
+        except (DailyCheckin.DoesNotExist, TypeError, ValueError):
+            checkin = None
+        if checkin and checkin.reflection and checkin.need:
+            cause_text = checkin.cause_display_text_snapshot or (checkin.cause.label if checkin.cause else '자세히 말하고 싶지 않은 마음')
+            action_text = f" 추천 행동으로는 '{checkin.selected_action.title}'을 골라두었고." if checkin.selected_action_id else ''
+            opener = (
+                f"오늘의 나 찾기에서 '{checkin.reflection.label}'에 가장 가까웠고, "
+                f"'{cause_text}'이 마음에 남았다고 골랐어. 지금 필요한 도움은 '{checkin.need.label}'이었지.{action_text} "
+                f"그 흐름에서 조금 더 이야기하고 싶은 부분부터 천천히 꺼내볼까?"
+            )
 
     # 첫인사도 대화 이력에 남긴다 (다음 턴 컨텍스트 연결)
     if is_secret:

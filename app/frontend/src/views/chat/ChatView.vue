@@ -377,7 +377,7 @@ async function initSession() {
   try {
     // 친구 컨셉: 감정 안 묻고 날씨/시간/닉네임 기반 첫인사로 시작
     const coords = await getCoordsOrNull()
-    const sess = await chatApi.startSession(character.value, isSecret.value, coords)
+    const sess = await chatApi.startSession(character.value, isSecret.value, coords, route.query.checkinId || null)
     sessionId.value = sess.session_id
     coldStartDone.value = true
     userTurnCount.value = 0

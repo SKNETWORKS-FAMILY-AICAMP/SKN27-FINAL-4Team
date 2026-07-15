@@ -1,0 +1,11 @@
+﻿weather_id,display_name,visual_prompt,mood_fit,ui_selectable,avoid_visual
+WTH_CLEAR,맑고 따뜻한 하늘,"clear warm sky, soft sunlight",POSITIVE|NEUTRAL,True,폭풍·재난·공포 과장 금지
+WTH_SUNSET,잔잔한 노을,calm coral and golden sunset,POSITIVE|MIXED|NEUTRAL,True,폭풍·재난·공포 과장 금지
+WTH_CLOUDY,구름이 조금 낀 하늘,partly cloudy sky with soft diffused light,NEGATIVE|MIXED|NEUTRAL,True,폭풍·재난·공포 과장 금지
+WTH_RAIN_NIGHT,비가 내리는 밤,"gentle rainy night with warm window light, no storm",SADNESS,True,폭풍·재난·공포 과장 금지
+WTH_MIST_DAWN,안개 낀 새벽,misty dawn with a small guiding light,ANXIETY|UNKNOWN,True,폭풍·재난·공포 과장 금지
+WTH_STAR_NIGHT,별이 선명한 밤,"clear star-filled night, calm moonlight",NEUTRAL|POSITIVE|MIXED,True,폭풍·재난·공포 과장 금지
+WTH_AFTER_RAIN,비가 그친 뒤의 하늘,sky after rain with warm reflected light,RELIEF|MIXED|SADNESS,True,폭풍·재난·공포 과장 금지
+WTH_LIGHT_CLOUDS,구름 사이로 빛이 드는 하늘,sunlight breaking through clouds,HOPE|MIXED,False,폭풍·재난·공포 과장 금지
+WTH_SOFT_MORNING,부드러운 아침 하늘,soft peach morning sky,POSITIVE|NEUTRAL,False,폭풍·재난·공포 과장 금지
+WTH_TWILIGHT,깊은 보랏빛 황혼,"deep plum and orange twilight, controlled clouds",ANGER|MIXED,False,폭풍·재난·공포 과장 금지

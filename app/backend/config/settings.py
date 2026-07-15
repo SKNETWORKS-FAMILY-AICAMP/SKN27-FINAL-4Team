@@ -53,6 +53,9 @@ INSTALLED_APPS = [
     'calendar_api',
     'game.tarot_api',
     'mindreport',
+    'checkin',
+    'mycard',
+    'emotion_cards',
 ]
 
 MIDDLEWARE = [
@@ -109,6 +112,14 @@ REST_FRAMEWORK = {
 
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',  # Vue dev server
+    'http://127.0.0.1:5173',
+]
+
+# Vue 개발 서버에서 프록시를 통해 세션 기반 POST 요청을 보낼 때,
+# Django가 해당 Origin을 신뢰해야 CSRF Origin 검사에서 차단되지 않는다.
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
 ]
 
 FRONTEND_BASE_URL = os.environ.get('FRONTEND_BASE_URL', 'http://localhost:5173').rstrip('/')
@@ -169,6 +180,23 @@ MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+
+# ── 마음카드(emotion_cards) ──
+# 기본은 외부 이미지 API를 호출하지 않는 안전한 개발 모드.
+EMOTION_CARD_ENABLE_REAL_IMAGE_API = os.environ.get('EMOTION_CARD_ENABLE_REAL_IMAGE_API', 'False').lower() == 'true'
+EMOTION_CARD_MAX_DAILY_GENERATIONS = int(os.environ.get('EMOTION_CARD_MAX_DAILY_GENERATIONS', '2'))
+# 텍스트 구조화 분석: 공유 LLM 공급자(ai/agents/llm). 키 없으면 자동 키워드 폴백. 테스트는 자동 오프라인.
+EMOTION_CARD_ENABLE_LLM_ANALYSIS = os.environ.get('EMOTION_CARD_ENABLE_LLM_ANALYSIS', 'True').lower() == 'true'
+# 학습된 감정 분류기(ai/emotion) 확신도 게이트. 이하이면 LLM/키워드로 폴백.
+EMOTION_CARD_EMOTION_CONF_GATE = float(os.environ.get('EMOTION_CARD_EMOTION_CONF_GATE', '0.55'))
+EMOTION_CARD_LLM_MODEL = os.environ.get('EMOTION_CARD_LLM_MODEL', '')
+# 이미지 생성: 실사용 전 계정에서 호출 가능한 정확한 모델 ID로 교체(초안값 자동치환 금지).
+EMOTION_CARD_IMAGE_MODEL = os.environ.get('EMOTION_CARD_IMAGE_MODEL', '')
+EMOTION_CARD_IMAGE_SIZE = os.environ.get('EMOTION_CARD_IMAGE_SIZE', '1024x1536')
+# 이미지 품질: low | medium(기본) | high. .env로 변경.
+EMOTION_CARD_IMAGE_QUALITY = os.environ.get('EMOTION_CARD_IMAGE_QUALITY', 'medium')
+# 입력 프롬프트 모더레이션(선택). 비우면 로컬 안전규칙만 사용.
+EMOTION_CARD_MODERATION_MODEL = os.environ.get('EMOTION_CARD_MODERATION_MODEL', '')
 # (TAVILY_API_KEY는 장소 추천 기능 폐기로 제거 — 2026-07-05)
 
 # ── ElevenLabs TTS (TTS_음성설정 v2.0) ──
@@ -214,5 +242,4 @@ else:
 # ── 테스트는 로컬 sqlite로 실행 (Postgres 불필요: python manage.py test chat) ──
 if 'test' in sys.argv:
     DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': ':memory:'}}
-
 
