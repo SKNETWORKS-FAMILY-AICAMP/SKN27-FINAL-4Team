@@ -22,6 +22,20 @@ export const reportApi = {
     return data
   },
 
+  async getTodayCheckin() {
+    const { data } = await http.get('/checkin/today/')
+    return data?.data ?? data
+  },
+
+  async saveActionFeedback(checkinId, actionId, helpfulness) {
+    const { data } = await http.post(`/checkin/${checkinId}/feedback/`, {
+      action_id: actionId,
+      completed: true,
+      helpfulness,
+    })
+    return data?.data ?? data
+  },
+
   async refreshReports() {
     const { data } = await http.post('/report/generate/')
     return data

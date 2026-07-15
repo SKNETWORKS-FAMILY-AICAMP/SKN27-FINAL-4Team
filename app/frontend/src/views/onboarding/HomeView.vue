@@ -28,10 +28,21 @@ const features = [
 
 const contentActions = [
   {
+    id: "mycard",
+    icon: "my-card",
+    title: "마음 카드 만들기",
+    desc: "오늘의 마음과 장면을 담아\n나만의 카드를 만들어보세요."
+  },
+  {
     id: "fortune",
-    icon: "fortune",
     title: "카드 운세 보기",
-    desc: "타로카드를 통해 오늘의 운세를 확인하고,\n카드 선택 후 상황 별 조언을 들어보세요."
+    desc: "타로카드를 통해 오늘의 운세를 확인하고,\n상황 별 조언을 들어보세요."
+  },
+  {
+    id: "memory-game",
+    icon: "memory-game",
+    title: "캐릭터 카드 맞추기",
+    desc: "포리와 친구들의 같은 카드를 찾아\n90초 안에 12쌍을 맞춰보세요."
   }
 ];
 </script>
@@ -49,8 +60,8 @@ const contentActions = [
       </p>
 
       <div class="hero-actions">
-        <button class="btn primary large" type="button" @click="$emit('navigate', 'startWalk')">
-          산책 시작하기
+        <button class="btn primary large" type="button" @click="$emit('navigate', 'chat')">
+          마음 대화 시작하기
         </button>
         <button class="btn secondary large" type="button" @click="$emit('navigate', 'my')">
           다락방 둘러보기
@@ -61,7 +72,7 @@ const contentActions = [
         <button
           v-for="action in contentActions"
           :key="action.id"
-          class="content-action tarot-game-action glass-panel"
+          :class="['content-action', 'tarot-game-action', 'glass-panel', action.id + '-action']"
           type="button"
           @click="$emit('navigate', action.id)"
         >
@@ -74,7 +85,7 @@ const contentActions = [
       </div>
     </div>
 
-    <aside class="feature-dock glass-panel" aria-label="핵심 기능">
+    <aside class="feature-dock" aria-label="핵심 기능">
       <article
         v-for="feature in features"
         :key="feature.id"

@@ -755,7 +755,7 @@ function translateCardName(name) {
 
       <aside class="glass-panel tarot-result-panel side-panel">
         <header>
-          <span>▣</span>
+          <span>♠️</span>
           <h3>오늘의 타로 결과</h3>
         </header>
 

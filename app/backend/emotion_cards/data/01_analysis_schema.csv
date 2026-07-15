@@ -1,0 +1,20 @@
+﻿field,type,required,codes,source,priority,fallback,description
+primary_emotion,ENUM,조건부,JOY|SADNESS|ANGER|ANXIETY,질문1/자유입력,90,null,중심 감정은 4개만 사용
+secondary_emotion,ENUM,아니오,JOY|SADNESS|ANGER|ANXIETY,질문1/자유입력,55,null,보조 감정
+emotion_intensity,ENUM,아니오,LOW|MEDIUM|HIGH,강조어/감정 표현,70,MEDIUM,감정 강도
+state_tags,ARRAY,아니오,FEATURE_STATE,전체 입력,80,CONFUSION,"뿌듯함·안도·외로움 등 세부 상태, 최대 3개"
+valence,ENUM,예,POSITIVE|NEGATIVE|MIXED|NEUTRAL|UNKNOWN,감정+사건 결과,80,UNKNOWN,전체 방향
+event_domain,ENUM,아니오,EVENT_DOMAIN,질문2/자유입력,85,UNKNOWN,사건 분야
+event_type_id,ENUM,예,03_event_types.csv,질문2/자유입력,90,EVT_UNSPECIFIED,구체 사건 유형
+event_outcome,ENUM,아니오,OUT_SUCCESS|OUT_POSITIVE|OUT_RELIEF|OUT_NEUTRAL|OUT_MIXED|OUT_DIFFICULT|OUT_LOSS|OUT_UNCERTAIN|OUT_UNKNOWN,결과 표현,60,OUT_UNKNOWN,사건 결과
+event_stage,ENUM,아니오,STARTED|ONGOING|COMPLETED|WAITING|CANCELLED|UNSPECIFIED,시제/완료 표현,40,UNSPECIFIED,사건 단계
+social_context,ENUM,아니오,ALONE|FRIENDS|PARTNER|FAMILY|COLLEAGUES|CLASSMATES|GROUP|CROWD|ONLINE|PET|NOT_DISCLOSED,등장 인물,60,NOT_DISCLOSED,관계 맥락
+energy_code,ENUM,예,ENG_ENERGETIC|ENG_STEADY|ENG_HEAVY|ENG_STOP_REST|ENG_RUSHED|ENG_SLOW_FINISH,질문3/자유입력,80,ENG_STEADY,오늘의 에너지와 리듬
+need_code,ENUM,예,NEED_REST|NEED_COMFORT|NEED_LISTENING|NEED_ORGANIZE|NEED_ENCOURAGEMENT|NEED_REFRESH|NEED_SAVORING|NEED_SOLITUDE|NEED_PRACTICAL|NEED_CONNECTION,질문4/자유입력,85,NEED_COMFORT,현재 필요한 것
+memory_focus,TEXT,아니오,자유 문장,질문5,95,입력의 안전한 요약,카드에 남길 핵심 순간
+explicit_place,TEXT,아니오,자유 명사,장소 표현,100,,"사용자가 직접 말한 장소, 자동 공간보다 우선"
+explicit_action,TEXT,아니오,자유 동작,행동 표현,100,,"사용자가 직접 말한 행동, 자동 행동보다 우선"
+explicit_objects,ARRAY,아니오,09_objects_symbols.csv 또는 자유 명사,사물 표현,95,,"직접 언급한 소품, 최대 3개"
+privacy_level,ENUM,예,PUBLIC_SAFE|ANONYMIZED|PRIVATE_MINIMAL|NOT_DISCLOSED,개인정보/민감도,100,ANONYMIZED,장면 익명화 수준
+analysis_status,ENUM,예,CLEAR|MIXED|AMBIGUOUS|NOT_DISCLOSED|SAFETY_REVIEW,전체 분석,100,AMBIGUOUS,분석 사용 가능 상태
+analysis_confidence,FLOAT,예,0~1,LLM 구조화 출력,100,0,전체 분석 신뢰도

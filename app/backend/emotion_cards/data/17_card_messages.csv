@@ -1,0 +1,9 @@
+﻿message_id,message_text,fit,avoid_when
+MSG_ENOUGH,오늘도 충분히 잘했어,PRIDE|ENCOURAGEMENT,고위험 상황을 무시하는 느낌이 되지 않도록 검수
+MSG_REST,조금 쉬어가도 괜찮아,FATIGUE|REST|ANXIETY,고위험 상황을 무시하는 느낌이 되지 않도록 검수
+MSG_GOOD_DAY,생각보다 좋은 하루였어,JOY|RELIEF,고위험 상황을 무시하는 느낌이 되지 않도록 검수
+MSG_SURVIVE,힘들었지만 잘 버텼어,DIFFICULT|COMPLETED,고위험 상황을 무시하는 느낌이 되지 않도록 검수
+MSG_CARE,내 마음을 먼저 돌봐주자,COMFORT|SOLITUDE|ORGANIZE,고위험 상황을 무시하는 느낌이 되지 않도록 검수
+MSG_WORRY,오늘의 걱정은 여기 두고 가자,ANXIETY|RELIEF|RELEASE,고위험 상황을 무시하는 느낌이 되지 않도록 검수
+MSG_KEEP,작은 기쁨을 오래 기억하고 싶어,JOY|SAVORING|GRATITUDE,고위험 상황을 무시하는 느낌이 되지 않도록 검수
+MSG_UNCLEAR,아직 잘 모르겠지만 괜찮아,AMBIGUOUS|MIXED|CONFUSION,고위험 상황을 무시하는 느낌이 되지 않도록 검수

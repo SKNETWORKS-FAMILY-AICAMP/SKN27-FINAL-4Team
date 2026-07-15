@@ -1,0 +1,18 @@
+﻿safety_rule_id,trigger_code,trigger_name,keyword_hints,policy,prohibited_visuals,preferred_reframe,review_required,priority,note
+SVR-001,SV_SELF_HARM,자해·극단적 선택,죽고 싶|사라지고 싶|자해,BLOCK_AND_SUPPORT,자해 도구·상처·위험 장소,이미지 중단·지원 플로우,True,100,키워드만으로 확정하지 말고 문맥 판정
+SVR-002,SV_DANGER,즉각적 위험,지금 다칠|죽이겠|위험해,BLOCK_AND_SUPPORT,위험 행위·무기,이미지 중단·안전 확인,True,100,키워드만으로 확정하지 말고 문맥 판정
+SVR-003,SV_VIOLENCE,폭력·공격,때렸|폭행|싸움,REFRAME,폭행·무기·상처,거리 두기·붉은 노을·숨 고르기,True,100,키워드만으로 확정하지 말고 문맥 판정
+SVR-004,SV_ABUSE,학대·괴롭힘,학대|가정폭력|괴롭힘|왕따,REVIEW,가해 장면·조롱 얼굴,안전 공간·익명 실루엣,True,100,키워드만으로 확정하지 말고 문맥 판정
+SVR-005,SV_SEXUAL,성폭력,성폭력|성추행|강간,BLOCK_OR_REVIEW,행위·신체 재현,직접 생성 금지,True,100,키워드만으로 확정하지 말고 문맥 판정
+SVR-006,SV_GORE,피·상처·사고,피가|상처|사고,REFRAME,피·상처·신체 손상,담요·등불·회복 공간,True,100,키워드만으로 확정하지 말고 문맥 판정
+SVR-007,SV_MEDICAL,의료·질환,진단|수술|검사|병원,ANONYMIZE,의료 기구·병명,일반 대기 공간·따뜻한 빛,False,100,키워드만으로 확정하지 말고 문맥 판정
+SVR-008,SV_PANIC,공황·극심 불안,공황|숨이 안 쉬|패닉,REFRAME,질식·공포·무너지는 공간,안개와 작은 안내 빛,True,100,키워드만으로 확정하지 말고 문맥 판정
+SVR-009,SV_GRIEF,사망·상실,사망|떠났|장례,REVIEW,시신·무덤,사진·꽃·작은 등불,True,100,키워드만으로 확정하지 말고 문맥 판정
+SVR-010,SV_BODY,신체 이미지,살쪘|못생겼|체중|먹으면 안,REFRAME,신체 비교·체중계,자기돌봄·중립 구도,True,100,키워드만으로 확정하지 말고 문맥 판정
+SVR-011,SV_SUBSTANCE,술·약물,취했|마약|약물,REFRAME,음주·약물 사용,물·휴식·안전 공간,True,100,키워드만으로 확정하지 말고 문맥 판정
+SVR-012,SV_FINANCE,심각 경제 위기,빚|파산,REFRAME,절망·구체 금액,노트·등불·정리 장면,True,100,키워드만으로 확정하지 말고 문맥 판정
+SVR-013,SV_IDENTITY,개인정보,전화번호|주소|회사명|학교명|아이디,ANONYMIZE,읽을 수 있는 정보·로고,장소·인물 일반화,False,100,키워드만으로 확정하지 말고 문맥 판정
+SVR-014,SV_DIAGNOSIS,자가 진단,우울증|불안장애|ADHD,NO_DIAGNOSIS,진단서·병명 강조,감정과 필요만 표현,False,100,키워드만으로 확정하지 말고 문맥 판정
+SVR-015,SV_HORROR,공포·오컬트,귀신|악몽|호러|오컬트,STYLE_LIMIT,괴물·의식·공포 얼굴,별·달·등불 중심,False,100,키워드만으로 확정하지 말고 문맥 판정
+SVR-016,SV_TEXT,이미지 내 문구,문구를 그림에,TEXT_SEPARATE,깨진 글자·워터마크,UI/Canvas로 별도 합성,False,100,키워드만으로 확정하지 말고 문맥 판정
+SVR-017,SV_CHARACTER,캐릭터 보존,포리|까미|토토|여울,PRESERVE,외형 변경·추가 팔다리,참조 이미지 그대로 유지,False,100,키워드만으로 확정하지 말고 문맥 판정

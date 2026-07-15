@@ -157,6 +157,34 @@
           <button type="button" class="secondary-button">이미지 저장</button>
           <button type="button" class="primary-button">공유</button>
         </footer>
+
+        <section v-if="todayAction" class="report-action-feedback" aria-labelledby="action-feedback-title">
+          <div>
+            <span class="eyebrow">오늘의 나 돌아보기</span>
+            <h2 id="action-feedback-title">추천 행동은 어땠나요?</h2>
+            <p><strong>{{ todayAction.title }}</strong>을(를) 해본 뒤, 감정 완화에 도움이 된 정도를 남겨주세요.</p>
+          </div>
+          <div class="report-action-score-row">
+            <button
+              v-for="option in feedbackOptions"
+              :key="option.value"
+              type="button"
+              class="report-action-score"
+              :class="{ active: actionFeedbackValue === option.value }"
+              :aria-pressed="actionFeedbackValue === option.value"
+              @click="actionFeedbackValue = option.value"
+            >
+              <strong>{{ option.value }}</strong>
+              <span>{{ option.label }}</span>
+            </button>
+          </div>
+          <div class="report-action-feedback-footer">
+            <span v-if="actionFeedbackMessage" class="report-action-feedback-message">{{ actionFeedbackMessage }}</span>
+            <button type="button" class="primary-button" :disabled="isFeedbackSaving || !actionFeedbackValue" @click="saveActionFeedback">
+              {{ isFeedbackSaving ? '저장 중…' : '평가 저장' }}
+            </button>
+          </div>
+        </section>
       </section>
     </section>
   </main>
@@ -168,6 +196,17 @@ import { reportApi } from '../../api/report.js'
 import reportBg from '../../assets/report-bg.png'
 
 const reports = ref([])
+const todayCheckin = ref(null)
+const actionFeedbackValue = ref(null)
+const actionFeedbackMessage = ref('')
+const isFeedbackSaving = ref(false)
+const feedbackOptions = [
+  { value: 1, label: '별로 도움 안 됨' },
+  { value: 2, label: '조금 아쉬움' },
+  { value: 3, label: '보통' },
+  { value: 4, label: '도움 됨' },
+  { value: 5, label: '완전 도움 됨' },
+]
 
 const isLoading = ref(true)
 const isRefreshing = ref(false)
@@ -220,6 +259,7 @@ const filteredReports = computed(() => (
 const currentReport = computed(
   () => filteredReports.value.find((report) => report.id === selectedReportId.value) ?? filteredReports.value[0],
 )
+const todayAction = computed(() => todayCheckin.value?.selected_action ?? null)
 
 watch(selectedMonth, () => {
   selectedReportId.value = filteredReports.value[0]?.id
@@ -265,7 +305,35 @@ const refreshReports = async () => {
   }
 }
 
-onMounted(loadReports)
+const loadTodayCheckin = async () => {
+  try {
+    const data = await reportApi.getTodayCheckin()
+    todayCheckin.value = data?.checkin ?? null
+    actionFeedbackValue.value = data?.action_feedback?.helpfulness ?? null
+  } catch (error) {
+    // 리포트 본문은 오늘의 나 기록이 없어도 계속 표시합니다.
+    console.warn('Failed to fetch today check-in:', error)
+  }
+}
+
+onMounted(() => {
+  loadReports()
+  loadTodayCheckin()
+})
+
+async function saveActionFeedback() {
+  if (!todayCheckin.value?.id || !todayAction.value?.id || !actionFeedbackValue.value || isFeedbackSaving.value) return
+  isFeedbackSaving.value = true
+  actionFeedbackMessage.value = ''
+  try {
+    await reportApi.saveActionFeedback(todayCheckin.value.id, todayAction.value.id, actionFeedbackValue.value)
+    actionFeedbackMessage.value = '평가를 저장했어요. 다음 행동 추천에 참고할게요.'
+  } catch (error) {
+    actionFeedbackMessage.value = error?.response?.data?.error?.message ?? '평가를 저장하지 못했어요. 잠시 후 다시 시도해주세요.'
+  } finally {
+    isFeedbackSaving.value = false
+  }
+}
 
 const emotionToneClass = (day) => {
   if (['😣', '😔'].includes(day.icon)) return 'emotion-day--very-low'
@@ -419,6 +487,53 @@ button {
   font-family: var(--font-soft);
   font-size: 18px;
   font-weight: 700;
+}
+
+.panel-head span,
+.eyebrow {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.empty-report-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.period-card {
+  display: grid;
+  width: 100%;
+  gap: 5px;
+  min-height: 58px;
+  margin-top: 8px;
+  padding: 11px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-secondary);
+  text-align: left;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.period-card:hover,
+.period-card.active {
+  transform: translateY(-1px);
+  border-color: rgba(255, 179, 71, 0.58);
+  background: linear-gradient(135deg, rgba(255, 179, 71, 0.16), rgba(94, 234, 212, 0.09));
+  color: var(--text-primary);
+}
+
+.period-card strong {
+  color: #BFF8EF;
+  font-size: 13px;
+}
+
+.period-card span {
+  font-size: 12px;
   color: #fff9ff;
   white-space: nowrap;
 }
@@ -633,6 +748,27 @@ button {
 .report-card > * {
   position: relative;
   z-index: 1;
+}
+
+.report-empty-state {
+  display: grid;
+  align-content: center;
+  min-height: 380px;
+}
+
+.report-empty-state h1 {
+  margin: 8px 0 0;
+  color: var(--text-primary);
+  font-size: 26px;
+  line-height: 1.35;
+}
+
+.report-empty-state p {
+  max-width: 620px;
+  margin: 14px 0 0;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 15px;
+  line-height: 1.8;
 }
 
 .report-header {
@@ -859,6 +995,90 @@ button {
   color: #425f58;
 }
 
+.report-action-feedback {
+  display: grid;
+  gap: 16px;
+  margin-top: 26px;
+  padding: 20px;
+  border: 1px solid rgba(255, 180, 140, 0.28);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(255, 164, 116, 0.1), rgba(94, 234, 212, 0.06));
+}
+
+.report-action-feedback h2 {
+  margin: 4px 0 6px;
+  color: #fff7ee;
+  font-size: 18px;
+}
+
+.report-action-feedback p {
+  margin: 0;
+  color: rgba(255, 245, 238, 0.72);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.report-action-feedback p strong {
+  color: #ffd39d;
+}
+
+.report-action-score-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.report-action-score {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  min-height: 62px;
+  padding: 9px 6px;
+  border: 1px solid rgba(255, 190, 151, 0.32);
+  border-radius: 12px;
+  color: rgba(255, 236, 224, 0.75);
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  transition: 0.18s ease;
+}
+
+.report-action-score strong {
+  color: #fff2dc;
+  font-size: 18px;
+}
+
+.report-action-score span {
+  font-size: 10px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.report-action-score:hover,
+.report-action-score.active {
+  border-color: rgba(255, 211, 157, 0.8);
+  background: linear-gradient(135deg, rgba(231, 62, 101, 0.72), rgba(231, 126, 110, 0.64));
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.report-action-feedback-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.report-action-feedback-message {
+  color: #bff8ef;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.report-action-feedback button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .primary-button:hover,
 .secondary-button:hover {
   transform: translateY(-1px);
@@ -982,6 +1202,19 @@ button {
   .report-actions button {
     flex: 1;
     min-width: 0;
+  }
+
+  .report-action-score-row {
+    gap: 5px;
+  }
+
+  .report-action-score span {
+    font-size: 9px;
+  }
+
+  .report-action-feedback-footer {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 </style>

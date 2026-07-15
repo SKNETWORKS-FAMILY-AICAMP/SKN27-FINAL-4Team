@@ -573,6 +573,99 @@ body {
   line-height: 1.5 !important;
 }
 
+/* Keep the two home shortcuts readable after the legacy responsive rules. */
+#app .home-view .tarot-only-actions {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 18px !important;
+  width: min(760px, 100%) !important;
+  max-width: 760px !important;
+}
+
+#app .home-view .tarot-game-action {
+  min-width: 0 !important;
+  min-height: 156px !important;
+  grid-template-columns: 88px minmax(0, 1fr) 34px !important;
+  gap: 14px !important;
+  padding: 18px 16px !important;
+}
+
+#app .home-view .tarot-game-action .sticker-icon {
+  width: 88px !important;
+  height: 112px !important;
+  background-size: 52px auto, 52px auto, 52px auto !important;
+}
+
+#app .home-view .tarot-game-action.checkin-action .sticker-icon {
+  border-radius: 18px !important;
+  background:
+    linear-gradient(145deg, rgba(255, 214, 157, 0.24), rgba(238, 87, 143, 0.24)),
+    url("/characters/redpanda/joy.png") center bottom / contain no-repeat !important;
+}
+
+#app .home-view .tarot-game-action > span:nth-child(2) {
+  min-width: 0 !important;
+  display: grid !important;
+  align-content: center !important;
+  gap: 7px !important;
+  padding-right: 26px !important;
+}
+
+#app .home-view .tarot-game-action strong {
+  min-width: 0 !important;
+  overflow: visible !important;
+  font-size: clamp(18px, 1.48vw, 24px) !important;
+  line-height: 1.2 !important;
+  letter-spacing: -0.03em !important;
+  text-overflow: clip !important;
+  white-space: normal !important;
+  word-break: keep-all !important;
+}
+
+#app .home-view .tarot-game-action small {
+  display: -webkit-box !important;
+  overflow: hidden !important;
+  margin-top: 0 !important;
+  color: rgba(255, 235, 230, 0.72) !important;
+  font-size: clamp(12px, 1vw, 15px) !important;
+  line-height: 1.45 !important;
+  white-space: normal !important;
+  word-break: keep-all !important;
+  overflow-wrap: anywhere !important;
+  -webkit-box-orient: vertical !important;
+  -webkit-line-clamp: 3 !important;
+}
+
+#app .home-view .tarot-game-action > span:last-child::after {
+  right: 12px !important;
+  width: 32px !important;
+  height: 32px !important;
+  font-size: 24px !important;
+}
+
+@media (max-width: 720px) {
+  #app .home-view .tarot-only-actions {
+    grid-template-columns: 1fr !important;
+    width: 100% !important;
+  }
+
+  #app .home-view .tarot-game-action {
+    min-height: 118px !important;
+    grid-template-columns: 76px minmax(0, 1fr) 28px !important;
+    gap: 12px !important;
+  }
+
+  #app .home-view .tarot-game-action .sticker-icon {
+    width: 76px !important;
+    height: 84px !important;
+    background-size: 58px auto, 58px auto, 58px auto !important;
+  }
+
+  #app .home-view .tarot-game-action.checkin-action .sticker-icon {
+    background-size: contain !important;
+  }
+}
+
 #app .home-view .feature-dock {
   width: 1140px !important;
   max-width: 1140px !important;

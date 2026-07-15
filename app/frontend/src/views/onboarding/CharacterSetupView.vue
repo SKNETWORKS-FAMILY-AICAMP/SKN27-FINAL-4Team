@@ -1,16 +1,16 @@
 <script setup>
 import { computed, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { characterApi } from "../../api/character.js";
 
-const emit = defineEmits(["navigate"]);
+const router = useRouter();
+const route = useRoute();
 
 const expressions = [
   { id: "joy", label: "기쁨", desc: "통통 튀는 밝은 반응" },
   { id: "anger", label: "화남", desc: "부들부들 화난 반응" },
   { id: "sadness", label: "슬픔", desc: "축 처진 공감 반응" },
   { id: "anxiety", label: "불안", desc: "작게 떨리는 긴장 반응" },
-  { id: "hurt", label: "상처", desc: "힘 빠진 위로 반응" },
-  { id: "panic", label: "당황", desc: "크게 흔들리는 당황 반응" },
 ];
 
 const characters = [
@@ -21,7 +21,6 @@ const characters = [
     tone: "부드럽고 따뜻한 말투",
     line: "오늘 마음은 제가 옆에서 같이 정리해볼게요.",
     tags: ["다정함", "포근함"],
-    stats: { empathy: 88, calm: 72, support: 86, careful: 82 },
   },
   {
     id: "cat",
@@ -30,7 +29,6 @@ const characters = [
     tone: "무심하지만 핵심을 짚는 말투",
     line: "피하고 싶은 마음까지 천천히 살펴볼까요?",
     tags: ["솔직함", "냉철함"],
-    stats: { empathy: 70, calm: 92, support: 76, careful: 84 },
   },
   {
     id: "redpanda",
@@ -39,7 +37,6 @@ const characters = [
     tone: "밝고 힘 있게 응원하는 말투",
     line: "작은 행동 하나만 골라서 같이 시작해봐요.",
     tags: ["에너지", "긍정적"],
-    stats: { empathy: 82, calm: 68, support: 94, careful: 78 },
   },
   {
     id: "bird",
@@ -48,15 +45,7 @@ const characters = [
     tone: "조심스럽고 섬세한 말투",
     line: "괜찮아요. 천천히 말해도 제가 듣고 있을게요.",
     tags: ["조심스러움", "섬세함"],
-    stats: { empathy: 92, calm: 85, support: 78, careful: 90 },
   },
-];
-
-const statLabels = [
-  { key: "empathy", label: "공감력", icon: "♡" },
-  { key: "calm", label: "차분함", icon: "♬" },
-  { key: "support", label: "응원력", icon: "✦" },
-  { key: "careful", label: "신중함", icon: "◌" },
 ];
 
 const storedCharacter = getStoredCharacter();
@@ -68,7 +57,7 @@ const selectedCharacter = ref(
 const selectedExpression = ref(
   expressions.some((expression) => expression.id === storedCharacter.expressionId)
     ? storedCharacter.expressionId
-    : "hurt"
+    : "anxiety"
 );
 
 const selected = computed(() => characters.find((character) => character.id === selectedCharacter.value) || characters[0]);
@@ -115,7 +104,11 @@ async function saveCharacterAndContinue() {
     // 서버 연결이 없을 때도 온보딩을 이어갈 수 있도록 localStorage 값을 유지한다.
   }
 
-  emit("navigate", "userinfo");
+  const redirect = String(route.query.redirect || "");
+  router.push({
+    path: "/onboarding/info",
+    query: redirect.startsWith("/") && !redirect.startsWith("//") ? { redirect } : {},
+  });
 }
 </script>
 
@@ -207,20 +200,6 @@ async function saveCharacterAndContinue() {
           <span>{{ selected.role }}</span>
           <p>{{ selected.role }} · {{ selected.tone }}</p>
           <blockquote>{{ selected.line }}</blockquote>
-        </section>
-
-        <section class="stat-preview" aria-label="성향 미리보기">
-          <h4>성향 미리보기</h4>
-          <div
-            v-for="stat in statLabels"
-            :key="stat.key"
-            class="trait-row"
-            :style="{ '--value': `${selected.stats[stat.key]}%` }"
-          >
-            <span><i>{{ stat.icon }}</i>{{ stat.label }}</span>
-            <div><b></b></div>
-            <strong>{{ selected.stats[stat.key] }}</strong>
-          </div>
         </section>
 
         <button class="btn primary full save-character-button" type="button" @click="saveCharacterAndContinue">
@@ -456,7 +435,10 @@ async function saveCharacterAndContinue() {
 
 .face-options {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(104px, 1fr));
+  justify-content: center;
+  width: min(100%, 620px);
+  margin-inline: auto;
   gap: 10px;
 }
 

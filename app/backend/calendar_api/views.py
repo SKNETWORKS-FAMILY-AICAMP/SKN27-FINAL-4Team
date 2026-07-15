@@ -40,9 +40,6 @@ def serialize_daily_fortune_with_emotion(request, fortune):
 @permission_classes([AllowAny])
 def get_calendar_month(request):
     owner_filter = get_owner_filter(request)
-    if owner_filter is None:
-        return Response([], status=status.HTTP_200_OK)
-
     today = timezone.localdate()
     try:
         year = int(request.query_params.get('year', today.year))
@@ -52,25 +49,36 @@ def get_calendar_month(request):
     except (TypeError, ValueError):
         return Response({'error': 'Invalid year or month.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    fortunes = DailyFortune.objects.filter(
-        **owner_filter,
-        date__gte=start_date,
-        date__lt=end_date,
-    ).order_by('date')
+    try:
+        from checkin.views import calendar_entries_for
+        checkins = {item['date']: item for item in calendar_entries_for(request.user, start_date, end_date)} if request.user.is_authenticated else {}
+    except Exception:
+        checkins = {}
+
+    if owner_filter is None:
+        fortunes = DailyFortune.objects.none()
+    else:
+        fortunes = DailyFortune.objects.filter(
+            **owner_filter,
+            date__gte=start_date,
+            date__lt=end_date,
+        ).order_by('date')
 
     emotion_by_date = get_emotion_labels_by_date(request, [fortune.date for fortune in fortunes])
-
+    fortune_by_date = {fortune.date.isoformat(): fortune for fortune in fortunes}
+    dates = sorted(set(fortune_by_date) | set(checkins))
     return Response([
         {
-            'date': fortune.date.isoformat(),
-            'day': fortune.date.day,
-            'topic': fortune.topic,
-            'title': fortune.title,
-            'keyword': fortune.keyword,
-            'emotion_label': emotion_by_date.get(fortune.date),
-            'has_fortune': bool(fortune.content),
+            'date': date_key,
+            'day': date.fromisoformat(date_key).day,
+            'topic': fortune_by_date[date_key].topic if date_key in fortune_by_date else 'checkin',
+            'title': fortune_by_date[date_key].title if date_key in fortune_by_date else '오늘의 나',
+            'keyword': fortune_by_date[date_key].keyword if date_key in fortune_by_date else '',
+            'emotion_label': emotion_by_date.get(fortune_by_date[date_key].date) if date_key in fortune_by_date else (checkins[date_key] or {}).get('primary_emotion'),
+            'has_fortune': bool(fortune_by_date[date_key].content) if date_key in fortune_by_date else False,
+            'checkin': checkins.get(date_key),
         }
-        for fortune in fortunes
+        for date_key in dates
     ])
 
 
@@ -78,9 +86,6 @@ def get_calendar_month(request):
 @permission_classes([AllowAny])
 def get_calendar_day(request):
     owner_filter = get_owner_filter(request)
-    if owner_filter is None:
-        return Response({'fortune': None}, status=status.HTTP_200_OK)
-
     value = request.query_params.get('date')
     if not value:
         return Response({'error': 'date is required.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -90,5 +95,19 @@ def get_calendar_day(request):
     except ValueError:
         return Response({'error': 'date must be YYYY-MM-DD.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    fortune = DailyFortune.objects.filter(**owner_filter, date=target_date).first()
-    return Response({'fortune': serialize_daily_fortune_with_emotion(request, fortune) if fortune else None})
+    fortune = DailyFortune.objects.filter(**owner_filter, date=target_date).first() if owner_filter is not None else None
+    checkin = None
+    if request.user.is_authenticated:
+        try:
+            from checkin.models import DailyCheckin
+            from checkin.services import calendar_entry
+            item = DailyCheckin.objects.select_related('reflection', 'cause', 'need', 'selected_action').filter(
+                user=request.user, checkin_date=target_date,
+            ).first()
+            checkin = calendar_entry(item) if item else None
+        except Exception:
+            checkin = None
+    return Response({
+        'fortune': serialize_daily_fortune_with_emotion(request, fortune) if fortune else None,
+        'checkin': checkin,
+    })

@@ -1,0 +1,7 @@
+﻿check,status,value,detail
+CSV 파일 수,PASS,28,manifest/readme/validation 포함
+사건 유형,PASS,61,일상 주요 영역
+취미·관심사 매핑,PASS,96,55 hobbies + 41 interests
+LLM 예시,PASS,50,구조화 회귀 테스트
+장면 매핑 테스트,PASS,45,예상 scene 요소
+참조 무결성 오류,PASS,0,
