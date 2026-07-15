@@ -1,13 +1,13 @@
 <template>
   <section class="memory-panel">
     <header class="memory-toolbar">
-      <div>
-        <span class="memory-kicker">MEMORY ARCHIVE</span>
-        <h3>기억 보관함</h3>
+      <div class="memory-summary">
+        <strong>{{ filteredMemories.length }}개의 기억</strong>
+        <span>대화에서 보관된 내용을 확인하고 관리합니다.</span>
       </div>
       <div class="memory-actions">
         <label class="memory-search">
-          <input v-model="keyword" type="search" placeholder="데이터 검색..." />
+          <input v-model="keyword" type="search" aria-label="기억 검색" placeholder="기억 검색" />
         </label>
         <button class="memory-ghost-button" type="button" :disabled="loading" @click="$emit('refresh')">
           새로고침
@@ -25,8 +25,7 @@
       <table v-else class="memory-table">
         <thead>
           <tr>
-            <th class="col-title">기억 조각</th>
-            <th class="col-content">내용</th>
+            <th class="col-memory">기억</th>
             <th class="col-date">기록된 날</th>
             <th class="col-action">관리</th>
           </tr>
@@ -38,8 +37,10 @@
             @click="selectNode(item)" 
             :class="{ 'active-row': selectedNode?.id === item.id }"
           >
-            <td class="col-title"><strong>{{ item.title }}</strong></td>
-            <td class="col-content"><p class="truncate">{{ item.content }}</p></td>
+            <td class="col-memory">
+              <strong>{{ item.title }}</strong>
+              <p class="truncate">{{ item.content }}</p>
+            </td>
             <td class="col-date"><small>{{ item.savedAt }}</small></td>
             <td class="col-action">
               <button class="action-btn delete-btn" @click.stop="deleteMemory(item.id)">삭제</button>
@@ -168,52 +169,62 @@ export default {
 .memory-panel {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
   color: #fff;
   height: 100%;
+  padding: 12px;
 }
 
 .memory-toolbar {
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
-  gap: 16px;
+  align-items: center;
+  gap: 12px;
   flex-shrink: 0;
 }
 
-.memory-kicker {
-  color: #4facf7;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+.memory-summary {
+  min-width: 0;
 }
 
-.memory-toolbar h3 {
-  margin: 4px 0 0;
-  font-size: 24px;
+.memory-summary strong,
+.memory-summary span {
+  display: block;
+}
+
+.memory-summary strong {
+  color: #f5eadf;
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.memory-summary span {
+  margin-top: 2px;
+  color: rgba(245, 234, 223, 0.58);
+  font-size: 11px;
 }
 
 .memory-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .memory-search input {
-  height: 38px;
+  height: 34px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.4);
   color: #fff;
-  padding: 0 16px;
-  font-size: 13px;
-  width: 200px;
+  padding: 0 12px;
+  font-size: 12px;
+  width: 170px;
   transition: all 0.3s ease;
 }
 
 .memory-search input:focus {
   outline: none;
-  border-color: #4facf7;
+  border-color: #e59b5f;
   background: rgba(0, 0, 0, 0.6);
 }
 
@@ -229,8 +240,8 @@ export default {
 .memory-ghost-button {
   background: rgba(255, 255, 255, 0.12);
   color: #fff;
-  padding: 10px 16px;
-  height: 38px;
+  padding: 0 12px;
+  height: 34px;
   transition: background 0.2s;
 }
 .memory-ghost-button:hover:not(:disabled) {
@@ -269,7 +280,7 @@ export default {
 .memory-empty {
   background: rgba(255, 255, 255, 0.05);
   color: rgba(255, 255, 255, 0.6);
-  padding: 40px;
+  padding: 28px;
   text-align: center;
   border: 1px dashed rgba(255, 255, 255, 0.15);
   border-radius: 12px;
@@ -309,8 +320,8 @@ export default {
 }
 
 .memory-table th {
-  padding: 16px;
-  font-size: 12px;
+  padding: 10px 12px;
+  font-size: 11px;
   color: rgba(255, 255, 255, 0.4);
   font-weight: 700;
   letter-spacing: 0.05em;
@@ -335,17 +346,18 @@ export default {
 }
 
 .memory-table td {
-  padding: 18px 16px;
-  vertical-align: top;
+  padding: 11px 12px;
+  vertical-align: middle;
 }
 
 /* Column Widths */
-.col-title { width: 30%; }
-.col-content { width: 45%; }
-.col-date { width: 15%; color: rgba(255,255,255,0.5); }
-.col-action { width: 10%; text-align: right; }
+.col-memory { width: 70%; }
+.col-date { width: 18%; color: rgba(255,255,255,0.5); }
+.col-action { width: 12%; text-align: right; }
 
-.col-title strong {
+.col-memory strong {
+  display: block;
+  margin-bottom: 3px;
   font-size: 14px;
   color: rgba(255, 255, 255, 0.9);
   font-weight: 600;
@@ -353,21 +365,21 @@ export default {
 
 .truncate {
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
   margin: 0;
   color: rgba(255, 255, 255, 0.65);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .action-btn {
   background: none;
   border: 1px solid rgba(255, 122, 138, 0.4);
   color: #ff7a8a;
-  padding: 6px 12px;
+  padding: 5px 9px;
   border-radius: 6px;
   font-size: 12px;
   cursor: pointer;
@@ -380,15 +392,15 @@ export default {
 /* Side Panel for Detail */
 .memory-detail-panel {
   position: absolute;
-  top: 16px;
-  right: 16px;
-  bottom: 16px;
-  width: 300px;
+  top: 10px;
+  right: 10px;
+  bottom: 10px;
+  width: 280px;
   background: rgba(27, 18, 62, 0.95);
   backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 16px;
-  padding: 24px;
+  border-radius: 12px;
+  padding: 18px;
   display: flex;
   flex-direction: column;
   z-index: 20;
@@ -397,8 +409,8 @@ export default {
 
 .close-btn {
   position: absolute;
-  top: 20px;
-  right: 20px;
+  top: 14px;
+  right: 14px;
   background: none;
   border: none;
   color: #fff;
@@ -413,15 +425,15 @@ export default {
 }
 
 .detail-header {
-  margin-bottom: 24px;
+  margin-bottom: 14px;
   padding-right: 20px;
   border-bottom: 1px solid rgba(255,255,255,0.08);
-  padding-bottom: 16px;
+  padding-bottom: 12px;
 }
 
 .detail-header h4 {
   margin: 0 0 8px;
-  font-size: 20px;
+  font-size: 17px;
   color: #fff;
   line-height: 1.4;
 }
@@ -435,8 +447,8 @@ export default {
   overflow-y: auto;
   line-height: 1.7;
   color: rgba(255, 255, 255, 0.8);
-  font-size: 14px;
-  padding-right: 8px;
+  font-size: 13px;
+  padding-right: 6px;
 }
 
 .detail-body::-webkit-scrollbar {
@@ -449,11 +461,36 @@ export default {
 }
 
 .detail-footer {
-  margin-top: 20px;
+  margin-top: 14px;
   display: flex;
   justify-content: stretch;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
-  padding-top: 16px;
+  padding-top: 12px;
+}
+
+@media (max-width: 680px) {
+  .memory-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .memory-actions,
+  .memory-search,
+  .memory-search input {
+    width: 100%;
+  }
+
+  .col-date {
+    display: none;
+  }
+
+  .col-memory { width: 82%; }
+  .col-action { width: 18%; }
+
+  .memory-detail-panel {
+    left: 10px;
+    width: auto;
+  }
 }
 
 .detail-footer .memory-danger-button {

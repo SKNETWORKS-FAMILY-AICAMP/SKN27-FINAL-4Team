@@ -82,8 +82,12 @@ export async function fetchCurrentWeather(location = {}) {
 
 
 
-export async function fetchBookRecommendation(force = false) {
-  const queryParams = force ? "?force=true" : "";
+export async function fetchBookRecommendation(force = false, theme = null) {
+  const params = [];
+  if (force) params.push("force=true");
+  if (theme) params.push(`theme=${encodeURIComponent(theme)}`);
+  const queryParams = params.length ? `?${params.join("&")}` : "";
+
   const endpoints = [
     `/api/mybook/recommendation/${queryParams}`,
     `http://localhost:8000/api/mybook/recommendation/${queryParams}`
@@ -171,6 +175,40 @@ export async function deleteMemoryVaultItem(memoryId) {
   }
 
   throw lastError || new Error("Memory delete API is not reachable");
+}
+
+export async function fetchImageVault() {
+  const response = await fetch("/api/image-vault/images/", {
+    cache: "no-store",
+    credentials: "include"
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch saved images: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function renameImageVaultItem(imageId, name) {
+  const response = await fetch(`/api/image-vault/images/${encodeURIComponent(imageId)}/`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ name })
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to rename saved image: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function deleteImageVaultItem(imageId) {
+  const response = await fetch(`/api/image-vault/images/${encodeURIComponent(imageId)}/`, {
+    method: "DELETE",
+    credentials: "include"
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to delete saved image: ${response.status}`);
+  }
 }
 
 export async function saveOnboardingMbti(mbtiType) {

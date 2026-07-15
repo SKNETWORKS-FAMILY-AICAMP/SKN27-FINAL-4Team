@@ -496,7 +496,7 @@ export default {
   background: rgba(255, 255, 255, 0.055);
   color: rgba(255, 245, 230, 0.78);
   font-size: 15px;
-  font-weight: 950;
+  font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -535,7 +535,7 @@ export default {
   font-size: 20px !important;
   color: #fff7df !important;
   margin: 0 !important;
-  font-weight: 850 !important;
+  font-weight: 800 !important;
   letter-spacing: -0.02em;
 }
 
@@ -573,7 +573,7 @@ export default {
     linear-gradient(145deg, rgba(156, 91, 255, 0.72), rgba(32, 41, 105, 0.76));
   color: #fff7df;
   font-size: 34px;
-  font-weight: 950;
+  font-weight: 900;
   box-shadow: 0 12px 24px rgba(5, 2, 18, 0.24);
   overflow: hidden;
 }
@@ -593,7 +593,7 @@ export default {
   display: block;
   color: #d7b7ff;
   font-size: 11px;
-  font-weight: 950;
+  font-weight: 700;
 }
 
 .profile-title h3 {
@@ -761,7 +761,7 @@ export default {
   padding: 4px 12px;
   border-radius: 999px;
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
 }
 .interest-chip {
   padding: 8px 16px !important;

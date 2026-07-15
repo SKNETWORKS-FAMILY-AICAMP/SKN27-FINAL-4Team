@@ -1,26 +1,69 @@
+import csv
 import math
 import os
+import re
+import time
+from collections import Counter
+from copy import deepcopy
+from datetime import datetime
 from datetime import timedelta
-from urllib.parse import unquote
 
 import requests
+from django.core.cache import cache
 from django.utils import timezone
 
 
-KMA_SERVICE_ENDPOINT = os.environ.get(
-    "KMA_SERVICE_ENDPOINT",
-    os.environ.get(
-        "KMA_CURRENT_WEATHER_URL",
-        "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0",
-    ),
+KMA_API_HUB_VILAGE_ENDPOINT = os.environ.get(
+    "KMA_API_HUB_VILAGE_ENDPOINT",
+    "https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService_2.0",
 )
 KMA_CURRENT_WEATHER_OPERATION = "getUltraSrtNcst"
 KMA_ULTRA_SHORT_FORECAST_OPERATION = "getUltraSrtFcst"
+KMA_SHORT_FORECAST_OPERATION = "getVilageFcst"
+KMA_API_HUB_MID_ENDPOINT = os.environ.get(
+    "KMA_API_HUB_MID_ENDPOINT",
+    "https://apihub.kma.go.kr/api/typ02/openApi/MidFcstInfoService",
+)
+KMA_MID_TEMPERATURE_OPERATION = "getMidTa"
+KMA_MID_LAND_OPERATION = "getMidLandFcst"
+KMA_CACHE_SECONDS = max(60, int(os.environ.get("KMA_CACHE_SECONDS", "600")))
+KMA_STALE_CACHE_SECONDS = max(
+    KMA_CACHE_SECONDS,
+    int(os.environ.get("KMA_STALE_CACHE_SECONDS", "7200")),
+)
+KMA_TIMEOUT_SECONDS = max(3, int(os.environ.get("KMA_TIMEOUT_SECONDS", "8")))
+KMA_RETRY_COUNT = max(0, int(os.environ.get("KMA_RETRY_COUNT", "1")))
+KMA_WARNING_ENDPOINT = os.environ.get(
+    "KMA_API_HUB_WARNING_ENDPOINT",
+    "https://apihub.kma.go.kr/api/typ01/url/wrn_now_data.php",
+)
+KMA_WARNING_CACHE_SECONDS = max(
+    60,
+    int(os.environ.get("KMA_WARNING_CACHE_SECONDS", "300")),
+)
+KMA_WARNING_STALE_SECONDS = max(
+    KMA_WARNING_CACHE_SECONDS,
+    int(os.environ.get("KMA_WARNING_STALE_SECONDS", "1800")),
+)
+KMA_WEEKLY_CACHE_SECONDS = max(
+    KMA_CACHE_SECONDS,
+    int(os.environ.get("KMA_WEEKLY_CACHE_SECONDS", "10800")),
+)
+KMA_WEEKLY_STALE_SECONDS = max(
+    KMA_WEEKLY_CACHE_SECONDS,
+    int(os.environ.get("KMA_WEEKLY_STALE_SECONDS", "86400")),
+)
 
 DEFAULT_LOCATION = {
     "name": "서울",
     "lat": 37.5665,
     "lon": 126.9780,
+}
+
+JEONNAM_GWANGJU_LOCATION = {
+    "name": "전남광주",
+    "lat": 35.1595,
+    "lon": 126.8526,
 }
 
 KNOWN_LOCATIONS = {
@@ -32,8 +75,11 @@ KNOWN_LOCATIONS = {
     "대구광역시": {"name": "대구", "lat": 35.8714, "lon": 128.6014},
     "인천": {"name": "인천", "lat": 37.4563, "lon": 126.7052},
     "인천광역시": {"name": "인천", "lat": 37.4563, "lon": 126.7052},
-    "광주": {"name": "광주", "lat": 35.1595, "lon": 126.8526},
-    "광주광역시": {"name": "광주", "lat": 35.1595, "lon": 126.8526},
+    "전남광주": JEONNAM_GWANGJU_LOCATION,
+    "전남광주통합특별시": JEONNAM_GWANGJU_LOCATION,
+    # 2026년 7월 1일 통합 이전에 저장된 사용자 선택값도 새 명칭으로 연결한다.
+    "광주": JEONNAM_GWANGJU_LOCATION,
+    "광주광역시": JEONNAM_GWANGJU_LOCATION,
     "대전": {"name": "대전", "lat": 36.3504, "lon": 127.3845},
     "대전광역시": {"name": "대전", "lat": 36.3504, "lon": 127.3845},
     "울산": {"name": "울산", "lat": 35.5384, "lon": 129.3114},
@@ -50,8 +96,8 @@ KNOWN_LOCATIONS = {
     "충청남도": {"name": "충남", "lat": 36.6588, "lon": 126.6728},
     "전북": {"name": "전북", "lat": 35.8242, "lon": 127.1480},
     "전북특별자치도": {"name": "전북", "lat": 35.8242, "lon": 127.1480},
-    "전남": {"name": "전남", "lat": 34.8161, "lon": 126.4629},
-    "전라남도": {"name": "전남", "lat": 34.8161, "lon": 126.4629},
+    "전남": JEONNAM_GWANGJU_LOCATION,
+    "전라남도": JEONNAM_GWANGJU_LOCATION,
     "경북": {"name": "경북", "lat": 36.5684, "lon": 128.7294},
     "경상북도": {"name": "경북", "lat": 36.5684, "lon": 128.7294},
     "경남": {"name": "경남", "lat": 35.2279, "lon": 128.6816},
@@ -59,6 +105,43 @@ KNOWN_LOCATIONS = {
     "제주": {"name": "제주", "lat": 33.4996, "lon": 126.5312},
     "제주특별자치도": {"name": "제주", "lat": 33.4996, "lon": 126.5312},
 }
+
+WARNING_REGION_ALIASES = {
+    "서울": ("서울",),
+    "부산": ("부산",),
+    "대구": ("대구",),
+    "인천": ("인천",),
+    "전남광주": ("전남광주", "광주", "전남", "전라남도"),
+    "대전": ("대전",),
+    "울산": ("울산",),
+    "세종": ("세종",),
+    "경기": ("경기",),
+    "강원": ("강원",),
+    "충북": ("충북", "충청북도"),
+    "충남": ("충남", "충청남도"),
+    "전북": ("전북", "전라북도", "전북특별자치도"),
+    "경북": ("경북", "경상북도"),
+    "경남": ("경남", "경상남도"),
+    "제주": ("제주",),
+}
+
+WARNING_TYPE_LABELS = {
+    "W": "강풍",
+    "R": "호우",
+    "C": "한파",
+    "D": "건조",
+    "O": "해일",
+    "N": "지진해일",
+    "V": "풍랑",
+    "T": "태풍",
+    "S": "대설",
+    "Y": "황사",
+    "H": "폭염",
+    "F": "안개",
+    "K": "열대야",
+}
+WARNING_LEVEL_LABELS = {"1": "예비특보", "2": "주의보", "3": "경보"}
+WARNING_RELEASE_COMMANDS = {"3", "4", "7"}
 
 PTY_LABELS = {
     "0": "맑음",
@@ -88,6 +171,47 @@ CATEGORY_MAP = {
     "WSD": ("wind_speed", "풍속", "m/s"),
 }
 
+# 중기예보는 동네예보 격자와 다른 광역/대표지점 코드를 사용한다.
+# 광역 위치를 선택한 경우 각 권역의 대표 관측지점 기온과 육상예보를 조합한다.
+MID_FORECAST_REGIONS = {
+    "서울": {"land": "11B00000", "temperature": "11B10101"},
+    "서울특별시": {"land": "11B00000", "temperature": "11B10101"},
+    "부산": {"land": "11H20000", "temperature": "11H20201"},
+    "부산광역시": {"land": "11H20000", "temperature": "11H20201"},
+    "대구": {"land": "11H10000", "temperature": "11H10701"},
+    "대구광역시": {"land": "11H10000", "temperature": "11H10701"},
+    "인천": {"land": "11B00000", "temperature": "11B20201"},
+    "인천광역시": {"land": "11B00000", "temperature": "11B20201"},
+    "전남광주": {"land": "11F20000", "temperature": "11F20501"},
+    "전남광주통합특별시": {"land": "11F20000", "temperature": "11F20501"},
+    "광주": {"land": "11F20000", "temperature": "11F20501"},
+    "광주광역시": {"land": "11F20000", "temperature": "11F20501"},
+    "대전": {"land": "11C20000", "temperature": "11C20401"},
+    "대전광역시": {"land": "11C20000", "temperature": "11C20401"},
+    "울산": {"land": "11H20000", "temperature": "11H20101"},
+    "울산광역시": {"land": "11H20000", "temperature": "11H20101"},
+    "세종": {"land": "11C20000", "temperature": "11C20404"},
+    "세종특별자치시": {"land": "11C20000", "temperature": "11C20404"},
+    "경기": {"land": "11B00000", "temperature": "11B20601"},
+    "경기도": {"land": "11B00000", "temperature": "11B20601"},
+    "강원": {"land": "11D10000", "temperature": "11D10301"},
+    "강원특별자치도": {"land": "11D10000", "temperature": "11D10301"},
+    "충북": {"land": "11C10000", "temperature": "11C10301"},
+    "충청북도": {"land": "11C10000", "temperature": "11C10301"},
+    "충남": {"land": "11C20000", "temperature": "11C20101"},
+    "충청남도": {"land": "11C20000", "temperature": "11C20101"},
+    "전북": {"land": "11F10000", "temperature": "11F10201"},
+    "전북특별자치도": {"land": "11F10000", "temperature": "11F10201"},
+    "전남": {"land": "11F20000", "temperature": "11F20501"},
+    "전라남도": {"land": "11F20000", "temperature": "11F20501"},
+    "경북": {"land": "11H10000", "temperature": "11H10501"},
+    "경상북도": {"land": "11H10000", "temperature": "11H10501"},
+    "경남": {"land": "11H20000", "temperature": "11H20301"},
+    "경상남도": {"land": "11H20000", "temperature": "11H20301"},
+    "제주": {"land": "11G00000", "temperature": "11G00201"},
+    "제주특별자치도": {"land": "11G00000", "temperature": "11G00201"},
+}
+
 
 class WeatherServiceError(Exception):
     pass
@@ -97,28 +221,247 @@ class WeatherInputError(WeatherServiceError):
     pass
 
 
-def get_kma_api_key():
-    key = (
-        os.environ.get("KMA_API_KEY")
-        or os.environ.get("KOREA_WEATHER_API_KEY")
-        or os.environ.get("KMA_SERVICE_KEY")
+def get_kma_api_hub_key():
+    """실황·예보·특보에 공통으로 사용하는 기상청 API허브 인증키."""
+    return (
+        os.environ.get("KMA_API_HUB_AUTH_KEY")
+        or os.environ.get("KMA_APIHUB_AUTH_KEY")
         or ""
     ).strip()
-    return unquote(key)
+
+
+def _warning_line_tokens(line):
+    stripped = line.strip().lstrip("#").strip()
+    if not stripped:
+        return []
+    if "," in stripped:
+        return [value.strip() for value in next(csv.reader([stripped]))]
+    return re.split(r"\s+", stripped)
+
+
+def parse_kma_warning_rows(text):
+    """API허브 help 헤더를 기준으로 CSV와 공백 구분 응답을 모두 해석한다."""
+    expected = [
+        "REG_UP", "REG_UP_KO", "REG_ID", "REG_KO", "TM_FC",
+        "TM_EF", "WRN", "LVL", "CMD",
+    ]
+    header = None
+    rows = []
+    for raw_line in str(text or "").splitlines():
+        tokens = _warning_line_tokens(raw_line)
+        upper_tokens = [token.upper() for token in tokens]
+        if "REG_UP" in upper_tokens and "WRN" in upper_tokens:
+            start = upper_tokens.index("REG_UP")
+            header = upper_tokens[start:]
+            continue
+        if not tokens or raw_line.lstrip().startswith("#"):
+            continue
+        if header and len(tokens) >= len(header):
+            row = dict(zip(header, tokens[:len(header)]))
+        elif len(tokens) == len(expected):
+            row = dict(zip(expected, tokens))
+        else:
+            continue
+        if row.get("REG_ID") and row.get("WRN"):
+            rows.append(row)
+    return rows
+
+
+def _warning_region_aliases(location_name):
+    name = str(location_name or "").strip()
+    if not name or name == "현재 위치":
+        return ()
+    if name in WARNING_REGION_ALIASES:
+        return WARNING_REGION_ALIASES[name]
+    resolved = KNOWN_LOCATIONS.get(name)
+    if resolved:
+        return WARNING_REGION_ALIASES.get(resolved["name"], (resolved["name"],))
+    return (name,)
+
+
+def filter_kma_warnings(rows, location_name):
+    aliases = _warning_region_aliases(location_name)
+    if not aliases:
+        return None
+    alerts = []
+    seen = set()
+    for row in rows:
+        if str(row.get("CMD") or "").strip() in WARNING_RELEASE_COMMANDS:
+            continue
+        region_text = " ".join((row.get("REG_UP_KO") or "", row.get("REG_KO") or ""))
+        if "전국" not in region_text and not any(alias in region_text for alias in aliases):
+            continue
+        warning_code = str(row.get("WRN") or "").strip().upper()
+        level_code = str(row.get("LVL") or "").strip()
+        item = {
+            "type": WARNING_TYPE_LABELS.get(warning_code, warning_code or "기상특보"),
+            "level": WARNING_LEVEL_LABELS.get(level_code, "특보"),
+            "region": row.get("REG_KO") or row.get("REG_UP_KO") or location_name,
+            "issued_at": row.get("TM_FC") or "",
+            "effective_at": row.get("TM_EF") or "",
+            "warning_code": warning_code,
+            "level_code": level_code,
+        }
+        identity = (item["type"], item["level"], item["region"], item["effective_at"])
+        if identity not in seen:
+            seen.add(identity)
+            alerts.append(item)
+    return sorted(
+        alerts,
+        key=lambda item: (
+            {"1": 1, "2": 2, "3": 3}.get(item["level_code"], 0),
+            item["effective_at"],
+        ),
+        reverse=True,
+    )
+
+
+def _decode_kma_hub_response(response):
+    content = response.content
+    for encoding in ("utf-8", "cp949", "euc-kr"):
+        try:
+            return content.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return content.decode("utf-8", errors="replace")
+
+
+def _request_kma_warning_rows(auth_key):
+    last_error = None
+    for attempt in range(KMA_RETRY_COUNT + 1):
+        try:
+            response = requests.get(
+                KMA_WARNING_ENDPOINT,
+                params={
+                    "fe": "e",
+                    "tm": "",
+                    "disp": "1",
+                    "help": "1",
+                    "authKey": auth_key,
+                },
+                timeout=KMA_TIMEOUT_SECONDS,
+            )
+            if response.status_code in {429, 500, 502, 503, 504} and attempt < KMA_RETRY_COUNT:
+                time.sleep(0.25 * (2 ** attempt))
+                continue
+            response.raise_for_status()
+            text = _decode_kma_hub_response(response)
+            rows = parse_kma_warning_rows(text)
+            lowered = text.lower()
+            if not rows and any(token in lowered for token in ("authkey", "인증키", "error")):
+                raise WeatherServiceError("기상청 API허브 인증 또는 응답 오류")
+            return rows
+        except (requests.RequestException, WeatherServiceError) as exc:
+            last_error = exc
+            if attempt >= KMA_RETRY_COUNT:
+                break
+    raise WeatherServiceError(
+        f"기상청 API허브 특보 조회 실패: {last_error.__class__.__name__}"
+    ) from last_error
+
+
+def fetch_weather_warnings(location):
+    source_url = "https://www.weather.go.kr/w/weather/warning/status.do"
+    docs_url = (
+        "https://apihub.kma.go.kr/apiList.do?"
+        "apiMov=%ED%8A%B9.%EC%A0%95%EB%B3%B4+%EC%9E%90%EB%A3%8C+%EC%A1%B0%ED%9A%8C&"
+        "seqApi=10&seqApiSub=288"
+    )
+    auth_key = get_kma_api_hub_key()
+    if not auth_key:
+        return {
+            "available": False,
+            "status": "key_required",
+            "items": [],
+            "region": location.get("name", "현재 지역"),
+            "message": "기상청 API허브 인증키 설정 후 현재 특보를 표시합니다.",
+            "source_url": source_url,
+            "docs_url": docs_url,
+        }
+
+    if not _warning_region_aliases(location.get("name")):
+        return {
+            "available": False,
+            "status": "region_unmapped",
+            "items": [],
+            "region": location.get("name", "현재 지역"),
+            "message": "현재 좌표의 특보구역을 확정할 수 없어 공식 특보 페이지를 확인해 주세요.",
+            "source_url": source_url,
+            "docs_url": docs_url,
+        }
+
+    cache_key = "myweather:kma:warnings:current"
+    stale_key = "myweather:kma:warnings:stale"
+    rows = _cached_payload(cache_key)
+    cache_status = "fresh"
+    if rows is None:
+        try:
+            rows = _request_kma_warning_rows(auth_key)
+            cache.set(cache_key, rows, timeout=KMA_WARNING_CACHE_SECONDS)
+            cache.set(stale_key, rows, timeout=KMA_WARNING_STALE_SECONDS)
+            cache_status = "miss"
+        except WeatherServiceError:
+            rows = _cached_payload(stale_key)
+            if rows is None:
+                return {
+                    "available": False,
+                    "status": "unavailable",
+                    "items": [],
+                    "region": location.get("name", "현재 지역"),
+                    "message": "기상청 특보를 일시적으로 확인할 수 없습니다.",
+                    "source_url": source_url,
+                    "docs_url": docs_url,
+                }
+            cache_status = "stale"
+
+    alerts = filter_kma_warnings(rows, location.get("name")) or []
+    return {
+        "available": True,
+        "status": "active" if alerts else "none",
+        "items": alerts,
+        "region": location.get("name", "현재 지역"),
+        "message": "발효 중인 기상특보가 있습니다." if alerts else "현재 발효 중인 기상특보가 없습니다.",
+        "checked_at": timezone.localtime().strftime("%Y%m%d%H%M"),
+        "cache_status": cache_status,
+        "cache_seconds": KMA_WARNING_CACHE_SECONDS,
+        "source_url": source_url,
+        "docs_url": docs_url,
+    }
 
 
 def get_current_weather_url():
-    endpoint = KMA_SERVICE_ENDPOINT.rstrip("/")
+    endpoint = KMA_API_HUB_VILAGE_ENDPOINT.rstrip("/")
     if endpoint.endswith(f"/{KMA_CURRENT_WEATHER_OPERATION}"):
         return endpoint
     return f"{endpoint}/{KMA_CURRENT_WEATHER_OPERATION}"
 
 
 def get_ultra_short_forecast_url():
-    endpoint = KMA_SERVICE_ENDPOINT.rstrip("/")
+    endpoint = KMA_API_HUB_VILAGE_ENDPOINT.rstrip("/")
     if endpoint.endswith(f"/{KMA_ULTRA_SHORT_FORECAST_OPERATION}"):
         return endpoint
     return f"{endpoint}/{KMA_ULTRA_SHORT_FORECAST_OPERATION}"
+
+
+def get_short_forecast_url():
+    endpoint = KMA_API_HUB_VILAGE_ENDPOINT.rstrip("/")
+    if endpoint.endswith(f"/{KMA_SHORT_FORECAST_OPERATION}"):
+        return endpoint
+    return f"{endpoint}/{KMA_SHORT_FORECAST_OPERATION}"
+
+
+def get_mid_temperature_url():
+    endpoint = KMA_API_HUB_MID_ENDPOINT.rstrip("/")
+    if endpoint.endswith(f"/{KMA_MID_TEMPERATURE_OPERATION}"):
+        return endpoint
+    return f"{endpoint}/{KMA_MID_TEMPERATURE_OPERATION}"
+
+
+def get_mid_land_url():
+    endpoint = KMA_API_HUB_MID_ENDPOINT.rstrip("/")
+    if endpoint.endswith(f"/{KMA_MID_LAND_OPERATION}"):
+        return endpoint
+    return f"{endpoint}/{KMA_MID_LAND_OPERATION}"
 
 
 def resolve_location(lat=None, lon=None, region=None):
@@ -139,6 +482,29 @@ def resolve_location(lat=None, lon=None, region=None):
         raise WeatherInputError(f"지원하지 않는 지역입니다: {key}")
 
     return DEFAULT_LOCATION
+
+
+def resolve_mid_forecast_codes(location):
+    """중기예보용 광역 육상코드와 가장 가까운 대표 기온지점 코드를 고른다."""
+    name = str(location.get("name") or "").strip()
+    if name in MID_FORECAST_REGIONS:
+        return MID_FORECAST_REGIONS[name]
+
+    latitude = float(location.get("lat", DEFAULT_LOCATION["lat"]))
+    longitude = float(location.get("lon", DEFAULT_LOCATION["lon"]))
+    representative_names = (
+        "서울", "부산", "대구", "인천", "전남광주", "대전", "울산", "세종",
+        "경기", "강원", "충북", "충남", "전북", "경북", "경남", "제주",
+    )
+
+    def distance_squared(candidate_name):
+        candidate = KNOWN_LOCATIONS[candidate_name]
+        latitude_delta = latitude - candidate["lat"]
+        longitude_delta = (longitude - candidate["lon"]) * math.cos(math.radians(latitude))
+        return latitude_delta ** 2 + longitude_delta ** 2
+
+    nearest_name = min(representative_names, key=distance_squared)
+    return MID_FORECAST_REGIONS[nearest_name]
 
 
 def latlon_to_grid(lat, lon):
@@ -195,6 +561,36 @@ def ultra_short_forecast_base_time():
     return safe_time.strftime("%Y%m%d"), safe_time.strftime("%H30")
 
 
+def short_forecast_base_time():
+    """단기예보 발표시각 중 API 반영 여유 15분을 지난 가장 최근 회차를 선택한다."""
+    safe_time = timezone.localtime() - timedelta(minutes=15)
+    release_hours = (2, 5, 8, 11, 14, 17, 20, 23)
+    release_candidates = [
+        safe_time.replace(hour=hour, minute=0, second=0, microsecond=0)
+        for hour in release_hours
+        if hour <= safe_time.hour
+    ]
+    if release_candidates:
+        selected = release_candidates[-1]
+    else:
+        previous_day = safe_time - timedelta(days=1)
+        selected = previous_day.replace(hour=23, minute=0, second=0, microsecond=0)
+    return selected.strftime("%Y%m%d"), selected.strftime("%H00")
+
+
+def mid_forecast_base_time():
+    """중기예보의 06/18시 발표 중 최근 24시간 안의 최신 회차를 선택한다."""
+    safe_time = timezone.localtime() - timedelta(minutes=30)
+    if safe_time.hour >= 18:
+        selected = safe_time.replace(hour=18, minute=0, second=0, microsecond=0)
+    elif safe_time.hour >= 6:
+        selected = safe_time.replace(hour=6, minute=0, second=0, microsecond=0)
+    else:
+        previous_day = safe_time - timedelta(days=1)
+        selected = previous_day.replace(hour=18, minute=0, second=0, microsecond=0)
+    return selected.strftime("%Y%m%d%H00")
+
+
 def normalize_obsr_value(value):
     if value in (None, "", "-", "null"):
         return None
@@ -246,6 +642,27 @@ def normalize_forecast_value(value):
     return str(value)
 
 
+def has_precipitation_amount(value):
+    if value in (None, "", "-", "null", "강수없음"):
+        return False
+    try:
+        return float(value) > 0
+    except (TypeError, ValueError):
+        text = str(value).strip().lower().replace(" ", "")
+        return text not in {"0", "0.0", "0mm", "0.0mm"}
+
+
+def merge_forecast_rainfall(observed_rainfall, forecast):
+    """Keep a positive observation, otherwise fill it from the matching rainy forecast."""
+    if has_precipitation_amount(observed_rainfall):
+        return observed_rainfall
+    precipitation_type = str(forecast.get("forecast_precipitation_type") or "0")
+    forecast_rainfall = forecast.get("forecast_rainfall_1h")
+    if precipitation_type not in {"0", "None", ""} and has_precipitation_amount(forecast_rainfall):
+        return forecast_rainfall
+    return observed_rainfall
+
+
 def parse_ultra_short_forecast_items(items):
     forecasts_by_time = {}
     for item in items:
@@ -263,8 +680,20 @@ def parse_ultra_short_forecast_items(items):
     if not forecasts_by_time:
         return {}
 
-    now_key = timezone.localtime().strftime("%Y%m%d%H%M")
-    selected_key = min(forecasts_by_time.keys(), key=lambda key: abs(int(key) - int(now_key)))
+    now = timezone.localtime().replace(second=0, microsecond=0, tzinfo=None)
+    forecast_times = []
+    for key in forecasts_by_time:
+        try:
+            forecast_times.append((datetime.strptime(key, "%Y%m%d%H%M"), key))
+        except ValueError:
+            continue
+    if not forecast_times:
+        return {}
+
+    forecast_times.sort()
+    future_times = [(forecast_at, key) for forecast_at, key in forecast_times if forecast_at >= now]
+    # 현재 하늘 상태는 날짜 경계를 포함한 실제 시간 차가 가장 작은 예보값을 쓴다.
+    selected_key = min(forecast_times, key=lambda entry: abs(entry[0] - now))[1]
     selected = forecasts_by_time[selected_key]
     pty_value = selected.get("PTY") or "0"
     sky_value = selected.get("SKY")
@@ -272,16 +701,15 @@ def parse_ultra_short_forecast_items(items):
     condition = PTY_LABELS.get(str(pty_value)) if has_precipitation else SKY_LABELS.get(str(sky_value))
 
     hourly_forecasts = []
-    # Pick every other hour or just first 5 to make it "not too dense"
-    sorted_keys = sorted(forecasts_by_time.keys())
-    for key in sorted_keys:
+    display_times = future_times[:6] if future_times else forecast_times[-1:]
+    for _, key in display_times:
         data = forecasts_by_time[key]
         pty = data.get("PTY") or "0"
         sky = data.get("SKY")
         cond = PTY_LABELS.get(str(pty)) if str(pty) not in {"0", "None", ""} else SKY_LABELS.get(str(sky), "알 수 없음")
         
         hourly_forecasts.append({
-            "time": f"{key[8:10]}시",
+            "time": f"{key[8:10]}:{key[10:12]}",
             "condition": cond,
             "temperature": data.get("T1H"),
             "rainfall": data.get("RN1"),
@@ -294,6 +722,7 @@ def parse_ultra_short_forecast_items(items):
         "sky_code": sky_value,
         "sky": SKY_LABELS.get(str(sky_value), ""),
         "forecast_precipitation_type": pty_value,
+        "forecast_rainfall_1h": selected.get("RN1"),
         "forecast_time": {
             "date": selected_key[:8],
             "time": selected_key[8:12],
@@ -303,110 +732,433 @@ def parse_ultra_short_forecast_items(items):
     }
 
 
-def fetch_sky_forecast(api_key, grid):
-    base_date, base_time = ultra_short_forecast_base_time()
-    params = {
-        "serviceKey": api_key,
-        "pageNo": 1,
-        "numOfRows": 100,
-        "dataType": "JSON",
-        "base_date": base_date,
-        "base_time": base_time,
-        "nx": grid["nx"],
-        "ny": grid["ny"],
-    }
-
+def _numeric_forecast_value(value):
     try:
-        response = requests.get(get_ultra_short_forecast_url(), params=params, timeout=8)
-        if response.status_code >= 400:
-            return {}
-        payload = response.json()
-    except (requests.RequestException, ValueError):
-        return {}
-
-    header = payload.get("response", {}).get("header", {})
-    result_code = header.get("resultCode")
-    if result_code not in ("00", "0"):
-        return {}
-
-    items = (
-        payload.get("response", {})
-        .get("body", {})
-        .get("items", {})
-        .get("item", [])
-    )
-    parsed = parse_ultra_short_forecast_items(items)
-    if not parsed:
-        return {}
-    parsed["forecast_base_date"] = base_date
-    parsed["forecast_base_time"] = base_time
-    return parsed
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
-def fetch_current_weather(lat=None, lon=None, region=None):
-    api_key = get_kma_api_key()
-    if not api_key:
-        raise WeatherServiceError("기상청 API 키가 설정되어 있지 않습니다.")
-
-    location = resolve_location(lat=lat, lon=lon, region=region)
-    grid = latlon_to_grid(location["lat"], location["lon"])
-    base_date, base_time = current_kma_base_time()
-
-    params = {
-        "serviceKey": api_key,
-        "pageNo": 1,
-        "numOfRows": 100,
-        "dataType": "JSON",
-        "base_date": base_date,
-        "base_time": base_time,
-        "nx": grid["nx"],
-        "ny": grid["ny"],
-    }
-
+def _day_label(date_value):
+    weekdays = ("월", "화", "수", "목", "금", "토", "일")
     try:
-        response = requests.get(get_current_weather_url(), params=params, timeout=8)
-        if response.status_code >= 400:
-            raise WeatherServiceError(f"기상청 API 호출에 실패했습니다: HTTP {response.status_code}")
-        payload = response.json()
-    except requests.RequestException as exc:
-        raise WeatherServiceError(f"기상청 API 호출에 실패했습니다: {exc.__class__.__name__}") from exc
-    except ValueError as exc:
-        raise WeatherServiceError("기상청 API 응답을 JSON으로 해석하지 못했습니다.") from exc
+        parsed_date = datetime.strptime(date_value, "%Y%m%d").date()
+    except (TypeError, ValueError):
+        return ""
+    return f"{parsed_date.month}/{parsed_date.day}({weekdays[parsed_date.weekday()]})"
 
+
+def _conditions_for_slots(slots):
+    conditions = []
+    for slot in slots:
+        precipitation_type = str(slot.get("PTY") or "0")
+        if precipitation_type not in {"0", "None", ""}:
+            condition = PTY_LABELS.get(precipitation_type, "강수")
+        else:
+            condition = SKY_LABELS.get(str(slot.get("SKY") or ""), "")
+        if condition:
+            conditions.append(condition)
+    if not conditions:
+        return "알 수 없음"
+    ranked = [item for item, _ in Counter(conditions).most_common(2)]
+    return "/".join(ranked)
+
+
+def parse_short_forecast_items(items):
+    """단기예보의 시간별 값을 날짜별 최저·최고·대표날씨·최대 강수확률로 묶는다."""
+    slots_by_date = {}
+    for item in items:
+        forecast_date = str(item.get("fcstDate") or "")
+        forecast_time = str(item.get("fcstTime") or "")
+        category = str(item.get("category") or "")
+        if not forecast_date or not forecast_time or not category:
+            continue
+        slot = slots_by_date.setdefault(forecast_date, {}).setdefault(forecast_time, {})
+        slot[category] = normalize_forecast_value(item.get("fcstValue"))
+
+    daily = []
+    for forecast_date in sorted(slots_by_date):
+        slots = [slots_by_date[forecast_date][key] for key in sorted(slots_by_date[forecast_date])]
+        hourly_temperatures = [
+            value
+            for value in (_numeric_forecast_value(slot.get("TMP")) for slot in slots)
+            if value is not None
+        ]
+        official_minimums = [
+            value
+            for value in (_numeric_forecast_value(slot.get("TMN")) for slot in slots)
+            if value is not None
+        ]
+        official_maximums = [
+            value
+            for value in (_numeric_forecast_value(slot.get("TMX")) for slot in slots)
+            if value is not None
+        ]
+        precipitation_probabilities = [
+            value
+            for value in (_numeric_forecast_value(slot.get("POP")) for slot in slots)
+            if value is not None
+        ]
+        minimum = official_minimums[0] if official_minimums else (
+            min(hourly_temperatures) if hourly_temperatures else None
+        )
+        maximum = official_maximums[0] if official_maximums else (
+            max(hourly_temperatures) if hourly_temperatures else None
+        )
+        daily.append({
+            "date": datetime.strptime(forecast_date, "%Y%m%d").date().isoformat(),
+            "day": _day_label(forecast_date),
+            "condition": _conditions_for_slots(slots),
+            "min_temperature": minimum,
+            "max_temperature": maximum,
+            "precipitation_probability": max(precipitation_probabilities) if precipitation_probabilities else None,
+            "source": "기상청 API허브 단기예보",
+        })
+    return daily
+
+
+def parse_mid_forecast_items(temperature_items, land_items, tm_fc):
+    """중기 기온과 육상예보를 같은 날짜의 일별 값으로 합친다."""
+    temperatures = temperature_items[0] if temperature_items else {}
+    land = land_items[0] if land_items else {}
+    try:
+        release_date = datetime.strptime(str(tm_fc)[:8], "%Y%m%d").date()
+    except (TypeError, ValueError):
+        return []
+
+    daily = []
+    for offset in range(4, 11):
+        forecast_date = release_date + timedelta(days=offset)
+        morning_weather = land.get(f"wf{offset}Am")
+        afternoon_weather = land.get(f"wf{offset}Pm")
+        if offset >= 8:
+            morning_weather = land.get(f"wf{offset}") or morning_weather
+            afternoon_weather = None
+        conditions = []
+        for value in (morning_weather, afternoon_weather):
+            if value and value not in conditions:
+                conditions.append(value)
+        rain_values = [
+            value
+            for value in (
+                _numeric_forecast_value(land.get(f"rnSt{offset}Am")),
+                _numeric_forecast_value(land.get(f"rnSt{offset}Pm")),
+                _numeric_forecast_value(land.get(f"rnSt{offset}")),
+            )
+            if value is not None
+        ]
+        minimum = _numeric_forecast_value(temperatures.get(f"taMin{offset}"))
+        maximum = _numeric_forecast_value(temperatures.get(f"taMax{offset}"))
+        if not conditions and minimum is None and maximum is None and not rain_values:
+            continue
+        date_key = forecast_date.strftime("%Y%m%d")
+        daily.append({
+            "date": forecast_date.isoformat(),
+            "day": _day_label(date_key),
+            "condition": "/".join(conditions) or "알 수 없음",
+            "min_temperature": minimum,
+            "max_temperature": maximum,
+            "precipitation_probability": max(rain_values) if rain_values else None,
+            "source": "기상청 API허브 중기예보",
+        })
+    return daily
+
+
+def merge_weekly_forecasts(short_forecasts, mid_forecasts, today=None):
+    """오늘부터 7일간은 단기예보를 우선하고 비어 있는 구간만 중기예보로 채운다."""
+    today = today or timezone.localdate()
+    last_date = today + timedelta(days=6)
+    merged = {item["date"]: deepcopy(item) for item in mid_forecasts}
+    for short_item in short_forecasts:
+        date_key = short_item["date"]
+        existing = merged.get(date_key, {})
+        combined = {**existing, **deepcopy(short_item)}
+        for field in ("min_temperature", "max_temperature", "precipitation_probability"):
+            if combined.get(field) is None and existing.get(field) is not None:
+                combined[field] = existing[field]
+        if existing:
+            combined["source"] = "기상청 API허브 단기·중기예보"
+        merged[date_key] = combined
+
+    weekly = []
+    for date_key in sorted(merged):
+        try:
+            forecast_date = datetime.strptime(date_key, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        if today <= forecast_date <= last_date:
+            weekly.append(merged[date_key])
+    return weekly[:7]
+
+
+def _cached_payload(cache_key):
+    cached = cache.get(cache_key)
+    return deepcopy(cached) if cached is not None else None
+
+
+def _request_kma_json(url, params):
+    last_error = None
+    for attempt in range(KMA_RETRY_COUNT + 1):
+        try:
+            response = requests.get(url, params=params, timeout=KMA_TIMEOUT_SECONDS)
+            if response.status_code in {429, 500, 502, 503, 504} and attempt < KMA_RETRY_COUNT:
+                if response.status_code == 429:
+                    try:
+                        retry_after = float(response.headers.get("Retry-After", "0.25"))
+                    except (TypeError, ValueError):
+                        retry_after = 0.25
+                    time.sleep(max(0.25, min(2.0, retry_after)))
+                else:
+                    time.sleep(0.25 * (2 ** attempt))
+                continue
+            if response.status_code >= 400:
+                raise WeatherServiceError(f"기상청 API 호출에 실패했습니다: HTTP {response.status_code}")
+            return response.json()
+        except (requests.RequestException, ValueError, WeatherServiceError) as exc:
+            last_error = exc
+            if attempt >= KMA_RETRY_COUNT:
+                break
+    if isinstance(last_error, WeatherServiceError):
+        raise last_error
+    if isinstance(last_error, ValueError):
+        raise WeatherServiceError("기상청 API 응답을 JSON으로 해석하지 못했습니다.") from last_error
+    raise WeatherServiceError(
+        f"기상청 API 호출에 실패했습니다: {last_error.__class__.__name__}"
+    ) from last_error
+
+
+def _validate_kma_payload(payload):
     header = payload.get("response", {}).get("header", {})
     result_code = header.get("resultCode")
     if result_code not in ("00", "0"):
         message = header.get("resultMsg") or "기상청 API 오류"
         raise WeatherServiceError(f"{message} ({result_code})")
-
-    items = (
+    return (
         payload.get("response", {})
         .get("body", {})
         .get("items", {})
         .get("item", [])
     )
-    parsed = parse_kma_items(items)
-    sky_forecast = fetch_sky_forecast(api_key, grid)
+
+
+def fetch_sky_forecast(auth_key, grid):
+    base_date, base_time = ultra_short_forecast_base_time()
+    cache_key = f"myweather:kma:fcst:{base_date}:{base_time}:{grid['nx']}:{grid['ny']}"
+    cached = _cached_payload(cache_key)
+    if cached is not None:
+        cached["cache_status"] = "fresh"
+        return cached
+    params = {
+        "authKey": auth_key,
+        "pageNo": 1,
+        "numOfRows": 100,
+        "dataType": "JSON",
+        "base_date": base_date,
+        "base_time": base_time,
+        "nx": grid["nx"],
+        "ny": grid["ny"],
+    }
+
+    stale_key = f"myweather:kma:fcst:stale:{grid['nx']}:{grid['ny']}"
+    try:
+        payload = _request_kma_json(get_ultra_short_forecast_url(), params)
+        items = _validate_kma_payload(payload)
+    except WeatherServiceError:
+        stale = _cached_payload(stale_key)
+        if stale is not None:
+            stale["cache_status"] = "stale"
+            return stale
+        return {}
+    parsed = parse_ultra_short_forecast_items(items)
+    if not parsed:
+        return {}
+    parsed["forecast_base_date"] = base_date
+    parsed["forecast_base_time"] = base_time
+    parsed["cache_status"] = "miss"
+    cache.set(cache_key, parsed, timeout=KMA_CACHE_SECONDS)
+    cache.set(stale_key, parsed, timeout=KMA_STALE_CACHE_SECONDS)
+    return parsed
+
+
+def fetch_weekly_forecast(auth_key, grid, location):
+    short_date, short_time = short_forecast_base_time()
+    mid_time = mid_forecast_base_time()
+    mid_codes = resolve_mid_forecast_codes(location)
+    cache_key = (
+        f"myweather:kma:weekly:{short_date}:{short_time}:{mid_time}:"
+        f"{grid['nx']}:{grid['ny']}:{mid_codes['land']}:{mid_codes['temperature']}"
+    )
+    cached = _cached_payload(cache_key)
+    if cached is not None:
+        cached["cache_status"] = "fresh"
+        return cached
+
+    stale_key = (
+        f"myweather:kma:weekly:stale:{grid['nx']}:{grid['ny']}:"
+        f"{mid_codes['land']}:{mid_codes['temperature']}"
+    )
+    common_params = {
+        "authKey": auth_key,
+        "pageNo": 1,
+        "dataType": "JSON",
+    }
+    errors = []
+    short_forecasts = []
+    mid_temperature_items = []
+    mid_land_items = []
+
+    try:
+        short_payload = _request_kma_json(get_short_forecast_url(), {
+            **common_params,
+            "numOfRows": 1000,
+            "base_date": short_date,
+            "base_time": short_time,
+            "nx": grid["nx"],
+            "ny": grid["ny"],
+        })
+        short_forecasts = parse_short_forecast_items(_validate_kma_payload(short_payload))
+    except WeatherServiceError:
+        errors.append("short_forecast")
+
+    try:
+        temperature_payload = _request_kma_json(get_mid_temperature_url(), {
+            **common_params,
+            "numOfRows": 10,
+            "regId": mid_codes["temperature"],
+            "tmFc": mid_time,
+        })
+        mid_temperature_items = _validate_kma_payload(temperature_payload)
+    except WeatherServiceError:
+        errors.append("mid_temperature")
+
+    try:
+        land_payload = _request_kma_json(get_mid_land_url(), {
+            **common_params,
+            "numOfRows": 10,
+            "regId": mid_codes["land"],
+            "tmFc": mid_time,
+        })
+        mid_land_items = _validate_kma_payload(land_payload)
+    except WeatherServiceError:
+        errors.append("mid_land")
+
+    mid_forecasts = parse_mid_forecast_items(mid_temperature_items, mid_land_items, mid_time)
+    weekly = merge_weekly_forecasts(short_forecasts, mid_forecasts)
+    stale = _cached_payload(stale_key)
+    if stale is not None and errors and len(stale.get("days", [])) > len(weekly):
+        stale["cache_status"] = "stale"
+        stale["errors"] = errors
+        return stale
+    if not weekly:
+        if stale is not None:
+            stale["cache_status"] = "stale"
+            stale["errors"] = errors
+            return stale
+        return {"days": [], "cache_status": "unavailable", "errors": errors}
+
+    result = {
+        "days": weekly,
+        "short_base_date": short_date,
+        "short_base_time": short_time,
+        "mid_base_time": mid_time,
+        "mid_region_codes": mid_codes,
+        "cache_status": "partial" if errors else "miss",
+        "errors": errors,
+    }
+    cache.set(cache_key, result, timeout=KMA_WEEKLY_CACHE_SECONDS)
+    cache.set(stale_key, result, timeout=KMA_WEEKLY_STALE_SECONDS)
+    return result
+
+
+def fetch_current_weather(lat=None, lon=None, region=None):
+    auth_key = get_kma_api_hub_key()
+    if not auth_key:
+        raise WeatherServiceError("기상청 API허브 인증키가 설정되어 있지 않습니다.")
+
+    location = resolve_location(lat=lat, lon=lon, region=region)
+    grid = latlon_to_grid(location["lat"], location["lon"])
+    base_date, base_time = current_kma_base_time()
+    observation_cache_key = (
+        f"myweather:kma:ncst:{base_date}:{base_time}:{grid['nx']}:{grid['ny']}"
+    )
+
+    params = {
+        "authKey": auth_key,
+        "pageNo": 1,
+        "numOfRows": 100,
+        "dataType": "JSON",
+        "base_date": base_date,
+        "base_time": base_time,
+        "nx": grid["nx"],
+        "ny": grid["ny"],
+    }
+
+    parsed = _cached_payload(observation_cache_key)
+    observation_cache_status = "fresh"
+    if parsed is None:
+        stale_key = f"myweather:kma:ncst:stale:{grid['nx']}:{grid['ny']}"
+        try:
+            payload = _request_kma_json(get_current_weather_url(), params)
+            parsed = parse_kma_items(_validate_kma_payload(payload))
+            parsed["_observation_base_date"] = base_date
+            parsed["_observation_base_time"] = base_time
+            cache.set(observation_cache_key, parsed, timeout=KMA_CACHE_SECONDS)
+            cache.set(stale_key, parsed, timeout=KMA_STALE_CACHE_SECONDS)
+            observation_cache_status = "miss"
+        except WeatherServiceError:
+            parsed = _cached_payload(stale_key)
+            if parsed is None:
+                raise
+            observation_cache_status = "stale"
+    observation_base_date = parsed.pop("_observation_base_date", base_date)
+    observation_base_time = parsed.pop("_observation_base_time", base_time)
+    sky_forecast = fetch_sky_forecast(auth_key, grid)
+    weekly_forecast = fetch_weekly_forecast(auth_key, grid, location)
+    weather_alerts = fetch_weather_warnings(location)
     if sky_forecast.get("condition"):
         parsed["condition"] = sky_forecast["condition"]
     if sky_forecast:
         parsed["sky"] = sky_forecast.get("sky", "")
         parsed["sky_code"] = sky_forecast.get("sky_code")
         parsed["forecast_precipitation_type"] = sky_forecast.get("forecast_precipitation_type")
+        parsed["forecast_rainfall_1h"] = sky_forecast.get("forecast_rainfall_1h")
+        parsed["rainfall_1h"] = merge_forecast_rainfall(parsed.get("rainfall_1h"), sky_forecast)
         parsed["forecast_time"] = sky_forecast.get("forecast_time")
         parsed["forecast_base_date"] = sky_forecast.get("forecast_base_date")
         parsed["forecast_base_time"] = sky_forecast.get("forecast_base_time")
         parsed["raw_forecast_categories"] = sky_forecast.get("raw_forecast_categories", {})
         parsed["hourly_forecasts"] = sky_forecast.get("hourly_forecasts", [])
 
+    parsed["weekly_forecasts"] = weekly_forecast.get("days", [])
+    parsed["weekly_forecast_meta"] = {
+        "cache_status": weekly_forecast.get("cache_status", "unavailable"),
+        "coverage_days": len(weekly_forecast.get("days", [])),
+        "missing_services": weekly_forecast.get("errors", []),
+        "short_base_date": weekly_forecast.get("short_base_date"),
+        "short_base_time": weekly_forecast.get("short_base_time"),
+        "mid_base_time": weekly_forecast.get("mid_base_time"),
+    }
+
     return {
-        "provider": "KMA",
-        "source": "VilageFcstInfoService_2.0/getUltraSrtNcst+getUltraSrtFcst",
-        "base_date": base_date,
-        "base_time": base_time,
+        "provider": "KMA API Hub",
+        "source": (
+            "APIHub/VilageFcstInfoService_2.0/"
+            "getUltraSrtNcst+getUltraSrtFcst+getVilageFcst;"
+            "MidFcstInfoService/getMidTa+getMidLandFcst;wrn_now_data"
+        ),
+        "base_date": observation_base_date,
+        "base_time": observation_base_time,
         "location": {
             **location,
             **grid,
         },
+        "api_meta": {
+            "observation_cache": observation_cache_status,
+            "forecast_cache": sky_forecast.get("cache_status", "unavailable"),
+            "weekly_forecast_cache": weekly_forecast.get("cache_status", "unavailable"),
+            "warning_cache": weather_alerts.get("cache_status", "unavailable"),
+            "cache_seconds": KMA_CACHE_SECONDS,
+        },
+        "weather_alerts": weather_alerts,
         **parsed,
     }

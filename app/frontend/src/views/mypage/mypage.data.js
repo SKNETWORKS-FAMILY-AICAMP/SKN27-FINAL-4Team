@@ -9,6 +9,7 @@ export const i18n = {
     weather: "날씨 정보",
     book: "오늘의 책 추천",
     memory: "기억 보관함",
+    imageVault: "이미지 보관함",
     mbti: "MBTI 분석",
     taste: "취향 분석",
     settings: "설정"
@@ -23,6 +24,7 @@ export const i18n = {
     weather: "Weather",
     book: "Today's Book",
     memory: "Memory Vault",
+    imageVault: "Image Vault",
     mbti: "MBTI Analysis",
     taste: "Taste Analysis",
     settings: "Settings"
@@ -43,6 +45,8 @@ export function createMypageState() {
     weatherLoading: false,
     weatherError: "",
     weatherLocation: null,
+    weatherLastFetchedAt: 0,
+    weatherRefreshTimer: null,
     bookPayload: null,
     bookLoading: false,
     bookError: "",
@@ -50,11 +54,15 @@ export function createMypageState() {
     memoryLoading: false,
     memoryError: "",
     memoryNotice: "",
+    imageVaultPayload: null,
+    imageVaultLoading: false,
+    imageVaultError: "",
+    imageVaultNotice: "",
     todayEmotionSummary: null,
     todayEmotionRefreshTimer: null,
     weatherRegions: [
-      "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종",
-      "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"
+      "서울", "부산", "대구", "인천", "대전", "울산", "세종", "전남광주",
+      "경기", "강원", "충북", "충남", "전북", "경북", "경남", "제주"
     ],
     profileSavedAt: "",
     profileEdit: false,

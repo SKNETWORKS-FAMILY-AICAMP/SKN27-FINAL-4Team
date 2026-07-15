@@ -54,6 +54,8 @@ INSTALLED_APPS = [
     'game.tarot_api',
     'mindreport',
     'mybook',
+    'myweather',
+    'imagevault',
 ]
 
 MIDDLEWARE = [
@@ -171,7 +173,9 @@ MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
-# (TAVILY_API_KEY는 장소 추천 기능 폐기로 제거 — 2026-07-05)
+# 마이페이지 날씨 검색에 사용합니다. 상용 운영 시 TAVILY_PLAN_NAME과
+# TAVILY_COMMERCIAL_USE_CONFIRMED를 함께 설정해 계약 확인 상태를 명시합니다.
+TAVILY_API_KEY = os.environ.get('TAVILY_API_KEY', '')
 
 # ── ElevenLabs TTS (TTS_음성설정 v2.0) ──
 ELEVENLABS_API_KEY = os.environ.get('ELEVENLABS_API_KEY', '')

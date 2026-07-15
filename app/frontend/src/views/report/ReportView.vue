@@ -287,7 +287,14 @@ button {
   min-height: calc(100vh - 54px);
   padding: 40px 28px 84px;
   overflow: hidden auto;
-  background-image: var(--report-bg);
+  background-image:
+    linear-gradient(
+      180deg,
+      rgba(13, 5, 32, 0.18) 0%,
+      rgba(20, 8, 48, 0.3) 45%,
+      rgba(13, 5, 32, 0.46) 100%
+    ),
+    var(--report-bg);
   background-position: center;
   background-size: cover;
   background-attachment: fixed;

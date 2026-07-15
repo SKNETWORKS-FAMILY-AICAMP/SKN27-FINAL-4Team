@@ -12,15 +12,20 @@
           <div>
             <span class="mbti-kicker">온보딩 MBTI 유형</span>
             <template v-if="mbtiData.onboarding.type === '----'">
-              <div class="mbti-input-area" style="margin-top: 16px; margin-bottom: 12px; display: flex; flex-direction: column; align-items: center; gap: 16px;">
-                <div class="mbti-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; width: 100%; max-width: 320px;">
-                  <button v-for="type in mbtiOptions" :key="type" type="button"
-                          :style="{ padding: '8px 4px', borderRadius: '10px', border: newMbti === type ? '2px solid #f84f9b' : '1px solid rgba(255,255,255,0.15)', background: newMbti === type ? 'rgba(248,79,155,0.15)' : 'rgba(255,255,255,0.05)', color: newMbti === type ? '#fff' : 'rgba(255,255,255,0.7)', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer', transition: 'all 0.2s' }"
-                          @click="newMbti = type">
+              <div class="mbti-input-area">
+                <div class="mbti-grid">
+                  <button
+                    v-for="type in mbtiOptions"
+                    :key="type"
+                    class="mbti-option-button"
+                    :class="{ active: newMbti === type }"
+                    type="button"
+                    @click="newMbti = type"
+                  >
                     {{ type }}
                   </button>
                 </div>
-                <button class="primary-button" @click="saveMbti" type="button" :disabled="!newMbti" :style="{ padding: '0 24px', borderRadius: '10px', minHeight: '42px', opacity: newMbti ? '1' : '0.5', cursor: newMbti ? 'pointer' : 'not-allowed' }">선택 완료</button>
+                <button class="primary-button mbti-save-button" @click="saveMbti" type="button" :disabled="!newMbti">선택 완료</button>
               </div>
             </template>
             <template v-else>
@@ -309,8 +314,8 @@ export default {
   padding: 32px 24px;
   max-width: 640px;
   margin: 0 auto;
-  background: linear-gradient(145deg, rgba(30,30,35,0.8) 0%, rgba(20,20,25,0.95) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(145deg, var(--mbti-surface-soft) 0%, var(--mbti-surface-deep) 100%);
+  border: 1px solid var(--mbti-line);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   border-radius: 20px;
   backdrop-filter: blur(20px);
@@ -324,8 +329,9 @@ export default {
 .qna-badge {
   display: inline-block;
   padding: 4px 12px;
-  background: rgba(248, 79, 155, 0.15);
-  color: #f84f9b;
+  background: rgba(229, 155, 95, 0.12);
+  color: #efb789;
+  border: 1px solid rgba(229, 155, 95, 0.22);
   font-size: 12px;
   font-weight: 700;
   border-radius: 20px;
@@ -337,13 +343,13 @@ export default {
   margin: 0 0 8px 0;
   font-size: 22px;
   font-weight: 700;
-  color: #fff;
+  color: var(--text);
 }
 
 .qna-subtitle {
   margin: 0;
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--muted);
 }
 
 .qna-empty-state {
@@ -358,32 +364,32 @@ export default {
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(229, 155, 95, 0.07);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.4);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  color: #d4b49f;
+  box-shadow: inset 0 0 0 1px var(--mbti-line);
 }
 
 .qna-draw-button {
   display: flex;
   align-items: center;
   padding: 14px 28px;
-  background: linear-gradient(135deg, #f84f9b 0%, #ff8c42 100%);
-  color: #fff;
+  background: linear-gradient(135deg, #e59b5f 0%, #8794a4 100%);
+  color: #21142b;
   font-weight: 600;
   font-size: 16px;
   border: none;
   border-radius: 14px;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(248, 79, 155, 0.3);
+  box-shadow: 0 4px 15px rgba(10, 7, 24, 0.28);
 }
 
 .qna-draw-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(248, 79, 155, 0.4);
+  box-shadow: 0 8px 25px rgba(229, 155, 95, 0.22);
 }
 
 .qna-active-state {
@@ -409,8 +415,8 @@ export default {
   width: 48px;
   height: 48px;
   border-radius: 16px;
-  background: linear-gradient(135deg, #2a2a35 0%, #1f1f26 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(135deg, #4a304d 0%, #292033 100%);
+  border: 1px solid var(--mbti-line-soft);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -420,19 +426,19 @@ export default {
 .axis-tag {
   font-size: 13px;
   font-weight: 800;
-  background: -webkit-linear-gradient(#f84f9b, #ffcf5a);
+  background: -webkit-linear-gradient(#efb789, #9ba8b8);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .chatbot-message {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(62, 38, 65, 0.72);
   padding: 18px 22px;
   border-radius: 4px 20px 20px 20px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--mbti-line-soft);
   font-size: 15px;
   line-height: 1.6;
-  color: #eaeaea;
+  color: var(--text);
   box-shadow: 0 4px 20px rgba(0,0,0,0.15);
   position: relative;
   max-width: 100%;
@@ -446,10 +452,10 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(27, 17, 36, 0.68);
   padding: 16px;
   border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--mbti-line-soft);
 }
 
 .qna-textarea {
@@ -457,7 +463,7 @@ export default {
   min-height: 120px;
   background: transparent;
   border: none;
-  color: #fff;
+  color: var(--text);
   font-size: 15px;
   line-height: 1.6;
   resize: none;
@@ -466,7 +472,7 @@ export default {
 }
 
 .qna-textarea::placeholder {
-  color: rgba(255, 255, 255, 0.3);
+  color: rgba(199, 179, 188, 0.62);
 }
 
 .qna-input-footer {
@@ -479,15 +485,15 @@ export default {
 
 .qna-hint {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--muted);
 }
 
 .qna-submit-button {
   display: flex;
   align-items: center;
   padding: 10px 20px;
-  background: #f84f9b;
-  color: #fff;
+  background: #e59b5f;
+  color: #21142b;
   font-weight: 600;
   font-size: 14px;
   border: none;
@@ -503,7 +509,7 @@ export default {
 }
 
 .qna-submit-button:not(:disabled):hover {
-  background: #ff5eaa;
+  background: #efb078;
   transform: translateY(-1px);
 }
 
@@ -518,23 +524,23 @@ export default {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(0,0,0,0.3);
+  background: rgba(27, 17, 36, 0.66);
   padding: 6px 12px;
   border-radius: 20px;
   font-size: 13px;
-  border: 1px solid rgba(255,255,255,0.05);
+  border: 1px solid var(--mbti-line-soft);
   transition: all 0.3s ease;
 }
 
 .progress-pill.is-complete {
-  background: rgba(248, 79, 155, 0.2);
-  border-color: rgba(248, 79, 155, 0.5);
-  box-shadow: 0 0 10px rgba(248, 79, 155, 0.2);
+  background: rgba(229, 155, 95, 0.14);
+  border-color: rgba(229, 155, 95, 0.38);
+  box-shadow: 0 0 10px rgba(229, 155, 95, 0.12);
 }
 
 .progress-pill .axis-name {
   font-weight: 700;
-  color: #ffcf5a;
+  color: #aeb8c4;
 }
 
 .progress-pill .axis-count {
@@ -543,7 +549,7 @@ export default {
 }
 
 .progress-pill.is-complete .axis-name {
-  color: #f84f9b;
+  color: #efb789;
 }
 
 .progress-pill.is-complete .axis-count {

@@ -11,6 +11,7 @@ urlpatterns = [
     path('api/myprofile/', include('myprofile.urls')),
     path('api/myweather/', include('myweather.urls')),
     path('api/mybook/', include('mybook.urls')),
+    path('api/image-vault/', include('imagevault.urls')),
     path('api/mbti/', include('mbti.urls')),
     path('api/characters/', include('character.urls')),
     path('api/calendar/', include('calendar_api.urls')),

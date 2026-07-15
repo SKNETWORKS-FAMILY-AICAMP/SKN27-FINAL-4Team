@@ -28,7 +28,7 @@
               <span class="dashboard-kicker">EXPLORE MY ROOM</span>
               <strong>기능 메뉴</strong>
             </div>
-            <span class="quick-actions-count">5</span>
+            <span class="quick-actions-count">6</span>
           </div>
           <button type="button" @click="openPanel('mbti')">
             <span class="menu-index">01</span>
@@ -54,8 +54,14 @@
             <span class="menu-copy"><strong>기억 보관함</strong><small>저장된 대화 기억 관리</small></span>
             <span class="menu-arrow" aria-hidden="true">→</span>
           </button>
-          <button class="character-action" type="button" @click="openPanel('character')">
+          <button class="image-vault-action" type="button" @click="openPanel('imageVault')">
             <span class="menu-index">05</span>
+            <span class="menu-object" aria-hidden="true">▧</span>
+            <span class="menu-copy"><strong>이미지 보관함</strong><small>저장된 그림 조회 및 편집</small></span>
+            <span class="menu-arrow" aria-hidden="true">→</span>
+          </button>
+          <button class="character-action" type="button" @click="openPanel('character')">
+            <span class="menu-index">06</span>
             <span class="menu-object" aria-hidden="true">●</span>
             <span class="menu-copy"><strong>캐릭터 정보</strong><small>캐릭터 선택 및 정보 확인</small></span>
             <span class="menu-arrow" aria-hidden="true">→</span>
@@ -156,7 +162,7 @@
           :error="weatherError"
           :location="weatherLocation"
           :regions="weatherRegions"
-          @refresh="loadWeatherData()"
+          @refresh="loadWeatherData({ force: true })"
           @change-region="setWeatherRegion"
           @close="closePanel"
         />
@@ -181,6 +187,17 @@
           @delete-selected="deleteMemoryItems"
         />
 
+        <ImageVaultPanel
+          v-if="activePanel === 'imageVault'"
+          :payload="imageVaultPayload"
+          :loading="imageVaultLoading"
+          :error="imageVaultError"
+          :notice="imageVaultNotice"
+          @refresh="loadImageVault"
+          @rename-image="renameSavedImage"
+          @delete-image="deleteSavedImage"
+        />
+
         <TastePanel
           v-if="activePanel === 'taste'"
           :taste="taste"
@@ -200,30 +217,28 @@
       <div v-if="toast" class="toast" role="status">{{ toast }}</div>
     </transition>
 
-    <transition name="fade">
-      <section
-        v-if="navigationConfirm"
-        class="navigation-confirm-backdrop"
-        role="presentation"
-        @click.self="cancelNavigationConfirm"
-      >
-        <article class="navigation-confirm" role="dialog" aria-modal="true" :aria-label="navigationConfirm.title">
-          <h2>{{ navigationConfirm.title }}</h2>
-          <p>{{ navigationConfirm.message }}</p>
-          <div class="navigation-confirm-actions">
-            <button class="navigation-cancel-button" type="button" @click="cancelNavigationConfirm">취소</button>
-            <button class="navigation-confirm-button" type="button" @click="confirmNavigation">
-              이동하기
-            </button>
-          </div>
-        </article>
-      </section>
-    </transition>
+    <section
+      v-if="navigationConfirm"
+      class="navigation-confirm-backdrop"
+      role="presentation"
+      @click.self="cancelNavigationConfirm"
+    >
+      <article class="navigation-confirm" role="dialog" aria-modal="true" :aria-label="navigationConfirm.title">
+        <h2>{{ navigationConfirm.title }}</h2>
+        <p>{{ navigationConfirm.message }}</p>
+        <div class="navigation-confirm-actions">
+          <button class="navigation-cancel-button" type="button" @click="cancelNavigationConfirm">취소</button>
+          <button class="navigation-confirm-button" type="button" @click="confirmNavigation">
+            이동하기
+          </button>
+        </div>
+      </article>
+    </section>
   </main>
 </template>
 
 <script>
-import { fetchCurrentWeather, fetchMbtiDemoPayload, fetchMyProfile, updateMyProfile, saveOnboardingMbti, fetchBookRecommendation, fetchMemoryVault, deleteMemoryVaultItem } from "./mypage.api";
+import { fetchCurrentWeather, fetchMbtiDemoPayload, fetchMyProfile, updateMyProfile, saveOnboardingMbti, fetchBookRecommendation, fetchMemoryVault, deleteMemoryVaultItem, fetchImageVault, renameImageVaultItem, deleteImageVaultItem } from "./mypage.api";
 import { createMypageState, i18n } from "./mypage.data";
 import CharacterPanel from "./components/CharacterPanel.vue";
 import MbtiPanel from "./components/MbtiPanel.vue";
@@ -235,6 +250,7 @@ import TastePanel from "./components/TastePanel.vue";
 import WeatherPanel from "./components/WeatherPanel.vue";
 import BookPanel from "./components/BookPanel.vue";
 import MemoryPanel from "./components/MemoryPanel.vue";
+import ImageVaultPanel from "./components/ImageVaultPanel.vue";
 
 export default {
   name: "MypageView",
@@ -248,7 +264,8 @@ export default {
     TastePanel,
     WeatherPanel,
     BookPanel,
-    MemoryPanel
+    MemoryPanel,
+    ImageVaultPanel
   },
   async beforeRouteEnter(to, from, next) {
     try {
@@ -276,6 +293,7 @@ export default {
       const descriptions = {
         book: "프로필의 관심사와 취미, 오늘의 감정을 바탕으로 지금 읽어볼 만한 책을 추천합니다.",
         memory: "챗봇이 보관한 기억을 확인하고 필요 없는 기억을 삭제합니다.",
+        imageVault: "저장한 카드형 그림을 모아 보고 이름을 바꾸거나 삭제합니다.",
         profile: "사전 정보 입력 화면에서 설정한 기본 정보와 관심분야 키워드를 조회하고, 수정합니다.",
         character: "방 안의 동행 캐릭터를 고르고, 캐릭터의 말투와 성향을 확인합니다.",
         weather: "창문 밖 현재 날씨와 오늘의 컨디션 관리 추천을 확인합니다.",
@@ -346,6 +364,12 @@ export default {
     this.applySettings();
     this.loadMbtiDemoData();
     this.loadProfileData();
+    this.weatherRefreshTimer = window.setInterval(() => {
+      if (this.activePanel === "weather") this.loadWeatherData();
+    }, 60 * 1000);
+  },
+  beforeUnmount() {
+    if (this.weatherRefreshTimer) window.clearInterval(this.weatherRefreshTimer);
   },
   methods: {
     normalizeList(value) {
@@ -455,7 +479,7 @@ export default {
       this.activatePanel(panel);
     },
     shouldMoveBeforeOpen(panel) {
-      return ["profile", "mbti", "weather", "book", "memory", "character", "settings"].includes(panel);
+      return ["profile", "mbti", "weather", "book", "memory", "imageVault", "character", "settings"].includes(panel);
     },
     activatePanel(panel) {
       this.pendingPanel = null;
@@ -473,6 +497,9 @@ export default {
       }
       if (panel === "memory") {
         this.loadMemoryData();
+      }
+      if (panel === "imageVault") {
+        this.loadImageVault();
       }
     },
     activatePanelAfterRoomMove(panel) {
@@ -536,13 +563,27 @@ export default {
     },
     getSavedWeatherLocation() {
       try {
-        return JSON.parse(localStorage.getItem("mindroom-weather-location") || "null");
+        const sessionLocation = JSON.parse(sessionStorage.getItem("mindroom-weather-auto-location") || "null");
+        if (sessionLocation?.mode === "auto") return sessionLocation;
+        const saved = JSON.parse(localStorage.getItem("mindroom-weather-location") || "null");
+        if (saved && ["광주", "전남"].includes(saved.region)) {
+          const migrated = { ...saved, region: "전남광주" };
+          localStorage.setItem("mindroom-weather-location", JSON.stringify(migrated));
+          return migrated;
+        }
+        return saved;
       } catch (error) {
         return null;
       }
     },
     saveWeatherLocation(location) {
       this.weatherLocation = location;
+      if (location?.mode === "auto") {
+        sessionStorage.setItem("mindroom-weather-auto-location", JSON.stringify(location));
+        localStorage.removeItem("mindroom-weather-location");
+        return;
+      }
+      sessionStorage.removeItem("mindroom-weather-auto-location");
       localStorage.setItem("mindroom-weather-location", JSON.stringify(location));
     },
     getBrowserLocation() {
@@ -569,6 +610,11 @@ export default {
         this.weatherLocation = saved;
         return saved;
       }
+      if (!force) {
+        const fallback = { mode: "manual", region: "서울" };
+        this.saveWeatherLocation(fallback);
+        return fallback;
+      }
       try {
         const browserLocation = await this.getBrowserLocation();
         this.saveWeatherLocation(browserLocation);
@@ -579,15 +625,21 @@ export default {
         return fallback;
       }
     },
-    async loadWeatherData(force = false) {
+    async loadWeatherData({ force = false, refreshLocation = false } = {}) {
+      const weatherFreshnessMs = 30 * 60 * 1000;
+      const hasFreshPayload = this.weatherPayload
+        && Date.now() - this.weatherLastFetchedAt < weatherFreshnessMs;
+      if (!force && (hasFreshPayload || this.weatherLoading)) return;
+
       this.weatherLoading = true;
       this.weatherError = "";
       try {
-        const location = await this.resolveWeatherLocation(force);
+        const location = await this.resolveWeatherLocation(refreshLocation);
         const requestLocation = location.mode === "auto"
           ? { lat: location.lat, lon: location.lon, region: location.region }
           : { region: location.region || "서울" };
         this.weatherPayload = await fetchCurrentWeather(requestLocation);
+        this.weatherLastFetchedAt = Date.now();
       } catch (error) {
         console.error(error);
         this.weatherError = error.message || "날씨 정보를 불러오지 못했습니다.";
@@ -597,18 +649,36 @@ export default {
     },
     async setWeatherRegion(region) {
       if (region === "현재 위치") {
+        const consentKey = "mindroom-location-consent-2026-07-15";
+        const hasConsent = localStorage.getItem(consentKey) === "true";
+        if (!hasConsent) {
+          const confirmed = window.confirm(
+            "현재 위치의 위도·경도를 날씨 조회에 사용합니다. 좌표는 서버에 저장하지 않고 현재 브라우저 탭에서만 보관하며, 기상청 예보 격자 변환에 사용합니다. 계속할까요?"
+          );
+          if (!confirmed) return;
+          localStorage.setItem(consentKey, "true");
+        }
         localStorage.removeItem("mindroom-weather-location");
-        await this.loadWeatherData(true);
+        await this.loadWeatherData({ force: true, refreshLocation: true });
         return;
       }
+      localStorage.removeItem("mindroom-location-consent-2026-07-15");
       this.saveWeatherLocation({ mode: "manual", region });
-      await this.loadWeatherData();
+      await this.loadWeatherData({ force: true });
     },
     async loadBookData(force = false) {
       this.bookLoading = true;
       this.bookError = "";
+      let forceBool = false;
+      let themeParam = null;
+      if (typeof force === "object" && force !== null) {
+        forceBool = Boolean(force.force);
+        themeParam = force.theme || null;
+      } else {
+        forceBool = Boolean(force);
+      }
       try {
-        this.bookPayload = await fetchBookRecommendation(force);
+        this.bookPayload = await fetchBookRecommendation(forceBool, themeParam);
       } catch (error) {
         console.error(error);
         this.bookError = error.message || "책 추천 정보를 불러오지 못했습니다.";
@@ -687,6 +757,59 @@ export default {
         console.warn(error);
         this.memoryPayload = previousPayload;
         this.memoryError = "삭제 API 호출에 실패했습니다. 잠시 후 다시 시도해주세요.";
+      }
+    },
+
+    async loadImageVault() {
+      if (this.imageVaultLoading) return;
+      this.imageVaultLoading = true;
+      this.imageVaultError = "";
+      this.imageVaultNotice = "";
+      try {
+        this.imageVaultPayload = await fetchImageVault();
+      } catch (error) {
+        console.warn(error);
+        this.imageVaultError = "이미지 보관함을 불러오지 못했습니다.";
+      } finally {
+        this.imageVaultLoading = false;
+      }
+    },
+    async renameSavedImage({ id, name }) {
+      const previousPayload = this.imageVaultPayload;
+      const items = this.imageVaultPayload?.items || [];
+      this.imageVaultPayload = {
+        ...(this.imageVaultPayload || {}),
+        items: items.map(item => item.id === id ? { ...item, name } : item)
+      };
+      this.imageVaultError = "";
+      try {
+        const updated = await renameImageVaultItem(id, name);
+        this.imageVaultPayload = {
+          ...(this.imageVaultPayload || {}),
+          items: (this.imageVaultPayload?.items || []).map(item => item.id === id ? updated : item)
+        };
+        this.showToast("이미지 이름을 변경했습니다.");
+      } catch (error) {
+        console.warn(error);
+        this.imageVaultPayload = previousPayload;
+        this.imageVaultError = "이름을 변경하지 못했습니다.";
+      }
+    },
+    async deleteSavedImage(id) {
+      const previousPayload = this.imageVaultPayload;
+      const items = this.imageVaultPayload?.items || [];
+      this.imageVaultPayload = {
+        ...(this.imageVaultPayload || {}),
+        items: items.filter(item => item.id !== id)
+      };
+      this.imageVaultError = "";
+      try {
+        await deleteImageVaultItem(id);
+        this.showToast("이미지를 삭제했습니다.");
+      } catch (error) {
+        console.warn(error);
+        this.imageVaultPayload = previousPayload;
+        this.imageVaultError = "이미지를 삭제하지 못했습니다.";
       }
     },
 
