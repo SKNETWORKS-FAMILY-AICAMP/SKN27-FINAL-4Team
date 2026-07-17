@@ -19,8 +19,8 @@ TAVILY_DEFAULT_DOMAINS = [
 ]
 TAVILY_MAX_RESULTS = max(1, min(5, int(os.environ.get("TAVILY_MAX_RESULTS", "3"))))
 TAVILY_SEARCH_DEPTH = os.environ.get("TAVILY_SEARCH_DEPTH", "basic")
-TAVILY_TIMEOUT_SECONDS = int(os.environ.get("TAVILY_TIMEOUT_SECONDS", "8"))
-TAVILY_RETRY_COUNT = max(0, int(os.environ.get("TAVILY_RETRY_COUNT", "2")))
+TAVILY_TIMEOUT_SECONDS = int(os.environ.get("TAVILY_TIMEOUT_SECONDS", "4"))
+TAVILY_RETRY_COUNT = max(0, int(os.environ.get("TAVILY_RETRY_COUNT", "1")))
 TAVILY_CACHE_SECONDS = max(300, int(os.environ.get("TAVILY_CACHE_SECONDS", "1800")))
 TAVILY_FAILURE_CACHE_SECONDS = max(
     60,
@@ -137,32 +137,68 @@ class WeatherWebAgent:
         temperature = WeatherWebAgent._to_float(weather.get("temperature"))
         humidity = WeatherWebAgent._to_float(weather.get("humidity"))
         wind_speed = WeatherWebAgent._to_float(weather.get("wind_speed"))
+        base_date = str(weather.get("base_date") or "")
+        try:
+            month = int(base_date[4:6]) if len(base_date) >= 6 else timezone.localdate().month
+        except ValueError:
+            month = timezone.localdate().month
 
-        def item(label, value, unit, level, minimum, maximum, reason, method, derived):
+        def item(
+            label,
+            value,
+            unit,
+            level,
+            severity,
+            minimum,
+            maximum,
+            status,
+            method,
+            derived,
+            bands,
+            source_url,
+        ):
             available = value is not None
             gauge_percent = 0.0
             if available and maximum > minimum:
                 gauge_percent = max(0.0, min(100.0, ((value - minimum) / (maximum - minimum)) * 100))
             rounded = round(value, 1) if available else None
+
+            normalized_bands = []
+            for band in bands:
+                start = max(minimum, min(maximum, band["from"]))
+                end = max(minimum, min(maximum, band["to"]))
+                normalized_bands.append({
+                    **band,
+                    "start_percent": round(((start - minimum) / (maximum - minimum)) * 100, 1),
+                    "width_percent": round(((end - start) / (maximum - minimum)) * 100, 1),
+                })
+
             return {
                 "label": label,
                 "score": rounded,
                 "value": rounded,
                 "unit": unit,
                 "level": level if available else "정보 없음",
+                "severity": severity if available else "unavailable",
                 "gauge_percent": round(gauge_percent, 1),
                 "scale_min": minimum,
                 "scale_max": maximum,
                 "scale_min_label": f"{minimum:g}{unit}",
                 "scale_max_label": f"{maximum:g}{unit}",
-                "reason": reason if available else "필요한 관측값이 없어 계산하지 않았습니다.",
+                "status": status,
+                # 이전 프런트와의 호환을 위해 당분간 같은 문장을 유지한다.
+                "reason": status,
                 "method": method,
                 "derived": derived,
                 "available": available,
+                "bands": normalized_bands,
+                "source_url": source_url,
             }
 
         discomfort = None
         discomfort_level = "정보 없음"
+        discomfort_severity = "unavailable"
+        discomfort_status = "기온·습도 관측값이 없어 계산하지 못했습니다."
         if temperature is not None and humidity is not None:
             discomfort = (
                 1.8 * temperature
@@ -171,20 +207,35 @@ class WeatherWebAgent:
             )
             if discomfort >= 80:
                 discomfort_level = "매우 높음"
+                discomfort_severity = "danger"
+                discomfort_status = "대부분이 불쾌감을 느끼는 범위입니다."
             elif discomfort >= 75:
                 discomfort_level = "높음"
+                discomfort_severity = "warning"
+                discomfort_status = "절반가량이 불쾌감을 느끼는 범위입니다."
             elif discomfort >= 68:
                 discomfort_level = "보통"
+                discomfort_severity = "caution"
+                discomfort_status = "일부가 불쾌감을 느끼기 시작하는 범위입니다."
             else:
                 discomfort_level = "낮음"
+                discomfort_severity = "safe"
+                discomfort_status = "현재는 대체로 쾌적한 범위입니다."
 
         apparent = None
         apparent_method = "기상청 계절별 체감온도 산식"
-        base_date = str(weather.get("base_date") or "")
-        try:
-            month = int(base_date[4:6]) if len(base_date) >= 6 else timezone.localdate().month
-        except ValueError:
-            month = timezone.localdate().month
+        apparent_level = "정보 없음"
+        apparent_severity = "unavailable"
+        apparent_status = "계산에 필요한 관측값이 없습니다."
+        apparent_minimum = 20
+        apparent_maximum = 42
+        apparent_bands = [
+            {"level": "기준 미만", "from": 20, "to": 31, "color": "#36a269"},
+            {"level": "관심", "from": 31, "to": 33, "color": "#c3a832"},
+            {"level": "주의", "from": 33, "to": 35, "color": "#ed982f"},
+            {"level": "경고", "from": 35, "to": 38, "color": "#e8663a"},
+            {"level": "위험", "from": 38, "to": 42, "color": "#d9424e"},
+        ]
         if 5 <= month <= 9 and temperature is not None and humidity is not None:
             wet_bulb = (
                 temperature * math.atan(0.151977 * math.sqrt(humidity + 8.313659))
@@ -202,9 +253,33 @@ class WeatherWebAgent:
                 + 3.0
             )
             apparent_method = "기상청 여름철 체감온도 산식(기온·습도)"
+            if apparent >= 38:
+                apparent_level = "위험"
+                apparent_severity = "danger"
+            elif apparent >= 35:
+                apparent_level = "경고"
+                apparent_severity = "warning"
+            elif apparent >= 33:
+                apparent_level = "주의"
+                apparent_severity = "caution"
+            elif apparent >= 31:
+                apparent_level = "관심"
+                apparent_severity = "interest"
+            else:
+                apparent_level = "기준 미만"
+                apparent_severity = "safe"
+            apparent_status = f"현재는 폭염 영향 {apparent_level} 범위입니다."
         elif temperature is not None and wind_speed is not None:
             wind_kmh = max(0.0, wind_speed) * 3.6
-            if temperature <= 10 and wind_kmh > 4.8:
+            apparent_minimum = -50
+            apparent_maximum = 10
+            apparent_bands = [
+                {"level": "위험", "from": -50, "to": -45, "color": "#d9424e"},
+                {"level": "경고", "from": -45, "to": -25, "color": "#e8663a"},
+                {"level": "주의", "from": -25, "to": -10, "color": "#ed982f"},
+                {"level": "관심", "from": -10, "to": 10, "color": "#c3a832"},
+            ]
+            if temperature <= 10 and wind_speed >= 1.3:
                 apparent = (
                     13.12
                     + 0.6215 * temperature
@@ -212,33 +287,41 @@ class WeatherWebAgent:
                     + 0.3965 * temperature * (wind_kmh ** 0.16)
                 )
                 apparent_method = "기상청 겨울철 체감온도 산식(기온·풍속)"
+                if apparent <= -45:
+                    apparent_level = "위험"
+                    apparent_severity = "danger"
+                elif apparent <= -25:
+                    apparent_level = "경고"
+                    apparent_severity = "warning"
+                elif apparent <= -10:
+                    apparent_level = "주의"
+                    apparent_severity = "caution"
+                else:
+                    apparent_level = "관심"
+                    apparent_severity = "interest"
+                apparent_status = f"현재는 한랭 체감 {apparent_level} 범위입니다."
             else:
-                apparent = temperature
-                apparent_method = "겨울 산식 적용범위 밖: 관측 기온 표시"
-
-        apparent_level = "정보 없음"
-        if apparent is not None:
-            if apparent >= 35:
-                apparent_level = "매우 더움"
-            elif apparent >= 31:
-                apparent_level = "더움"
-            elif apparent <= -10:
-                apparent_level = "매우 추움"
-            elif apparent <= 0:
-                apparent_level = "추움"
-            else:
-                apparent_level = "보통"
+                apparent_method = "기상청 겨울철 산출 조건: 기온 10℃ 이하·풍속 1.3m/s 이상"
+                apparent_status = "겨울철 공식 산출 조건 밖입니다."
 
         return {
             "불쾌지수": item(
-                "불쾌지수", discomfort, "", discomfort_level, 40, 100,
-                "현재 기온과 습도로 계산한 참고값입니다.",
-                "DI=1.8T-0.55(1-RH/100)(1.8T-26)+32", True,
+                "불쾌지수", discomfort, "", discomfort_level, discomfort_severity, 60, 90,
+                discomfort_status,
+                "기상청 과거 불쾌지수 산식: DI=1.8T-0.55(1-RH/100)(1.8T-26)+32", True,
+                [
+                    {"level": "낮음", "from": 60, "to": 68, "color": "#3b8edb"},
+                    {"level": "보통", "from": 68, "to": 75, "color": "#36a269"},
+                    {"level": "높음", "from": 75, "to": 80, "color": "#ed982f"},
+                    {"level": "매우 높음", "from": 80, "to": 90, "color": "#d9424e"},
+                ],
+                "https://www.kma.go.kr/kma/servlet/NeoboardProcess?bid=press2&mode=download&num=1553&fno=1",
             ),
             "체감온도": item(
-                "체감온도", apparent, "℃", apparent_level, -20, 40,
-                "계절에 맞는 기상청 산식으로 현재 관측값을 재계산했습니다.",
-                apparent_method, True,
+                "체감온도", apparent, "℃", apparent_level, apparent_severity,
+                apparent_minimum, apparent_maximum, apparent_status,
+                apparent_method, True, apparent_bands,
+                "https://data.kma.go.kr/climate/windChill/selectWindChillChart.do",
             ),
         }
 
@@ -249,6 +332,7 @@ class WeatherWebAgent:
                 weather,
                 tavily_context=tavily_context,
                 generation_error="missing_openai_key",
+                user_profile=user_profile,
             )
         try:
             indices = WeatherWebAgent._calculate_weather_indices(weather)
@@ -279,6 +363,7 @@ class WeatherWebAgent:
                 weather,
                 tavily_context=tavily_context,
                 generation_error=exc.__class__.__name__,
+                user_profile=user_profile,
             )
 
     @staticmethod
@@ -340,16 +425,19 @@ class WeatherWebAgent:
             "0. 기온·강수·풍속·습도·예보·특보 사실은 기상청 API허브 데이터만 기준으로 삼으세요. 민간 검색 결과와 다르면 API허브를 우선하고 민간 검색 수치를 새로 인용하지 마세요. Tavily 결과는 주간 흐름의 설명과 생활 추천 맥락을 보완하는 용도로만 사용하세요.\n"
             "1. weatherAnalysis (150~200자): 현재 날씨를 흥미롭게 해설하되, 개인화 정보를 텍스트에 직접 노출하거나 인용하지 마세요. 분석 리포트처럼 딱딱하지 않고 부드럽고 자연스럽게 작성하세요.\n"
             "2. forecastSummary (120~180자): 기상청 API허브의 단기·중기 자료를 합친 주간예보를 요약하세요. 기온 변화, 비 가능성이 큰 날, 주간 생활상 주의점을 자연스럽게 연결하되 없는 날짜나 수치를 추측하지 마세요. 제공 범위가 7일보다 짧으면 실제 제공된 마지막 날짜까지만 요약하고 '이후 예보는 확인 중'이라고 밝혀 주세요. 주간 데이터가 없으면 '기상청 주간예보를 일시적으로 확인할 수 없습니다'라고 쓰세요.\n"
-            "3. recommendations (3개 필수): 사용자의 취미와 '오늘의 감정'을 바탕으로 상황에 맞는 행동을 추천하세요. 개인화 정보를 문장에 직접 노출하지 말고 배경으로만 은은하게 참고하세요.\n"
-            "   - reason (50~80자): 행동을 추천하는 구체적인 이유.\n"
-            "   - howTo (50~100자): 즉시 실행 가능한 방법.\n"
+            "3. recommendations (정확히 3개): 반드시 일반 날씨 추천 2개를 먼저 쓰고, 저장된 취미와 연결한 추천 1개를 마지막에 쓰세요. 일반 추천의 우선순위가 더 높습니다.\n"
+            "   - 첫 번째·두 번째 항목의 kind는 general: 현재 관측값과 가까운 시간대 예보에 바로 대응하는 준비를 서로 겹치지 않게 작성하세요.\n"
+            "   - 세 번째 항목의 kind는 hobby: 저장된 취미 중 하나를 오늘 날씨에 맞게 즐기는 구체적인 방법을 작성하세요. 취미 이름은 이 항목에서만 자연스럽게 언급해도 됩니다.\n"
+            "   - title (12~24자): 무엇을 할지 바로 알 수 있는 제목.\n"
+            "   - summary (45~80자): 현재 날씨 수치나 예보와 행동을 한 문장으로 연결하되 '이유' 같은 표제어는 쓰지 마세요.\n"
+            "   - actions (2개): 시간·횟수·준비물·설정값 중 하나 이상을 담은 20~45자의 실행 항목. 추상적인 격려 문장은 금지합니다.\n"
             "5. 전반적 어투: 전문적이고 따뜻하게 작성하며, 의학적 지시나 공포를 주는 표현은 금지합니다.\n\n"
             "Output ONLY in JSON format:\n"
             "{\n"
             '  "weatherAnalysis": "맞춤형 날씨 해설 (직접 언급 금지)",\n'
             '  "moodImpact": "기분 영향 (선택)",\n'
             '  "forecastSummary": "기상청 주간예보와 검색 맥락을 바탕으로 한 7일 요약",\n'
-            '  "recommendations": [{"title": "...", "reason": "...", "howTo": "..."}],\n'
+            '  "recommendations": [{"kind": "general", "title": "...", "summary": "...", "actions": ["...", "..."]}, {"kind": "general", "title": "...", "summary": "...", "actions": ["...", "..."]}, {"kind": "hobby", "title": "...", "summary": "...", "actions": ["...", "..."]}],\n'
             '  "careNote": ""\n'
             "}"
         )
@@ -374,7 +462,11 @@ class WeatherWebAgent:
             "weeklyForecasts": weather.get("weekly_forecasts", []) if weather else [],
             "forecastSummary": data.get("forecastSummary") or WeatherWebAgent._fallback_weekly_summary(weather or {}),
             "weeklyForecast": data.get("forecastSummary") or WeatherWebAgent._fallback_weekly_summary(weather or {}),
-            "recommendations": WeatherWebAgent._normalize_recommendations(recommendations, weather),
+            "recommendations": WeatherWebAgent._normalize_recommendations(
+                recommendations,
+                weather,
+                user_profile,
+            ),
             "careNote": WeatherWebAgent._soften_phrasing(
                 data.get("careNote") or "",
                 weather,
@@ -403,7 +495,7 @@ class WeatherWebAgent:
         }
 
     @staticmethod
-    def _fallback(weather, tavily_context=None, generation_error=""):
+    def _fallback(weather, tavily_context=None, generation_error="", user_profile=None):
         condition = weather.get("condition") or "현재 날씨"
         humidity = WeatherWebAgent._to_float(weather.get("humidity"))
         temperature = WeatherWebAgent._to_float(weather.get("temperature"))
@@ -412,35 +504,35 @@ class WeatherWebAgent:
 
         recommendations = [
             {
-                "title": "창문 옆 컨디션 체크",
-                "reason": f"{condition} 날씨에는 지금 내 리듬이 어떤지 먼저 살펴보면 좋아요.",
-                "howTo": "물 한 모금 마시고 어깨와 목을 30초만 천천히 풀어보세요.",
+                "kind": "general",
+                "title": "외출 전 3분 점검",
+                "summary": f"현재 {condition}, {temperature:g}℃ 기준으로 가까운 시간의 비와 기온 변화를 먼저 확인하세요." if temperature is not None else f"현재 {condition} 기준으로 가까운 시간의 비와 기온 변화를 먼저 확인하세요.",
+                "actions": [
+                    "시간대별 예보에서 출발 시각의 강수를 확인하기",
+                    "귀가 시각 기온에 맞춰 얇은 겉옷을 정하기",
+                ],
             },
             {
-                "title": "작은 공간 정리",
-                "reason": "날씨가 흐름을 흔들 때는 눈에 보이는 공간을 조금 정돈하면 마음도 따라 안정돼요.",
-                "howTo": "책상 위 한 구역만 비우고, 오늘 할 일 하나를 가까이에 놓아보세요.",
+                "kind": "general",
+                "title": "실내 온습도 맞추기",
+                "summary": f"실외 습도 {humidity:g}%를 참고해 실내는 40~60% 범위로 조절하면 머무는 동안 더 편합니다." if humidity is not None else "실외 상태를 참고해 실내 습도를 40~60% 범위로 조절하면 머무는 동안 더 편합니다.",
+                "actions": [
+                    "실내 습도계를 확인하고 60% 이상이면 제습하기",
+                    "비가 멎은 시간에 창문을 5~10분 맞통풍하기",
+                ],
             },
         ]
-
-        if humidity is not None and humidity >= 70:
-            recommendations.append({
-                "title": "보송한 공기 만들기",
-                "reason": "습도가 높으면 방 안 공기가 조금 답답하게 느껴질 수 있어요.",
-                "howTo": "가능하면 짧게 환기하고, 외출 전에는 우산이나 겉옷을 가볍게 확인해보세요.",
-            })
-        elif temperature is not None and temperature >= 28:
-            recommendations.append({
-                "title": "열감 낮추기",
-                "reason": "기온이 높으면 방 안에서도 리듬이 느슨해질 수 있어요.",
-                "howTo": "시원한 물을 가까이에 두고, 해야 할 일은 짧은 단위로 나눠보세요.",
-            })
-        else:
-            recommendations.append({
-                "title": "가벼운 산책 준비",
-                "reason": "날씨 부담이 크지 않다면 짧은 움직임이 기분 전환에 좋아요.",
-                "howTo": "10분 정도만 천천히 걷고 돌아오는 방식으로 시작해보세요.",
-            })
+        hobbies = (user_profile or {}).get("hobbies") or []
+        hobby = str(hobbies[0]).strip() if hobbies else "좋아하는 취미"
+        recommendations.append({
+            "kind": "hobby",
+            "title": f"{hobby}, 오늘 날씨에 맞춰 즐기기",
+            "summary": f"{condition}인 오늘은 가까운 시간대 예보를 살펴 {hobby}에 집중할 시간을 편하게 잡아보세요.",
+            "actions": [
+                f"{hobby}에 쓸 20~30분을 일정에 먼저 비워두기",
+                "야외 활동이면 출발 직전 강수와 특보 확인하기",
+            ],
+        })
 
         return {
             "weatherAnalysis": f"현재 날씨는 {condition}입니다. 분석 데이터 로딩이 지연되고 있으나, 이 기상 정보를 바탕으로 가볍게 오늘의 페이스를 조절해보세요.",
@@ -461,8 +553,8 @@ class WeatherWebAgent:
                 "model": os.environ.get("MYWEATHER_OPENAI_MODEL", "gpt-5.4-mini"),
                 "status": "fallback",
                 "reason": generation_error or "generation_failed",
-                "personalized": False,
-                "personalization_fields": [],
+                "personalized": bool(hobbies),
+                "personalization_fields": ["선택한 취미"] if hobbies else [],
             },
             "is_fallback": True,
         }
@@ -652,23 +744,64 @@ class WeatherWebAgent:
         return "낮음"
 
     @staticmethod
-    def _normalize_recommendations(recommendations, weather=None):
+    def _normalize_recommendations(recommendations, weather=None, user_profile=None):
         normalized = []
-        for item in recommendations[:3]:
+        for index, item in enumerate(recommendations[:6]):
             if not isinstance(item, dict):
                 continue
+            kind = str(item.get("kind") or "").strip().lower()
+            if kind not in {"general", "hobby"}:
+                kind = "general" if index < 2 else "hobby"
+            actions = item.get("actions")
+            if not isinstance(actions, list):
+                actions = [item.get("howTo")] if item.get("howTo") else []
+            actions = [
+                WeatherWebAgent._soften_phrasing(action, weather)
+                for action in actions[:2]
+                if isinstance(action, str) and action.strip()
+            ]
+            if not actions:
+                actions = ["시간대별 예보와 현재 특보를 확인한 뒤 일정을 정하세요."]
             normalized.append({
+                "kind": kind,
                 "title": WeatherWebAgent._soften_phrasing(item.get("title") or "작은 날씨 루틴", weather),
-                "reason": WeatherWebAgent._soften_phrasing(
-                    item.get("reason") or "지금 날씨에 맞춰 오늘의 리듬을 편하게 잡는 데 도움이 돼요.",
+                "summary": WeatherWebAgent._soften_phrasing(
+                    item.get("summary") or item.get("reason") or "현재 관측값과 가까운 시간대 예보에 맞춰 일정을 조절하세요.",
                     weather,
                 ),
-                "howTo": WeatherWebAgent._soften_phrasing(
-                    item.get("howTo") or "바로 할 수 있는 작은 행동부터 시작해보세요.",
-                    weather,
-                ),
+                "actions": actions,
             })
-        return normalized
+
+        general_items = [item for item in normalized if item["kind"] == "general"]
+        hobby_items = [item for item in normalized if item["kind"] == "hobby"]
+
+        while len(general_items) < 2:
+            fallback_index = len(general_items) + 1
+            general_items.append({
+                "kind": "general",
+                "title": "외출 전 날씨 한 번 더 보기" if fallback_index == 1 else "실내 온습도 가볍게 맞추기",
+                "summary": "가까운 시간의 강수와 기온 변화를 확인해 오늘 일정을 무리 없이 조절하세요.",
+                "actions": [
+                    "출발 시각의 강수와 현재 특보 확인하기",
+                    "귀가 시각 기온에 맞춰 준비물 정하기",
+                ],
+            })
+
+        if not hobby_items:
+            hobbies = (user_profile or {}).get("hobbies") or []
+            hobby = str(hobbies[0]).strip() if hobbies else "좋아하는 취미"
+            condition = (weather or {}).get("condition") or "오늘 날씨"
+            hobby_items.append({
+                "kind": "hobby",
+                "title": f"{hobby}, 오늘 날씨에 맞춰 즐기기",
+                "summary": f"{condition}인 오늘은 예보를 살펴 {hobby}에 집중할 시간을 편하게 잡아보세요.",
+                "actions": [
+                    f"{hobby}에 쓸 20~30분을 일정에 먼저 비워두기",
+                    "야외 활동이면 출발 직전 강수와 특보 확인하기",
+                ],
+            })
+
+        return general_items[:2] + hobby_items[:1]
 
     @staticmethod
     def _soften_phrasing(text, weather=None):
@@ -711,6 +844,6 @@ def _get_openai_llm(temperature=0.35, max_tokens=4000):
         temperature=temperature,
         max_tokens=max_tokens,
         api_key=os.environ.get("OPENAI_API_KEY"),
-        timeout=max(5, int(os.environ.get("MYWEATHER_OPENAI_TIMEOUT_SECONDS", "20"))),
+        timeout=max(5, int(os.environ.get("MYWEATHER_OPENAI_TIMEOUT_SECONDS", "12"))),
         max_retries=max(0, int(os.environ.get("MYWEATHER_OPENAI_RETRY_COUNT", "2"))),
     )

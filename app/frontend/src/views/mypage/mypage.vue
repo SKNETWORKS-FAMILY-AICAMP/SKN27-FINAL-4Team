@@ -7,7 +7,7 @@
             <img :src="`/characters/${currentCharacter.id}/default.png`" :alt="currentCharacter.name" />
           </div>
           <div class="identity-copy">
-            <span class="dashboard-kicker">ROOM PLATE</span>
+            <span class="dashboard-kicker">나의 오늘</span>
             <h1>{{ displayName }}님의 공간</h1>
             <p>{{ homeStatusMessage }}</p>
             <div class="identity-chips">
@@ -25,10 +25,10 @@
         <nav class="quick-actions" aria-label="마이룸 기능 메뉴">
           <div class="quick-actions-heading">
             <div>
-              <span class="dashboard-kicker">EXPLORE MY ROOM</span>
-              <strong>기능 메뉴</strong>
+              <span class="dashboard-kicker">내 공간 살펴보기</span>
+              <strong>마이룸 기능</strong>
             </div>
-            <span class="quick-actions-count">6</span>
+            <span class="quick-actions-count">5</span>
           </div>
           <button type="button" @click="openPanel('mbti')">
             <span class="menu-index">01</span>
@@ -39,7 +39,7 @@
           <button type="button" @click="openPanel('weather')">
             <span class="menu-index">02</span>
             <span class="menu-object" aria-hidden="true">⌑</span>
-            <span class="menu-copy"><strong>날씨 정보</strong><small>현재 날씨와 컨디션 추천</small></span>
+            <span class="menu-copy"><strong>날씨 정보</strong><small>현재 날씨와 활동 제안</small></span>
             <span class="menu-arrow" aria-hidden="true">→</span>
           </button>
           <button type="button" @click="openPanel('book')">
@@ -54,14 +54,8 @@
             <span class="menu-copy"><strong>기억 보관함</strong><small>저장된 대화 기억 관리</small></span>
             <span class="menu-arrow" aria-hidden="true">→</span>
           </button>
-          <button class="image-vault-action" type="button" @click="openPanel('imageVault')">
-            <span class="menu-index">05</span>
-            <span class="menu-object" aria-hidden="true">▧</span>
-            <span class="menu-copy"><strong>이미지 보관함</strong><small>저장된 그림 조회 및 편집</small></span>
-            <span class="menu-arrow" aria-hidden="true">→</span>
-          </button>
           <button class="character-action" type="button" @click="openPanel('character')">
-            <span class="menu-index">06</span>
+            <span class="menu-index">05</span>
             <span class="menu-object" aria-hidden="true">●</span>
             <span class="menu-copy"><strong>캐릭터 정보</strong><small>캐릭터 선택 및 정보 확인</small></span>
             <span class="menu-arrow" aria-hidden="true">→</span>
@@ -70,8 +64,8 @@
 
         <aside class="home-sidebar" aria-label="오늘의 상태판">
           <div class="panel-caption">
-            <span class="dashboard-kicker">ROOM NOTE</span>
-            <strong>방 안 상태판</strong>
+            <span class="dashboard-kicker">오늘의 요약</span>
+            <strong>내 상태 한눈에 보기</strong>
           </div>
           <section class="summary-grid" aria-label="내 상태 요약">
             <button class="summary-card" type="button" @click="goToReport">
@@ -92,7 +86,7 @@
             <button class="summary-card" type="button" @click="openPanel('profile')">
               <span>취미</span>
               <strong>{{ hobbyPreview }}</strong>
-              <small>개인화 보정</small>
+              <small>프로필 기준</small>
             </button>
           </section>
         </aside>
@@ -101,10 +95,10 @@
       <section class="room-section" aria-label="내 공간">
         <header class="room-section-heading">
           <div>
-            <span class="dashboard-kicker">MY ROOM</span>
+            <span class="dashboard-kicker">나의 공간</span>
             <h2>{{ displayName }}님의 미니룸</h2>
           </div>
-          <p>책장, 창문, 액자처럼 방 안 오브젝트가 오늘의 기록과 연결됩니다.</p>
+          <p>표시된 방 안 오브젝트를 선택하면 연결된 기능을 열 수 있어요.</p>
         </header>
         <MypageRoom
           :labels="t"
@@ -133,6 +127,7 @@
           :profile-saved-at="profileSavedAt"
           :current-character="currentCharacter"
           @toggle-profile-edit="toggleProfileEdit"
+          @cancel-profile-edit="cancelProfileEdit"
           @update-profile-keywords="updateProfileKeywords"
         />
 
@@ -187,17 +182,6 @@
           @delete-selected="deleteMemoryItems"
         />
 
-        <ImageVaultPanel
-          v-if="activePanel === 'imageVault'"
-          :payload="imageVaultPayload"
-          :loading="imageVaultLoading"
-          :error="imageVaultError"
-          :notice="imageVaultNotice"
-          @refresh="loadImageVault"
-          @rename-image="renameSavedImage"
-          @delete-image="deleteSavedImage"
-        />
-
         <TastePanel
           v-if="activePanel === 'taste'"
           :taste="taste"
@@ -238,7 +222,7 @@
 </template>
 
 <script>
-import { fetchCurrentWeather, fetchMbtiDemoPayload, fetchMyProfile, updateMyProfile, saveOnboardingMbti, fetchBookRecommendation, fetchMemoryVault, deleteMemoryVaultItem, fetchImageVault, renameImageVaultItem, deleteImageVaultItem } from "./mypage.api";
+import { MEMORY_API_ENABLED, fetchCurrentWeather, fetchMbtiDemoPayload, fetchMyProfile, updateMyProfile, saveOnboardingMbti, fetchBookRecommendation, fetchMemoryVault, deleteMemoryVaultItem } from "./mypage.api";
 import { createMypageState, i18n } from "./mypage.data";
 import CharacterPanel from "./components/CharacterPanel.vue";
 import MbtiPanel from "./components/MbtiPanel.vue";
@@ -250,7 +234,6 @@ import TastePanel from "./components/TastePanel.vue";
 import WeatherPanel from "./components/WeatherPanel.vue";
 import BookPanel from "./components/BookPanel.vue";
 import MemoryPanel from "./components/MemoryPanel.vue";
-import ImageVaultPanel from "./components/ImageVaultPanel.vue";
 
 export default {
   name: "MypageView",
@@ -264,8 +247,7 @@ export default {
     TastePanel,
     WeatherPanel,
     BookPanel,
-    MemoryPanel,
-    ImageVaultPanel
+    MemoryPanel
   },
   async beforeRouteEnter(to, from, next) {
     try {
@@ -291,12 +273,13 @@ export default {
     },
     currentPanelDescription() {
       const descriptions = {
-        book: "프로필의 관심사와 취미, 오늘의 감정을 바탕으로 지금 읽어볼 만한 책을 추천합니다.",
-        memory: "챗봇이 보관한 기억을 확인하고 필요 없는 기억을 삭제합니다.",
-        imageVault: "저장한 카드형 그림을 모아 보고 이름을 바꾸거나 삭제합니다.",
-        profile: "사전 정보 입력 화면에서 설정한 기본 정보와 관심분야 키워드를 조회하고, 수정합니다.",
-        character: "방 안의 동행 캐릭터를 고르고, 캐릭터의 말투와 성향을 확인합니다.",
-        weather: "창문 밖 현재 날씨와 오늘의 컨디션 관리 추천을 확인합니다.",
+        book: "관심사와 취미, 오늘의 감정을 바탕으로 지금 읽어볼 만한 책을 추천해요.",
+        memory: MEMORY_API_ENABLED
+          ? "대화에서 저장된 기억을 확인하고 직접 관리할 수 있어요."
+          : "예시 화면에서 기억 검색·상세 보기·숨기기 흐름을 미리 체험할 수 있어요.",
+        profile: "내 기본 정보와 관심사·취미를 확인하고 수정할 수 있어요.",
+        character: "방 안의 동행 캐릭터를 고르고, 적용 전에 말투와 성향 정보를 확인할 수 있어요.",
+        weather: "현재 날씨와 오늘의 활동 제안을 확인할 수 있어요.",
         mbti: "대화 중 자연스럽게 나눈 성향 답변을 바탕으로, 내가 요즘 어떤 방식으로 생각하고 소통하는지 MBTI 유형으로 돌아봐요.",
         taste: "최근 30일 대화 로그에서 반복적으로 나타난 관심사·취향 키워드를 집계해 보여줍니다. 일정 횟수 이상 등장한 키워드만 대시보드에 표시됩니다.",
         settings: "계정 기본 정보와 언어, 접근성 설정을 관리합니다."
@@ -312,7 +295,7 @@ export default {
     },
     homeStatusMessage() {
       const emotion = this.todayEmotionLabel;
-      if (emotion && emotion !== "대화 후 반영") {
+      if (emotion && emotion !== "아직 기록 없음") {
         return `${emotion}의 결을 담아 오늘의 추천과 프로필 취향을 정리했어요.`;
       }
       return "대화와 프로필을 바탕으로 오늘의 기분과 추천을 정리하는 개인 홈입니다.";
@@ -320,17 +303,21 @@ export default {
     profileMbtiLabel() {
       const current = this.mbtiData?.current?.type;
       const onboarding = this.mbtiData?.onboarding?.type;
-      return (current && current !== "----" ? current : onboarding) || this.profile?.mbti || "미등록";
+      const profileType = this.profile?.mbti;
+      return [current, onboarding, profileType].find(type => type && type !== "----") || "미등록";
     },
     mbtiSummaryText() {
       const previous = this.mbtiData?.previous?.type;
-      if (previous && previous !== this.profileMbtiLabel) {
+      if (this.profileMbtiLabel === "미등록") return "설정 필요";
+      if (previous && previous !== "----" && previous !== this.profileMbtiLabel) {
         return `${previous} -> ${this.profileMbtiLabel}`;
       }
-      return "최근 분석 기준";
+      return this.mbtiData?.current?.type && this.mbtiData.current.type !== "----"
+        ? "최근 월간 분석 기준"
+        : "온보딩 기준";
     },
     todayEmotionLabel() {
-      return this.bookPayload?.profile_basis?.today_emotion || "대화 후 반영";
+      return this.bookPayload?.profile_basis?.today_emotion || "아직 기록 없음";
     },
     profileInterestCount() {
       return this.normalizeList(this.profile?.interests).length;
@@ -479,7 +466,7 @@ export default {
       this.activatePanel(panel);
     },
     shouldMoveBeforeOpen(panel) {
-      return ["profile", "mbti", "weather", "book", "memory", "imageVault", "character", "settings"].includes(panel);
+      return ["profile", "mbti", "weather", "book", "memory", "character", "settings"].includes(panel);
     },
     activatePanel(panel) {
       this.pendingPanel = null;
@@ -498,9 +485,6 @@ export default {
       if (panel === "memory") {
         this.loadMemoryData();
       }
-      if (panel === "imageVault") {
-        this.loadImageVault();
-      }
     },
     activatePanelAfterRoomMove(panel) {
       if (this.pendingChatNavigation && panel === "door") {
@@ -515,9 +499,17 @@ export default {
       this.activatePanel(panel);
     },
     closePanel() {
+      if (this.activePanel === "profile" && this.profileEdit) {
+        this.cancelProfileEdit();
+      }
       this.activePanel = null;
     },
     async toggleProfileEdit() {
+      if (!this.profileEdit) {
+        this.profileSnapshot = JSON.parse(JSON.stringify(this.profile));
+        this.profileEdit = true;
+        return;
+      }
       if (this.profileEdit) {
         try {
           const res = await updateMyProfile({
@@ -531,14 +523,23 @@ export default {
             }
           }
           this.profileSavedAt = new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+          this.bookPayload = null;
           this.showToast("프로필 수정 내용이 정상적으로 반영되었습니다.");
+          this.profileSnapshot = null;
         } catch (e) {
           console.error("Failed to update profile", e);
           this.showToast("프로필 저장에 실패했습니다.");
           return;
         }
       }
-      this.profileEdit = !this.profileEdit;
+      this.profileEdit = false;
+    },
+    cancelProfileEdit() {
+      if (this.profileSnapshot) {
+        this.profile = JSON.parse(JSON.stringify(this.profileSnapshot));
+      }
+      this.profileSnapshot = null;
+      this.profileEdit = false;
     },
     updateProfileKeywords({ type, values }) {
       if (!this.profileEdit) return;
@@ -631,6 +632,7 @@ export default {
         && Date.now() - this.weatherLastFetchedAt < weatherFreshnessMs;
       if (!force && (hasFreshPayload || this.weatherLoading)) return;
 
+      const requestId = ++this.weatherRequestId;
       this.weatherLoading = true;
       this.weatherError = "";
       try {
@@ -638,13 +640,16 @@ export default {
         const requestLocation = location.mode === "auto"
           ? { lat: location.lat, lon: location.lon, region: location.region }
           : { region: location.region || "서울" };
-        this.weatherPayload = await fetchCurrentWeather(requestLocation);
+        const payload = await fetchCurrentWeather(requestLocation);
+        if (requestId !== this.weatherRequestId) return;
+        this.weatherPayload = payload;
         this.weatherLastFetchedAt = Date.now();
       } catch (error) {
+        if (requestId !== this.weatherRequestId) return;
         console.error(error);
         this.weatherError = error.message || "날씨 정보를 불러오지 못했습니다.";
       } finally {
-        this.weatherLoading = false;
+        if (requestId === this.weatherRequestId) this.weatherLoading = false;
       }
     },
     async setWeatherRegion(region) {
@@ -690,6 +695,11 @@ export default {
       this.memoryLoading = true;
       this.memoryError = "";
       this.memoryNotice = "";
+      if (!MEMORY_API_ENABLED) {
+        this.memoryPayload = this.createMemoryPreviewPayload();
+        this.memoryLoading = false;
+        return;
+      }
       try {
         this.memoryPayload = await fetchMemoryVault(force);
       } catch (error) {
@@ -705,27 +715,71 @@ export default {
     createMemoryPreviewPayload() {
       return {
         source: "preview",
+        preview_label: "기능 미리보기",
         memories: [
           {
             id: "preview-career-worry",
             title: "커리어 전환 고민",
             content: "최근 대화에서 직무 전환과 준비 방향에 대한 고민이 반복적으로 언급되었습니다.",
-            saved_at: new Date().toISOString(),
-            last_used_at: new Date().toISOString()
+            saved_at: "2026-07-01T09:00:00+09:00",
+            last_used_at: "2026-07-01T09:00:00+09:00",
+            is_preview: true
           },
           {
             id: "preview-relationship",
             title: "관계에서 느끼는 부담",
             content: "가까운 관계에서 기대와 거리감 사이를 조절하고 싶다는 이야기가 있었습니다.",
-            saved_at: new Date().toISOString(),
-            last_used_at: ""
+            saved_at: "2026-07-05T14:30:00+09:00",
+            last_used_at: "",
+            is_preview: true
           },
           {
             id: "preview-routine",
             title: "혼자 정리하는 습관",
             content: "기분이 복잡할 때 산책, 기록, 음악으로 생각을 정리하는 경향이 있습니다.",
-            saved_at: new Date().toISOString(),
-            last_used_at: new Date().toISOString()
+            saved_at: "2026-07-10T21:10:00+09:00",
+            last_used_at: "2026-07-10T21:10:00+09:00",
+            is_preview: true
+          },
+          {
+            id: "preview-first-meeting",
+            title: "첫 만남",
+            content: "AI와 처음 대화를 나누며 앞으로 어떤 이야기를 기록할지 천천히 살펴보았습니다.",
+            saved_at: "2026-07-11T18:20:00+09:00",
+            last_used_at: "",
+            is_preview: true
+          },
+          {
+            id: "preview-rainy-afternoon",
+            title: "비 오는 오후",
+            content: "비 내리는 창밖을 떠올리며 복잡했던 마음을 차분하게 정리했습니다.",
+            saved_at: "2026-07-12T16:40:00+09:00",
+            last_used_at: "",
+            is_preview: true
+          },
+          {
+            id: "preview-new-goal",
+            title: "새로운 목표",
+            content: "부담을 줄이고 매일 조금씩 실천할 수 있는 작은 계획을 세웠습니다.",
+            saved_at: "2026-07-13T10:15:00+09:00",
+            last_used_at: "",
+            is_preview: true
+          },
+          {
+            id: "preview-old-dream",
+            title: "잊고 있던 꿈",
+            content: "한동안 미뤄두었던 관심사를 다시 시작해 보고 싶은 마음을 이야기했습니다.",
+            saved_at: "2026-07-14T20:05:00+09:00",
+            last_used_at: "",
+            is_preview: true
+          },
+          {
+            id: "preview-evening-walk",
+            title: "저녁 산책",
+            content: "짧은 산책과 음악으로 하루의 긴장을 풀어내는 나만의 루틴을 정리했습니다.",
+            saved_at: "2026-07-15T19:30:00+09:00",
+            last_used_at: "",
+            is_preview: true
           }
         ]
       };
@@ -734,6 +788,7 @@ export default {
       const targetIds = ids.filter(Boolean).map(String);
       if (!targetIds.length) return;
       const previousPayload = this.memoryPayload;
+      const isPreview = this.memoryPayload?.source === "preview";
       const idSet = new Set(targetIds);
       const currentMemories = Array.isArray(this.memoryPayload)
         ? this.memoryPayload
@@ -748,6 +803,11 @@ export default {
         };
       }
 
+      if (isPreview) {
+        this.showToast("예시 기억을 목록에서 숨겼습니다. 새로고침하면 다시 표시됩니다.");
+        return;
+      }
+
       this.memoryNotice = "";
       try {
         const realIds = targetIds.filter(id => !id.startsWith("preview-"));
@@ -760,62 +820,8 @@ export default {
       }
     },
 
-    async loadImageVault() {
-      if (this.imageVaultLoading) return;
-      this.imageVaultLoading = true;
-      this.imageVaultError = "";
-      this.imageVaultNotice = "";
-      try {
-        this.imageVaultPayload = await fetchImageVault();
-      } catch (error) {
-        console.warn(error);
-        this.imageVaultError = "이미지 보관함을 불러오지 못했습니다.";
-      } finally {
-        this.imageVaultLoading = false;
-      }
-    },
-    async renameSavedImage({ id, name }) {
-      const previousPayload = this.imageVaultPayload;
-      const items = this.imageVaultPayload?.items || [];
-      this.imageVaultPayload = {
-        ...(this.imageVaultPayload || {}),
-        items: items.map(item => item.id === id ? { ...item, name } : item)
-      };
-      this.imageVaultError = "";
-      try {
-        const updated = await renameImageVaultItem(id, name);
-        this.imageVaultPayload = {
-          ...(this.imageVaultPayload || {}),
-          items: (this.imageVaultPayload?.items || []).map(item => item.id === id ? updated : item)
-        };
-        this.showToast("이미지 이름을 변경했습니다.");
-      } catch (error) {
-        console.warn(error);
-        this.imageVaultPayload = previousPayload;
-        this.imageVaultError = "이름을 변경하지 못했습니다.";
-      }
-    },
-    async deleteSavedImage(id) {
-      const previousPayload = this.imageVaultPayload;
-      const items = this.imageVaultPayload?.items || [];
-      this.imageVaultPayload = {
-        ...(this.imageVaultPayload || {}),
-        items: items.filter(item => item.id !== id)
-      };
-      this.imageVaultError = "";
-      try {
-        await deleteImageVaultItem(id);
-        this.showToast("이미지를 삭제했습니다.");
-      } catch (error) {
-        console.warn(error);
-        this.imageVaultPayload = previousPayload;
-        this.imageVaultError = "이미지를 삭제하지 못했습니다.";
-      }
-    },
-
     setMbtiView(viewKey) {
       this.mbtiViewMode = viewKey;
-      this.showToast(`${this.currentMbtiView.title} 화면으로 전환했습니다.`);
     },
     async saveMbti(mbtiType) {
       try {

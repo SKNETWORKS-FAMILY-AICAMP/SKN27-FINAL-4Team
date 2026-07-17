@@ -1,5 +1,9 @@
 <template>
   <section class="room-stage">
+    <p class="room-interaction-guide">
+      <span aria-hidden="true">●</span>
+      빛나는 지점을 선택하면 연결된 기능을 열 수 있어요.
+    </p>
     <div ref="roomCanvas" class="room-canvas">
       <img class="room-image" src="../../../assets/UI 신버전4.png" alt="야간 톤 MindRoom 방 일러스트" />
       <button
@@ -25,7 +29,6 @@
         @blur="hideHotspotLabel"
         @click="$emit('open-chat')"
       ></button>
-      <button class="hotspot image-vault" type="button" :aria-label="labels.imageVault || '이미지 보관함'" title="이미지 보관함" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-panel', 'imageVault')"></button>
       <button class="hotspot profile" type="button" :aria-label="labels.profile" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-panel', 'profile')"></button>
       <button class="hotspot weather" type="button" :aria-label="labels.weather" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-panel', 'weather')"></button>
       <button class="hotspot mbti" type="button" :aria-label="labels.mbti" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-panel', 'mbti')"></button>
@@ -133,14 +136,13 @@ export default {
       return {
         character: { x: 45.2, y: 33.8 },
         door: { x: 10.8, y: 17.0 },
-        imageVault: { x: 19.8, y: 17.2 },
         profile: { x: 21.8, y: 20.1 },
         weather: { x: 31.0, y: 16.6 },
-        book: { x: 58.1, y: 26.4 },
+        book: { x: 50.0, y: 26.4 },
         mbti: { x: 74.0, y: 20.8 },
-        memory: { x: 73.0, y: 53.5 },
-        wardrobe: { x: 84.8, y: 58.0 },
-        settings: { x: 82.8, y: 60.2 }
+        memory: { x: 50.0, y: 53.5 },
+        wardrobe: { x: 78.0, y: 18.5 },
+        settings: { x: 50.0, y: 56.0 }
       };
     },
     characterFootOffset() {
@@ -150,23 +152,18 @@ export default {
       return { x: 3.4, y: 1.5 };
     },
     pathGridStep() {
-      return 1.5;
+      return 1;
     },
     roomObstacles() {
       return [
-        { id: "door", x1: 5, y1: 5, x2: 17, y2: 31, padding: 0.8 },
-        { id: "window", x1: 28, y1: 9, x2: 42, y2: 29, padding: 0.8 },
-        { id: "plant", x1: 45, y1: 12, x2: 54, y2: 36, padding: 1.1 },
-        { id: "bookcase", x1: 54, y1: 3, x2: 68.5, y2: 35, padding: 0.8 },
-        { id: "mbti-board", x1: 71, y1: 5, x2: 86.5, y2: 31.5, padding: 0.8 },
-        { id: "wall-shelf", x1: 87, y1: 14, x2: 97, y2: 34, padding: 1.2 },
-        { id: "nightstand", x1: 2, y1: 63, x2: 12, y2: 88, padding: 1.4 },
-        { id: "bed", x1: 13, y1: 40, x2: 31, y2: 96, padding: 1.8 },
-        { id: "desk", x1: 58.5, y1: 40, x2: 85.5, y2: 65.5, padding: 3.2 },
-        { id: "desk-chair", x1: 63.2, y1: 60, x2: 72.2, y2: 80.5, padding: 1.8 },
-        { id: "closet", x1: 86.2, y1: 39, x2: 97.5, y2: 76, padding: 1.6 },
-        { id: "trash-bin", x1: 77.8, y1: 79, x2: 86.2, y2: 93, padding: 0.8 },
-        { id: "heart-box", x1: 86, y1: 78, x2: 97.2, y2: 92, padding: 0.8 }
+        // Floor furniture blocks movement. Wall-mounted objects remain approachable hotspots.
+        { id: "nightstand", x1: 2.3, y1: 62.7, x2: 11.7, y2: 88.4, padding: 0.8 },
+        { id: "bed", x1: 13.3, y1: 39.2, x2: 30.7, y2: 95.8, padding: 0.9 },
+        { id: "desk", x1: 58.3, y1: 39.8, x2: 85.1, y2: 69.5, padding: 0.8 },
+        { id: "desk-chair", x1: 63.1, y1: 59.6, x2: 72.4, y2: 80.7, padding: 0.7 },
+        { id: "closet", x1: 85.7, y1: 39.3, x2: 96.8, y2: 72.2, padding: 0.8 },
+        { id: "trash-bin", x1: 77.5, y1: 75.2, x2: 83.7, y2: 88.2, padding: 0.6 },
+        { id: "heart-box", x1: 85.6, y1: 75.2, x2: 96.6, y2: 90.2, padding: 0.6 }
       ];
     },
     walkableFloorRects() {
@@ -234,7 +231,14 @@ export default {
       this.clearMoveTimers();
       this.arrivalPulse = false;
 
-      if (this.prefersReducedMotion() || !route.length || this.samePoint(start, destination)) {
+      if (!route.length) {
+        this.isWalking = false;
+        this.activeTarget = target;
+        this.$emit("arrived", target);
+        return;
+      }
+
+      if (this.prefersReducedMotion() || this.samePoint(start, destination)) {
         this.characterPosition = route[route.length - 1] || this.fromFootPoint(this.nearestWalkablePoint(this.toFootPoint(destination)));
         this.activeTarget = target;
         this.$emit("arrived", target);
@@ -316,12 +320,24 @@ export default {
         startFoot,
         goalFoot,
       );
+      if (!footRoute.length) return [];
       const route = footRoute.map(point => this.fromFootPoint(point));
       const safeDestination = this.fromFootPoint(goalFoot);
       if (!route.length || !this.samePoint(route[route.length - 1], safeDestination)) {
         route.push(safeDestination);
       }
-      return this.compactRoute(this.smoothRoute(route));
+      const directRoute = this.compactRoute(route);
+      const optimizedRoute = this.compactRoute(this.smoothRoute(directRoute));
+      if (this.isCharacterRouteWalkable(optimizedRoute)) return optimizedRoute;
+      if (this.isCharacterRouteWalkable(directRoute)) return directRoute;
+      return [];
+    },
+    isCharacterRouteWalkable(route) {
+      if (!route.length) return false;
+      const footPath = [this.characterPosition, ...route].map(point => this.toFootPoint(point));
+      return footPath.slice(1).every((point, index) => (
+        this.hasWalkableLine(footPath[index], point)
+      ));
     },
     compactRoute(route) {
       return route.filter((point, index, list) => {
@@ -362,12 +378,72 @@ export default {
       };
     },
     findShortestWalkablePath(start, goal) {
-      const startNode = this.snapToGrid(start);
-      const goalNode = this.snapToGrid(goal);
+      const visibilityPath = this.findVisibilityPath(start, goal);
+      if (visibilityPath.length) return visibilityPath;
+      return this.findGridPath(start, goal);
+    },
+    findVisibilityPath(start, goal) {
+      if (this.hasWalkableLine(start, goal)) return [start, goal];
+
+      const nodes = [start, goal, ...this.obstacleCornerNodes()];
+      const distances = nodes.map(() => Number.POSITIVE_INFINITY);
+      const previous = nodes.map(() => -1);
+      const visited = new Set();
+      distances[0] = 0;
+
+      while (visited.size < nodes.length) {
+        let current = -1;
+        for (let index = 0; index < nodes.length; index += 1) {
+          if (visited.has(index)) continue;
+          if (current === -1 || distances[index] < distances[current]) current = index;
+        }
+        if (current === -1 || !Number.isFinite(distances[current])) break;
+        if (current === 1) break;
+        visited.add(current);
+
+        for (let next = 0; next < nodes.length; next += 1) {
+          if (next === current || visited.has(next)) continue;
+          if (!this.hasWalkableLine(nodes[current], nodes[next])) continue;
+          const nextDistance = distances[current] + this.pathHeuristic(nodes[current], nodes[next]);
+          if (nextDistance >= distances[next]) continue;
+          distances[next] = nextDistance;
+          previous[next] = current;
+        }
+      }
+
+      if (!Number.isFinite(distances[1])) return [];
+      const route = [];
+      for (let index = 1; index !== -1; index = previous[index]) {
+        route.unshift(nodes[index]);
+      }
+      return route;
+    },
+    obstacleCornerNodes() {
+      const clearance = this.characterFloorClearance;
+      const epsilon = 0.12;
+      const corners = this.roomObstacles.flatMap((box) => {
+        const padding = box.padding ?? 1.8;
+        const x1 = box.x1 - padding - clearance.x - epsilon;
+        const x2 = box.x2 + padding + clearance.x + epsilon;
+        const y1 = box.y1 - padding - clearance.y - epsilon;
+        const y2 = box.y2 + padding + clearance.y + epsilon;
+        return [
+          { x: x1, y: y1 }, { x: x2, y: y1 },
+          { x: x1, y: y2 }, { x: x2, y: y2 }
+        ];
+      });
+      const unique = new Map();
+      corners.filter(point => this.isWalkable(point)).forEach((point) => {
+        unique.set(`${point.x.toFixed(2)}:${point.y.toFixed(2)}`, point);
+      });
+      return [...unique.values()];
+    },
+    findGridPath(start, goal) {
+      const startNode = this.snapToWalkableGrid(start);
+      const goalNode = this.snapToWalkableGrid(goal);
       const open = new Map([[this.nodeKey(startNode), { ...startNode, g: 0, f: this.pathHeuristic(startNode, goalNode), parent: null }]]);
       const closed = new Set();
-      let bestNode = open.values().next().value;
-      const maxIterations = 6400;
+      const maxIterations = 12000;
 
       for (let i = 0; open.size && i < maxIterations; i += 1) {
         const current = this.lowestCostNode(open);
@@ -375,9 +451,6 @@ export default {
         open.delete(currentKey);
         closed.add(currentKey);
 
-        if (this.pathHeuristic(current, goalNode) < this.pathHeuristic(bestNode, goalNode)) {
-          bestNode = current;
-        }
         if (currentKey === this.nodeKey(goalNode)) {
           return this.reconstructPath(current, start, goal);
         }
@@ -400,7 +473,26 @@ export default {
         });
       }
 
-      return this.reconstructPath(bestNode, start, goal);
+      return [];
+    },
+    snapToWalkableGrid(point) {
+      const snapped = this.snapToGrid(point);
+      if (this.isWalkable(snapped)) return snapped;
+      const step = this.pathGridStep;
+      for (let radius = step; radius <= 6; radius += step) {
+        const candidates = [];
+        for (let offset = -radius; offset <= radius; offset += step) {
+          candidates.push({ x: snapped.x + offset, y: snapped.y - radius });
+          candidates.push({ x: snapped.x + offset, y: snapped.y + radius });
+          candidates.push({ x: snapped.x - radius, y: snapped.y + offset });
+          candidates.push({ x: snapped.x + radius, y: snapped.y + offset });
+        }
+        const nearest = candidates
+          .filter(candidate => this.isWalkable(candidate))
+          .sort((a, b) => this.pathHeuristic(point, a) - this.pathHeuristic(point, b))[0];
+        if (nearest) return nearest;
+      }
+      return snapped;
     },
     snapToGrid(point) {
       const step = this.pathGridStep;
@@ -497,15 +589,21 @@ export default {
       return Math.hypot(a.x - b.x, a.y - b.y);
     },
     reconstructPath(node, exactStart, exactGoal) {
-      if (!node) return [exactGoal];
+      if (!node) return [];
       const path = [];
       let current = node;
       while (current) {
         path.unshift({ x: current.x, y: current.y });
         current = current.parent;
       }
-      path[0] = exactStart;
-      path[path.length - 1] = exactGoal;
+      if (path.length === 1 || this.hasWalkableLine(exactStart, path[1])) {
+        path[0] = exactStart;
+      }
+      const finalNode = path[path.length - 1];
+      if (this.hasWalkableLine(finalNode, exactGoal)) {
+        if (this.samePoint(finalNode, exactGoal)) path[path.length - 1] = exactGoal;
+        else path.push(exactGoal);
+      }
       return this.smoothFootPath(path);
     },
     smoothFootPath(path) {
@@ -528,8 +626,9 @@ export default {
       return this.smoothFootPath(footPath).map(point => this.fromFootPoint(point));
     },
     hasWalkableLine(a, b) {
+      if (!this.isWalkable(a) || !this.isWalkable(b)) return false;
       const distance = Math.hypot(b.x - a.x, b.y - a.y);
-      const steps = Math.max(1, Math.ceil(distance / 0.6));
+      const steps = Math.max(1, Math.ceil(distance / 0.25));
       for (let index = 1; index < steps; index += 1) {
         const point = {
           x: a.x + ((b.x - a.x) * index) / steps,

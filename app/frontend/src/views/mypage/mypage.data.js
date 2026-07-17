@@ -4,12 +4,11 @@ export const i18n = {
     roomTitle: "마이페이지 메인",
     hint: "방 안의 오브젝트에 커서를 올리거나 클릭해 기능을 열어보세요.",
     user: "서마음",
-    profile: "프로필 조회",
+    profile: "프로필 관리",
     character: "캐릭터 정보",
     weather: "날씨 정보",
     book: "오늘의 책 추천",
     memory: "기억 보관함",
-    imageVault: "이미지 보관함",
     mbti: "MBTI 분석",
     taste: "취향 분석",
     settings: "설정"
@@ -24,7 +23,6 @@ export const i18n = {
     weather: "Weather",
     book: "Today's Book",
     memory: "Memory Vault",
-    imageVault: "Image Vault",
     mbti: "MBTI Analysis",
     taste: "Taste Analysis",
     settings: "Settings"
@@ -46,6 +44,7 @@ export function createMypageState() {
     weatherError: "",
     weatherLocation: null,
     weatherLastFetchedAt: 0,
+    weatherRequestId: 0,
     weatherRefreshTimer: null,
     bookPayload: null,
     bookLoading: false,
@@ -54,10 +53,6 @@ export function createMypageState() {
     memoryLoading: false,
     memoryError: "",
     memoryNotice: "",
-    imageVaultPayload: null,
-    imageVaultLoading: false,
-    imageVaultError: "",
-    imageVaultNotice: "",
     todayEmotionSummary: null,
     todayEmotionRefreshTimer: null,
     weatherRegions: [
@@ -66,6 +61,7 @@ export function createMypageState() {
     ],
     profileSavedAt: "",
     profileEdit: false,
+    profileSnapshot: null,
     selectedCharacter: "otter",
     characters: [
       {

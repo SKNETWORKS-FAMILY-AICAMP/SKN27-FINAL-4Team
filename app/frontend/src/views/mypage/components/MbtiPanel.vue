@@ -1,10 +1,14 @@
 <template>
   <div class="panel-body">
-    <div class="actions mbti-refresh-actions">
+    <div v-if="mbtiViewMode === 'onboardingNext' && !isMonthlyPreparing" class="actions mbti-refresh-actions">
       <button class="secondary-button" type="button" @click="$emit('refresh')">
         분석 결과 새로고침
       </button>
     </div>
+
+    <aside class="mbti-disclaimer" role="note">
+      MBTI는 대화와 사용자가 입력한 정보를 바탕으로 살펴본 성향입니다. 전문적인 심리검사나 진단 결과가 아니며, 상황에 따라 달라질 수 있어요.
+    </aside>
 
     <template v-if="mbtiViewMode === 'onboardingType'">
       <div class="mbti-dashboard mbti-dashboard-single">
@@ -45,23 +49,33 @@
     </template>
 
     <template v-else-if="mbtiViewMode === 'onboardingNext'">
-      <section class="card mbti-combined-card" :class="{ 'is-preparing': isMonthlyPreparing }">
-        <div v-if="isMonthlyPreparing" class="mbti-preparing-banner" role="status">
-          <strong>월간 MBTI 분석을 준비하고 있어요.</strong>
-          <span>대화 기반 응답이 충분히 저장되면 이 화면에서 성향 그래프와 근거 리포트를 보여드릴게요.</span>
+      <section v-if="isMonthlyPreparing" class="card mbti-empty-state" role="status">
+        <span class="mbti-kicker">월간 분석</span>
+        <h3>아직 월간 성향을 보여드릴 만큼 대화가 쌓이지 않았어요.</h3>
+        <p>대화 기반 응답이 충분해지면 네 가지 선호 지표와 변화 이유를 이 화면에서 확인할 수 있어요.</p>
+        <div class="mbti-empty-baseline">
+          <span>현재 참고 기준</span>
+          <strong>{{ mbtiData.onboarding.type }}</strong>
+          <small>온보딩에서 직접 입력한 유형</small>
         </div>
+      </section>
+
+      <section v-else class="card mbti-combined-card">
 
         <div class="mbti-combined-grid">
           <div class="mbti-type-stack">
             <article class="mbti-type-panel current">
               <span>현재 기준 MBTI</span>
               <strong class="mbti-letter-row">
-                <span
-                  v-for="(letter, index) in currentTypeLetters"
-                  :key="letter + index"
-                  class="mbti-type-letter"
-                  :style="{ color: isMbtiTypeLetterChanged(letter, index) ? '#ffcf5a' : 'inherit' }"
-                >{{ letter }}</span>
+                <span v-if="isMonthlyPreparing" class="mbti-preparing-label">분석 준비 중</span>
+                <template v-else>
+                  <span
+                    v-for="(letter, index) in currentTypeLetters"
+                    :key="letter + index"
+                    class="mbti-type-letter"
+                    :style="{ color: isMbtiTypeLetterChanged(letter, index) ? '#ffcf5a' : 'inherit' }"
+                  >{{ letter }}</span>
+                </template>
               </strong>
               <small>{{ mbtiData.current.monthLabel }}</small>
             </article>
@@ -79,15 +93,21 @@
                 <p v-if="isMonthlyPreparing">아직 확정된 월간 점수가 없어 기본 상태로 표시됩니다.</p>
               </div>
               <div class="mbti-type mbti-type-current mbti-letter-row">
-                <span
-                  v-for="(letter, index) in currentTypeLetters"
-                  :key="'header-' + letter + index"
-                  class="mbti-type-letter"
-                  :style="{ color: isMbtiTypeLetterChanged(letter, index) ? '#ffcf5a' : 'inherit' }"
-                >{{ letter }}</span>
+                <span v-if="isMonthlyPreparing" class="mbti-preparing-label">준비 중</span>
+                <template v-else>
+                  <span
+                    v-for="(letter, index) in currentTypeLetters"
+                    :key="'header-' + letter + index"
+                    class="mbti-type-letter"
+                    :style="{ color: isMbtiTypeLetterChanged(letter, index) ? '#ffcf5a' : 'inherit' }"
+                  >{{ letter }}</span>
+                </template>
               </div>
             </div>
-            <div class="axis-list graph-only-list">
+            <div v-if="isMonthlyPreparing" class="mbti-graph-placeholder">
+              대화 기록이 충분히 쌓이면 I/E, S/N, T/F, J/P 네 가지 선호 지표를 보여드립니다.
+            </div>
+            <div v-else class="axis-list graph-only-list">
               <div
                 class="axis-item"
                 v-for="axis in mbtiData.current.axes"
@@ -193,6 +213,7 @@
         :key="view.key"
         class="secondary-button"
         :class="{ active: mbtiViewMode === view.key }"
+        :aria-pressed="mbtiViewMode === view.key"
         type="button"
         @click="$emit('set-view', view.key)"
       >

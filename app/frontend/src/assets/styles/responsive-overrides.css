@@ -1175,3 +1175,15 @@ body,
     font-size: 36px !important;
   }
 }
+
+/* Final mobile header guard: wrapped navigation must increase header height. */
+@media (max-width: 1023px) {
+  #app .gnav-inner {
+    height: auto !important;
+    min-height: 80px !important;
+  }
+
+  #app .gnav {
+    min-height: max-content !important;
+  }
+}

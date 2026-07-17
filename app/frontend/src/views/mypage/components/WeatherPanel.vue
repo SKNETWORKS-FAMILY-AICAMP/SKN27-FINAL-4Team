@@ -82,7 +82,7 @@
         </dl>
 
         <p v-if="error" class="weather-error">{{ error }}</p>
-        <p v-else-if="loading" class="weather-loading">날씨와 추천을 불러오는 중입니다.</p>
+        <p v-else-if="loading" class="weather-loading">{{ selectedRegion }} 날씨와 추천을 불러오는 중입니다.</p>
 
         <button class="weather-refresh-button" type="button" :disabled="loading" @click="$emit('refresh')">
           새로고침
@@ -103,24 +103,34 @@
           </button>
         </nav>
 
-        <section v-if="loading && !payload" class="weather-section-page weather-refresh-state" aria-live="polite">
+        <section v-if="loading && (!payload || isLocationTransition)" class="weather-section-page weather-refresh-state" aria-live="polite">
           <div class="weather-refresh-spinner" aria-hidden="true"></div>
-          <strong>새 날씨를 반영하고 있어요</strong>
-          <p>관측 정보와 생활 가이드를 다시 읽는 중입니다.</p>
+          <strong>{{ selectedRegion }} 날씨를 반영하고 있어요</strong>
+          <p>이전 지역 정보는 잠시 숨기고, 새 관측 정보와 생활 가이드를 불러오는 중입니다.</p>
         </section>
 
         <section v-else-if="activeWeatherSection === 'summary'" class="weather-section-page weather-summary-page">
           <div class="weather-section-heading">
-            <span class="weather-section-label">현재 날씨</span>
+            <span class="weather-section-label">오늘의 날씨</span>
             <h3>{{ insightTitle }}</h3>
             <p style="white-space: pre-wrap; line-height: 1.6;">{{ insight?.weatherAnalysis || loadingText }}</p>
           </div>
 
-          <div class="weather-guide-grid" aria-label="오늘의 컨디션 지표">
-            <article v-for="item in conditionGuide" :key="item.label" class="weather-guide-card">
+          <hr class="weather-section-divider" aria-hidden="true" />
+
+          <div class="weather-guide-grid" aria-label="오늘의 생활 참고 지표">
+            <article
+              v-for="item in conditionGuide"
+              :key="item.label"
+              class="weather-guide-card"
+              :class="`is-${item.severity || 'unavailable'}`"
+              :style="{ '--index-color': getMeterColor(item) }"
+            >
               <div class="weather-guide-head">
                 <strong>{{ item.label }}</strong>
-                <span>{{ formatIndexValue(item) }}</span>
+                <span :style="{ borderColor: getMeterColor(item), color: getMeterColor(item) }">
+                  {{ formatIndexValue(item) }} · {{ item.level }}
+                </span>
               </div>
               <div
                 class="weather-guide-meter"
@@ -130,55 +140,78 @@
                 :aria-valuemin="item.scale_min"
                 :aria-valuemax="item.scale_max"
               >
-                <i :style="{ width: `${getMeterWidth(item)}%`, background: getMeterColor(item.level) }"></i>
+                <i
+                  v-if="item.available !== false"
+                  class="weather-guide-fill"
+                  :style="{ width: `${getMeterWidth(item)}%`, background: getMeterColor(item) }"
+                ></i>
+                <i
+                  v-if="item.available !== false"
+                  class="weather-guide-marker"
+                  :style="{ left: `${getMeterWidth(item)}%`, background: getMeterColor(item) }"
+                ></i>
+              </div>
+              <div v-if="item.bands?.length" class="weather-guide-legend" aria-label="단계별 색상">
+                <span
+                  v-for="band in item.bands"
+                  :key="`${item.label}-${band.level}-legend`"
+                  :class="{ current: band.level === item.level }"
+                >
+                  <i :style="{ background: getBandColor(band) }"></i>{{ band.level }}
+                </span>
               </div>
               <div class="weather-guide-scale" aria-hidden="true">
                 <span>{{ item.scale_min_label }}</span>
-                <b>{{ item.level }}</b>
+                <b>▲ 현재</b>
                 <span>{{ item.scale_max_label }}</span>
               </div>
-              <p>{{ item.reason }}</p>
-            </article>
-
-            <article class="weather-alert-card" :class="weatherAlertClass" aria-live="polite">
-              <div class="weather-alert-head">
-                <div>
-                  <span class="weather-alert-icon" aria-hidden="true">!</span>
-                  <div>
-                    <strong>현재 기상특보</strong>
-                    <small>{{ weatherAlerts.region || locationName }} 기준</small>
-                  </div>
-                </div>
-                <span class="weather-alert-badge">{{ weatherAlertBadge }}</span>
-              </div>
-
-              <ul v-if="weatherAlertItems.length" class="weather-alert-list">
-                <li v-for="item in weatherAlertItems" :key="`${item.type}-${item.level}-${item.region}-${item.effective_at}`">
-                  <strong>{{ item.type }} {{ item.level }}</strong>
-                  <span>{{ item.region }}</span>
-                  <small v-if="item.effective_at">발효 {{ formatAlertTime(item.effective_at) }}</small>
-                </li>
-              </ul>
-              <p v-else class="weather-alert-message">{{ weatherAlerts.message || "특보 현황을 확인하는 중입니다." }}</p>
-
-              <div class="weather-alert-links">
-                <span v-if="weatherAlerts.checked_at">확인 {{ formatAlertTime(weatherAlerts.checked_at) }}</span>
-                <a v-if="weatherAlerts.source_url" :href="weatherAlerts.source_url" target="_blank" rel="noopener noreferrer">기상청 특보현황</a>
-                <a v-if="weatherAlerts.status === 'key_required' && weatherAlerts.docs_url" :href="weatherAlerts.docs_url" target="_blank" rel="noopener noreferrer">API허브 설정</a>
-              </div>
+              <p>{{ item.status || item.reason }}</p>
             </article>
           </div>
+          <p class="weather-index-note">생활 판단을 돕는 참고값이며, 건강 상태를 진단하거나 의료적 판단을 대신하지 않습니다.</p>
+
+          <details class="weather-alert-card weather-alert-fold" :class="weatherAlertClass" :open="weatherAlerts.status === 'active' || undefined">
+            <summary class="weather-alert-head">
+              <div>
+                <span class="weather-alert-icon" aria-hidden="true">!</span>
+                <div>
+                  <strong>현재 기상특보</strong>
+                  <small>{{ weatherAlerts.region || locationName }} 기준</small>
+                </div>
+              </div>
+              <span class="weather-alert-badge">{{ weatherAlertBadge }}</span>
+            </summary>
+
+            <div v-if="weatherAlertItems.length" class="weather-alert-summary">
+              <div
+                v-for="item in weatherAlertItems"
+                :key="`${item.type}-${item.level}-${item.region}-${item.effective_at}`"
+                class="weather-alert-row"
+              >
+                <strong>{{ item.type }}{{ item.level }}</strong>
+                <span>{{ item.region }}</span>
+                <small v-if="item.effective_at">발효 {{ formatAlertTime(item.effective_at) }}</small>
+              </div>
+            </div>
+            <p v-else class="weather-alert-message">{{ weatherAlerts.message || "특보 현황을 확인하는 중입니다." }}</p>
+
+            <div class="weather-alert-links">
+              <span v-if="weatherAlerts.checked_at">확인 {{ formatAlertTime(weatherAlerts.checked_at) }}</span>
+              <a v-if="weatherAlerts.source_url" :href="weatherAlerts.source_url" target="_blank" rel="noopener noreferrer">기상청 특보현황</a>
+              <a v-if="weatherAlerts.status === 'key_required' && weatherAlerts.docs_url" :href="weatherAlerts.docs_url" target="_blank" rel="noopener noreferrer">API허브 설정</a>
+            </div>
+          </details>
 
         </section>
 
         <section v-else-if="activeWeatherSection === 'rhythm'" class="weather-section-page weather-rhythm-section" aria-label="시간대별 날씨 리듬">
           <div class="weather-section-heading">
-            <span class="weather-section-label">시간대별 예보</span>
-            <h3>오늘의 예보</h3>
-            <p>오늘의 단기적인 날씨 변화를 보여드려요.</p>
+            <span class="weather-section-label">오늘의 흐름</span>
+            <h3>지금부터 날씨가 이렇게 흘러가요</h3>
+            <p>나갈 시간을 떠올리며 가볍게 살펴보세요.</p>
           </div>
 
-          <div class="weather-rhythm-list" tabindex="0" aria-label="시간대별 예보 가로 목록">
+          <div class="weather-rhythm-list" aria-label="시간대별 단기 예보 목록">
             <article
               v-for="(item, index) in hourlyForecasts"
               :key="index"
@@ -194,17 +227,17 @@
             </article>
           </div>
           
-          <div class="weekly-forecast-summary" style="margin-top: 1.5rem; padding: 1.2rem; border-radius: 12px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);">
-            <h4 style="margin: 0 0 0.5rem 0; font-size: 1.1rem; color: var(--text-main);">주간예보 요약</h4>
-            <p style="margin: 0; font-size: 0.95rem; line-height: 1.5; color: var(--text-muted);">{{ forecastSummary }}</p>
+          <div class="weekly-forecast-summary">
+            <h4>이번 주는</h4>
+            <p>{{ forecastSummary }}</p>
           </div>
         </section>
 
         <section v-else class="weather-section-page weather-recommend-section">
           <div class="weather-section-heading">
-            <span class="weather-section-label">상황별 선택지</span>
-            <h3>오늘 날씨에 맞춘 작은 선택</h3>
-            <p>하나만 골라도 충분하도록, 상황과 바로 할 일을 같이 묶었어요.</p>
+            <span class="weather-section-label">오늘 챙길 것</span>
+            <h3>이런 준비가 잘 맞겠어요</h3>
+            <p>오늘 날씨에 어울리는 것부터 하나씩 골라보세요.</p>
           </div>
 
           <div class="weather-recommend-list">
@@ -213,11 +246,15 @@
               :key="`${item.title}-${index}`"
               class="weather-recommend-card"
             >
-              <b>{{ index + 1 }}</b>
-              <div>
+              <b class="weather-recommend-number">{{ index + 1 }}</b>
+              <div class="weather-recommend-content">
                 <strong>{{ item.title }}</strong>
-                <p>{{ item.reason }}</p>
-                <span>{{ item.howTo }}</span>
+                <p>{{ item.summary || item.reason }}</p>
+                <ul>
+                  <li v-for="(action, actionIndex) in recommendationActions(item)" :key="`${item.title}-${actionIndex}`">
+                    {{ action }}
+                  </li>
+                </ul>
               </div>
             </article>
           </div>
@@ -243,6 +280,7 @@
             <p>{{ methodology.summary }}</p>
             <p>{{ methodology.graph }}</p>
             <a v-if="methodology.formula_source_url" :href="methodology.formula_source_url" target="_blank" rel="noopener noreferrer">기상청 체감온도 산식 보기</a>
+            <a v-if="methodology.discomfort_source_url" :href="methodology.discomfort_source_url" target="_blank" rel="noopener noreferrer">기상청 생활기상지수 안내 보기</a>
           </details>
           <details v-if="processingNotice || apiLimits">
             <summary>AI·API 이용 안내</summary>
@@ -287,14 +325,23 @@ export default {
   },
   watch: {
     loading(isLoading) {
-      if (isLoading && !this.payload) this.activeWeatherSection = "summary";
+      if (isLoading && (!this.payload || this.isLocationTransition)) this.activeWeatherSection = "summary";
     }
   },
   computed: {
+    isLocationTransition() {
+      if (!this.loading || !this.payload?.weather) return false;
+      if (this.location?.mode === "auto") return true;
+      const requested = String(this.location?.region || "").trim();
+      const displayed = String(this.payload?.weather?.location?.name || "").trim();
+      return Boolean(requested && displayed && requested !== displayed);
+    },
     weather() {
+      if (this.isLocationTransition) return null;
       return this.payload?.weather || null;
     },
     insight() {
+      if (this.isLocationTransition) return null;
       return this.payload?.insight || null;
     },
     attributions() {
@@ -336,7 +383,12 @@ export default {
       return this.weather?.location?.name || this.location?.region || "서울";
     },
     selectedRegion() {
-      if (this.location?.mode === "auto") return "현재 위치";
+      if (this.location?.mode === "auto") {
+        const resolvedRegion = String(this.weather?.location?.name || "").trim();
+        return resolvedRegion && resolvedRegion !== "현재 위치"
+          ? `현재 위치 · ${resolvedRegion} 기준`
+          : "현재 위치";
+      }
       return this.location?.region || this.locationName;
     },
     weatherCondition() {
@@ -373,15 +425,15 @@ export default {
     },
     insightTitle() {
       if (this.error) return "날씨 정보를 확인할 수 없어요";
-      if (this.loading) return "날씨 리포트를 작성하는 중이에요";
-      return `${this.locationName}의 지금 날씨는`;
+      if (this.loading) return "오늘 날씨를 살펴보고 있어요";
+      return `오늘 ${this.locationName}${this.topicParticle(this.locationName)} ${this.weatherCondition}`;
     },
     conditionGuide() {
       const items = this.insight?.conditionGuide;
       if (Array.isArray(items) && items.length) return items;
       return [
-        { label: "불쾌지수", level: "확인 중", value: null, unit: "", gauge_percent: 0, scale_min_label: "40", scale_max_label: "100", reason: "날씨 정보를 불러오는 중입니다.", available: false },
-        { label: "체감온도", level: "확인 중", value: null, unit: "℃", gauge_percent: 0, scale_min_label: "-20℃", scale_max_label: "40℃", reason: "날씨 정보를 불러오는 중입니다.", available: false }
+        { label: "불쾌지수", level: "확인 중", severity: "unavailable", value: null, unit: "", gauge_percent: 0, scale_min: 60, scale_max: 90, scale_min_label: "60", scale_max_label: "90", status: "날씨 정보를 불러오는 중입니다.", bands: [], available: false },
+        { label: "체감온도", level: "확인 중", severity: "unavailable", value: null, unit: "℃", gauge_percent: 0, scale_min: 20, scale_max: 42, scale_min_label: "20℃", scale_max_label: "42℃", status: "날씨 정보를 불러오는 중입니다.", bands: [], available: false }
       ];
     },
     weatherAlerts() {
@@ -427,19 +479,35 @@ export default {
       if (Array.isArray(items) && items.length) return items;
       return [
         {
-          title: "잠깐 쉬어가기",
-          reason: "날씨 정보를 불러오는 동안에도 오늘의 리듬을 잠깐 낮춰두면 좋아요.",
-          howTo: "물 한 모금 마시고 어깨를 천천히 내려보세요."
+          kind: "general",
+          title: "현재 날씨 다시 확인하기",
+          summary: "관측값을 불러오면 시간대별 강수와 기온에 맞춘 준비를 표시합니다.",
+          actions: ["새로고침 후 현재 위치와 기준 시각을 확인하기"]
         },
         {
-          title: "창문 밖 확인",
-          reason: "현재 위치 기준 날씨가 준비되면 더 알맞은 추천을 보여드릴게요.",
-          howTo: "새로고침을 눌러 다시 확인해보세요."
+          kind: "general",
+          title: "외출 시각 정하기",
+          summary: "현재 위치의 시간대별 예보가 준비된 뒤 출발 시각을 정하는 편이 정확합니다.",
+          actions: ["시간대별 예보가 표시된 뒤 강수 구간을 확인하기"]
+        },
+        {
+          kind: "hobby",
+          title: "좋아하는 일 잠깐 즐기기",
+          summary: "저장된 취미를 불러오면 오늘 날씨에 어울리는 즐기는 방법을 함께 보여드립니다.",
+          actions: ["날씨 정보가 표시된 뒤 취미 추천을 확인하기"]
         }
       ];
     }
   },
   methods: {
+    topicParticle(value) {
+      const text = String(value || "").trim();
+      if (!text) return "는";
+      const lastCharacter = text[text.length - 1];
+      const code = lastCharacter.charCodeAt(0);
+      if (code < 0xac00 || code > 0xd7a3) return "는";
+      return (code - 0xac00) % 28 === 0 ? "는" : "은";
+    },
     selectRegion(region) {
       this.regionMenuOpen = false;
       if (region !== this.selectedRegion) this.$emit("change-region", region);
@@ -473,12 +541,25 @@ export default {
       
       return "☁️";
     },
-    getMeterColor(level) {
-      if (!level) return "#8ea7ff";
-      if (level.includes("매우 높음") || level.includes("매우 더움") || level.includes("매우 추움") || level.includes("위험")) return "#ff4d4f";
-      if (level.includes("높음") || level.includes("더움") || level.includes("추움") || level.includes("강함") || level.includes("경고") || level.includes("주의")) return "#ffa940";
-      if (level.includes("보통") || level.includes("관심") || level.includes("낮음")) return "#73d13d";
+    getMeterColor(item) {
+      const matchingBand = (item?.bands || []).find((band) => band.level === item?.level);
+      if (matchingBand) return this.getBandColor(matchingBand);
+      const severity = item?.severity;
+      if (severity === "danger") return "#ef4444";
+      if (severity === "warning") return "#f97316";
+      if (severity === "caution") return "#facc15";
+      if (severity === "interest") return "#3b82f6";
+      if (severity === "safe") return "#22c55e";
       return "#8ea7ff";
+    },
+    getBandColor(band) {
+      const level = String(band?.level || "");
+      if (level.includes("매우 높음") || level.includes("위험")) return "#ef4444";
+      if (level === "높음" || level.includes("경고")) return "#f97316";
+      if (level === "보통" || level.includes("주의")) return "#facc15";
+      if (level.includes("관심")) return "#3b82f6";
+      if (level.includes("낮음") || level.includes("기준 미만")) return "#22c55e";
+      return band?.color || "#8ea7ff";
     },
     getMeterWidth(item) {
       const percent = Number(item.gauge_percent || 0);
@@ -487,6 +568,10 @@ export default {
     formatIndexValue(item) {
       if (!item || item.available === false || item.value === null || item.value === undefined) return "-";
       return `${item.value}${item.unit || ""}`;
+    },
+    recommendationActions(item) {
+      if (Array.isArray(item?.actions) && item.actions.length) return item.actions;
+      return item?.howTo ? [item.howTo] : [];
     },
     formatAlertTime(value) {
       const text = String(value || "").replace(/\D/g, "");

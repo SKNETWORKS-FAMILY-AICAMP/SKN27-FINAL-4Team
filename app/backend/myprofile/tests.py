@@ -4,6 +4,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from user.models import User, UserProfile
+from mybook.views import _build_user_profile
 
 
 class MyProfileApiTests(APITestCase):
@@ -94,3 +95,25 @@ class MyProfileApiTests(APITestCase):
         self.assertEqual(self.profile.interests, ['음악', '관계'])
         self.assertEqual(self.profile.hobbies, ['산책'])
         self.assertEqual(response.data['profile']['name'], '새닉네임')
+
+    def test_partial_interest_update_preserves_other_profile_fields_for_books(self):
+        self.client.force_authenticate(self.user)
+
+        response = self.client.put(
+            '/api/myprofile/profile/',
+            {'profile': {'interests': ['천문학', '과학사']}},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.user.refresh_from_db()
+        self.profile.refresh_from_db()
+        self.assertEqual(self.user.nickname, '청상아리')
+        self.assertEqual(self.user.character, 'pori')
+        self.assertEqual(self.profile.interests, ['천문학', '과학사'])
+        self.assertEqual(self.profile.hobbies, ['음악 감상', '카페 투어', '산책'])
+        self.assertEqual(response.data['profile']['interests'], ['천문학', '과학사'])
+        self.assertEqual(
+            _build_user_profile(self.user)['interests'],
+            ['천문학', '과학사'],
+        )

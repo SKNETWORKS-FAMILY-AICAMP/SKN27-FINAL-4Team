@@ -2,6 +2,7 @@ from rest_framework.decorators import api_view, authentication_classes, permissi
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
+from django.db import transaction
 from django.db.models import Count
 from django.utils import timezone
 from user.models import UserProfile
@@ -38,40 +39,51 @@ def profile_detail(request):
         serializer = MyProfileSerializer(data=request.data.get('profile', request.data))
         if serializer.is_valid():
             data = serializer.validated_data
-            
-            # Update User model
-            if 'name' in data:
-                user.nickname = data['name'][:30]
-            if 'selectedCharacter' in data:
-                user.character = data['selectedCharacter'][:10]
-            user.save(update_fields=['nickname', 'character'])
 
-            # Update UserProfile model
-            if 'job' in data:
-                profile.job = data['job']
+            # Keep the existing request/response contract, but commit the user
+            # and profile rows together so book recommendation never observes a
+            # half-written profile.
+            with transaction.atomic():
+                user_update_fields = []
+                if 'name' in data:
+                    user.nickname = data['name'][:30]
+                    user_update_fields.append('nickname')
+                if 'selectedCharacter' in data:
+                    user.character = data['selectedCharacter'][:10]
+                    user_update_fields.append('character')
+                if user_update_fields:
+                    user.save(update_fields=user_update_fields)
 
-
-            if 'gender' in data:
-                profile.gender = data['gender']
-            if 'interests' in data:
-                profile.interests = data['interests']
-            if 'hobbies' in data:
-                profile.hobbies = data['hobbies']
-            if 'birthDate' in data:
-                date_str = data['birthDate'].strip()
-                if date_str:
-                    try:
-                        date_obj = datetime.strptime(date_str, "%Y.%m.%d").date()
-                        profile.birth_date = date_obj
-                        today = timezone.localdate()
-                        profile.age = today.year - date_obj.year - ((today.month, today.day) < (date_obj.month, date_obj.day))
-                    except ValueError:
-                        pass
-                else:
-                    profile.birth_date = None
-                    profile.age = None
-            
-            profile.save()
+                profile_update_fields = []
+                if 'job' in data:
+                    profile.job = data['job']
+                    profile_update_fields.append('job')
+                if 'gender' in data:
+                    profile.gender = data['gender']
+                    profile_update_fields.append('gender')
+                if 'interests' in data:
+                    profile.interests = data['interests']
+                    profile_update_fields.append('interests')
+                if 'hobbies' in data:
+                    profile.hobbies = data['hobbies']
+                    profile_update_fields.append('hobbies')
+                if 'birthDate' in data:
+                    date_str = data['birthDate'].strip()
+                    if date_str:
+                        try:
+                            date_obj = datetime.strptime(date_str, "%Y.%m.%d").date()
+                            profile.birth_date = date_obj
+                            today = timezone.localdate()
+                            profile.age = today.year - date_obj.year - ((today.month, today.day) < (date_obj.month, date_obj.day))
+                            profile_update_fields.extend(['birth_date', 'age'])
+                        except ValueError:
+                            pass
+                    else:
+                        profile.birth_date = None
+                        profile.age = None
+                        profile_update_fields.extend(['birth_date', 'age'])
+                if profile_update_fields:
+                    profile.save(update_fields=[*dict.fromkeys(profile_update_fields), 'updated_at'])
 
             return Response({'profile': MyProfileSerializer({'user': user, 'profile': profile}).data})
         

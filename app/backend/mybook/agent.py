@@ -1,12 +1,16 @@
 import json
+import hashlib
+import html
 import math
 import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib.parse import urlencode, urlparse
 
 import requests
 from django.core.cache import cache
+from django.utils import timezone
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 
@@ -15,26 +19,51 @@ NLK_BOOK_API_URL = os.environ.get(
     "NLK_BOOK_API_URL",
     "https://apis.data.go.kr/1371029/BookInformationService_v2/getbookList_v2",
 )
-NLK_BOOK_TIMEOUT_SECONDS = float(os.environ.get("NLK_BOOK_TIMEOUT_SECONDS", "8"))
-NLK_BOOK_RETRY_COUNT = max(0, int(os.environ.get("NLK_BOOK_RETRY_COUNT", "2")))
+NLK_BOOK_TIMEOUT_SECONDS = float(os.environ.get("NLK_BOOK_TIMEOUT_SECONDS", "5"))
+NLK_BOOK_RETRY_COUNT = max(0, int(os.environ.get("NLK_BOOK_RETRY_COUNT", "1")))
 NLK_BOOK_PAGE_SIZE = min(20, max(1, int(os.environ.get("NLK_BOOK_PAGE_SIZE", "20"))))
-NLK_BOOK_CANDIDATE_POOL_SIZE = max(
-    8,
-    int(os.environ.get("NLK_BOOK_CANDIDATE_POOL_SIZE", "12")),
+NLK_BOOK_QUERY_LIMIT = min(
+    6,
+    max(2, int(os.environ.get("NLK_BOOK_QUERY_LIMIT", "4"))),
 )
-NLK_ISBN_API_URL = os.environ.get(
-    "NLK_ISBN_API_URL",
-    "https://www.nl.go.kr/seoji/SearchApi.do",
+NLK_BOOK_MAX_PROBE_PAGES = min(
+    2,
+    max(0, int(os.environ.get("NLK_BOOK_MAX_PROBE_PAGES", "1"))),
 )
-NLK_COVER_TIMEOUT_SECONDS = float(os.environ.get("NLK_COVER_TIMEOUT_SECONDS", "3"))
-NLK_COVER_CACHE_SECONDS = max(
+KAKAO_BOOK_API_URL = os.environ.get(
+    "KAKAO_BOOK_API_URL",
+    "https://dapi.kakao.com/v3/search/book",
+)
+KAKAO_BOOK_TIMEOUT_SECONDS = float(os.environ.get("KAKAO_BOOK_TIMEOUT_SECONDS", "5"))
+KAKAO_BOOK_RETRY_COUNT = max(0, int(os.environ.get("KAKAO_BOOK_RETRY_COUNT", "1")))
+KAKAO_BOOK_PAGE_SIZE = min(50, max(10, int(os.environ.get("KAKAO_BOOK_PAGE_SIZE", "20"))))
+KAKAO_BOOK_QUERY_LIMIT = min(5, max(2, int(os.environ.get("KAKAO_BOOK_QUERY_LIMIT", "4"))))
+RECOMMENDATION_ENGINE_VERSION = "kakao_books_v1"
+BOOK_COVER_TIMEOUT_SECONDS = float(os.environ.get("BOOK_COVER_TIMEOUT_SECONDS", "3"))
+BOOK_COVER_CACHE_SECONDS = max(
     3600,
-    int(os.environ.get("NLK_COVER_CACHE_SECONDS", str(60 * 60 * 24 * 7))),
+    int(os.environ.get("BOOK_COVER_CACHE_SECONDS", str(60 * 60 * 24 * 7))),
 )
-NLK_COVER_NEGATIVE_CACHE_SECONDS = max(
-    300,
-    int(os.environ.get("NLK_COVER_NEGATIVE_CACHE_SECONDS", str(60 * 60 * 6))),
-)
+MAX_BOOK_AGE_YEARS = 10
+BASIS_TOKEN_ALIASES = {
+    "사진": ("카메라", "촬영", "사진술", "포토"),
+    "찍기": ("카메라", "촬영"),
+    "산책": ("걷기", "보행", "트레킹"),
+    "음악": ("작곡", "연주", "음향", "뮤지션", "음악사"),
+    "심리": ("인지", "정서", "심리학"),
+    "요리": ("레시피", "조리", "식재료"),
+    "운동": ("체력", "트레이닝", "피트니스"),
+    "독서": ("읽기", "문학", "서평"),
+    "영화": ("시네마", "영화사", "감독"),
+    "드라마": ("극본", "연출", "텔레비전"),
+    "그림": ("드로잉", "회화", "미술"),
+    "필사": ("쓰기", "문장", "손글씨"),
+    "요가": ("명상", "호흡", "스트레칭"),
+    "패션": ("스타일", "복식", "의류", "디자인"),
+    "팝업스토어": ("팝업", "브랜드", "전시", "공간"),
+    "맛집": ("미식", "식문화", "음식", "외식"),
+    "탐방": ("여행", "답사", "기행"),
+}
 NLK_PROVIDER_INFO = {
     "id": "nlk_national_bibliography_lod",
     "label": "국립중앙도서관 국가서지 LOD",
@@ -44,12 +73,19 @@ NLK_PROVIDER_INFO = {
     "license": "공공누리 제1유형 · CC0 1.0",
     "attribution": "출처: 문화체육관광부 국립중앙도서관 국가서지 LOD",
 }
-NLK_COVER_PROVIDER_INFO = {
-    "id": "nlk_isbn_bibliography",
-    "label": "국립중앙도서관 ISBN 서지정보",
-    "short_label": "ISBN 서지정보 표지",
-    "detail_url": "https://www.nl.go.kr/NL/contents/N31101030500.do",
-    "attribution": "표지: 문화체육관광부 국립중앙도서관 ISBN 서지정보",
+KAKAO_BOOK_PROVIDER_INFO = {
+    "id": "kakao_daum_book_search",
+    "label": "Kakao Daum 책 검색",
+    "short_label": "Kakao 도서정보",
+    "detail_url": "https://developers.kakao.com/docs/latest/ko/daum-search/dev-guide#search-book",
+    "attribution": "책 상세·표지: Kakao Daum 책 검색",
+}
+OPEN_LIBRARY_COVER_PROVIDER_INFO = {
+    "id": "open_library_covers",
+    "label": "Open Library Covers",
+    "short_label": "Open Library 표지",
+    "detail_url": "https://openlibrary.org/dev/docs/api/covers",
+    "attribution": "표지: Open Library Covers",
 }
 
 
@@ -92,7 +128,7 @@ class BookRecommendationUnavailable(RuntimeError):
 
 class BookRecommendationAgent:
     @staticmethod
-    def recommend(user_profile, force_theme=None, cached_data=None):
+    def recommend(user_profile, force_theme=None, cached_data=None, excluded_isbns=None):
         cached_books = {}
         cached_themes = {}
         if isinstance(cached_data, dict):
@@ -104,6 +140,9 @@ class BookRecommendationAgent:
                     cached_themes[th["id"]] = th
 
         themes = BookRecommendationAgent._build_themes(user_profile)
+        excluded_by_theme = excluded_isbns if isinstance(excluded_isbns, dict) else {}
+        for theme in themes:
+            theme["excluded_isbns"] = excluded_by_theme.get(theme["id"], [])
 
         themes_to_process = []
         for theme in themes:
@@ -149,21 +188,27 @@ class BookRecommendationAgent:
                         )
 
         books = BookRecommendationAgent._generate_reviews(user_profile, themes, cached_books=cached_books)
-        BookRecommendationAgent._enrich_book_covers(books)
 
         return {
+            "recommendation_engine": RECOMMENDATION_ENGINE_VERSION,
             "is_fallback": False,
             "selection_policy": {
                 "general_books_only": True,
-                "required_metadata": ["ISBN", "Book 자료유형"],
-                "excluded_materials": ["학위논문", "비도서자료"],
-                "ranking": "개인화 기준의 제목·주제 일치도와 발행연도를 함께 평가",
+                "candidate_source": "Kakao Daum 책 검색",
+                "candidate_metadata": [
+                    "책 소개", "저자", "번역자", "출판사", "출간일",
+                    "ISBN", "가격", "판매상태", "표지", "상세 URL",
+                ],
+                "ranking": "개인화 검색어별 Kakao 후보 중 AI가 전체 서지정보를 비교해 가장 적합한 책을 선정",
             },
             "themes": [
                 {
                     "id": theme["id"],
                     "name": theme["name"],
                     "keyword": theme["keyword"],
+                    "search_terms": theme.get("search_terms", []),
+                    "content_terms": theme.get("content_terms", []),
+                    "selected_basis": theme.get("selected_basis", ""),
                     "reason": theme["reason"],
                     "keyword_basis": theme.get("keyword_basis", ""),
                     "basis_label": theme["basis_label"],
@@ -175,57 +220,85 @@ class BookRecommendationAgent:
             ],
             "books": books,
             "source_disclosure": {
-                "book_metadata": "국립중앙도서관 국가서지 LOD",
-                "cover_metadata": "국립중앙도서관 ISBN 서지정보 TITLE_URL",
+                "book_metadata": "Kakao Daum 책 검색",
+                "cover_metadata": "Kakao Daum 책 검색 표지",
                 "curation": "OpenAI를 이용해 생성한 맞춤 추천 AI 추천사",
                 "display_policy": "도서 검색 결과와 AI 생성 추천을 구분해 표시합니다.",
-                "providers": [NLK_PROVIDER_INFO, NLK_COVER_PROVIDER_INFO],
+                "providers": [KAKAO_BOOK_PROVIDER_INFO],
             },
         }
 
     @staticmethod
     def _enrich_book_covers(books):
-        """Attach official NLK cover URLs without making covers a hard dependency."""
-        service_key = _nlk_isbn_service_key()
+        """Attach Kakao/Daum detail links and non-NLK covers as soft dependencies."""
         pending = {}
         for book in books or []:
-            isbn = _normalize_isbn([book.get("isbn", "")])
-            if not isbn or _safe_http_url(book.get("image", "")):
+            title = str(book.get("title") or "").strip()
+            author = str(book.get("author") or "").strip()
+            if not title or _safe_http_url(book.get("image", "")):
                 continue
-            pending.setdefault(isbn, []).append(book)
+            lookup_key = (_normalize_book_title(title), _normalize_book_author(author))
+            pending.setdefault(lookup_key, []).append(book)
 
-        if not service_key or not pending:
+        if not pending:
             return
 
         with ThreadPoolExecutor(max_workers=min(3, len(pending))) as executor:
             futures = {
-                executor.submit(_cached_nlk_cover_url, service_key, isbn): isbn
-                for isbn in pending
+                executor.submit(
+                    _cached_external_book_info,
+                    pending[lookup_key][0].get("title", ""),
+                    pending[lookup_key][0].get("author", ""),
+                    _normalize_isbn([pending[lookup_key][0].get("isbn", "")]),
+                ): lookup_key
+                for lookup_key in pending
             }
             for future in as_completed(futures):
-                isbn = futures[future]
+                lookup_key = futures[future]
                 try:
-                    cover_url = future.result()
+                    external_info = future.result()
                 except Exception as exc:
-                    print(f"[BookAgent] NLK cover lookup failed for ISBN {isbn}: {exc}")
+                    print(
+                        "[BookAgent] External cover lookup failed for title "
+                        f"'{pending[lookup_key][0].get('title', '')}': {exc}"
+                    )
                     continue
-                if not cover_url:
+                if not isinstance(external_info, dict):
                     continue
-                for book in pending[isbn]:
-                    book["image"] = cover_url
-                    book["cover_provider"] = NLK_COVER_PROVIDER_INFO
+                cover_url = external_info.get("image", "")
+                detail_url = external_info.get("link", "")
+                cover_provider = external_info.get("cover_provider")
+                link_provider = external_info.get("link_provider")
+                for book in pending[lookup_key]:
+                    if cover_url:
+                        book["image"] = cover_url
+                        book["cover_provider"] = cover_provider
+                    if detail_url:
+                        book["link"] = detail_url
+                        book["link_provider"] = link_provider
                     source_result = book.get("source_result")
                     if isinstance(source_result, dict):
-                        source_result["image"] = cover_url
-                        source_result["cover_provider"] = NLK_COVER_PROVIDER_INFO
+                        if cover_url:
+                            source_result["image"] = cover_url
+                            source_result["cover_provider"] = cover_provider
+                        if detail_url:
+                            source_result["link"] = detail_url
+                            source_result["link_provider"] = link_provider
 
     @staticmethod
     def _search_theme_candidates(theme):
-        theme["candidates"] = BookRecommendationAgent._search_nlk_books(
+        search_options = {
+            "display": 8,
+            "basis_values": theme["basis_values"],
+            "content_terms": theme.get("content_terms"),
+            "theme_id": theme["id"],
+            "excluded_isbns": theme.get("excluded_isbns"),
+        }
+        if theme.get("search_terms"):
+            search_options["search_terms"] = theme["search_terms"]
+        theme["candidates"] = BookRecommendationAgent._search_kakao_books(
             theme["keyword"],
-            display=4,
-            basis_values=theme["basis_values"],
-            theme_id=theme["id"],
+            **search_options,
         )
         if not theme["candidates"]:
             fallback_keyword = BookRecommendationAgent._fallback_search_keyword(
@@ -234,11 +307,24 @@ class BookRecommendationAgent:
                 FALLBACK_KEYWORDS[theme["id"]][0],
             )
             theme["search_fallback_used"] = True
-            theme["candidates"] = BookRecommendationAgent._search_nlk_books(
+            theme["candidates"] = BookRecommendationAgent._search_kakao_books(
                 fallback_keyword,
-                display=4,
+                display=8,
                 basis_values=theme["basis_values"],
+                content_terms=BookRecommendationAgent._fallback_content_terms(
+                    theme["id"],
+                    theme["basis_values"],
+                    fallback_keyword,
+                ),
+                search_terms=_book_search_terms(
+                    [],
+                    selected_basis=(theme.get("selected_basis") or (
+                        theme["basis_values"][0] if theme["basis_values"] else ""
+                    )),
+                    keyword=fallback_keyword,
+                ),
                 theme_id=theme["id"],
+                excluded_isbns=theme.get("excluded_isbns"),
             )
 
     @staticmethod
@@ -250,11 +336,6 @@ class BookRecommendationAgent:
                 user_profile,
                 definition["basis_key"],
             )
-
-            today = timezone.localdate()
-            if len(basis_values) > 1 and theme_id in ["interests", "hobbies"]:
-                offset = today.day % len(basis_values)
-                basis_values = basis_values[offset:] + basis_values[:offset]
 
             return {
                 **definition,
@@ -277,32 +358,85 @@ class BookRecommendationAgent:
             response = _get_llm(temperature=0.25, max_tokens=220).invoke([
                 (
                     "system",
-                    "당신은 개인 맞춤 도서 검색 키워드를 설계하는 큐레이터입니다. "
-                    "검색 가능한 한국어 키워드와 추천 의도를 JSON으로만 작성하세요.",
+                    "당신은 책 제목의 문구가 아니라 책이 실제로 다루는 내용을 기준으로 "
+                    "개인 맞춤 Kakao Daum 도서 검색어를 설계하는 큐레이터입니다. "
+                    "온라인 서점 검색에서 실제 책 후보가 충분히 나오는 한국어 검색어와 추천 의도를 JSON으로만 작성하세요.",
                 ),
                 ("user", BookRecommendationAgent._keyword_prompt(user_profile, definition, basis_values)),
             ])
             data = BookRecommendationAgent._parse_json(response.content)
             keyword = _clean_keyword(data.get("keyword"))
+            selected_basis = BookRecommendationAgent._selected_basis_value(
+                data.get("selected_basis"),
+                basis_values,
+            )
+            content_terms = _clean_content_terms(data.get("content_terms"), keyword)
+            keyword, content_terms = BookRecommendationAgent._anchor_profile_topic(
+                definition["id"],
+                keyword,
+                content_terms,
+                selected_basis,
+            )
+            search_terms = _book_search_terms(
+                data.get("search_terms"),
+                selected_basis=selected_basis,
+                keyword=keyword,
+            )
             reason = str(data.get("reason") or "").strip()
             if keyword:
                 return {
                     "keyword": keyword,
+                    "content_terms": content_terms,
+                    "search_terms": search_terms,
+                    "selected_basis": selected_basis,
                     "reason": reason or fallback_reason,
                     "keyword_basis": definition["basis_label"],
                 }
         except Exception as exc:
             print(f"[BookAgent] Keyword generation failed for {definition['id']}: {exc}")
 
+        keyword = BookRecommendationAgent._fallback_search_keyword(
+            definition["id"],
+            basis_values,
+            fallback_keyword,
+        )
         return {
-            "keyword": BookRecommendationAgent._fallback_search_keyword(
+            "keyword": keyword,
+            "content_terms": BookRecommendationAgent._fallback_content_terms(
                 definition["id"],
                 basis_values,
                 fallback_keyword,
             ),
+            "search_terms": _book_search_terms(
+                [],
+                selected_basis=(str(basis_values[0]).strip() if basis_values else ""),
+                keyword=keyword,
+            ),
+            "selected_basis": str(basis_values[0]).strip() if basis_values else "",
             "reason": fallback_reason,
             "keyword_basis": definition["basis_label"],
         }
+
+    @staticmethod
+    def _selected_basis_value(value, basis_values):
+        available = [str(item).strip() for item in basis_values if str(item).strip()]
+        requested = str(value or "").strip()
+        return next((item for item in available if item == requested), available[0] if available else "")
+
+    @staticmethod
+    def _anchor_profile_topic(theme_id, keyword, content_terms, selected_basis):
+        """Keep an interest/hobby label visible in the actual catalog queries."""
+        if theme_id not in {"interests", "hobbies"} or not selected_basis:
+            return keyword, content_terms
+
+        anchored_keyword = keyword
+        if selected_basis not in keyword:
+            anchored_keyword = _clean_keyword(f"{selected_basis} {keyword}")
+
+        anchored_terms = list(content_terms or [])
+        if not any(selected_basis in term for term in anchored_terms):
+            anchored_terms.insert(0, selected_basis)
+        return anchored_keyword, _clean_content_terms(anchored_terms, anchored_keyword)
 
     @staticmethod
     def _keyword_prompt(user_profile, definition, basis_values):
@@ -333,8 +467,21 @@ class BookRecommendationAgent:
 {guide_by_theme.get(definition['id'], '핵심 기준을 읽고 책 검색어를 만드세요.')}
 
 [검색 키워드 작성 규칙]
-- 국립중앙도서관 국가서지의 표제명 검색에 사용할 한국어 검색어 1개만 만드세요.
-- 실제 책 제목에 등장할 가능성이 높은 핵심어 1~3개로 짧게 작성하세요.
+- search_terms는 Kakao Daum 책 검색 API에 각각 독립적으로 넣을 탐색어입니다. 문장이나 가상의 책 제목이 아니라 실제 온라인 서점에서 관련 책을 찾기 좋은 1~4어절의 한국어 검색어로 작성하세요.
+- 관심사·취미 유형에서는 핵심 값 중 정확히 하나를 이번 검색의 selected_basis로 고르세요. selected_basis는 반드시 입력된 핵심 값의 원문과 완전히 같아야 합니다.
+- keyword의 첫 부분에는 selected_basis 원문을 그대로 포함하세요. 원래 주제를 다른 분야, 넓은 교양어, 감정 상태로 치환하지 마세요.
+- selected_basis가 '패션'이면 '패션', '사진 찍기'이면 '사진 찍기'가 keyword에 직접 보여야 합니다. '라이프스타일', '창의성', '힐링'만 남기는 식의 일반화는 금지합니다.
+- 여러 핵심 값을 억지로 한 검색어에 섞지 말고, 한 가지 주제를 선명하게 고른 뒤 그 주제의 하위 분야·기술·역사·비평 관점으로 구체화하세요.
+- 입력 문구와 비슷한 제목을 찾는 것이 아니라, 선택한 주제를 실제 본문에서 중심적으로 다루는 책을 찾을 검색어를 만드세요.
+- keyword는 그 내용 전체를 대표하는 한국어 검색 의도 1개를 2~5어절로 작성하세요.
+- content_terms는 책의 주제 분류나 초록에 나타날 법한 핵심 개념 2~4개를 각각 1~3어절로 작성하세요.
+- content_terms 중 하나 이상에도 selected_basis 원문 또는 그 주제의 직접적인 하위 개념을 넣으세요.
+- search_terms의 첫 항목은 selected_basis를 직접 반영하면서도 가장 구체적인 탐색어로 작성하세요. 예: '사진 찍기'→'사진 촬영', '드라마 보기'→'드라마 극본', '패션'→'패션 스타일링'.
+- 프로필 표현이 서점에서 잘 쓰이지 않는 구어라면 출판·서점에서 통용되는 동의어를 반드시 별도 search_terms에 포함하세요. 예: '헬스'→'근력 운동', '웨이트 트레이닝', '피트니스 운동'.
+- 나머지 search_terms는 같은 주제의 실용·입문·역사·비평 등 서로 다른 검색 관점 2~3개로 작성하세요. 서로 다른 관심사나 취미를 절대 섞지 마세요.
+- keyword와 content_terms를 가상의 책 제목이나 감성적인 문장처럼 만들지 마세요.
+- '책', '도서', '추천', '관련', '취미 생활', '관심 분야'처럼 검색 결과를 흐리는 일반어는 keyword에 넣지 마세요.
+- 선택한 주제는 보존하되, 그 뒤를 검색 가능한 하위 주제·방법·관점으로 구체화하세요.
 - 책 장르나 독서 목적이 드러나게 만드세요. 단, 에세이로 고정하지 마세요.
 - 후보 장르는 소설, 인문, 심리, 교양, 실용서, 예술서, 만화, 자기계발, 에세이 중 맥락에 맞게 고르세요.
 - 예: 마음 회복 소설, 커리어 인문학, 사진 실용서, 영화 심리 교양, 요리 레시피북.
@@ -345,7 +492,10 @@ class BookRecommendationAgent:
 
 Below output JSON only.
 {{
+  "selected_basis": "핵심 값에서 원문 그대로 고른 한 항목",
   "keyword": "도서 검색 키워드",
+  "search_terms": ["Kakao 책 검색어", "서점 동의어", "다른 검색 관점"],
+  "content_terms": ["책이 다룰 핵심 주제", "관련 방법 또는 관점"],
   "reason": "이 기준으로 검색어를 만든 이유를 45자 안팎으로 설명",
   "keyword_basis": "{definition['basis_label']}"
 }}
@@ -365,7 +515,168 @@ Below output JSON only.
         return " ".join(values[:2]) or fallback_keyword
 
     @staticmethod
-    def _search_nlk_books(keyword, display=4, basis_values=None, theme_id=""):
+    def _fallback_content_terms(theme_id, basis_values, fallback_keyword):
+        values = [str(value).strip() for value in basis_values if str(value).strip()]
+        theme_terms = {
+            "emotion": ["마음 회복", "감정 치유", "휴식"],
+            "interests": ["교양", "역사", "비평"],
+            "hobbies": ["방법", "기술", "활용"],
+        }
+        return _clean_content_terms(
+            [*values[:2], *theme_terms.get(theme_id, []), fallback_keyword],
+            fallback_keyword,
+        )
+
+    @staticmethod
+    def _search_kakao_books(
+        keyword,
+        display=8,
+        basis_values=None,
+        content_terms=None,
+        search_terms=None,
+        theme_id="",
+        excluded_isbns=None,
+    ):
+        service_key = _kakao_rest_api_key()
+        if not service_key:
+            raise BookRecommendationUnavailable(
+                "Kakao Daum 책 검색 API 인증키가 설정되지 않았습니다.",
+                code="KAKAO_CREDENTIALS_MISSING",
+            )
+
+        queries = _kakao_search_queries(
+            keyword,
+            search_terms=search_terms,
+            basis_values=basis_values,
+            content_terms=content_terms,
+        )[:KAKAO_BOOK_QUERY_LIMIT]
+        books = []
+        books_by_identity = {}
+        books_by_title_author = {}
+        successful_requests = 0
+        request_errors = []
+
+        for query_index, query in enumerate(queries):
+            try:
+                payload = _request_kakao_book_search(
+                    service_key,
+                    query,
+                    size=KAKAO_BOOK_PAGE_SIZE,
+                )
+                successful_requests += 1
+            except Exception as exc:
+                request_errors.append(exc)
+                print(f"[BookAgent] Kakao book search failed for '{query}': {exc}")
+                continue
+
+            for result_index, document in enumerate(payload.get("documents") or []):
+                if not isinstance(document, dict):
+                    continue
+                book = BookRecommendationAgent._normalize_kakao_book_document(
+                    len(books) + 1,
+                    document,
+                    query=query,
+                    query_index=query_index,
+                    result_index=result_index,
+                )
+                title_identity = _normalize_book_title(book.get("title"))
+                author_identity = _normalize_book_author(book.get("author"))
+                identity = book.get("isbn") or f"{title_identity}|{author_identity}"
+                title_author_identity = f"{title_identity}|{author_identity}"
+                if (
+                    not book.get("title")
+                    or not identity.strip("|")
+                    or any(marker in book["title"] for marker in ("체험판", "미리보기", "요약본"))
+                ):
+                    continue
+                existing = (
+                    books_by_identity.get(identity)
+                    or books_by_title_author.get(title_author_identity)
+                )
+                if existing:
+                    if query not in existing["matched_queries"]:
+                        existing["matched_queries"].append(query)
+                    continue
+                books_by_identity[identity] = book
+                books_by_title_author[title_author_identity] = book
+                books.append(book)
+
+        if successful_requests == 0 and request_errors:
+            raise BookRecommendationUnavailable(
+                "Kakao Daum 책 검색 서비스를 현재 이용할 수 없습니다.",
+                code="KAKAO_SERVICE_UNAVAILABLE",
+            ) from request_errors[-1]
+
+        ranked_books = _rank_kakao_books(
+            books,
+            keyword=keyword,
+            basis_values=basis_values or [],
+            content_terms=content_terms or [],
+            search_terms=search_terms or [],
+            theme_id=theme_id,
+        )
+        ranked_books = _without_excluded_books(ranked_books, excluded_isbns)[:display]
+        for index, book in enumerate(ranked_books, start=1):
+            book["candidate_id"] = f"book_{index}"
+        return ranked_books
+
+    @staticmethod
+    def _normalize_kakao_book_document(
+        index,
+        document,
+        *,
+        query="",
+        query_index=0,
+        result_index=0,
+    ):
+        title = _clean_kakao_text(document.get("title"))
+        description = _clean_kakao_text(document.get("contents"))
+        authors = _clean_string_list(document.get("authors"))
+        translators = _clean_string_list(document.get("translators"))
+        published_at = str(document.get("datetime") or "").strip()
+        issued_match = re.search(r"(?:19|20)\d{2}", published_at)
+        isbn = _normalize_isbn(str(document.get("isbn") or "").split())
+        link = _safe_daum_book_url(document.get("url")) or _daum_book_search_url(title=title)
+        image = _safe_external_cover_url(document.get("thumbnail"))
+        return {
+            "candidate_id": f"book_{index}",
+            "title": title,
+            "author": ", ".join(authors),
+            "authors": authors,
+            "translators": translators,
+            "publisher": _clean_kakao_text(document.get("publisher")),
+            "description": description,
+            "image": image,
+            "link": link,
+            "isbn": isbn,
+            "raw_isbn": str(document.get("isbn") or "").strip(),
+            "subjects": [],
+            "bibliographic_id": "",
+            "published_at": published_at,
+            "issued_year": int(issued_match.group(0)) if issued_match else None,
+            "price": _safe_int(document.get("price")),
+            "sale_price": _safe_int(document.get("sale_price")),
+            "status": str(document.get("status") or "").strip(),
+            "matched_queries": [query] if query else [],
+            "query_index": query_index,
+            "result_index": result_index,
+            "general_book_verified": True,
+            "recent_book_verified": False,
+            "source_provider": KAKAO_BOOK_PROVIDER_INFO,
+            "cover_provider": KAKAO_BOOK_PROVIDER_INFO if image else None,
+            "link_provider": KAKAO_BOOK_PROVIDER_INFO,
+        }
+
+    @staticmethod
+    def _search_nlk_books(
+        keyword,
+        display=4,
+        basis_values=None,
+        content_terms=None,
+        catalog_terms=None,
+        theme_id="",
+        excluded_isbns=None,
+    ):
         service_key = _nlk_service_key()
         if not service_key:
             raise BookRecommendationUnavailable(
@@ -378,15 +689,12 @@ Below output JSON only.
         seen_titles = set()
         successful_requests = 0
         request_errors = []
-        basis_search_terms = []
-        for value in basis_values or []:
-            for term in _nlk_search_terms(value):
-                if term not in basis_search_terms:
-                    basis_search_terms.append(term)
-        search_terms = [
-            *basis_search_terms,
-            *(term for term in _nlk_search_terms(keyword) if term not in basis_search_terms),
-        ]
+        search_terms = _semantic_search_terms(
+            keyword,
+            content_terms,
+            basis_values,
+            catalog_terms,
+        )[:NLK_BOOK_QUERY_LIMIT]
 
         for term_index, search_term in enumerate(search_terms):
             try:
@@ -397,18 +705,16 @@ Below output JSON only.
                     page_no=1,
                 )
                 successful_requests += 1
-                term_book_count = 0
-
                 def collect_payload(payload):
-                    nonlocal term_book_count
                     for item in _nlk_items(payload):
                         book = BookRecommendationAgent._normalize_nlk_book_item(
                             len(books) + 1,
                             item,
                         )
-                        if not _is_general_book(item, book):
+                        if not _is_general_book(item, book) or not _is_recent_book(book):
                             continue
                         book["general_book_verified"] = True
+                        book["recent_book_verified"] = True
                         identity = book.get("isbn") or book.get("bibliographic_id")
                         title_identity = re.sub(
                             r"\s+",
@@ -425,12 +731,9 @@ Below output JSON only.
                         seen_identifiers.add(identity)
                         seen_titles.add(title_identity)
                         books.append(book)
-                        term_book_count += 1
 
                 collect_payload(first_payload)
-                for page_no in _nlk_probe_page_numbers(first_payload):
-                    if term_book_count >= NLK_BOOK_CANDIDATE_POOL_SIZE:
-                        break
+                for page_no in _nlk_probe_page_numbers(first_payload)[:NLK_BOOK_MAX_PROBE_PAGES]:
                     try:
                         collect_payload(
                             _request_nlk_books(
@@ -446,10 +749,6 @@ Below output JSON only.
                             f"for '{search_term}': {exc}"
                         )
 
-                if len(books) >= NLK_BOOK_CANDIDATE_POOL_SIZE and (
-                    search_term in basis_search_terms or term_index >= 1
-                ):
-                    break
             except Exception as exc:
                 request_errors.append(exc)
                 print(f"[BookAgent] NLK LOD search failed for '{search_term}': {exc}")
@@ -464,8 +763,10 @@ Below output JSON only.
             books,
             keyword=keyword,
             basis_values=basis_values or [],
+            content_terms=content_terms or [],
             theme_id=theme_id,
-        )[:display]
+        )
+        ranked_books = _without_excluded_books(ranked_books, excluded_isbns)[:display]
         for index, book in enumerate(ranked_books, start=1):
             book["candidate_id"] = f"book_{index}"
         return ranked_books
@@ -477,10 +778,7 @@ Below output JSON only.
         subjects = _text_values(item, "DCTERMS_subject", "NLON_keyword")
         material_types = _text_values(item, "RDF_type", "DC_type")
         raw_isbn = _normalize_isbn(_text_values(item, "BIBO_isbn"))
-        if raw_isbn:
-            link = f"https://www.nl.go.kr/NL/contents/search.do?srchTarget=total&keyword={raw_isbn}"
-        else:
-            link = _safe_http_url(_first_text(item, "URI", "RDFS_seeAlso"))
+        link = _daum_book_search_url(title=title)
         return {
             "candidate_id": f"book_{index}",
             "title": title,
@@ -555,7 +853,7 @@ Below output JSON only.
         )
         raw_result = chain.invoke({})
         selected_id, genre, review = _parse_review_result(raw_result)
-        selected_book = _find_candidate(theme.get("candidates", []), selected_id)
+        selected_book = _find_candidate(theme["candidates"], selected_id)
         if selected_book is None:
             selected_book = theme["candidates"][0]
 
@@ -576,9 +874,14 @@ Below output JSON only.
                 f"candidate_id: {book['candidate_id']}\n"
                 f"  제목: {book['title']}\n"
                 f"  저자: {book['author']}\n"
+                f"  번역자: {', '.join(book.get('translators') or []) or '없음/미제공'}\n"
                 f"  출판사: {book['publisher']}\n"
-                f"  주제: {', '.join(book.get('subjects', []))[:120]}\n"
-                f"  초록: {book['description'][:120]}"
+                f"  출간일: {(book.get('published_at') or '')[:10] or '미제공'}\n"
+                f"  ISBN: {book.get('isbn') or '미제공'}\n"
+                f"  정가/판매가: {book.get('price') or '미제공'} / {book.get('sale_price') or '미제공'}\n"
+                f"  판매상태: {book.get('status') or '미제공'}\n"
+                f"  일치한 검색어: {', '.join(book.get('matched_queries') or [])}\n"
+                f"  책 소개: {book['description'][:260]}"
             )
 
         return f"""
@@ -591,12 +894,15 @@ Below output JSON only.
 - 실제 고려 기준: {theme['basis_label']}
 - 참고 맥락: {theme['basis_label']} {basis_text}
 - 검색 키워드: {theme.get('keyword') or '미상'}
+- 책에서 다루길 바라는 핵심 내용: {', '.join(theme.get('content_terms') or []) or '미상'}
 - 검색 키워드 생성 의도: {theme.get('reason') or '사용자 맥락에 맞는 책 후보를 찾기 위한 검색어입니다.'}
 
-[후보 도서]
+[검증된 개인화 상위 후보]
 {chr(10).join(candidate_lines)}
 
-후보 도서 중 1권을 고르고, ３～４문장의 추천 서평을 작성하세요.
+후보 중 현재 사용자 맥락에 가장 적합한 책 1권을 고르고, 그 책에 대한 ３～４문장의 추천 서평을 작성하세요.
+제목이 입력 문구와 비슷하다는 이유만으로 고르지 말고, Kakao가 제공한 책 소개, 저자·번역자 구성, 출판사, 출간 시점, 판매상태, ISBN과 검색어 일치 맥락을 함께 비교하세요.
+책 소개가 짧더라도 저자·출판사·출간정보 등 제공된 다른 서지정보를 활용해 선택하되, 후보 정보에 없는 사실은 만들지 마세요.
 서평은 이 책을 고른 이유가 분명히 느껴지도록, 책의 주제/분위기/현재 맥락과 맞는 지점을 자연스럽게 포함하세요.
 참고 맥락은 책을 고르고 문장의 톤을 잡는 데 사용하세요.
 유형별 기준을 반드시 지키세요.
@@ -605,11 +911,11 @@ Below output JSON only.
 - 취미 추천: 취미를 실제로 즐기는 사람에게 도움이 되는 책을 고르세요. 방법, 기술, 도구, 작품 감상, 문화, 역사, 루틴처럼 취미 관점이 드러나야 하며, 취미를 소재로 한 일반 감성 에세이에 치우치지 마세요.
 도서 장르는 후보 도서의 실제 성격을 따르세요. 에세이, 소설, 인문서, 실용서, 예술서, 만화 등 특정 장르를 사전에 우대하지 마세요.
 서평 본문에 "관심사가 있어서", "취미가 있어서", "검색어", "키워드", "근거", "데이터", "마음리포트", "분석 결과"처럼 추천 로직이나 리포트 맥락이 직접 드러나는 표현을 쓰지 마세요.
-후보에 없는 책을 새로 만들면 안 됩니다.
+후보에 없는 책을 새로 고르거나 만들면 안 됩니다.
 genre는 선택한 책의 장르를 2~8자 정도로 짧게 쓰세요. 예: 소설, 심리, 인문, 실용서, 예술서, 만화, 자기계발, 에세이.
 
 아래 형식만 지키세요.
-candidate_id: book_1
+candidate_id: 선택한 후보 ID
 genre: 장르
 review: 추천 서평
 """.strip()
@@ -696,10 +1002,20 @@ review: 추천 서평
             "link": book.get("link", ""),
             "isbn": book.get("isbn", ""),
             "subjects": book.get("subjects", []),
+            "authors": book.get("authors", []),
+            "translators": book.get("translators", []),
+            "published_at": book.get("published_at", ""),
+            "price": book.get("price", 0),
+            "sale_price": book.get("sale_price", 0),
+            "status": book.get("status", ""),
+            "matched_queries": book.get("matched_queries", []),
             "bibliographic_id": book.get("bibliographic_id", ""),
             "issued_year": book.get("issued_year"),
             "general_book_verified": bool(book.get("general_book_verified")),
-            "provider": book.get("source_provider") or NLK_PROVIDER_INFO,
+            "recent_book_verified": bool(book.get("recent_book_verified")),
+            "provider": book.get("source_provider") or KAKAO_BOOK_PROVIDER_INFO,
+            "cover_provider": book.get("cover_provider"),
+            "link_provider": book.get("link_provider"),
         }
         ai_curation = {
             "genre": genre or _infer_genre(book, theme),
@@ -722,12 +1038,22 @@ review: 추천 서평
             "isbn": book.get("isbn", ""),
             "description": book.get("description", ""),
             "subjects": book.get("subjects", []),
+            "authors": book.get("authors", []),
+            "translators": book.get("translators", []),
+            "published_at": book.get("published_at", ""),
+            "price": book.get("price", 0),
+            "sale_price": book.get("sale_price", 0),
+            "status": book.get("status", ""),
+            "matched_queries": book.get("matched_queries", []),
             "bibliographic_id": book.get("bibliographic_id", ""),
             "issued_year": book.get("issued_year"),
             "general_book_verified": bool(book.get("general_book_verified")),
+            "recent_book_verified": bool(book.get("recent_book_verified")),
             "personalization_score": book.get("personalization_score", 0),
             "match_terms": book.get("match_terms", []),
             "source_provider": source_result["provider"],
+            "cover_provider": book.get("cover_provider"),
+            "link_provider": book.get("link_provider"),
             "source_result": source_result,
             "ai_curation": ai_curation,
             "data_used": _visible_data_used(theme),
@@ -798,91 +1124,153 @@ def _nlk_service_key():
     ).strip()
 
 
-def _nlk_isbn_service_key():
+def _kakao_rest_api_key():
     return (
-        os.environ.get("NLK_ISBN_SERVICE_KEY")
-        or os.environ.get("NLK_BIBLIO_SERVICE_KEY")
-        or os.environ.get("DATA_GO_KR_SERVICE_KEY")
+        os.environ.get("KAKAO_REST_API_KEY")
+        or os.environ.get("KAKAO_CLIENT_ID")
         or ""
     ).strip()
 
 
-def _cached_nlk_cover_url(service_key, isbn):
-    cache_key = f"mybook:nlk-cover:v1:{isbn}"
+def _cached_external_book_info(title, author="", isbn=""):
+    title = str(title or "").strip()
+    author = str(author or "").strip()
+    normalized_isbn = _normalize_isbn([isbn])
+    cache_identity = f"{_normalize_book_title(title)}|{_normalize_book_author(author)}"
+    cache_key = "mybook:external-book:v4:" + hashlib.sha256(
+        cache_identity.encode("utf-8")
+    ).hexdigest()
     cached = cache.get(cache_key)
-    if isinstance(cached, dict) and "url" in cached:
-        return _safe_nlk_cover_url(cached.get("url"))
+    if (
+        isinstance(cached, dict)
+        and _safe_external_cover_url(cached.get("image"))
+        and _safe_daum_book_url(cached.get("link"))
+    ):
+        return cached
 
-    try:
-        cover_url = _request_nlk_cover(service_key, isbn)
-    except (requests.RequestException, RuntimeError, ValueError) as exc:
-        print(f"[BookAgent] NLK cover service unavailable for ISBN {isbn}: {exc}")
-        cover_url = ""
+    kakao_info = {}
+    service_key = _kakao_rest_api_key()
+    if service_key:
+        try:
+            kakao_info = _request_kakao_book_info(service_key, title, author)
+        except (requests.RequestException, RuntimeError, ValueError) as exc:
+            print(f"[BookAgent] Kakao book lookup unavailable for title '{title}': {exc}")
 
-    cache.set(
-        cache_key,
-        {"url": cover_url},
-        timeout=(
-            NLK_COVER_CACHE_SECONDS
-            if cover_url
-            else NLK_COVER_NEGATIVE_CACHE_SECONDS
+    kakao_cover = _safe_external_cover_url(kakao_info.get("image"))
+    kakao_link = _safe_daum_book_url(kakao_info.get("link"))
+    result = {
+        "image": kakao_cover or (
+            _open_library_cover_url(normalized_isbn) if normalized_isbn else ""
         ),
-    )
-    return cover_url
+        "link": kakao_link or _daum_book_search_url(title=title),
+        "cover_provider": (
+            KAKAO_BOOK_PROVIDER_INFO
+            if kakao_cover
+            else OPEN_LIBRARY_COVER_PROVIDER_INFO
+        ),
+        "link_provider": KAKAO_BOOK_PROVIDER_INFO,
+    }
+    cache.set(cache_key, result, timeout=BOOK_COVER_CACHE_SECONDS)
+    return result
 
 
-def _request_nlk_cover(service_key, isbn):
+def _request_kakao_book_search(service_key, query, *, size=20, page=1, sort="accuracy"):
+    response = None
+    for attempt in range(KAKAO_BOOK_RETRY_COUNT + 1):
+        try:
+            response = requests.get(
+                KAKAO_BOOK_API_URL,
+                params={
+                    "query": str(query or "").strip(),
+                    "sort": sort,
+                    "page": max(1, min(50, int(page))),
+                    "size": max(1, min(50, int(size))),
+                },
+                headers={
+                    "Accept": "application/json",
+                    "Authorization": f"KakaoAK {service_key}",
+                },
+                timeout=KAKAO_BOOK_TIMEOUT_SECONDS,
+            )
+        except (requests.Timeout, requests.ConnectionError):
+            if attempt < KAKAO_BOOK_RETRY_COUNT:
+                time.sleep(0.25 * (2 ** attempt))
+                continue
+            raise
+        if response.status_code not in {429, 500, 502, 503, 504}:
+            response.raise_for_status()
+            try:
+                payload = response.json()
+            except ValueError as exc:
+                raise RuntimeError("Kakao book API returned a non-JSON response") from exc
+            if not isinstance(payload, dict) or not isinstance(payload.get("documents", []), list):
+                raise RuntimeError("Kakao book API returned an invalid response")
+            return payload
+        if attempt < KAKAO_BOOK_RETRY_COUNT:
+            time.sleep(0.25 * (2 ** attempt))
+
+    response.raise_for_status()
+    return response.json()
+
+
+def _request_kakao_book_info(service_key, title, author=""):
+    title = str(title or "").strip()
+    if not title:
+        return {}
     response = requests.get(
-        NLK_ISBN_API_URL,
+        KAKAO_BOOK_API_URL,
         params={
-            "cert_key": service_key,
-            "result_style": "json",
-            "page_no": 1,
-            "page_size": 1,
-            "isbn": isbn,
+            "query": title,
+            "target": "title",
+            "size": 10,
         },
-        headers={"Accept": "application/json"},
-        timeout=NLK_COVER_TIMEOUT_SECONDS,
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"KakaoAK {service_key}",
+        },
+        timeout=BOOK_COVER_TIMEOUT_SECONDS,
     )
     response.raise_for_status()
     try:
         payload = response.json()
     except ValueError as exc:
-        raise RuntimeError("NLK ISBN API returned a non-JSON response") from exc
+        raise RuntimeError("Kakao book API returned a non-JSON response") from exc
 
     if not isinstance(payload, dict):
-        raise RuntimeError("NLK ISBN API returned an invalid response")
-    error_code = str(
-        payload.get("ERROR")
-        or payload.get("error")
-        or payload.get("ERROR_CODE")
-        or ""
-    ).strip()
-    if error_code:
-        raise RuntimeError(f"NLK ISBN API error: {error_code}")
+        raise RuntimeError("Kakao book API returned an invalid response")
 
-    docs = payload.get("docs") or payload.get("DOCS") or []
-    if isinstance(docs, dict) and "e" in docs:
-        docs = docs.get("e") or []
-    if isinstance(docs, dict):
-        docs = [docs]
-    if not isinstance(docs, list):
-        return ""
-
-    for document in docs:
+    ranked_documents = []
+    normalized_title = _normalize_book_title(title)
+    normalized_author = _normalize_book_author(author)
+    for index, document in enumerate(payload.get("documents") or []):
         if not isinstance(document, dict):
             continue
-        document_isbn = _normalize_isbn(
-            [document.get("EA_ISBN", ""), document.get("SET_ISBN", "")]
-        )
-        if document_isbn and document_isbn != isbn:
+        document_title = _normalize_book_title(document.get("title"))
+        if not document_title or not (
+            document_title == normalized_title
+            or document_title in normalized_title
+            or normalized_title in document_title
+        ):
             continue
-        cover_url = _safe_nlk_cover_url(
-            document.get("TITLE_URL") or document.get("title_url") or ""
+        document_authors = _normalize_book_author(
+            " ".join(str(value) for value in document.get("authors") or [])
         )
-        if cover_url:
-            return cover_url
-    return ""
+        title_score = 4 if document_title == normalized_title else 2
+        author_score = (
+            3 if normalized_author and normalized_author in document_authors else 0
+        )
+        cover_score = 1 if _safe_external_cover_url(document.get("thumbnail")) else 0
+        ranked_documents.append(
+            (title_score + author_score + cover_score, -index, document)
+        )
+
+    if ranked_documents:
+        document = max(ranked_documents, key=lambda item: (item[0], item[1]))[2]
+        return {
+            "image": _safe_external_cover_url(document.get("thumbnail")),
+            "link": _daum_book_search_url(title=title),
+        }
+    return {}
 
 
 def _request_nlk_books(service_key, keyword, display, page_no=1):
@@ -926,7 +1314,10 @@ def _nlk_probe_page_numbers(first_payload):
 
     last_page = max(1, math.ceil(total_count / rows_per_page))
     page_numbers = []
-    for ratio in (0.2, 0.4, 0.6, 0.8, 1.0):
+    # The catalog commonly returns older records first. Probe the tail before
+    # intermediate pages so the ten-year freshness policy can find recent books
+    # even when only one additional page is allowed.
+    for ratio in (0.8, 1.0, 0.6, 0.4, 0.2):
         page_no = max(2, min(last_page, math.ceil(last_page * ratio)))
         if page_no not in page_numbers:
             page_numbers.append(page_no)
@@ -984,6 +1375,125 @@ def _nlk_search_terms(keyword):
     return terms[:4]
 
 
+def _catalog_core_term(value):
+    """Return a short noun-like anchor suitable for the NLK ``label`` lookup."""
+    cleaned = re.sub(r"[^0-9A-Za-z가-힣\s]", " ", str(value or ""))
+    tokens = [token for token in cleaned.split() if len(token) >= 2]
+    if not tokens:
+        return ""
+
+    for token in tokens:
+        for source in BASIS_TOKEN_ALIASES:
+            if source == token or source in token or token in source:
+                return source
+
+    action_tokens = {
+        "하기", "보기", "듣기", "읽기", "찍기", "만들기", "다니기",
+        "감상", "탐방", "투어", "활동", "생활",
+    }
+    return next((token for token in tokens if token not in action_tokens), tokens[0])
+
+
+def _book_search_terms(values, *, selected_basis="", keyword=""):
+    """Validate Kakao queries while retaining the profile topic as fallback."""
+    if isinstance(values, str):
+        values = re.split(r"[,/|\n]", values)
+    if not isinstance(values, (list, tuple)):
+        values = []
+
+    terms = []
+    basis_core = _catalog_core_term(selected_basis)
+
+    for value in values:
+        cleaned = re.sub(r"[^0-9A-Za-z가-힣\s]", " ", str(value or ""))
+        tokens = [token for token in cleaned.split() if len(token) >= 2][:4]
+        term = " ".join(tokens).strip()
+        if term and term not in terms:
+            terms.append(term)
+        if len(terms) >= 4:
+            break
+
+    if basis_core and basis_core not in terms:
+        terms = terms[:3]
+        terms.append(basis_core)
+
+    if len(terms) < 2:
+        for value in _nlk_search_terms(keyword):
+            tokens = value.split()[:2]
+            term = " ".join(tokens).strip()
+            if term and term not in terms:
+                terms.append(term)
+            if len(terms) >= 2:
+                break
+    return terms[:4]
+
+
+def _catalog_search_terms(values, *, selected_basis="", keyword=""):
+    """Backward-compatible alias for stored payloads and older callers."""
+    return _book_search_terms(
+        values,
+        selected_basis=selected_basis,
+        keyword=keyword,
+    )
+
+
+def _semantic_search_terms(keyword, content_terms=None, basis_values=None, catalog_terms=None):
+    """Prefer LLM catalog terms, then use the profile topic as a guardrail."""
+    terms = []
+    content_values = [value for value in content_terms or [] if str(value).strip()]
+    basis_values = [value for value in basis_values or [] if str(value).strip()]
+    catalog_values = [value for value in catalog_terms or [] if str(value).strip()]
+
+    # The keyword is server-anchored to the LLM-selected profile value. Do not
+    # infer the selected topic from broader content terms because words such as
+    # "브랜드" could accidentally activate another saved interest.
+    intent_tokens = set(_personalization_tokens(keyword, [], catalog_values[:1]))
+    focused_basis_values = [
+        value
+        for value in basis_values
+        if _expanded_basis_tokens([value]).intersection(intent_tokens)
+    ]
+    discovery_basis_values = (focused_basis_values or basis_values[:1])[:1]
+
+    # The LLM has already been constrained to short, noun-like bibliography
+    # terms. Search those specific terms before the broader profile label.
+    for value in catalog_values:
+        exact_terms = _nlk_search_terms(value)
+        if exact_terms and exact_terms[0] not in terms:
+            terms.append(exact_terms[0])
+
+    for value in discovery_basis_values:
+        core_term = _catalog_core_term(value)
+        if core_term and core_term not in terms:
+            terms.append(core_term)
+
+    for value in discovery_basis_values:
+        raw_tokens = _personalization_tokens("", [value])
+        alias_added = False
+        for token in raw_tokens:
+            for source, aliases in BASIS_TOKEN_ALIASES.items():
+                if source not in token and token not in source:
+                    continue
+                alias = next((item for item in aliases if item not in terms), None)
+                if alias:
+                    terms.append(alias)
+                    alias_added = True
+                    break
+            if alias_added or len(terms) >= NLK_BOOK_QUERY_LIMIT:
+                break
+
+    for value in content_values:
+        exact_terms = _nlk_search_terms(value)
+        if exact_terms and exact_terms[0] not in terms:
+            terms.append(exact_terms[0])
+
+    for value in [keyword, *basis_values]:
+        for term in _nlk_search_terms(value):
+            if term not in terms:
+                terms.append(term)
+    return terms[:8]
+
+
 def _text_values(item, *keys):
     values = []
     for key in keys:
@@ -1008,15 +1518,62 @@ def _safe_http_url(value):
     return text if text.startswith(("https://", "http://")) else ""
 
 
-def _safe_nlk_cover_url(value):
+def _normalize_book_title(value):
+    return re.sub(r"[^0-9a-z가-힣]", "", str(value or "").lower())
+
+
+def _normalize_book_author(value):
+    return re.sub(r"[^0-9a-z가-힣]", "", str(value or "").lower())
+
+
+def _daum_book_search_url(title=""):
+    query = str(title or "").strip()
+    if not query:
+        return "https://search.daum.net/search?w=book"
+    return "https://search.daum.net/search?" + urlencode({"w": "book", "q": query})
+
+
+def _without_excluded_books(books, excluded_isbns=None):
+    candidates = list(books or [])
+    excluded = {
+        normalized
+        for value in excluded_isbns or []
+        if (normalized := _normalize_isbn([value]))
+    }
+    if not excluded:
+        return candidates
+    eligible = [book for book in candidates if book.get("isbn") not in excluded]
+    return eligible or candidates
+
+
+def _open_library_cover_url(isbn):
+    return f"https://covers.openlibrary.org/b/isbn/{isbn}-L.jpg?default=false"
+
+
+def _safe_external_cover_url(value):
     url = _safe_http_url(value)
-    if url.startswith("https://"):
-        return url
-    match = re.match(r"^http://([^/:]+)(?::\d+)?(?:/|$)", url, flags=re.IGNORECASE)
-    host = match.group(1).lower() if match else ""
-    if host == "nl.go.kr" or host.endswith(".nl.go.kr"):
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    allowed_hosts = {
+        "covers.openlibrary.org",
+    }
+    allowed_suffixes = (".kakaocdn.net", ".daumcdn.net")
+    if host not in allowed_hosts and not host.endswith(allowed_suffixes):
+        return ""
+    if url.startswith("http://"):
         return "https://" + url[len("http://"):]
-    return ""
+    return url if url.startswith("https://") else ""
+
+
+def _safe_daum_book_url(value):
+    url = _safe_http_url(value)
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    if host != "search.daum.net":
+        return ""
+    if url.startswith("http://"):
+        return "https://" + url[len("http://"):]
+    return url if url.startswith("https://") else ""
 
 
 def _normalize_isbn(values):
@@ -1091,8 +1648,16 @@ def _is_general_book(item, book):
     return True
 
 
-def _personalization_tokens(keyword, basis_values):
-    raw_values = [keyword, *(basis_values or [])]
+def _is_recent_book(book, reference_year=None):
+    issued_year = book.get("issued_year")
+    if not isinstance(issued_year, int):
+        return False
+    current_year = reference_year or timezone.localdate().year
+    return current_year - MAX_BOOK_AGE_YEARS <= issued_year <= current_year + 1
+
+
+def _personalization_tokens(keyword, basis_values, content_terms=None):
+    raw_values = [keyword, *(content_terms or []), *(basis_values or [])]
     stopwords = {
         "추천", "도서", "책", "입문", "실용", "교양", "오늘", "기반",
         "관련", "위한", "좋은", "읽기", "소설", "에세이",
@@ -1106,9 +1671,143 @@ def _personalization_tokens(keyword, basis_values):
     return tokens[:12]
 
 
-def _rank_personalized_books(books, *, keyword, basis_values, theme_id):
-    tokens = _personalization_tokens(keyword, basis_values)
-    basis_tokens = set(_personalization_tokens("", basis_values))
+def _expanded_basis_tokens(basis_values):
+    tokens = _personalization_tokens("", basis_values)
+    expanded = list(tokens)
+    for token in tokens:
+        for source, related in BASIS_TOKEN_ALIASES.items():
+            if source not in token and token not in source:
+                continue
+            for value in related:
+                if value not in expanded:
+                    expanded.append(value)
+    return set(expanded)
+
+
+def _clean_kakao_text(value):
+    text = html.unescape(str(value or ""))
+    text = re.sub(r"<[^>]+>", "", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _clean_string_list(values):
+    if not isinstance(values, (list, tuple)):
+        values = [values] if values else []
+    cleaned = []
+    for value in values:
+        text = _clean_kakao_text(value)
+        if text and text not in cleaned:
+            cleaned.append(text)
+    return cleaned
+
+
+def _safe_int(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _kakao_search_queries(keyword, *, search_terms=None, basis_values=None, content_terms=None):
+    queries = []
+    for value in [*(search_terms or []), keyword, *(basis_values or []), *(content_terms or [])]:
+        cleaned = _clean_keyword(value)
+        if cleaned and cleaned not in queries:
+            queries.append(cleaned)
+    return queries[:8]
+
+
+def _rank_kakao_books(
+    books,
+    *,
+    keyword,
+    basis_values,
+    content_terms=None,
+    search_terms=None,
+    theme_id="",
+):
+    tokens = _personalization_tokens(
+        keyword,
+        [*(basis_values or []), *(search_terms or [])],
+        content_terms,
+    )
+    expanded_basis = _expanded_basis_tokens(basis_values)
+    tokens = list(dict.fromkeys([*tokens, *sorted(expanded_basis)]))[:24]
+    ranked = []
+    current_year = timezone.localdate().year
+
+    for book in books:
+        title = str(book.get("title") or "").lower()
+        description = str(book.get("description") or "").lower()
+        people_and_publisher = " ".join([
+            str(book.get("author") or ""),
+            " ".join(book.get("translators") or []),
+            str(book.get("publisher") or ""),
+        ]).lower()
+        score = max(0.0, 18.0 - book.get("query_index", 0) * 3.0)
+        score += max(0.0, 6.0 - book.get("result_index", 0) * 0.25)
+        matches = []
+        for token in tokens:
+            token_score = 0.0
+            if token in title:
+                token_score += 9.0
+            if token in description:
+                token_score += 5.0
+            if token in people_and_publisher:
+                token_score += 1.5
+            if token_score:
+                matches.append(token)
+                score += token_score
+
+        if book.get("description"):
+            score += 3.0
+        if book.get("isbn"):
+            score += 2.0
+        if book.get("image"):
+            score += 1.0
+        if str(book.get("status") or "").strip() in {"정상판매", "판매중"}:
+            score += 1.0
+        issued_year = book.get("issued_year")
+        if isinstance(issued_year, int):
+            score += max(0.0, 3.0 - max(0, current_year - issued_year) / 10)
+
+        book["personalization_score"] = round(score, 2)
+        book["match_terms"] = list(dict.fromkeys(matches))
+        book["basis_match_terms"] = sorted(expanded_basis.intersection(matches))
+        ranked.append(book)
+
+    return sorted(
+        ranked,
+        key=lambda book: (
+            -book.get("personalization_score", 0),
+            book.get("query_index", 0),
+            book.get("result_index", 0),
+            book.get("title") or "",
+        ),
+    )
+
+
+def _rank_personalized_books(
+    books,
+    *,
+    keyword,
+    basis_values,
+    theme_id,
+    content_terms=None,
+):
+    tokens = _personalization_tokens(keyword, basis_values, content_terms)
+    basis_tokens = _expanded_basis_tokens(basis_values)
+    tokens = list(dict.fromkeys([*sorted(basis_tokens), *tokens]))[:20]
+    content_intent_tokens = set(_personalization_tokens("", [], content_terms))
+    intent_tokens = set(_personalization_tokens(keyword, [], content_terms))
+    primary_basis_values = [
+        value
+        for value in basis_values
+        if _expanded_basis_tokens([value]).intersection(intent_tokens)
+    ]
+    primary_basis_tokens = set()
+    for value in primary_basis_values:
+        primary_basis_tokens.update(_expanded_basis_tokens([value]))
     current_year = time.localtime().tm_year
     ranked = []
     for book in books:
@@ -1116,15 +1815,27 @@ def _rank_personalized_books(books, *, keyword, basis_values, theme_id):
         subjects = " ".join(book.get("subjects") or []).lower()
         description = str(book.get("description") or "").lower()
         matches = []
+        semantic_matches = []
+        basis_metadata_matches = []
         score = 0.0
+        content_match_score = 0.0
         for token in tokens:
             token_score = 0
             if token in title:
-                token_score += 8
+                token_score += 3
             if token in subjects:
-                token_score += 5
+                token_score += 12
+                content_match_score += 12
+                semantic_matches.append(token)
+                if token in basis_tokens:
+                    basis_metadata_matches.append(token)
             if token in description:
-                token_score += 2
+                token_score += 9
+                content_match_score += 9
+                if token not in semantic_matches:
+                    semantic_matches.append(token)
+                if token in basis_tokens and token not in basis_metadata_matches:
+                    basis_metadata_matches.append(token)
             if token_score:
                 matches.append(token)
                 score += token_score * (2 if token in basis_tokens else 1)
@@ -1132,9 +1843,7 @@ def _rank_personalized_books(books, *, keyword, basis_values, theme_id):
         issued_year = book.get("issued_year")
         if isinstance(issued_year, int):
             age = max(0, current_year - issued_year)
-            score += max(0, 8 - min(age, 40) / 5)
-            if age > 15:
-                score -= min(12, (age - 15) * 0.7)
+            score += max(0, 8 - age / 5)
         if book.get("description"):
             score += 1
         if len(book.get("isbn") or "") == 13:
@@ -1144,10 +1853,10 @@ def _rank_personalized_books(books, *, keyword, basis_values, theme_id):
             marker in f"{title} {subjects}"
             for marker in (
                 "방법", "기술", "가이드", "레시피", "배우", "연습", "활용",
-                "촬영", "스타일링", "사진책", "입문", "기초",
+                "촬영", "스타일링", "사진책", "입문", "기초", "교본", "안내서", "렌즈",
             )
         ):
-            score += 4
+            score += 8
         if theme_id == "hobbies" and any(
             marker in f"{title} {subjects}"
             for marker in ("측량", "탐측", "창립", "기념", "교육과정", "교재")
@@ -1160,15 +1869,48 @@ def _rank_personalized_books(books, *, keyword, basis_values, theme_id):
             score += 2
 
         book["personalization_score"] = round(score, 2)
+        book["content_match_score"] = round(content_match_score, 2)
         book["match_terms"] = matches
+        book["semantic_match_terms"] = semantic_matches
+        book["basis_match_terms"] = sorted(basis_tokens.intersection(matches))
+        book["basis_metadata_match_terms"] = sorted(set(basis_metadata_matches))
+        book["primary_basis_match_terms"] = sorted(
+            primary_basis_tokens.intersection(matches)
+        )
+        book["primary_basis_metadata_match_terms"] = sorted(
+            primary_basis_tokens.intersection(basis_metadata_matches)
+        )
+        book["content_intent_match_terms"] = sorted(
+            content_intent_tokens.intersection(semantic_matches)
+        )
         ranked.append(book)
 
-    if basis_tokens:
-        ranked = [
-            book
-            for book in ranked
-            if basis_tokens.intersection(book.get("match_terms") or [])
-        ]
+    if tokens:
+        if theme_id in {"interests", "hobbies"} and basis_tokens:
+            required_match_field = (
+                "primary_basis_match_terms"
+                if primary_basis_tokens
+                else "basis_match_terms"
+            )
+            metadata_match_field = (
+                "primary_basis_metadata_match_terms"
+                if primary_basis_tokens
+                else "basis_metadata_match_terms"
+            )
+            # Prefer candidates whose standardized subject/abstract metadata
+            # confirms the topic. Fall back to a title match only when the API
+            # returned no metadata-confirmed candidate at all.
+            if any(book.get(metadata_match_field) for book in ranked):
+                ranked = [book for book in ranked if book.get(metadata_match_field)]
+            else:
+                ranked = [book for book in ranked if book.get(required_match_field)]
+        else:
+            ranked = [
+                book
+                for book in ranked
+                if book.get("basis_match_terms")
+                or book.get("content_intent_match_terms")
+            ]
 
     return sorted(
         ranked,
@@ -1194,6 +1936,28 @@ def _clean_keyword(value):
     if not keyword:
         return ""
     return " ".join(keyword.split()[:5])
+
+
+def _clean_content_terms(values, fallback_keyword=""):
+    if isinstance(values, str):
+        values = re.split(r"[,/|\n]", values)
+    if not isinstance(values, (list, tuple)):
+        values = []
+
+    terms = []
+    for value in values:
+        cleaned = _clean_keyword(value)
+        cleaned = " ".join(cleaned.split()[:3])
+        if cleaned and cleaned not in terms:
+            terms.append(cleaned)
+
+    if len(terms) < 2:
+        for term in _nlk_search_terms(fallback_keyword):
+            if term not in terms:
+                terms.append(term)
+            if len(terms) >= 2:
+                break
+    return terms[:4]
 
 
 def _find_candidate(candidates, candidate_id):

@@ -2,8 +2,8 @@
   <section class="memory-panel">
     <header class="memory-toolbar">
       <div class="memory-summary">
-        <strong>{{ filteredMemories.length }}개의 기억</strong>
-        <span>대화에서 보관된 내용을 확인하고 관리합니다.</span>
+        <strong>{{ filteredMemories.length }}개의 {{ isPreview ? "예시 기억" : "기억" }}</strong>
+        <span>{{ isPreview ? "검색·상세 보기·숨기기 흐름을 미리 체험할 수 있습니다." : "대화에서 저장된 내용을 확인하고 직접 관리할 수 있습니다." }}</span>
       </div>
       <div class="memory-actions">
         <label class="memory-search">
@@ -15,12 +15,22 @@
       </div>
     </header>
 
+    <div v-if="isPreview" class="memory-preview-banner" role="status">
+      <span aria-hidden="true">i</span>
+      <div>
+        <strong>기능 미리보기</strong>
+        <p>아래 내용은 실제 계정의 대화 기록이 아닌 예시입니다. 기능이 정식 연결되기 전까지 어떤 방식으로 관리할 수 있는지 보여드려요.</p>
+      </div>
+    </div>
+    <div v-else class="memory-privacy-note" role="note">
+      저장된 기억은 대화를 개인화하는 데 사용됩니다. 상세 화면에서 내용을 확인한 뒤 언제든 삭제할 수 있어요.
+    </div>
     <div v-if="notice" class="memory-notice" role="status">{{ notice }}</div>
     <div v-if="error" class="memory-error" role="alert">{{ error }}</div>
 
     <div class="memory-list-container">
       <div v-if="loading" class="memory-empty">기억을 불러오는 중입니다...</div>
-      <div v-else-if="!filteredMemories.length" class="memory-empty">아직 보관된 기억이 없습니다.</div>
+      <div v-else-if="!filteredMemories.length" class="memory-empty">{{ isPreview ? "검색 조건에 맞는 예시 기억이 없습니다." : "아직 저장된 기억이 없습니다." }}</div>
       
       <table v-else class="memory-table">
         <thead>
@@ -35,15 +45,19 @@
             v-for="item in filteredMemories" 
             :key="item.id" 
             @click="selectNode(item)" 
+            @keydown.enter="selectNode(item)"
+            @keydown.space.prevent="selectNode(item)"
+            tabindex="0"
+            :aria-label="`${item.title} 상세 보기${item.isPreview ? ', 예시 기억' : ''}`"
             :class="{ 'active-row': selectedNode?.id === item.id }"
           >
             <td class="col-memory">
-              <strong>{{ item.title }}</strong>
+              <strong>{{ item.title }} <small v-if="item.isPreview" class="memory-preview-tag">예시</small></strong>
               <p class="truncate">{{ item.content }}</p>
             </td>
             <td class="col-date"><small>{{ item.savedAt }}</small></td>
             <td class="col-action">
-              <button class="action-btn delete-btn" @click.stop="deleteMemory(item.id)">삭제</button>
+              <button class="action-btn" type="button" @click.stop="selectNode(item)">상세 보기</button>
             </td>
           </tr>
         </tbody>
@@ -51,9 +65,10 @@
       
       <!-- 상세정보 팝업 패널 -->
       <transition name="slide-fade">
-        <aside v-if="selectedNode" class="memory-detail-panel">
-          <button class="close-btn" @click="selectedNode = null">✕</button>
+        <aside v-if="selectedNode" class="memory-detail-panel" :aria-label="`${selectedNode.title} 기억 상세`">
+          <button class="close-btn" type="button" aria-label="기억 상세 닫기" @click="selectedNode = null">✕</button>
           <div class="detail-header">
+            <span v-if="selectedNode.isPreview" class="memory-detail-preview">예시 기억</span>
             <h4>{{ selectedNode.title }}</h4>
             <small>{{ selectedNode.savedAt }}</small>
           </div>
@@ -61,13 +76,35 @@
             <p>{{ selectedNode.content }}</p>
           </div>
           <div class="detail-footer">
-            <button class="memory-danger-button" @click="deleteMemory(selectedNode.id)">
+            <button class="memory-danger-button" @click="requestDelete(selectedNode)">
               기억 지우기
             </button>
           </div>
         </aside>
       </transition>
     </div>
+
+    <section
+      v-if="pendingDelete"
+      class="memory-confirm-backdrop"
+      role="presentation"
+      @click.self="cancelDelete"
+    >
+      <article class="memory-confirm-dialog" role="dialog" aria-modal="true" aria-label="기억 삭제 확인">
+        <span class="memory-confirm-kicker">{{ isPreview ? "예시 항목" : "삭제 확인" }}</span>
+        <h4>{{ isPreview ? "이 예시 기억을 숨길까요?" : "이 기억을 삭제할까요?" }}</h4>
+        <p>
+          <strong>{{ pendingDelete.title }}</strong>
+          {{ isPreview ? "예시 화면에서만 사라지며 새로고침하면 다시 표시됩니다." : "삭제한 기억은 복구할 수 없습니다." }}
+        </p>
+        <div>
+          <button class="memory-ghost-button" type="button" @click="cancelDelete">취소</button>
+          <button class="memory-danger-button" type="button" @click="confirmDelete">
+            {{ isPreview ? "예시 숨기기" : "삭제하기" }}
+          </button>
+        </div>
+      </article>
+    </section>
   </section>
 </template>
 
@@ -92,36 +129,23 @@ export default {
       default: ""
     }
   },
-  emits: ["refresh", "delete-memory", "delete-selected"],
+  emits: ["refresh", "delete-memory"],
   data() {
     return {
       keyword: "",
-      selectedNode: null
+      selectedNode: null,
+      pendingDelete: null
     };
   },
   computed: {
+    isPreview() {
+      return !Array.isArray(this.payload) && this.payload?.source === "preview";
+    },
     memories() {
       const source = Array.isArray(this.payload)
         ? this.payload
         : this.payload?.memories || this.payload?.items || [];
-      const parsed = source.map((item, index) => this.normalizeMemory(item, index));
-      
-      const demoData = [
-        { id: "node-2034", title: "첫 만남", content: "MindRoom에서 AI와 처음 대화를 나누었던 날. 어색했지만 따뜻한 환영이 기억에 남는다.", savedAt: "2026-07-01" },
-        { id: "node-2051", title: "비오는 오후", content: "우울한 기분이었지만 큰 위로를 받았다. 비 내리는 창밖 풍경을 상상하며 마음이 차분해졌다.", savedAt: "2026-07-05" },
-        { id: "node-2088", title: "밤하늘의 별", content: "오늘 하루 수고한 나에게 주는 작은 위로. 늦은 밤 별자리 이야기를 나누며 하루를 마무리했다.", savedAt: "2026-07-10" },
-        { id: "node-2102", title: "새로운 목표", content: "오랜만에 의욕이 생겨 새로운 계획을 세웠다. 매일 조금씩 실천해 나가기로 다짐했다.", savedAt: "2026-07-12" },
-        { id: "node-2115", title: "잊고 있던 꿈", content: "어릴 적 꾸었던 꿈에 대해 이야기하다 보니 잊고 있던 열정이 다시 피어나는 느낌이 들었다.", savedAt: "2026-07-13" },
-        { id: "node-2120", title: "기분 좋은 산책", content: "맑은 공기를 마시며 걷는 상상을 했다. 가상의 산책이었지만 머리가 맑아지는 기분이었다.", savedAt: "2026-07-14" },
-        { id: "node-2124", title: "깊은 고민", content: "쉽게 풀리지 않는 문제에 대해 밤새 이야기했다. 정답은 없지만 마음이 한결 가벼워졌다.", savedAt: "2026-07-14" }
-      ];
-
-      // API가 미리보기 데이터(3개)만 던져주는 경우에도 데모 데이터를 섞어 보여줍니다.
-      if (parsed.length < 5) {
-        return [...parsed, ...demoData].slice(0, 8);
-      }
-      
-      return parsed;
+      return source.map((item, index) => this.normalizeMemory(item, index));
     },
     filteredMemories() {
       const needle = this.keyword.trim().toLowerCase();
@@ -145,17 +169,32 @@ export default {
         id,
         title: item.title || item.topic || item.label || `기억 노드 ${index + 1}`,
         content: item.content || item.summary || item.text || item.memory || "",
-        savedAt: this.formatDate(item.saved_at || item.created_at || item.updated_at)
+        savedAt: item.savedAt || this.formatDate(item.saved_at || item.created_at || item.updated_at),
+        isPreview: Boolean(item.is_preview || this.isPreview)
       };
     },
     formatDate(value) {
       if (!value) return "";
       const date = new Date(value);
       if (Number.isNaN(date.getTime())) return String(value);
-      return date.toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit" });
+      return date.toLocaleString("ko-KR", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
     },
-    deleteMemory(id) {
-      this.$emit("delete-memory", id);
+    requestDelete(item) {
+      this.pendingDelete = item;
+    },
+    cancelDelete() {
+      this.pendingDelete = null;
+    },
+    confirmDelete() {
+      if (!this.pendingDelete) return;
+      this.$emit("delete-memory", this.pendingDelete.id);
+      this.pendingDelete = null;
       this.selectedNode = null;
     },
     selectNode(item) {
@@ -167,6 +206,7 @@ export default {
 
 <style scoped>
 .memory-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -201,7 +241,8 @@ export default {
 .memory-summary span {
   margin-top: 2px;
   color: rgba(245, 234, 223, 0.58);
-  font-size: 11px;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .memory-actions {
@@ -267,6 +308,52 @@ export default {
   padding: 12px 14px;
 }
 
+.memory-preview-banner {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid rgba(159, 192, 255, 0.28);
+  border-radius: 10px;
+  background: rgba(63, 91, 154, 0.16);
+  color: rgba(238, 244, 255, 0.88);
+}
+
+.memory-preview-banner > span {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(159, 192, 255, 0.18);
+  color: #c8daff;
+  font-weight: 900;
+}
+
+.memory-preview-banner strong {
+  display: block;
+  margin-bottom: 2px;
+  color: #e7efff;
+  font-size: 13px;
+}
+
+.memory-preview-banner p {
+  margin: 0;
+  color: rgba(231, 239, 255, 0.7);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.memory-privacy-note {
+  padding: 10px 12px;
+  border: 1px solid rgba(159, 192, 255, 0.2);
+  border-radius: 10px;
+  background: rgba(63, 91, 154, 0.1);
+  color: rgba(231, 239, 255, 0.78);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .memory-notice {
   background: rgba(246, 200, 121, 0.15);
   color: #ffe0a0;
@@ -321,7 +408,7 @@ export default {
 
 .memory-table th {
   padding: 10px 12px;
-  font-size: 11px;
+  font-size: 12px;
   color: rgba(255, 255, 255, 0.4);
   font-weight: 700;
   letter-spacing: 0.05em;
@@ -338,6 +425,11 @@ export default {
 
 .memory-table tbody tr:hover {
   background: rgba(255, 255, 255, 0.03);
+}
+
+.memory-table tbody tr:focus-visible {
+  outline: 2px solid #c8daff;
+  outline-offset: -2px;
 }
 
 .memory-table tbody tr.active-row {
@@ -363,6 +455,19 @@ export default {
   font-weight: 600;
 }
 
+.memory-preview-tag {
+  display: inline-flex;
+  margin-left: 5px;
+  padding: 2px 5px;
+  border: 1px solid rgba(159, 192, 255, 0.25);
+  border-radius: 999px;
+  background: rgba(63, 91, 154, 0.18);
+  color: #c8daff;
+  font-size: 10px;
+  font-weight: 800;
+  vertical-align: 1px;
+}
+
 .truncate {
   display: -webkit-box;
   -webkit-line-clamp: 1;
@@ -371,7 +476,7 @@ export default {
   text-overflow: ellipsis;
   margin: 0;
   color: rgba(255, 255, 255, 0.65);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.4;
 }
 
@@ -431,6 +536,18 @@ export default {
   padding-bottom: 12px;
 }
 
+.memory-detail-preview {
+  display: inline-flex;
+  margin-bottom: 8px;
+  padding: 4px 7px;
+  border: 1px solid rgba(159, 192, 255, 0.3);
+  border-radius: 999px;
+  background: rgba(63, 91, 154, 0.2);
+  color: #d8e5ff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .detail-header h4 {
   margin: 0 0 8px;
   font-size: 17px;
@@ -447,7 +564,7 @@ export default {
   overflow-y: auto;
   line-height: 1.7;
   color: rgba(255, 255, 255, 0.8);
-  font-size: 13px;
+  font-size: 14px;
   padding-right: 6px;
 }
 
@@ -495,6 +612,59 @@ export default {
 
 .detail-footer .memory-danger-button {
   width: 100%;
+}
+
+.memory-confirm-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  border-radius: 12px;
+  background: rgba(9, 6, 24, 0.72);
+  backdrop-filter: blur(5px);
+}
+
+.memory-confirm-dialog {
+  width: min(390px, 100%);
+  padding: 20px;
+  border: 1px solid rgba(255, 122, 138, 0.28);
+  border-radius: 14px;
+  background: linear-gradient(160deg, rgba(45, 27, 64, 0.98), rgba(24, 16, 48, 0.98));
+  box-shadow: 0 24px 54px rgba(0, 0, 0, 0.48);
+}
+
+.memory-confirm-kicker {
+  color: #ffb5c0;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.memory-confirm-dialog h4 {
+  margin: 5px 0 8px;
+  color: #fff;
+  font-size: 19px;
+}
+
+.memory-confirm-dialog p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.memory-confirm-dialog p strong {
+  display: block;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.memory-confirm-dialog > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
 }
 
 /* Transitions */

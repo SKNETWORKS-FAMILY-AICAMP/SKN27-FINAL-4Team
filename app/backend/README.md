@@ -49,8 +49,7 @@ docker compose down -v && docker compose up -d --build
 | `LLM_PROVIDER` | N | `openai`(기본) / `groq` — groq 쓸 땐 `GROQ_API_KEY` 필요 |
 | `PG_*` | Y | PostgreSQL 접속 (docker면 자동) |
 | `ELEVENLABS_API_KEY` + `VOICE_ID_{PORI,KKAMI,TOTO,YEOUL}` | N | 없으면 TTS만 failed, 대화는 정상 |
-| `NLK_BIBLIO_SERVICE_KEY` | 마이페이지 도서 | 공공데이터포털의 `국립중앙도서관_서지 정보 제공 서비스` 활용신청 후 받은 일반 인증키(Decoding). 공통 키 `DATA_GO_KR_SERVICE_KEY`도 지원 |
-| `NLK_ISBN_SERVICE_KEY` | N(표지 권장) | 국립중앙도서관 Open API의 `ISBN 서지정보` 승인 인증키. 없으면 서지 추천은 정상 동작하고 표지만 대체 이미지로 표시 |
+| `KAKAO_REST_API_KEY` | 마이페이지 도서 | Kakao Daum 책 검색의 후보·책 소개·서지정보·상세 링크·표지 조회. 미설정 시 소셜 로그인용 `KAKAO_CLIENT_ID`를 재사용 |
 | `TAVILY_API_KEY` | 마이페이지 날씨 | 공개 웹 날씨 맥락 검색. 사용자 프로필·정밀 좌표는 전송하지 않음 |
 | `TAVILY_PLAN_NAME` | 운영 권장 | 확인한 Tavily 구독/계약 플랜명 |
 | `TAVILY_COMMERCIAL_USE_CONFIRMED` | 운영 권장 | 고객용 서비스 통합 권한을 계약에서 확인한 후 `true`; 미설정 시 `manage.py check` 경고 |
@@ -86,14 +85,13 @@ API허브 배포 순서:
 4. `KMA_API_HUB_AUTH_KEY`를 설정하고 실황·초단기·7일 주간예보·특보 스모크 테스트를 실행합니다.
 5. 성공한 뒤에만 `KMA_API_HUB_SERVICES_CONFIRMED=true`로 설정합니다.
 
-### 국립중앙도서관 국가서지 LOD 도서 검색
+### Kakao Daum 책 검색 기반 추천
 
-1. 공공데이터포털에서 **문화체육관광부 국립중앙도서관_서지 정보 제공 서비스**를 활용 신청합니다.
-2. 개발계정은 자동승인 후 일반 인증키(Decoding)를 확인합니다.
-3. 루트 `.env`에 `NLK_BIBLIO_SERVICE_KEY`를 설정합니다.
-4. 운영 전 `python manage.py check`에서 `mybook.W001`이 사라졌는지 확인합니다.
+1. Kakao Developers 앱의 REST API 키를 확인합니다.
+2. 루트 `.env`에 `KAKAO_REST_API_KEY`를 설정합니다. 소셜 로그인과 같은 앱이면 `KAKAO_CLIENT_ID`도 재사용할 수 있습니다.
+3. 운영 전 `python manage.py check`에서 `mybook.W001`이 사라졌는지 확인합니다.
 
-도서 후보는 국가서지 LOD 기반 REST API의 `/getbookList_v2`만 사용합니다. 개인 프로필은 보내지 않고 AI가 만든 일반 표제명 검색어만 전달합니다. 복합 검색어와 개인화 핵심어 결과를 함께 비교하고, ISBN이 유효하며 RDF 자료유형이 `Book`인 비학위 일반 단행본만 허용합니다. 제목·주제의 개인화 일치도와 발행연도를 함께 평가한 뒤 중복 ISBN·동일 제목 판본을 제거합니다. 최종 선정된 3권의 표지는 ISBN 서지정보 API의 공식 `TITLE_URL`로만 보강하며, 표지 조회는 3초 제한·병렬 처리·성공 7일/미존재 6시간 공동 캐시를 적용합니다. 표지 API 장애는 추천을 실패시키지 않고 UI 대체 표지로 전환합니다. 429/5xx 응답은 짧은 지수 백오프로 제한 재시도하며, 장애 응답은 빈 추천으로 캐시하지 않습니다. 강제 새로고침 실패 시 검증된 이전 캐시가 있으면 이를 명시적으로 표시하고, 캐시가 없으면 재시도 가능한 503을 반환합니다. 기존 NAVER 도서 API 환경변수와 호출 경로는 사용하지 않습니다.
+도서 후보·책 소개·서지정보·상세 링크·표지는 Kakao Daum 책 검색 API로 단일화합니다. AI가 오늘의 감정, 관심사, 취미별로 대표 검색 의도와 2~4개의 서점 검색어를 만들고, 각 검색어의 Kakao 후보를 합쳐 ISBN과 동일 제목을 중복 제거합니다. 전날 또는 같은 날 직전 추천 ISBN은 테마별로 제외합니다. AI는 후보의 제목과 책 소개뿐 아니라 저자, 번역자, 출판사, 출간일, ISBN, 가격, 판매상태, 검색어 일치 맥락을 함께 비교해 최종 한 권과 장르, 추천사를 작성합니다. 사용자 프로필 원문은 Kakao에 보내지 않고 AI가 만든 검색어만 전달합니다. 429/5xx 응답은 짧은 지수 백오프로 제한 재시도하며, 강제 새로고침 실패 시 검증된 이전 캐시가 있으면 이를 명시적으로 표시하고 캐시가 없으면 재시도 가능한 503을 반환합니다.
 
 ## 검증 상태 (2026-07-02)
 

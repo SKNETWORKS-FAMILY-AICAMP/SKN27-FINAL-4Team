@@ -2,8 +2,8 @@
   <div class="panel-body book-panel-body">
     <section v-if="loading" class="book-state" aria-live="polite">
       <div class="book-spinner" aria-hidden="true"></div>
-      <strong>오늘의 책을 고르고 있어요</strong>
-      <p>오늘의 감정, 관심사, 취미를 각각 나누어 추천을 만들고 있습니다.</p>
+      <strong>{{ slowLoading ? "도서 내용을 한 번 더 확인하고 있어요" : "오늘의 책을 고르고 있어요" }}</strong>
+      <p>{{ slowLoading ? "Kakao 도서 후보의 소개와 출판 정보를 비교하고 있어요. 조금만 더 기다려 주세요." : "오늘의 감정, 관심사, 취미에 맞는 책을 찾고 있어요. 보통 10~30초 정도 걸립니다." }}</p>
     </section>
 
     <section v-else-if="error" class="book-state error" role="alert">
@@ -44,16 +44,12 @@
         <button class="nav-button prev" type="button" :disabled="currentIndex === 0" aria-label="이전 책" @click="prevSlide">‹</button>
 
         <div class="cover-column">
-          <a v-if="currentSource.link" :href="currentSource.link" target="_blank" rel="noopener noreferrer" aria-label="국립중앙도서관 국가서지에서 보기">
-            <img v-if="hasCover" :src="currentSource.image" :alt="`${currentSource.title} 표지`" class="book-cover" @error="markCoverFailed" />
-            <div v-else class="cover-placeholder" aria-hidden="true">{{ coverInitial }}</div>
-          </a>
-          <img v-else-if="hasCover" :src="currentSource.image" :alt="`${currentSource.title} 표지`" class="book-cover" @error="markCoverFailed" />
+          <img v-if="hasCover" :src="currentSource.image" :alt="`${currentSource.title} 표지`" class="book-cover" @error="markCoverFailed" />
           <div v-else class="cover-placeholder" aria-hidden="true">{{ coverInitial }}</div>
         </div>
 
         <div class="book-copy">
-          <section class="source-result-block" aria-label="국립중앙도서관 국가서지 LOD 검색 결과">
+          <section class="source-result-block" aria-label="Kakao Daum 책 검색 결과">
             <div class="source-result-label">
               <span>{{ sourceProvider.short_label || sourceProvider.label }}</span>
             </div>
@@ -101,31 +97,33 @@
 
       <footer class="book-actions">
         <details class="book-source-disclosure">
-          <summary>국가서지 LOD · AI 추천 <span>상세</span></summary>
+          <summary>Kakao 도서 검색 · AI 추천 <span>상세</span></summary>
           <div>
-            <p><strong>도서 정보</strong> {{ sourceProvider.attribution || "출처: 문화체육관광부 국립중앙도서관 국가서지 LOD" }}</p>
-            <p><strong>이용조건</strong> {{ sourceProvider.license || "공공누리 제1유형 · CC0 1.0" }}</p>
-            <p><strong>AI 콘텐츠</strong> 추천사는 국가서지의 서지정보와 사용자의 추천 기준을 바탕으로 생성했습니다.</p>
-            <p v-if="currentSource.description"><strong>서지 초록</strong> {{ currentSource.description }}</p>
+            <p><strong>도서 정보</strong> {{ sourceProvider.attribution || "책 정보·표지: Kakao Daum 책 검색" }}</p>
+            <p><strong>AI 콘텐츠</strong> 추천사는 Kakao 도서 정보와 사용자의 추천 기준을 함께 비교해 생성했습니다.</p>
+            <p v-if="currentSource.description"><strong>책 소개</strong> {{ currentSource.description }}</p>
+            <p v-if="currentSource.translators?.length"><strong>번역자</strong> {{ currentSource.translators.join(", ") }}</p>
             <p v-if="currentSource.isbn"><strong>ISBN</strong> {{ currentSource.isbn }}</p>
+            <p v-if="currentSource.published_at"><strong>출간일</strong> {{ currentSource.published_at.slice(0, 10) }}</p>
+            <p v-else-if="currentSource.issued_year"><strong>발행연도</strong> {{ currentSource.issued_year }}년</p>
+            <p v-if="currentSource.status"><strong>판매상태</strong> {{ currentSource.status }}</p>
+            <p v-if="currentSource.link_provider"><strong>책 정보 링크</strong> {{ currentSource.link_provider.attribution }}</p>
             <p v-if="currentSource.cover_provider"><strong>표지</strong> {{ currentSource.cover_provider.attribution }}</p>
-            <p v-if="currentSource.general_book_verified"><strong>자료 확인</strong> ISBN이 있는 일반 단행본</p>
             <nav aria-label="도서 출처 상세 링크">
-              <a v-if="sourceProvider.portal_url" :href="sourceProvider.portal_url" target="_blank" rel="noopener noreferrer">공공데이터포털</a>
-              <a v-if="sourceProvider.detail_url" :href="sourceProvider.detail_url" target="_blank" rel="noopener noreferrer">국가서지 LOD 안내</a>
+              <a v-if="sourceProvider.detail_url" :href="sourceProvider.detail_url" target="_blank" rel="noopener noreferrer">Kakao 책 검색 안내</a>
             </nav>
           </div>
         </details>
         <div>
-          <button class="secondary" type="button" @click="$emit('refresh', true)">새로 추천받기</button>
-          <a v-if="hasCurrentBook && currentSource.link" class="primary" :href="currentSource.link" target="_blank" rel="noopener noreferrer">국가서지에서 보기</a>
+          <button class="secondary" type="button" @click="requestFullRefresh">현재 정보로 추천 새로고침</button>
+          <a v-if="hasCurrentBook && currentSource.link" class="primary" :href="currentSource.link" target="_blank" rel="noopener noreferrer">책 정보 확인하기</a>
         </div>
       </footer>
     </section>
 
     <section v-else class="book-state">
       <strong>추천할 책을 찾지 못했어요</strong>
-      <p>국가서지 LOD API 키 또는 검색 결과를 확인해 주세요.</p>
+      <p>Kakao 책 검색 API 설정 또는 검색 결과를 확인해 주세요.</p>
       <button class="primary" type="button" @click="$emit('refresh', true)">다시 시도</button>
     </section>
   </div>
@@ -140,7 +138,7 @@ export default {
     error: { type: String, default: "" }
   },
   emits: ["refresh", "close"],
-  data: () => ({ currentIndex: 0, failedCoverUrl: "" }),
+  data: () => ({ currentIndex: 0, failedCoverUrl: "", slowLoading: false, loadingTimer: null }),
   computed: {
     bookList() {
       return Array.isArray(this.payload?.books) ? this.payload.books : [];
@@ -177,12 +175,10 @@ export default {
     },
     sourceProvider() {
       return this.currentSource.provider || this.currentBook.source_provider || {
-        label: "국립중앙도서관 국가서지 LOD",
-        short_label: "국가서지 LOD",
-        portal_url: "https://www.data.go.kr/data/15154402/openapi.do",
-        detail_url: "https://www.nl.go.kr/NL/contents/N11000000000.do",
-        license: "공공누리 제1유형 · CC0 1.0",
-        attribution: "출처: 문화체육관광부 국립중앙도서관 국가서지 LOD"
+        label: "Kakao Daum 책 검색",
+        short_label: "Kakao 도서정보",
+        detail_url: "https://developers.kakao.com/docs/latest/ko/daum-search/dev-guide#search-book",
+        attribution: "책 정보·표지: Kakao Daum 책 검색"
       };
     },
     hasCurrentBook() {
@@ -200,7 +196,9 @@ export default {
     curationDetails() {
       return [
         { label: "검색 키워드", value: this.currentBook.keyword },
-        { label: "추천 기준", value: this.currentBook.keyword_basis }
+        { label: "추천 기준", value: this.currentBook.keyword_basis },
+        { label: "출간일", value: this.currentSource.published_at?.slice(0, 10) },
+        { label: "판매상태", value: this.currentSource.status }
       ].filter(detail => detail.value);
     },
     currentThemeReason() {
@@ -216,8 +214,19 @@ export default {
   },
   watch: {
     payload() {
-      this.currentIndex = 0;
       this.failedCoverUrl = "";
+    },
+    loading: {
+      immediate: true,
+      handler(isLoading) {
+        window.clearTimeout(this.loadingTimer);
+        this.slowLoading = false;
+        if (isLoading) {
+          this.loadingTimer = window.setTimeout(() => {
+            this.slowLoading = true;
+          }, 7000);
+        }
+      }
     },
     "currentSource.image"() {
       this.failedCoverUrl = "";
@@ -225,6 +234,9 @@ export default {
     tabItems(nextList) {
       if (this.currentIndex >= nextList.length) this.currentIndex = 0;
     }
+  },
+  beforeUnmount() {
+    window.clearTimeout(this.loadingTimer);
   },
   methods: {
     markCoverFailed() {
@@ -235,6 +247,10 @@ export default {
     },
     nextSlide() {
       if (this.currentIndex < this.tabItems.length - 1) this.currentIndex += 1;
+    },
+    requestFullRefresh() {
+      if (!window.confirm("현재 저장된 주된 감정·관심사·취미를 다시 읽어 오늘의 추천 3권을 바꿀까요? 완료까지 10~30초 정도 걸릴 수 있어요.")) return;
+      this.$emit("refresh", true);
     },
     tabLabel(book, index) {
       const labels = {
@@ -266,8 +282,9 @@ export default {
 
 <style scoped>
 .book-panel-body {
-  max-height: calc(100vh - 132px);
-  overflow: auto;
+  height: auto;
+  max-height: none;
+  overflow: visible;
   padding: 12px 14px 14px;
 }
 .book-layout { display: grid; gap: 8px; }
@@ -275,18 +292,18 @@ export default {
 .book-overview { display: grid; grid-template-columns: minmax(0,1fr) minmax(390px,.95fr); align-items: center; gap: 14px; padding: 8px 10px; border: 1px solid rgba(215,183,255,.12); border-radius: 8px; background: rgba(15,10,49,.18); }
 .book-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
 .book-heading > div { min-width: 0; }
-.kicker, .book-count { color: #d7b7ff; font-size: 11px; font-weight: 900; }
+.kicker, .book-count { color: #d7b7ff; font-size: 12px; font-weight: 900; }
 .book-heading h3 { margin: 1px 0 2px; color: #fff7df; font-size: 18px; line-height: 1.2; }
-.book-heading p { margin: 0; color: rgba(255,245,230,.74); font-size: 12px; line-height: 1.35; word-break: keep-all; }
+.book-heading p { margin: 0; color: rgba(255,245,230,.8); font-size: 13px; line-height: 1.5; word-break: keep-all; }
 .cache-badge { flex: 0 0 auto; padding: 4px 8px; border-radius: 999px; background: rgba(156,91,255,.22); font-size: 11px; font-weight: 900; }
 .recommendation-tabs { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 4px; padding: 3px; border: 1px solid rgba(215,183,255,.14); border-radius: 8px; background: rgba(15,10,49,.28); }
 .recommendation-tabs button { display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; min-height: 36px; padding: 5px 7px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: rgba(255,245,230,.68); text-align: center; }
 .recommendation-tabs button.active { border-color: rgba(215,183,255,.5); background: rgba(156,91,255,.24); color: #fff7df; }
 .recommendation-tabs strong, .recommendation-tabs span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recommendation-tabs strong { font-size: 12px; }
-.recommendation-tabs span { margin-top: 0; color: rgba(255,245,230,.5); font-size: 10px; }
+.recommendation-tabs span { margin-top: 0; color: rgba(255,245,230,.7); font-size: 11px; }
 .basis-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 9px; }
-.basis-list span { padding: 5px 9px; border: 1px solid rgba(215,183,255,.22); border-radius: 999px; background: rgba(32,41,105,.36); color: rgba(255,245,230,.78); font-size: 11px; font-weight: 800; }
+.basis-list span { padding: 5px 9px; border: 1px solid rgba(215,183,255,.22); border-radius: 999px; background: rgba(32,41,105,.36); color: rgba(255,245,230,.84); font-size: 12px; font-weight: 800; }
 .recommendation-card { position: relative; display: grid; grid-template-columns: minmax(126px,162px) minmax(0,1fr); gap: 20px; align-items: center; min-height: 326px; padding: 20px 48px; border: 1px solid rgba(255,116,180,.18); border-radius: 8px; background: rgba(73,27,88,.22); }
 .recommendation-card.empty { grid-template-columns: 1fr; place-items: center; text-align: center; }
 .empty-book-state { max-width: 420px; color: rgba(255,245,230,.72); }
@@ -299,10 +316,10 @@ export default {
 .book-copy { min-width: 0; }
 .source-result-block, .ai-curation-block { min-width: 0; }
 .source-result-block { margin-bottom: 9px; padding: 0 2px 9px; border-bottom: 1px solid rgba(255,255,255,.1); }
-.source-result-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 3px; color: #9fc0ff; font-size: 10px; font-weight: 800; }
+.source-result-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 3px; color: #b6ceff; font-size: 12px; font-weight: 800; }
 .ai-curation-block { padding-top: 1px; }
 .book-context { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 4px; }
-.book-context span { display: inline-flex; align-items: center; min-height: 24px; padding: 0 8px; border-radius: 999px; background: rgba(15,10,49,.34); color: rgba(215,183,255,.86); font-size: 11px; font-weight: 900; }
+.book-context span { display: inline-flex; align-items: center; min-height: 26px; padding: 0 8px; border-radius: 999px; background: rgba(15,10,49,.34); color: rgba(226,210,255,.92); font-size: 12px; font-weight: 900; }
 .book-copy h4 { margin: 5px 0; color: #fff7df; font-size: 19px; line-height: 1.25; word-break: keep-all; }
 .book-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 0 0 9px; color: rgba(255,245,230,.68); font-size: 13px; line-height: 1.35; }
 .book-genre { flex: 0 0 auto; padding: 3px 7px; border: 1px solid rgba(255,211,122,.24); border-radius: 999px; background: rgba(255,211,122,.1); color: #ffd37a; font-size: 11px; font-weight: 900; }
@@ -312,15 +329,15 @@ export default {
 .curation-details { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 10px 0 0; padding: 9px 2px 0; border-top: 1px solid rgba(215,183,255,.14); }
 .curation-details div { position: relative; display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; }
 .curation-details div + div::before { content: ""; width: 3px; height: 3px; margin-right: 10px; border-radius: 50%; background: rgba(229,155,95,.56); align-self: center; }
-.curation-details dt { flex: 0 0 auto; color: rgba(215,183,255,.68); font-size: 10px; font-weight: 700; }
-.curation-details dd { margin: 0; color: rgba(255,245,230,.84); font-size: 12px; line-height: 1.35; word-break: keep-all; }
+.curation-details dt { flex: 0 0 auto; color: rgba(226,210,255,.82); font-size: 12px; font-weight: 700; }
+.curation-details dd { margin: 0; color: rgba(255,245,230,.88); font-size: 13px; line-height: 1.45; word-break: keep-all; }
 .nav-button { position: absolute; top: 50%; transform: translateY(-50%); width: 30px; height: 48px; border: 1px solid rgba(215,183,255,.2); border-radius: 8px; background: rgba(15,10,49,.34); color: rgba(255,247,223,.86); font-size: 25px; }
 .nav-button.prev { left: 10px; }
 .nav-button.next { right: 10px; }
 .nav-button:disabled { opacity: .35; cursor: not-allowed; }
 .book-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .book-actions > div { display: flex; flex: 0 0 auto; gap: 8px; }
-.book-source-disclosure { min-width: 0; color: rgba(255,245,230,.62); font-size: 10px; line-height: 1.45; }
+.book-source-disclosure { min-width: 0; color: rgba(255,245,230,.76); font-size: 12px; line-height: 1.55; }
 .book-source-disclosure summary { width: fit-content; cursor: pointer; color: rgba(255,245,230,.68); font-weight: 700; }
 .book-source-disclosure summary span { margin-left: 3px; color: #d7b7ff; }
 .book-source-disclosure > div { margin-top: 7px; padding: 9px 11px; border: 1px solid rgba(215,183,255,.14); border-radius: 8px; background: rgba(15,10,49,.28); }
@@ -332,7 +349,7 @@ export default {
 .primary, .secondary { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; padding: 0 13px; border-radius: 8px; font-size: 14px; font-weight: 900; text-decoration: none; }
 .primary { border: 1px solid #6b7fd7; background: #6b7fd7; color: #fff; }
 .secondary { border: 1px solid rgba(215,183,255,.28); background: rgba(32,41,105,.48); color: #f4efff; }
-.book-state { min-height: 360px; display: grid; place-items: center; align-content: center; gap: 10px; text-align: center; color: rgba(255,245,230,.72); }
+.book-state { min-height: 100%; display: grid; place-items: center; align-content: center; gap: 10px; text-align: center; color: rgba(255,245,230,.72); }
 .book-state strong { color: #fff7df; font-size: 18px; }
 .book-state p { max-width: 420px; margin: 0; line-height: 1.55; }
 .book-state.error p { color: #ffb8c8; }

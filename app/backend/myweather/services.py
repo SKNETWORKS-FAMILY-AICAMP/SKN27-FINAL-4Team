@@ -106,6 +106,24 @@ KNOWN_LOCATIONS = {
     "제주특별자치도": {"name": "제주", "lat": 33.4996, "lon": 126.5312},
 }
 
+WEATHER_REPRESENTATIVE_NAMES = (
+    "서울", "부산", "대구", "인천", "전남광주", "대전", "울산", "세종",
+    "경기", "강원", "충북", "충남", "전북", "경북", "경남", "제주",
+)
+
+
+def _nearest_weather_region_name(latitude, longitude):
+    latitude = float(latitude)
+    longitude = float(longitude)
+
+    def distance_squared(candidate_name):
+        candidate = KNOWN_LOCATIONS[candidate_name]
+        latitude_delta = latitude - candidate["lat"]
+        longitude_delta = (longitude - candidate["lon"]) * math.cos(math.radians(latitude))
+        return latitude_delta ** 2 + longitude_delta ** 2
+
+    return min(WEATHER_REPRESENTATIVE_NAMES, key=distance_squared)
+
 WARNING_REGION_ALIASES = {
     "서울": ("서울",),
     "부산": ("부산",),
@@ -125,6 +143,47 @@ WARNING_REGION_ALIASES = {
     "제주": ("제주",),
 }
 
+# 기상청 특보구역 코드표의 육상 광역 상위코드. 서비스의 지역 선택값을
+# 문자열 포함 여부가 아니라 공식 특보구역 코드로 판별한다.
+WARNING_REGION_CODE_PREFIXES = {
+    "서울": ("L110",),
+    "부산": ("L115",),
+    "대구": ("L114",),
+    "인천": ("L111",),
+    "대전": ("L112",),
+    "울산": ("L116",),
+    "세종": ("L117",),
+    "전남광주": ("L105", "L113"),
+    "경기": ("L101",),
+    "강원": ("L102",),
+    "충북": ("L104",),
+    "충남": ("L103",),
+    "전북": ("L106",),
+    # 울릉도·독도는 별도 상위구역 L160이지만 경북 선택에 포함한다.
+    "경북": ("L107", "L160"),
+    "경남": ("L108",),
+    "제주": ("L109",),
+}
+
+WARNING_REGION_DISPLAY_NAMES = {
+    "서울": "서울",
+    "부산": "부산",
+    "대구": "대구",
+    "인천": "인천",
+    "대전": "대전",
+    "울산": "울산",
+    "세종": "세종",
+    "전남광주": "전남광주",
+    "경기": "경기도",
+    "강원": "강원도",
+    "충북": "충청북도",
+    "충남": "충청남도",
+    "전북": "전북자치도",
+    "경북": "경상북도",
+    "경남": "경상남도",
+    "제주": "제주도",
+}
+
 WARNING_TYPE_LABELS = {
     "W": "강풍",
     "R": "호우",
@@ -140,8 +199,17 @@ WARNING_TYPE_LABELS = {
     "F": "안개",
     "K": "열대야",
 }
-WARNING_LEVEL_LABELS = {"1": "예비특보", "2": "주의보", "3": "경보"}
-WARNING_RELEASE_COMMANDS = {"3", "4", "7"}
+WARNING_LEVEL_LABELS = {
+    "1": "예비특보",
+    "2": "주의보",
+    "3": "경보",
+    "예비": "예비특보",
+    "예비특보": "예비특보",
+    "주의": "주의보",
+    "주의보": "주의보",
+    "경보": "경보",
+}
+WARNING_RELEASE_COMMANDS = {"3", "4", "7", "해제", "취소"}
 
 PTY_LABELS = {
     "0": "맑음",
@@ -252,7 +320,12 @@ def parse_kma_warning_rows(text):
         upper_tokens = [token.upper() for token in tokens]
         if "REG_UP" in upper_tokens and "WRN" in upper_tokens:
             start = upper_tokens.index("REG_UP")
-            header = upper_tokens[start:]
+            header = [
+                re.match(r"[A-Z][A-Z0-9_]*", token).group(0)
+                if re.match(r"[A-Z][A-Z0-9_]*", token)
+                else token
+                for token in upper_tokens[start:]
+            ]
             continue
         if not tokens or raw_line.lstrip().startswith("#"):
             continue
@@ -279,38 +352,131 @@ def _warning_region_aliases(location_name):
     return (name,)
 
 
+def _warning_region_name(location_name):
+    name = str(location_name or "").strip()
+    if name in WARNING_REGION_CODE_PREFIXES:
+        return name
+    resolved = KNOWN_LOCATIONS.get(name)
+    if resolved and resolved["name"] in WARNING_REGION_CODE_PREFIXES:
+        return resolved["name"]
+    return name
+
+
+def _warning_row_matches_region(row, region_name, aliases):
+    reg_id = str(row.get("REG_ID") or "").strip().upper()
+    reg_up = str(row.get("REG_UP") or "").strip().upper()
+    prefixes = WARNING_REGION_CODE_PREFIXES.get(region_name, ())
+    region_text = " ".join((row.get("REG_UP_KO") or "", row.get("REG_KO") or ""))
+
+    # REG_ID가 실제 특보 대상 세부 구역이다. REG_UP과 REG_ID가 서로 다른
+    # 광역단체 코드를 담은 비정상/경계 응답에서도 상위 코드만 보고 섞지 않는다.
+    if reg_id.startswith("L") and reg_id != "L1000000":
+        return any(reg_id.startswith(prefix) for prefix in prefixes)
+
+    # L1000000은 육상 최상위 코드이므로 한글 명칭도 전국으로 확인될 때만
+    # 모든 지역에 포함한다. 그렇지 않으면 구체적인 상위 코드를 보조로 쓴다.
+    if reg_id == "L1000000" and "전국" in region_text:
+        return True
+    if reg_up.startswith("L") and reg_up != "L1000000":
+        return any(reg_up.startswith(prefix) for prefix in prefixes)
+    if reg_up == "L1000000" and "전국" in region_text:
+        return True
+
+    # 구형/테스트 응답처럼 코드가 없는 경우에만 한글 지역명으로 보완한다.
+    return "전국" in region_text or any(alias in region_text for alias in aliases)
+
+
+def _warning_type_label(value):
+    text = str(value or "").strip()
+    return WARNING_TYPE_LABELS.get(text.upper(), text or "기상특보")
+
+
+def _warning_level_label(value):
+    text = str(value or "").strip()
+    return WARNING_LEVEL_LABELS.get(text, "특보")
+
+
+def _warning_area_display_name(value):
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    if not text:
+        return ""
+    metropolitan_names = {
+        "서울특별시": "서울",
+        "부산광역시": "부산",
+        "대구광역시": "대구",
+        "인천광역시": "인천",
+        "광주광역시": "광주",
+        "대전광역시": "대전",
+        "울산광역시": "울산",
+        "세종특별자치시": "세종",
+    }
+    if text in metropolitan_names:
+        return metropolitan_names[text]
+    if text.startswith(("제주시", "서귀포시")):
+        return text
+    return re.sub(
+        r"(?<=[가-힣])(시|군)(?=([가-힣]+|$|\())",
+        "",
+        text,
+    )
+
+
+def _format_warning_region(region_name, areas):
+    display_name = WARNING_REGION_DISPLAY_NAMES.get(region_name, region_name)
+    compact_areas = [area for area in areas if area and area != display_name]
+    if not compact_areas:
+        return display_name
+    return f"{display_name}({', '.join(compact_areas)})"
+
+
 def filter_kma_warnings(rows, location_name):
     aliases = _warning_region_aliases(location_name)
     if not aliases:
         return None
-    alerts = []
-    seen = set()
+    region_name = _warning_region_name(location_name)
+    grouped = {}
     for row in rows:
         if str(row.get("CMD") or "").strip() in WARNING_RELEASE_COMMANDS:
             continue
-        region_text = " ".join((row.get("REG_UP_KO") or "", row.get("REG_KO") or ""))
-        if "전국" not in region_text and not any(alias in region_text for alias in aliases):
+        if not _warning_row_matches_region(row, region_name, aliases):
             continue
         warning_code = str(row.get("WRN") or "").strip().upper()
         level_code = str(row.get("LVL") or "").strip()
-        item = {
-            "type": WARNING_TYPE_LABELS.get(warning_code, warning_code or "기상특보"),
-            "level": WARNING_LEVEL_LABELS.get(level_code, "특보"),
-            "region": row.get("REG_KO") or row.get("REG_UP_KO") or location_name,
-            "issued_at": row.get("TM_FC") or "",
-            "effective_at": row.get("TM_EF") or "",
+        warning_type = _warning_type_label(warning_code)
+        warning_level = _warning_level_label(level_code)
+        group_key = (warning_type, warning_level)
+        item = grouped.setdefault(group_key, {
+            "type": warning_type,
+            "level": warning_level,
+            "region_name": WARNING_REGION_DISPLAY_NAMES.get(region_name, region_name),
+            "areas": [],
+            "issued_times": set(),
+            "effective_times": set(),
             "warning_code": warning_code,
             "level_code": level_code,
-        }
-        identity = (item["type"], item["level"], item["region"], item["effective_at"])
-        if identity not in seen:
-            seen.add(identity)
-            alerts.append(item)
+        })
+        area = _warning_area_display_name(row.get("REG_KO") or row.get("REG_UP_KO"))
+        if area and area not in item["areas"]:
+            item["areas"].append(area)
+        if row.get("TM_FC"):
+            item["issued_times"].add(row["TM_FC"])
+        if row.get("TM_EF"):
+            item["effective_times"].add(row["TM_EF"])
+
+    alerts = []
+    for item in grouped.values():
+        issued_times = item.pop("issued_times")
+        effective_times = item.pop("effective_times")
+        item["issued_at"] = next(iter(issued_times)) if len(issued_times) == 1 else ""
+        item["effective_at"] = next(iter(effective_times)) if len(effective_times) == 1 else ""
+        item["region"] = _format_warning_region(region_name, item["areas"])
+        alerts.append(item)
+
     return sorted(
         alerts,
         key=lambda item: (
-            {"1": 1, "2": 2, "3": 3}.get(item["level_code"], 0),
-            item["effective_at"],
+            {"예비특보": 1, "주의보": 2, "경보": 3}.get(item["level"], 0),
+            item["type"],
         ),
         reverse=True,
     )
@@ -469,10 +635,20 @@ def resolve_location(lat=None, lon=None, region=None):
         raise WeatherInputError("lat/lon은 함께 전달해야 합니다.")
 
     if lat is not None and lon is not None:
+        latitude = float(lat)
+        longitude = float(lon)
+        requested_name = str(region or "").strip()
+        resolved_name = (
+            requested_name
+            if requested_name and requested_name != "현재 위치"
+            else _nearest_weather_region_name(latitude, longitude)
+        )
         return {
-            "name": region or "현재 위치",
-            "lat": float(lat),
-            "lon": float(lon),
+            "name": resolved_name,
+            "lat": latitude,
+            "lon": longitude,
+            "is_current_location": True,
+            "location_resolution": "nearest_supported_region",
         }
 
     if region:
@@ -492,18 +668,7 @@ def resolve_mid_forecast_codes(location):
 
     latitude = float(location.get("lat", DEFAULT_LOCATION["lat"]))
     longitude = float(location.get("lon", DEFAULT_LOCATION["lon"]))
-    representative_names = (
-        "서울", "부산", "대구", "인천", "전남광주", "대전", "울산", "세종",
-        "경기", "강원", "충북", "충남", "전북", "경북", "경남", "제주",
-    )
-
-    def distance_squared(candidate_name):
-        candidate = KNOWN_LOCATIONS[candidate_name]
-        latitude_delta = latitude - candidate["lat"]
-        longitude_delta = (longitude - candidate["lon"]) * math.cos(math.radians(latitude))
-        return latitude_delta ** 2 + longitude_delta ** 2
-
-    nearest_name = min(representative_names, key=distance_squared)
+    nearest_name = _nearest_weather_region_name(latitude, longitude)
     return MID_FORECAST_REGIONS[nearest_name]
 
 

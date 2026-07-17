@@ -16,6 +16,7 @@ from .services import (
     parse_mid_forecast_items,
     parse_short_forecast_items,
     parse_ultra_short_forecast_items,
+    resolve_location,
 )
 
 
@@ -40,6 +41,19 @@ class RainfallMergeTests(SimpleTestCase):
             "forecast_rainfall_1h": "강수없음",
         }
         self.assertEqual(merge_forecast_rainfall("0", forecast), "0")
+
+
+class WeatherLocationResolutionTests(SimpleTestCase):
+    def test_current_coordinates_are_labeled_with_nearest_supported_region(self):
+        location = resolve_location(
+            lat=37.5665,
+            lon=126.9780,
+            region="현재 위치",
+        )
+
+        self.assertEqual(location["name"], "서울")
+        self.assertTrue(location["is_current_location"])
+        self.assertEqual(location["location_resolution"], "nearest_supported_region")
 
 
 class WeatherExternalProcessingTests(SimpleTestCase):
@@ -149,12 +163,82 @@ class WeatherExternalProcessingTests(SimpleTestCase):
 
         self.assertEqual(list(indices), ['불쾌지수', '체감온도'])
         self.assertEqual(indices['불쾌지수']['value'], 81.4)
-        self.assertEqual(indices['불쾌지수']['gauge_percent'], 69.0)
+        self.assertEqual(indices['불쾌지수']['gauge_percent'], 71.3)
+        self.assertEqual(indices['불쾌지수']['level'], '매우 높음')
+        self.assertEqual(indices['불쾌지수']['severity'], 'danger')
+        self.assertEqual(
+            [band['level'] for band in indices['불쾌지수']['bands']],
+            ['낮음', '보통', '높음', '매우 높음'],
+        )
         self.assertTrue(indices['체감온도']['derived'])
+        self.assertEqual(indices['체감온도']['level'], '관심')
+        self.assertEqual(
+            [band['level'] for band in indices['체감온도']['bands']],
+            ['기준 미만', '관심', '주의', '경고', '위험'],
+        )
         self.assertNotIn('습도', indices)
         self.assertNotIn('풍속', indices)
         self.assertNotIn('식중독지수', indices)
         self.assertNotIn('감기가능지수', indices)
+
+    def test_winter_apparent_temperature_uses_official_calculation_boundary(self):
+        applicable = WeatherWebAgent._calculate_weather_indices({
+            'base_date': '20260115',
+            'temperature': 0,
+            'humidity': 50,
+            'wind_speed': 1.3,
+        })['체감온도']
+        outside = WeatherWebAgent._calculate_weather_indices({
+            'base_date': '20260115',
+            'temperature': 0,
+            'humidity': 50,
+            'wind_speed': 1.29,
+        })['체감온도']
+
+        self.assertTrue(applicable['available'])
+        self.assertEqual(applicable['level'], '관심')
+        self.assertIn('기온·풍속', applicable['method'])
+        self.assertFalse(outside['available'])
+        self.assertIn('산출 조건 밖', outside['status'])
+
+    def test_recommendations_are_normalized_to_summary_and_actions(self):
+        recommendations = WeatherWebAgent._normalize_recommendations([
+            {
+                'title': '우산 준비',
+                'reason': '오후에 비가 옵니다.',
+                'howTo': '접이식 우산을 가방에 넣으세요.',
+            }
+        ])
+
+        self.assertEqual(recommendations[0]['summary'], '오후에 비가 옵니다.')
+        self.assertEqual(recommendations[0]['actions'], ['접이식 우산을 가방에 넣으세요.'])
+        self.assertNotIn('reason', recommendations[0])
+        self.assertNotIn('howTo', recommendations[0])
+
+    def test_general_recommendations_precede_one_hobby_recommendation(self):
+        recommendations = WeatherWebAgent._normalize_recommendations(
+            [
+                {'kind': 'hobby', 'title': '사진 산책', 'summary': '사진을 찍어요.', 'actions': ['카메라 챙기기']},
+                {'kind': 'general', 'title': '우산 준비', 'summary': '비에 대비해요.', 'actions': ['우산 챙기기']},
+                {'kind': 'general', 'title': '겉옷 준비', 'summary': '기온에 대비해요.', 'actions': ['겉옷 챙기기']},
+            ],
+            {'condition': '흐림'},
+            {'hobbies': ['사진']},
+        )
+
+        self.assertEqual([item['kind'] for item in recommendations], ['general', 'general', 'hobby'])
+        self.assertEqual([item['title'] for item in recommendations], ['우산 준비', '겉옷 준비', '사진 산책'])
+
+    def test_fallback_keeps_hobby_recommendation_last(self):
+        result = WeatherWebAgent._fallback(
+            {'condition': '맑음', 'temperature': 24, 'humidity': 50},
+            WeatherWebAgent._empty_tavily_context(),
+            'generation_failed',
+            {'hobbies': ['사진']},
+        )
+
+        self.assertEqual([item['kind'] for item in result['recommendations']], ['general', 'general', 'hobby'])
+        self.assertIn('사진', result['recommendations'][2]['title'])
 
     def test_llm_cannot_replace_index_values(self):
         weather = {
@@ -350,20 +434,97 @@ class KmaApiHubUnificationTests(SimpleTestCase):
 
 class KmaWarningTests(SimpleTestCase):
     def test_parses_and_filters_current_warnings_by_region(self):
-        payload = """# REG_UP,REG_UP_KO,REG_ID,REG_KO,TM_FC,TM_EF,WRN,LVL,CMD
-L1000000,서울특별시,L1010000,서울 전역,202607151000,202607151100,H,2,1
-L1000000,서울특별시,L1020000,서울 동부,202607150900,202607151000,W,3,3
-L2000000,부산광역시,L2010000,부산 전역,202607151000,202607151100,R,3,1
+        payload = """# REG_UP,REG_UP_KO-------------------------------,REG_ID,REG_KO----------------------------------,TM_FC,TM_EF,WRN,LVL,CMD,ED_TM
+L1021900,동해시,L1021920,동해시산지,202607151000,202607151100,폭염,주의,발표,
+L1022000,삼척시,L1022020,삼척시산지,202607151000,202607151100,폭염,주의,변경,
+L1022500,강릉시,L1022520,강릉시산지,202607151000,202607151100,폭염,주의,발표,
+L1022700,양양군,L1022730,양양군북부산지,202607151000,202607151100,폭염,주의,발표,
+L1020000,강원도,L1022600,속초시평지,202607151000,202607151100,강풍,경보,해제,
+L1150000,부산광역시,L1150100,부산동부,202607151000,202607151100,호우,경보,발표,
 """
 
         rows = parse_kma_warning_rows(payload)
-        alerts = filter_kma_warnings(rows, '서울')
+        alerts = filter_kma_warnings(rows, '강원')
 
-        self.assertEqual(len(rows), 3)
+        self.assertEqual(len(rows), 6)
         self.assertEqual(len(alerts), 1)
         self.assertEqual(alerts[0]['type'], '폭염')
         self.assertEqual(alerts[0]['level'], '주의보')
-        self.assertEqual(alerts[0]['region'], '서울 전역')
+        self.assertEqual(alerts[0]['areas'], ['동해산지', '삼척산지', '강릉산지', '양양북부산지'])
+        self.assertEqual(alerts[0]['region'], '강원도(동해산지, 삼척산지, 강릉산지, 양양북부산지)')
+
+    def test_maps_every_supported_region_by_official_land_warning_code(self):
+        cases = {
+            '서울': 'L1100100', '부산': 'L1150100', '대구': 'L1140100',
+            '인천': 'L1110100', '대전': 'L1120100', '울산': 'L1160100',
+            '세종': 'L1170100', '전남광주': 'L1050100', '경기': 'L1010100',
+            '강원': 'L1020100', '충북': 'L1040100', '충남': 'L1030100',
+            '전북': 'L1060100', '경북': 'L1070100', '경남': 'L1080100',
+            '제주': 'L1090100',
+        }
+        for region, reg_id in cases.items():
+            with self.subTest(region=region):
+                alerts = filter_kma_warnings(
+                    [{
+                        'REG_UP': reg_id[:4] + '0000',
+                        'REG_ID': reg_id,
+                        'REG_KO': '세부지역',
+                        'WRN': 'H',
+                        'LVL': '2',
+                        'CMD': '1',
+                    }],
+                    region,
+                )
+                self.assertEqual(len(alerts), 1)
+
+    def test_includes_ulleungdo_dokdo_in_gyeongbuk(self):
+        alerts = filter_kma_warnings(
+            [{
+                'REG_UP': 'L1600000',
+                'REG_ID': 'L1072100',
+                'REG_KO': '울릉도.독도',
+                'WRN': '강풍',
+                'LVL': '주의',
+                'CMD': '발표',
+            }],
+            '경북',
+        )
+
+        self.assertEqual(alerts[0]['region'], '경상북도(울릉도.독도)')
+
+    def test_uses_detail_code_when_parent_and_detail_regions_conflict(self):
+        alerts = filter_kma_warnings(
+            [{
+                'REG_UP': 'L1010000',
+                'REG_UP_KO': '경기도',
+                'REG_ID': 'L1100100',
+                'REG_KO': '서울특별시',
+                'WRN': '폭염',
+                'LVL': '주의',
+                'CMD': '발표',
+            }],
+            '경기',
+        )
+
+        self.assertEqual(alerts, [])
+
+    def test_keeps_gwangju_and_jeonnam_in_integrated_region(self):
+        alerts = filter_kma_warnings(
+            [
+                {
+                    'REG_UP': 'L1050000', 'REG_ID': 'L1050100',
+                    'REG_KO': '목포시', 'WRN': '폭염', 'LVL': '주의', 'CMD': '발표',
+                },
+                {
+                    'REG_UP': 'L1130000', 'REG_ID': 'L1130100',
+                    'REG_KO': '광주광역시', 'WRN': '폭염', 'LVL': '주의', 'CMD': '발표',
+                },
+            ],
+            '전남광주',
+        )
+
+        self.assertEqual(alerts[0]['areas'], ['목포', '광주'])
+        self.assertEqual(alerts[0]['region'], '전남광주(목포, 광주)')
 
     def test_returns_none_when_coordinate_region_cannot_be_mapped(self):
         self.assertIsNone(filter_kma_warnings([], '현재 위치'))

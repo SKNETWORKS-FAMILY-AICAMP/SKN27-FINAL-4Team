@@ -18,9 +18,14 @@
               <span>취향 {{ totalTasteCount }}개</span>
             </div>
           </div>
-          <button class="profile-edit-button" type="button" @click="handleEditToggle">
-            {{ profileEdit ? '완료' : '수정' }}
-          </button>
+          <div class="profile-edit-actions">
+            <button v-if="profileEdit" class="profile-cancel-button" type="button" @click="$emit('cancel-profile-edit')">
+              취소
+            </button>
+            <button class="profile-edit-button" type="button" @click="handleEditToggle">
+              {{ profileEdit ? '저장' : '수정' }}
+            </button>
+          </div>
         </header>
 
         <section class="profile-section">
@@ -38,7 +43,7 @@
           </div>
           <div class="field">
             <label for="profile-birthdate">생년월일</label>
-            <input id="profile-birthdate" v-model="profile.birthDate" placeholder="YYYY.MM.DD" :readonly="!profileEdit" @input="normalizeBirthDateInput" />
+            <input id="profile-birthdate" v-model="profile.birthDate" :placeholder="profileEdit ? 'YYYY.MM.DD' : '미등록'" :readonly="!profileEdit" @input="normalizeBirthDateInput" />
           </div>
           <div class="field">
             <label>성별</label>
@@ -48,6 +53,7 @@
                 :key="gender"
                 type="button"
                 :class="{ active: profile.gender === gender }"
+                :aria-pressed="profile.gender === gender"
                 @click="profileEdit && (profile.gender = gender)"
                 :disabled="!profileEdit"
               >
@@ -61,7 +67,7 @@
 
         <section class="profile-section taste-section">
           <div class="profile-section-title">
-            <span>취향 조각</span>
+            <span>관심사와 취미</span>
             <strong>{{ totalTasteCount }}개 선택</strong>
           </div>
           <div class="form-grid profile-extra-grid">
@@ -84,14 +90,14 @@
                 class="add-button" 
                 @click="togglePicker('interest')"
               >
-                + 수정
+                관심분야 수정
               </button>
             </div>
             <!-- 관심분야 드롭다운 패널 -->
             <div v-if="activePicker === 'interest'" class="inline-dropdown">
               <div class="dropdown-header">
                 <strong>관심분야 선택 (최대 3개)</strong>
-                <button type="button" @click="activePicker = null">×</button>
+                <button type="button" aria-label="관심분야 선택 닫기" @click="activePicker = null">×</button>
               </div>
               <div class="dropdown-body">
                 <div v-for="(items, category) in interestGroups" :key="category" class="category-group">
@@ -100,6 +106,7 @@
                      <button v-for="item in items" :key="item.label" 
                              class="interest-chip"
                              :class="{ active: profile.interests.includes(item.label) }"
+                             :aria-pressed="profile.interests.includes(item.label)"
                              @click.prevent="toggleKeyword('interest', item.label)">
                        {{ getKeywordIcon(item.label, 'interest') }} {{ item.label }}
                      </button>
@@ -128,14 +135,14 @@
                 class="add-button" 
                 @click="togglePicker('hobby')"
               >
-                + 수정
+                취미 수정
               </button>
             </div>
             <!-- 취미 드롭다운 패널 -->
             <div v-if="activePicker === 'hobby'" class="inline-dropdown">
               <div class="dropdown-header">
                 <strong>취미 선택 (최대 3개)</strong>
-                <button type="button" @click="activePicker = null">×</button>
+                <button type="button" aria-label="취미 선택 닫기" @click="activePicker = null">×</button>
               </div>
               <div class="dropdown-body">
                 <div v-for="(items, category) in hobbyGroups" :key="category" class="category-group">
@@ -144,6 +151,7 @@
                      <button v-for="item in items" :key="item.label" 
                              class="interest-chip hobby-chip"
                              :class="{ active: profile.hobbies.includes(item.label) }"
+                             :aria-pressed="profile.hobbies.includes(item.label)"
                              @click.prevent="toggleKeyword('hobby', item.label)">
                        {{ getKeywordIcon(item.label, 'hobby') }} {{ item.label }}
                      </button>
@@ -239,7 +247,8 @@ export default {
     "close-character-picker",
     "toggle-profile-edit",
     "choose-character",
-    "update-profile-keywords"
+    "update-profile-keywords",
+    "cancel-profile-edit"
   ],
   data() {
     return {
@@ -325,13 +334,13 @@ export default {
       const name = String(this.profile.name || "").trim();
       const birth = String(this.profile.birthDate || "").trim();
       
-      if (!name || !birth) {
-        alert("이름 또는 닉네임, 생년월일을 꼭 입력해 주세요.");
+      if (!name) {
+        alert("이름 또는 닉네임을 입력해 주세요.");
         return;
       }
       
-      const match = birth.match(/^(\d{4})\.(\d{2})\.(\d{2})$/);
-      if (!match) {
+      const match = birth && birth.match(/^(\d{4})\.(\d{2})\.(\d{2})$/);
+      if (birth && !match) {
         alert("생년월일은 YYYY.MM.DD 형식으로 입력해 주세요.");
         return;
       }
@@ -368,6 +377,21 @@ export default {
   font-size: 13px;
   cursor: pointer;
   margin-top: 4px;
+}
+.profile-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.profile-cancel-button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 245, 230, 0.24);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 245, 230, 0.86);
+  font-size: 13px;
+  font-weight: 700;
 }
 .inline-dropdown {
   position: absolute;
@@ -790,6 +814,11 @@ export default {
 }
 
 @media (max-width: 640px) {
+  .form-grid.two,
+  .profile-extra-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
   .profile-card-head {
     grid-template-columns: 76px minmax(0, 1fr);
     min-height: 0;
@@ -803,9 +832,13 @@ export default {
     font-size: 24px;
   }
 
-  .profile-edit-button {
+  .profile-edit-actions {
     grid-column: 1 / -1;
     width: 100%;
+  }
+
+  .profile-edit-actions button {
+    flex: 1 1 0;
   }
 }
 </style>

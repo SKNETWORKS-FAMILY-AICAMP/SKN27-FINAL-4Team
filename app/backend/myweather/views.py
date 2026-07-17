@@ -82,7 +82,7 @@ def current_weather(request):
     from django.core.cache import cache
 
     cache_state = {
-        "version": 9,  # 단기·중기 7일 예보를 사용하는 검색 기반 주간요약 반영
+        "version": 11,  # 일반 추천 2개 우선·취미 추천 1개 구성 반영
         "user_id": request.user.id,
         "base_date": weather.get("base_date"),
         "base_time": weather.get("base_time"),
@@ -179,10 +179,11 @@ def current_weather(request):
             },
         },
         "methodology": {
-            "summary": "불쾌지수·체감온도는 관측값으로 서비스가 계산한 참고값이며, 기상청이 별도로 발표한 생활기상지수 원문은 아닙니다. 습도·풍속은 왼쪽 현재 날씨 패널에서만 표시합니다.",
-            "graph": "두 막대는 카드에 표시된 최소·최대 눈금 안에서 현재값의 위치를 나타냅니다. 현재 특보는 지수로 환산하지 않고 기상청 API허브의 특보 종류와 단계를 그대로 표시합니다.",
+            "summary": "체감온도는 기상청 계절별 산식과 영향 단계를 적용했습니다. 불쾌지수는 2020년 종료된 기상청 서비스의 공식 산식·과거 단계를 참고값으로 재현합니다.",
+            "graph": "막대 색은 공식 단계 구간, 흰색 표식은 현재 계산값의 위치입니다. 특보는 환산하지 않고 기상청 발표 단계를 그대로 표시합니다.",
             "indices": insight.get("conditionGuide", []),
-            "formula_source_url": "https://www.weather.go.kr/kma/servlet/NeoboardProcess?bid=press&mode=download&num=1194231&fno=2",
+            "formula_source_url": "https://data.kma.go.kr/climate/windChill/selectWindChillChart.do",
+            "discomfort_source_url": "https://data.kma.go.kr/data/lwi/lwiList.do?pgmNo=635",
         },
         "api_limits": {
             "checked_at": "2026-07-15",

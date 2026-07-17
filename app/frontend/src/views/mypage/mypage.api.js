@@ -1,3 +1,7 @@
+export const MEMORY_API_ENABLED = String(
+  import.meta.env.VITE_MEMORY_API_ENABLED || ""
+).toLowerCase() === "true";
+
 export async function fetchMbtiDemoPayload(force = false) {
   const queryParams = force ? "?force=true" : "";
   const endpoints = [
@@ -175,40 +179,6 @@ export async function deleteMemoryVaultItem(memoryId) {
   }
 
   throw lastError || new Error("Memory delete API is not reachable");
-}
-
-export async function fetchImageVault() {
-  const response = await fetch("/api/image-vault/images/", {
-    cache: "no-store",
-    credentials: "include"
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to fetch saved images: ${response.status}`);
-  }
-  return response.json();
-}
-
-export async function renameImageVaultItem(imageId, name) {
-  const response = await fetch(`/api/image-vault/images/${encodeURIComponent(imageId)}/`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ name })
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to rename saved image: ${response.status}`);
-  }
-  return response.json();
-}
-
-export async function deleteImageVaultItem(imageId) {
-  const response = await fetch(`/api/image-vault/images/${encodeURIComponent(imageId)}/`, {
-    method: "DELETE",
-    credentials: "include"
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to delete saved image: ${response.status}`);
-  }
 }
 
 export async function saveOnboardingMbti(mbtiType) {
