@@ -806,29 +806,60 @@ class WeatherWebAgent:
     @staticmethod
     def _soften_phrasing(text, weather=None):
         text = str(text)
-        replacements = {
-            "혈액 순환": "기분 전환",
-            "면역": "컨디션",
-            "치료": "돌봄",
-            "증상": "몸의 신호",
-            "완화": "덜어내기",
-        }
+        from myweather.models import WeatherPhrasingFilter
+        from django.core.cache import cache
+
+        cache_key = "weather:phrasing_filters"
+        rules = cache.get(cache_key)
+        if rules is None:
+            try:
+                db_rules = list(WeatherPhrasingFilter.objects.all())
+                rules = [
+                    {
+                        "source": r.source_word,
+                        "target": r.target_word,
+                        "trigger": r.condition_trigger
+                    }
+                    for r in db_rules
+                ]
+                rules.sort(key=lambda x: len(x["source"]), reverse=True)
+                cache.set(cache_key, rules, timeout=600)
+            except Exception:
+                rules = []
+
         condition = (weather or {}).get("condition") or ""
-        if "맑음" in condition:
-            replacements.update({
-                "따뜻한 햇살": "밝은 바깥 분위기",
-                "강한 햇살": "밝은 바깥 분위기",
-                "햇살": "바깥 분위기",
-                "햇빛": "바깥 공기",
-                "신선한 공기와 ": "바깥 공기가 ",
-                "맑은 공기": "가벼운 바깥 공기",
-                "맑고": "비 소식은 적고",
-                "맑은": "비 소식이 적은",
-                "자외선 차단제를 바르는": "외출 전 바깥 상황을 한 번 확인하는",
-                "자외선 차단제": "외출 준비",
-            })
-        for source, target in replacements.items():
-            text = text.replace(source, target)
+
+        if not rules:
+            # DB 조회 불가 대비 폴백 규칙 (길이 역순 정렬 적용)
+            replacements = {
+                "혈액 순환": "기분 전환",
+                "면역": "컨디션",
+                "치료": "돌봄",
+                "증상": "몸의 신호",
+                "완화": "덜어내기",
+            }
+            if "맑음" in condition:
+                replacements.update({
+                    "따뜻한 햇살": "밝은 바깥 분위기",
+                    "강한 햇살": "밝은 바깥 분위기",
+                    "햇살": "바깥 분위기",
+                    "햇빛": "바깥 공기",
+                    "신선한 공기와 ": "바깥 공기가 ",
+                    "맑은 공기": "가벼운 바깥 공기",
+                    "맑고": "비 소식은 적고",
+                    "맑은": "비 소식이 적은",
+                    "자외선 차단제를 바르는": "외출 전 바깥 상황을 한 번 확인하는",
+                    "자외선 차단제": "외출 준비",
+                })
+            fallback_items = sorted(replacements.items(), key=lambda x: len(x[0]), reverse=True)
+            for source, target in fallback_items:
+                text = text.replace(source, target)
+        else:
+            for rule in rules:
+                trigger = rule["trigger"]
+                if not trigger or (trigger in condition):
+                    text = text.replace(rule["source"], rule["target"])
+
         text = text.replace("분위기이", "분위기가")
         text = text.replace("창문 밖은 비 소식은", "창문 밖은 비 소식이")
         text = text.replace("밖은 비 소식은", "밖은 비 소식이")

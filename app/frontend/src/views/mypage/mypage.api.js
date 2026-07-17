@@ -5,8 +5,7 @@ export const MEMORY_API_ENABLED = String(
 export async function fetchMbtiDemoPayload(force = false) {
   const queryParams = force ? "?force=true" : "";
   const endpoints = [
-    `/api/mbti/monthly-demo/${queryParams}`,
-    `http://localhost:8000/api/mbti/monthly-demo/${queryParams}`
+    `/api/mbti/monthly-demo/${queryParams}`
   ];
 
   let lastError = null;
@@ -93,8 +92,7 @@ export async function fetchBookRecommendation(force = false, theme = null) {
   const queryParams = params.length ? `?${params.join("&")}` : "";
 
   const endpoints = [
-    `/api/mybook/recommendation/${queryParams}`,
-    `http://localhost:8000/api/mybook/recommendation/${queryParams}`
+    `/api/mybook/recommendation/${queryParams}`
   ];
 
   let lastError = null;
@@ -126,9 +124,7 @@ export async function fetchMemoryVault(force = false) {
   const queryParams = force ? "?force=true" : "";
   const endpoints = [
     `/api/mymemory/memories/${queryParams}`,
-    `/api/mypage/memory/${queryParams}`,
-    `http://localhost:8000/api/mymemory/memories/${queryParams}`,
-    `http://localhost:8000/api/mypage/memory/${queryParams}`
+    `/api/mypage/memory/${queryParams}`
   ];
 
   let lastError = null;
@@ -155,9 +151,7 @@ export async function deleteMemoryVaultItem(memoryId) {
   const encodedId = encodeURIComponent(memoryId);
   const endpoints = [
     `/api/mymemory/memories/${encodedId}/`,
-    `/api/mypage/memory/${encodedId}/`,
-    `http://localhost:8000/api/mymemory/memories/${encodedId}/`,
-    `http://localhost:8000/api/mypage/memory/${encodedId}/`
+    `/api/mypage/memory/${encodedId}/`
   ];
 
   let lastError = null;
@@ -224,6 +218,14 @@ export async function resetMockQna() {
   });
   if (!response.ok) {
     throw new Error(`Failed to reset mock qna: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function fetchWeatherRegions() {
+  const response = await fetch("/api/myweather/regions/", { credentials: "include" });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch weather regions: ${response.status}`);
   }
   return response.json();
 }

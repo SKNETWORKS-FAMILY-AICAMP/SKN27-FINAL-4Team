@@ -16,12 +16,7 @@ from .agent import (
 from .models import DailyBookRecommendation
 
 
-EMOTION_LABELS_KO = {
-    "joy": "기쁨",
-    "sadness": "슬픔",
-    "anger": "분노",
-    "normal": "평온",
-}
+from user.constants import EMOTION_LABELS_KO
 
 
 def _build_user_profile(user):

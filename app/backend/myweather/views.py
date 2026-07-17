@@ -1,5 +1,6 @@
 from rest_framework import status
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -8,6 +9,10 @@ from user.views import CsrfExemptSessionAuthentication
 
 from .agent import WeatherWebAgent
 from .services import WeatherInputError, WeatherServiceError, fetch_current_weather
+from user.constants import EMOTION_LABELS_KO, WEATHER_INSIGHT_CACHE_VERSION
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _request_value(request, key):
@@ -37,8 +42,7 @@ def _build_user_profile(user):
         
         if emotion_counts.exists():
             raw_emotion = emotion_counts.first()['emotion_label']
-            emotion_map = {'anger': '분노', 'sadness': '슬픔', 'joy': '기쁨', 'normal': '평온함'}
-            today_emotion = emotion_map.get(raw_emotion, raw_emotion)
+            today_emotion = EMOTION_LABELS_KO.get(raw_emotion, raw_emotion)
     except Exception as e:
         print(f"Failed to fetch today emotion: {e}")
 
@@ -82,7 +86,7 @@ def current_weather(request):
     from django.core.cache import cache
 
     cache_state = {
-        "version": 11,  # 일반 추천 2개 우선·취미 추천 1개 구성 반영
+        "version": WEATHER_INSIGHT_CACHE_VERSION,
         "user_id": request.user.id,
         "base_date": weather.get("base_date"),
         "base_time": weather.get("base_time"),
@@ -118,13 +122,13 @@ def current_weather(request):
 
     insight = cache.get(cache_key)
     if not insight:
-        print("======== [LLM 분석 실행] 캐시가 없으므로 LLM API를 호출합니다! ========")
+        logger.info("[LLM 분석 실행] 캐시가 없으므로 LLM API를 호출합니다!")
         insight = WeatherWebAgent.analyze(weather, user_profile)
         # LLM 실패로 인한 Fallback 응답일 경우 60초만 캐시, 정상 응답은 1시간 캐시
         timeout_seconds = 60 if insight.get("is_fallback") else 3600
         cache.set(cache_key, insight, timeout=timeout_seconds)
     else:
-        print("======== [캐시 적중] 저장된 LLM 리포트를 즉시 반환합니다! (토큰 0 소모) ========")
+        logger.debug("[캐시 적중] 저장된 LLM 리포트를 즉시 반환합니다! (토큰 0 소모)")
 
     attributions = [
         {
@@ -211,3 +215,18 @@ def current_weather(request):
             },
         },
     })
+
+
+@api_view(["GET"])
+@authentication_classes([CsrfExemptSessionAuthentication])
+@permission_classes([IsAuthenticated])
+def get_weather_regions(request):
+    from myweather.models import WeatherRegion
+    ordered_names = list(WeatherRegion.objects.order_by("id").values_list("name", flat=True))
+    if not ordered_names:
+        ordered_names = [
+            "서울", "부산", "대구", "인천", "대전", "울산", "세종", "전남광주",
+            "경기", "강원", "충북", "충남", "전북", "경북", "경남", "제주"
+        ]
+    return Response(ordered_names)
+

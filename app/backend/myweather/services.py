@@ -54,62 +54,168 @@ KMA_WEEKLY_STALE_SECONDS = max(
     int(os.environ.get("KMA_WEEKLY_STALE_SECONDS", "86400")),
 )
 
-DEFAULT_LOCATION = {
-    "name": "서울",
-    "lat": 37.5665,
-    "lon": 126.9780,
-}
+_db_regions_cache = None
 
-JEONNAM_GWANGJU_LOCATION = {
-    "name": "전남광주",
-    "lat": 35.1595,
-    "lon": 126.8526,
-}
+def clear_db_regions_cache():
+    global _db_regions_cache
+    _db_regions_cache = None
 
-KNOWN_LOCATIONS = {
-    "서울": DEFAULT_LOCATION,
-    "서울특별시": DEFAULT_LOCATION,
-    "부산": {"name": "부산", "lat": 35.1796, "lon": 129.0756},
-    "부산광역시": {"name": "부산", "lat": 35.1796, "lon": 129.0756},
-    "대구": {"name": "대구", "lat": 35.8714, "lon": 128.6014},
-    "대구광역시": {"name": "대구", "lat": 35.8714, "lon": 128.6014},
-    "인천": {"name": "인천", "lat": 37.4563, "lon": 126.7052},
-    "인천광역시": {"name": "인천", "lat": 37.4563, "lon": 126.7052},
-    "전남광주": JEONNAM_GWANGJU_LOCATION,
-    "전남광주통합특별시": JEONNAM_GWANGJU_LOCATION,
-    # 2026년 7월 1일 통합 이전에 저장된 사용자 선택값도 새 명칭으로 연결한다.
-    "광주": JEONNAM_GWANGJU_LOCATION,
-    "광주광역시": JEONNAM_GWANGJU_LOCATION,
-    "대전": {"name": "대전", "lat": 36.3504, "lon": 127.3845},
-    "대전광역시": {"name": "대전", "lat": 36.3504, "lon": 127.3845},
-    "울산": {"name": "울산", "lat": 35.5384, "lon": 129.3114},
-    "울산광역시": {"name": "울산", "lat": 35.5384, "lon": 129.3114},
-    "세종": {"name": "세종", "lat": 36.4800, "lon": 127.2890},
-    "세종특별자치시": {"name": "세종", "lat": 36.4800, "lon": 127.2890},
-    "경기": {"name": "경기", "lat": 37.2636, "lon": 127.0286},
-    "경기도": {"name": "경기", "lat": 37.2636, "lon": 127.0286},
-    "강원": {"name": "강원", "lat": 37.8813, "lon": 127.7298},
-    "강원특별자치도": {"name": "강원", "lat": 37.8813, "lon": 127.7298},
-    "충북": {"name": "충북", "lat": 36.6357, "lon": 127.4917},
-    "충청북도": {"name": "충북", "lat": 36.6357, "lon": 127.4917},
-    "충남": {"name": "충남", "lat": 36.6588, "lon": 126.6728},
-    "충청남도": {"name": "충남", "lat": 36.6588, "lon": 126.6728},
-    "전북": {"name": "전북", "lat": 35.8242, "lon": 127.1480},
-    "전북특별자치도": {"name": "전북", "lat": 35.8242, "lon": 127.1480},
-    "전남": JEONNAM_GWANGJU_LOCATION,
-    "전라남도": JEONNAM_GWANGJU_LOCATION,
-    "경북": {"name": "경북", "lat": 36.5684, "lon": 128.7294},
-    "경상북도": {"name": "경북", "lat": 36.5684, "lon": 128.7294},
-    "경남": {"name": "경남", "lat": 35.2279, "lon": 128.6816},
-    "경상남도": {"name": "경남", "lat": 35.2279, "lon": 128.6816},
-    "제주": {"name": "제주", "lat": 33.4996, "lon": 126.5312},
-    "제주특별자치도": {"name": "제주", "lat": 33.4996, "lon": 126.5312},
-}
+def _load_db_regions():
+    global _db_regions_cache
+    if _db_regions_cache is not None:
+        return _db_regions_cache
 
-WEATHER_REPRESENTATIVE_NAMES = (
-    "서울", "부산", "대구", "인천", "전남광주", "대전", "울산", "세종",
-    "경기", "강원", "충북", "충남", "전북", "경북", "경남", "제주",
-)
+    from myweather.models import WeatherRegion
+    try:
+        regions = list(WeatherRegion.objects.all())
+    except Exception:
+        regions = []
+
+    if not regions:
+        from .constants import (
+            STATIC_DEFAULT_KNOWN_LOCATIONS,
+            STATIC_DEFAULT_WEATHER_REPRESENTATIVE_NAMES,
+            STATIC_DEFAULT_WARNING_REGION_ALIASES,
+            STATIC_DEFAULT_WARNING_REGION_CODE_PREFIXES,
+            STATIC_DEFAULT_WARNING_REGION_DISPLAY_NAMES,
+            STATIC_DEFAULT_MID_FORECAST_REGIONS,
+        )
+        _db_regions_cache = (
+            STATIC_DEFAULT_KNOWN_LOCATIONS,
+            STATIC_DEFAULT_WEATHER_REPRESENTATIVE_NAMES,
+            STATIC_DEFAULT_WARNING_REGION_ALIASES,
+            STATIC_DEFAULT_WARNING_REGION_CODE_PREFIXES,
+            STATIC_DEFAULT_WARNING_REGION_DISPLAY_NAMES,
+            STATIC_DEFAULT_MID_FORECAST_REGIONS,
+        )
+        return _db_regions_cache
+
+    known_locations = {}
+    weather_representative_names = []
+    warning_region_aliases = {}
+    warning_region_code_prefixes = {}
+    warning_region_display_names = {}
+    mid_forecast_regions = {}
+
+    for r in regions:
+        loc_data = {"name": r.name, "lat": r.lat, "lon": r.lon}
+        known_locations[r.name] = loc_data
+        for alias in r.aliases:
+            known_locations[alias] = loc_data
+
+        weather_representative_names.append(r.name)
+
+        all_aliases = [r.name] + r.aliases
+        warning_region_aliases[r.name] = tuple(all_aliases)
+        warning_region_code_prefixes[r.name] = tuple(r.warning_code_prefixes)
+        warning_region_display_names[r.name] = r.warning_display_name or r.name
+
+        mid_forecast_regions[r.name] = {
+            "land": r.mid_land_code,
+            "temperature": r.mid_temp_code,
+        }
+        for alias in r.aliases:
+            mid_forecast_regions[alias] = {
+                "land": r.mid_land_code,
+                "temperature": r.mid_temp_code,
+            }
+
+    _db_regions_cache = (
+        known_locations,
+        tuple(weather_representative_names),
+        warning_region_aliases,
+        warning_region_code_prefixes,
+        warning_region_display_names,
+        mid_forecast_regions
+    )
+    return _db_regions_cache
+
+
+class DynamicDict(object):
+    def __init__(self, index):
+        self.index = index
+
+    def _get_dict(self):
+        return _load_db_regions()[self.index]
+
+    def __getitem__(self, key):
+        return self._get_dict()[key]
+
+    def __contains__(self, key):
+        return key in self._get_dict()
+
+    def get(self, key, default=None):
+        return self._get_dict().get(key, default)
+
+    def keys(self):
+        return self._get_dict().keys()
+
+    def values(self):
+        return self._get_dict().values()
+
+    def items(self):
+        return self._get_dict().items()
+
+
+class DynamicTuple(object):
+    def __init__(self, index):
+        self.index = index
+
+    def _get_tuple(self):
+        return _load_db_regions()[self.index]
+
+    def __iter__(self):
+        return iter(self._get_tuple())
+
+    def __len__(self):
+        return len(self._get_tuple())
+
+    def __getitem__(self, index):
+        return self._get_tuple()[index]
+
+
+class DynamicDefaultLocation(object):
+    def _get_dict(self):
+        default_name = os.environ.get("DEFAULT_WEATHER_REGION_NAME", "서울").strip()
+        try:
+            from myweather.models import WeatherRegion
+            r = WeatherRegion.objects.filter(name=default_name).first()
+            if r:
+                return {"name": r.name, "lat": r.lat, "lon": r.lon}
+        except Exception:
+            pass
+
+        from .constants import STATIC_DEFAULT_KNOWN_LOCATIONS, DEFAULT_LOCATION
+        return STATIC_DEFAULT_KNOWN_LOCATIONS.get(default_name) or DEFAULT_LOCATION
+
+    def __getitem__(self, key):
+        return self._get_dict()[key]
+
+    def get(self, key, default=None):
+        return self._get_dict().get(key, default)
+
+    def keys(self):
+        return self._get_dict().keys()
+
+    def values(self):
+        return self._get_dict().values()
+
+    def items(self):
+        return self._get_dict().items()
+
+    def __str__(self):
+        return str(self._get_dict())
+
+    def __repr__(self):
+        return repr(self._get_dict())
+
+
+DEFAULT_LOCATION = DynamicDefaultLocation()
+KNOWN_LOCATIONS = DynamicDict(0)
+WEATHER_REPRESENTATIVE_NAMES = DynamicTuple(1)
+WARNING_REGION_ALIASES = DynamicDict(2)
+WARNING_REGION_CODE_PREFIXES = DynamicDict(3)
+WARNING_REGION_DISPLAY_NAMES = DynamicDict(4)
 
 
 def _nearest_weather_region_name(latitude, longitude):
@@ -124,161 +230,16 @@ def _nearest_weather_region_name(latitude, longitude):
 
     return min(WEATHER_REPRESENTATIVE_NAMES, key=distance_squared)
 
-WARNING_REGION_ALIASES = {
-    "서울": ("서울",),
-    "부산": ("부산",),
-    "대구": ("대구",),
-    "인천": ("인천",),
-    "전남광주": ("전남광주", "광주", "전남", "전라남도"),
-    "대전": ("대전",),
-    "울산": ("울산",),
-    "세종": ("세종",),
-    "경기": ("경기",),
-    "강원": ("강원",),
-    "충북": ("충북", "충청북도"),
-    "충남": ("충남", "충청남도"),
-    "전북": ("전북", "전라북도", "전북특별자치도"),
-    "경북": ("경북", "경상북도"),
-    "경남": ("경남", "경상남도"),
-    "제주": ("제주",),
-}
+from .constants import (
+    WARNING_TYPE_LABELS,
+    WARNING_LEVEL_LABELS,
+    WARNING_RELEASE_COMMANDS,
+    PTY_LABELS,
+    SKY_LABELS,
+    CATEGORY_MAP,
+)
 
-# 기상청 특보구역 코드표의 육상 광역 상위코드. 서비스의 지역 선택값을
-# 문자열 포함 여부가 아니라 공식 특보구역 코드로 판별한다.
-WARNING_REGION_CODE_PREFIXES = {
-    "서울": ("L110",),
-    "부산": ("L115",),
-    "대구": ("L114",),
-    "인천": ("L111",),
-    "대전": ("L112",),
-    "울산": ("L116",),
-    "세종": ("L117",),
-    "전남광주": ("L105", "L113"),
-    "경기": ("L101",),
-    "강원": ("L102",),
-    "충북": ("L104",),
-    "충남": ("L103",),
-    "전북": ("L106",),
-    # 울릉도·독도는 별도 상위구역 L160이지만 경북 선택에 포함한다.
-    "경북": ("L107", "L160"),
-    "경남": ("L108",),
-    "제주": ("L109",),
-}
-
-WARNING_REGION_DISPLAY_NAMES = {
-    "서울": "서울",
-    "부산": "부산",
-    "대구": "대구",
-    "인천": "인천",
-    "대전": "대전",
-    "울산": "울산",
-    "세종": "세종",
-    "전남광주": "전남광주",
-    "경기": "경기도",
-    "강원": "강원도",
-    "충북": "충청북도",
-    "충남": "충청남도",
-    "전북": "전북자치도",
-    "경북": "경상북도",
-    "경남": "경상남도",
-    "제주": "제주도",
-}
-
-WARNING_TYPE_LABELS = {
-    "W": "강풍",
-    "R": "호우",
-    "C": "한파",
-    "D": "건조",
-    "O": "해일",
-    "N": "지진해일",
-    "V": "풍랑",
-    "T": "태풍",
-    "S": "대설",
-    "Y": "황사",
-    "H": "폭염",
-    "F": "안개",
-    "K": "열대야",
-}
-WARNING_LEVEL_LABELS = {
-    "1": "예비특보",
-    "2": "주의보",
-    "3": "경보",
-    "예비": "예비특보",
-    "예비특보": "예비특보",
-    "주의": "주의보",
-    "주의보": "주의보",
-    "경보": "경보",
-}
-WARNING_RELEASE_COMMANDS = {"3", "4", "7", "해제", "취소"}
-
-PTY_LABELS = {
-    "0": "맑음",
-    "1": "비",
-    "2": "비/눈",
-    "3": "눈",
-    "4": "소나기",
-    "5": "약한 비",
-    "6": "약한 비/눈",
-    "7": "약한 눈",
-}
-
-SKY_LABELS = {
-    "1": "맑음",
-    "3": "구름많음",
-    "4": "흐림",
-}
-
-CATEGORY_MAP = {
-    "T1H": ("temperature", "기온", "℃"),
-    "RN1": ("rainfall_1h", "1시간 강수량", "mm"),
-    "UUU": ("east_west_wind", "동서바람성분", "m/s"),
-    "VVV": ("north_south_wind", "남북바람성분", "m/s"),
-    "REH": ("humidity", "습도", "%"),
-    "PTY": ("precipitation_type", "강수형태", ""),
-    "VEC": ("wind_direction", "풍향", "deg"),
-    "WSD": ("wind_speed", "풍속", "m/s"),
-}
-
-# 중기예보는 동네예보 격자와 다른 광역/대표지점 코드를 사용한다.
-# 광역 위치를 선택한 경우 각 권역의 대표 관측지점 기온과 육상예보를 조합한다.
-MID_FORECAST_REGIONS = {
-    "서울": {"land": "11B00000", "temperature": "11B10101"},
-    "서울특별시": {"land": "11B00000", "temperature": "11B10101"},
-    "부산": {"land": "11H20000", "temperature": "11H20201"},
-    "부산광역시": {"land": "11H20000", "temperature": "11H20201"},
-    "대구": {"land": "11H10000", "temperature": "11H10701"},
-    "대구광역시": {"land": "11H10000", "temperature": "11H10701"},
-    "인천": {"land": "11B00000", "temperature": "11B20201"},
-    "인천광역시": {"land": "11B00000", "temperature": "11B20201"},
-    "전남광주": {"land": "11F20000", "temperature": "11F20501"},
-    "전남광주통합특별시": {"land": "11F20000", "temperature": "11F20501"},
-    "광주": {"land": "11F20000", "temperature": "11F20501"},
-    "광주광역시": {"land": "11F20000", "temperature": "11F20501"},
-    "대전": {"land": "11C20000", "temperature": "11C20401"},
-    "대전광역시": {"land": "11C20000", "temperature": "11C20401"},
-    "울산": {"land": "11H20000", "temperature": "11H20101"},
-    "울산광역시": {"land": "11H20000", "temperature": "11H20101"},
-    "세종": {"land": "11C20000", "temperature": "11C20404"},
-    "세종특별자치시": {"land": "11C20000", "temperature": "11C20404"},
-    "경기": {"land": "11B00000", "temperature": "11B20601"},
-    "경기도": {"land": "11B00000", "temperature": "11B20601"},
-    "강원": {"land": "11D10000", "temperature": "11D10301"},
-    "강원특별자치도": {"land": "11D10000", "temperature": "11D10301"},
-    "충북": {"land": "11C10000", "temperature": "11C10301"},
-    "충청북도": {"land": "11C10000", "temperature": "11C10301"},
-    "충남": {"land": "11C20000", "temperature": "11C20101"},
-    "충청남도": {"land": "11C20000", "temperature": "11C20101"},
-    "전북": {"land": "11F10000", "temperature": "11F10201"},
-    "전북특별자치도": {"land": "11F10000", "temperature": "11F10201"},
-    "전남": {"land": "11F20000", "temperature": "11F20501"},
-    "전라남도": {"land": "11F20000", "temperature": "11F20501"},
-    "경북": {"land": "11H10000", "temperature": "11H10501"},
-    "경상북도": {"land": "11H10000", "temperature": "11H10501"},
-    "경남": {"land": "11H20000", "temperature": "11H20301"},
-    "경상남도": {"land": "11H20000", "temperature": "11H20301"},
-    "제주": {"land": "11G00000", "temperature": "11G00201"},
-    "제주특별자치도": {"land": "11G00000", "temperature": "11G00201"},
-}
+MID_FORECAST_REGIONS = DynamicDict(5)
 
 
 class WeatherServiceError(Exception):

@@ -25,8 +25,13 @@ class MyProfileSerializer(serializers.Serializer):
             'interests': profile.interests if profile else [],
             'hobbies': profile.hobbies if profile else [],
             'selectedCharacter': user.character if user and user.character else "otter",
-            # 더미 데이터 유지 (DB에 없지만 프론트엔드 에러 방지)
-            'mbti': "INFP",
-            'status': "교류하고 싶음",
-            'keywords': "공감형, 느린 집중, 감성 기록, 안정 선호",
+            'selectedCharacter': user.character if user and user.character else "otter",
+            'account': {
+                'email': user.email if user else "",
+                'provider': user.oauth_accounts.first().provider.capitalize() if user and user.oauth_accounts.exists() else "Email",
+                'joinedAt': user.created_at.strftime("%Y.%m.%d") if user else "",
+                'lastLogin': user.last_login.strftime("%Y.%m.%d %H:%M") if user and user.last_login else "",
+                'session': "현재 접속 중",
+                'plan': "Free",
+            } if user else None,
         }

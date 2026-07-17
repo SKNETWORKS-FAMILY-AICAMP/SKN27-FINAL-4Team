@@ -4,7 +4,7 @@ from json import JSONDecodeError
 
 from django.db import DatabaseError
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from user.views import CsrfExemptSessionAuthentication
@@ -35,10 +35,10 @@ def _has_frontend_mbti_data(payload):
 
 @api_view(['GET'])
 @authentication_classes([CsrfExemptSessionAuthentication])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def monthly_demo(request):
     user = request.user
-    user_id = user.id if user.is_authenticated else 1
+    user_id = user.id
     period_key = request.query_params.get('period_key') or None
     force = request.query_params.get('force') == 'true'
 
@@ -64,7 +64,7 @@ def monthly_demo(request):
 
 @api_view(['POST', 'PUT'])
 @authentication_classes([CsrfExemptSessionAuthentication])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def set_onboarding_mbti(request):
     mbti_type = request.data.get('mbti_type')
     if not mbti_type or len(mbti_type) != 4:
@@ -78,7 +78,7 @@ def set_onboarding_mbti(request):
 
     from django.utils.timezone import now
     
-    user_id = request.user.id if request.user.is_authenticated else 1
+    user_id = request.user.id
     
     profile, created = MbtiOnboardingProfile.objects.update_or_create(
         user_id=user_id,
@@ -95,7 +95,7 @@ def set_onboarding_mbti(request):
 
 @api_view(['GET'])
 @authentication_classes([CsrfExemptSessionAuthentication])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def get_mock_question(request):
     axis = request.query_params.get('axis')
     if axis and axis not in ['IE', 'SN', 'TF', 'JP']:
@@ -116,7 +116,7 @@ def get_mock_question(request):
     from mbti.models import MbtiQuestionResponse
     from django.db.models import Count
     
-    user_id = request.user.id if request.user.is_authenticated else 1
+    user_id = request.user.id
     current_time = now()
     period_key = current_time.strftime('%Y-%m')
     
@@ -134,7 +134,7 @@ def get_mock_question(request):
 
 @api_view(['POST'])
 @authentication_classes([CsrfExemptSessionAuthentication])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def save_mock_answer(request):
     data = request.data
     question_text = data.get('question_text')
@@ -147,7 +147,7 @@ def save_mock_answer(request):
     from django.utils.timezone import now
     from mbti.models import MbtiQuestionResponse
     
-    user_id = request.user.id if request.user.is_authenticated else 1
+    user_id = request.user.id
     current_time = now()
     period_key = current_time.strftime('%Y-%m')
     
@@ -175,7 +175,7 @@ def save_mock_answer(request):
 
 @api_view(['DELETE'])
 @authentication_classes([CsrfExemptSessionAuthentication])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def reset_mock_qna(request):
     from django.db import transaction
     from django.utils.timezone import now
@@ -187,7 +187,7 @@ def reset_mock_qna(request):
         MbtiMonthlyReport,
     )
     
-    user_id = request.user.id if request.user.is_authenticated else 1
+    user_id = request.user.id
     current_time = now()
     period_key = current_time.strftime('%Y-%m')
     

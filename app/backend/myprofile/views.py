@@ -11,12 +11,7 @@ from .serializers import MyProfileSerializer
 from datetime import datetime
 
 
-EMOTION_LABELS_KO = {
-    'joy': '기쁨',
-    'sadness': '슬픔',
-    'anger': '분노',
-    'normal': '평온',
-}
+from user.constants import EMOTION_LABELS_KO
 
 @api_view(['GET', 'PUT'])
 @authentication_classes([CsrfExemptSessionAuthentication])

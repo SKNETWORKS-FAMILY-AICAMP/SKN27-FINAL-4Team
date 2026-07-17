@@ -1,6 +1,12 @@
 <template>
   <div class="panel-body">
-    <div class="log-summary">
+    <div v-if="!taste" class="empty-state">
+      <div class="empty-icon">🌱</div>
+      <h3>아직 취향 분석 데이터가 없습니다</h3>
+      <p>대화를 통해 관심사와 취향이 충분히 쌓이면 여기에 나타납니다.</p>
+    </div>
+    <template v-else>
+      <div class="log-summary">
       <div class="log-pill">
         <span>조회 기간</span>
         <strong>{{ taste.period }}</strong>
@@ -47,6 +53,7 @@
         <p>업데이트: {{ taste.updated }}</p>
       </section>
     </div>
+    </template>
   </div>
 </template>
 
@@ -62,3 +69,29 @@ export default {
   emits: ["refresh"]
 };
 </script>
+
+<style scoped>
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 60px 20px;
+  color: #e1c5ff;
+}
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.8;
+}
+.empty-state h3 {
+  font-size: 18px;
+  color: #fff;
+  margin-bottom: 8px;
+}
+.empty-state p {
+  font-size: 14px;
+  opacity: 0.7;
+}
+</style>

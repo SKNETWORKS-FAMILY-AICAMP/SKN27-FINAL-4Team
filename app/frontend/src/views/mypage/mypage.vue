@@ -222,7 +222,8 @@
 </template>
 
 <script>
-import { MEMORY_API_ENABLED, fetchCurrentWeather, fetchMbtiDemoPayload, fetchMyProfile, updateMyProfile, saveOnboardingMbti, fetchBookRecommendation, fetchMemoryVault, deleteMemoryVaultItem } from "./mypage.api";
+import { MEMORY_API_ENABLED, fetchCurrentWeather, fetchMbtiDemoPayload, fetchMyProfile, updateMyProfile, saveOnboardingMbti, fetchBookRecommendation, fetchMemoryVault, deleteMemoryVaultItem, fetchWeatherRegions } from "./mypage.api";
+import { LOCATION_CONSENT_VERSION } from "../../constants/consentVersions";
 import { createMypageState, i18n } from "./mypage.data";
 import CharacterPanel from "./components/CharacterPanel.vue";
 import MbtiPanel from "./components/MbtiPanel.vue";
@@ -351,6 +352,7 @@ export default {
     this.applySettings();
     this.loadMbtiDemoData();
     this.loadProfileData();
+    this.loadWeatherRegions();
     this.weatherRefreshTimer = window.setInterval(() => {
       if (this.activePanel === "weather") this.loadWeatherData();
     }, 60 * 1000);
@@ -423,6 +425,16 @@ export default {
       const path = this.navigationConfirm.path;
       this.navigationConfirm = null;
       this.$router.push(path);
+    },
+    async loadWeatherRegions() {
+      try {
+        const regions = await fetchWeatherRegions();
+        if (Array.isArray(regions) && regions.length > 0) {
+          this.weatherRegions = regions;
+        }
+      } catch (error) {
+        console.error("Failed to load weather regions:", error);
+      }
     },
     async loadProfileData() {
       try {
@@ -567,11 +579,6 @@ export default {
         const sessionLocation = JSON.parse(sessionStorage.getItem("mindroom-weather-auto-location") || "null");
         if (sessionLocation?.mode === "auto") return sessionLocation;
         const saved = JSON.parse(localStorage.getItem("mindroom-weather-location") || "null");
-        if (saved && ["광주", "전남"].includes(saved.region)) {
-          const migrated = { ...saved, region: "전남광주" };
-          localStorage.setItem("mindroom-weather-location", JSON.stringify(migrated));
-          return migrated;
-        }
         return saved;
       } catch (error) {
         return null;
@@ -654,7 +661,7 @@ export default {
     },
     async setWeatherRegion(region) {
       if (region === "현재 위치") {
-        const consentKey = "mindroom-location-consent-2026-07-15";
+        const consentKey = `mindroom-location-consent-${LOCATION_CONSENT_VERSION}`;
         const hasConsent = localStorage.getItem(consentKey) === "true";
         if (!hasConsent) {
           const confirmed = window.confirm(
@@ -667,7 +674,7 @@ export default {
         await this.loadWeatherData({ force: true, refreshLocation: true });
         return;
       }
-      localStorage.removeItem("mindroom-location-consent-2026-07-15");
+      localStorage.removeItem(`mindroom-location-consent-${LOCATION_CONSENT_VERSION}`);
       this.saveWeatherLocation({ mode: "manual", region });
       await this.loadWeatherData({ force: true });
     },
@@ -884,12 +891,7 @@ export default {
       this.showToast(message);
     },
     refreshTaste() {
-      this.taste.updated = new Date().toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-      this.taste.keywords = this.taste.keywords.map(item => ({
-        ...item,
-        count: Math.max(1, item.count + Math.round(Math.random() * 2 - 1))
-      })).sort((a, b) => b.count - a.count);
-      this.showToast("저장된 대화 로그에서 키워드를 다시 추출했습니다.");
+      this.showToast("아직 백엔드 API가 연동되지 않은 기능입니다.");
     },
     resetSettings() {
       this.settings = {
