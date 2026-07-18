@@ -16,7 +16,8 @@
 - `config/book.config.js`: 도서 추천 테마와 출처 표시 설정
 - `config/mbti.constants.js`: MBTI 선택지와 Q&A 완료 기준
 - `config/weather.constants.js`: 날씨 표시 구간과 색상·시간 기준
-- `styles/mypage.css`: 마이페이지 공통 스타일
+- `styles/mypage.css`: 기존 캐스케이드를 유지하는 마이페이지 스타일 진입점
+- `styles/sections/`: 화면 영역과 반응형·재정의 순서로 분리한 마이페이지 스타일
 
 ## 연결 API
 

@@ -1,0 +1,98 @@
+.navigation-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2400;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(5, 7, 27, 0.72);
+}
+
+.navigation-confirm {
+  position: relative;
+  overflow: hidden;
+  width: min(420px, 100%);
+  padding: 28px;
+  border: 1px solid rgba(215, 183, 255, 0.26);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(156, 91, 255, 0.2), transparent 34%),
+    linear-gradient(145deg, rgba(35, 25, 91, 0.98), rgba(17, 16, 58, 0.99));
+  color: #f4efff;
+  box-shadow: 0 28px 80px rgba(2, 3, 20, 0.62), inset 0 1px rgba(255, 255, 255, 0.06);
+  text-align: left;
+}
+
+.navigation-confirm::before {
+  content: "이동 안내";
+  display: inline-flex;
+  margin-bottom: 13px;
+  padding: 5px 9px;
+  border: 1px solid rgba(215, 183, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(156, 91, 255, 0.1);
+  color: #d7b7ff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.navigation-confirm h2 {
+  margin: 0;
+  color: #fff7df;
+  font-size: 22px;
+  line-height: 1.3;
+}
+
+.navigation-confirm p {
+  margin: 10px 0 0;
+  color: rgba(255, 245, 230, 0.68);
+  font-size: 14px;
+  line-height: 1.65;
+  word-break: keep-all;
+}
+
+.navigation-confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.navigation-confirm-actions button {
+  min-height: 46px;
+  padding: 0 18px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.navigation-cancel-button {
+  border: 1px solid rgba(215, 183, 255, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 245, 230, 0.76);
+}
+
+.navigation-confirm-button {
+  border: 1px solid rgba(215, 183, 255, 0.38);
+  background: linear-gradient(135deg, #9c5bff, #5167e8);
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(81, 103, 232, 0.26);
+}
+
+.navigation-confirm-actions button:hover,
+.navigation-confirm-actions button:focus-visible {
+  outline: none;
+}
+
+.navigation-cancel-button:hover,
+.navigation-cancel-button:focus-visible {
+  border-color: rgba(215, 183, 255, 0.42);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.navigation-confirm-button:hover,
+.navigation-confirm-button:focus-visible {
+  box-shadow: 0 14px 30px rgba(81, 103, 232, 0.38);
+}
+

@@ -1,0 +1,126 @@
+@media (max-width: 1100px) {
+  .vn-shell { width: calc(100% - 24px); }
+  .character-presence { right: auto; left: 0; width: clamp(215px, 25vw, 280px); }
+  .presence-state { display: none; }
+  .room-control b { display: none; }
+  .room-control { width: 36px; padding: 0; justify-content: center; }
+  .choice-deck { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .choice-guide { display: none; }
+  .user-whisper { right: 4%; width: 34%; }
+}
+
+@media (max-width: 1040px) {
+  .character-presence {
+    top: 68px;
+    right: auto;
+    left: 0;
+    height: auto;
+    min-height: 0;
+    bottom: 98px;
+  }
+  .vn-dialogue {
+    top: 70px;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: auto;
+    height: auto;
+  }
+  .chat-console-header,
+  .chat-console-footer { padding-inline: clamp(16px, 5vw, 48px); }
+  .chat-thread {
+    padding-right: clamp(18px, 5vw, 48px);
+    padding-left: clamp(205px, 27vw, 285px);
+  }
+  .chat-message { max-width: min(84%, 680px); }
+}
+
+@media (max-width: 760px) {
+  .chat-page { min-height: calc(100dvh - var(--bt-header-h, 88px)); }
+  .vn-shell { width: calc(100% - 14px); min-height: 780px; padding: 7px 0 10px; }
+  .mind-room { min-height: 770px; border-radius: 20px; }
+  .room-header { min-height: 56px; padding: 9px 10px 8px 13px; }
+  .room-symbol { width: 31px; height: 31px; }
+  .room-plaque small { display: none; }
+  .room-plaque strong { font-size: 12px; }
+  .room-controls { gap: 4px; }
+  .room-control { width: 32px; min-height: 32px; }
+  .story-lights { display: none; }
+  .character-presence {
+    top: 58px;
+    right: auto;
+    bottom: auto;
+    left: 0;
+    width: min(42vw, 185px);
+    height: 164px;
+    min-height: 0;
+    opacity: .9;
+  }
+  .presence-ring { width: min(68vw, 280px); }
+  .vn-character {
+    top: 8px;
+    right: auto;
+    bottom: 8px;
+    left: 8px;
+    width: min(36vw, 160px);
+    max-width: none;
+    height: auto;
+  }
+  .character-presence::after { top: 10px; bottom: 16px; left: 7px; width: min(36vw, 160px); }
+  .character-hud { right: auto; bottom: 6px; left: 11px; min-width: 88px; padding: 4px 8px 4px 6px; }
+  .character-hud b { font-size: 8px; }
+  .character-hud small { font-size: 7px; }
+  .character-state { display: none; }
+  .user-whisper { display: none; }
+  .curtain { width: 27%; }
+  .window-glow { width: 80%; right: -16%; height: 52%; }
+  .vn-dialogue { top: 56px; left: 0; right: 0; bottom: 0; width: auto; height: auto; padding: 0; border-radius: 0; }
+  .chat-console-header { min-height: 52px; padding: 8px 11px; }
+  .chat-peer-avatar { width: 32px; height: 32px; }
+  .chat-thread { padding: 102px 10px 14px; gap: 10px; }
+  .chat-message { max-width: 88%; }
+  .chat-bubble { padding: 9px 11px; }
+  .chat-bubble p { font-size: 11.5px; }
+  .chat-console-footer { padding: 8px; gap: 6px; }
+  .speaker-name { left: 14px; top: -15px; height: 31px; min-width: 100px; padding: 0 13px; font-size: 11px; }
+  .dialogue-copy { min-height: 58px; padding-top: 3px; }
+  .dialogue-copy p { font-size: 13px; line-height: 1.62; }
+  .story-link { position: relative; top: auto; right: auto; width: 100%; margin: 0 0 8px; }
+  .choice-deck { gap: 5px; margin: 0; }
+  .choice-deck button { min-width: 142px; }
+  .choice-deck button { min-height: 37px; }
+  .choice-deck button strong { font-size: 10px; }
+  .vn-composer { gap: 5px; }
+  .world-action { min-width: 40px; width: 40px; height: 43px; padding: 0; }
+  .world-action b { display: none; }
+  .composer-field { min-height: 45px; padding-left: 11px; padding-right: 34px; }
+  .composer-field .msg-input { font-size: 12px; }
+  .vn-send { min-width: 45px; width: 45px; height: 43px; padding: 0; }
+  .vn-send span { display: none; }
+  .composer-hint { display: none; }
+  .vn-image-preview { right: auto; left: auto; width: 100%; }
+  .secret-banner { font-size: 10px; padding: 7px 10px; }
+  .secret-banner span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .secret-exit-btn { padding: 4px 8px; }
+}
+
+@media (max-height: 720px) and (min-width: 1041px) {
+  .vn-shell { padding-block: 7px 10px; }
+  .room-header { min-height: 56px; padding-block: 9px; }
+  .character-presence { top: 64px; right: auto; bottom: 96px; left: 0; height: auto; min-height: 0; }
+  .vn-character { top: 18px; right: auto; bottom: 18px; left: 20px; width: clamp(185px, 16vw, 250px); height: auto; }
+  .vn-dialogue { top: 56px; right: 0; bottom: 0; left: 0; width: auto; padding: 0; }
+  .dialogue-copy { min-height: 48px; }
+  .choice-deck button { min-height: 37px; }
+  .vn-composer { min-height: 46px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .light-mote,
+  .presence-ring,
+  .presence-ring::before,
+  .presence-ring::after,
+  .character-presence.speaking .vn-character img,
+  .thought-dots i,
+  .voice-wave i { animation: none !important; }
+}

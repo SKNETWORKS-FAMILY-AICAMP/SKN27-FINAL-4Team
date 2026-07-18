@@ -16,7 +16,8 @@
 | `config/chat.constants.js` | - | 캐릭터, 표정, 추천 답장, 첫인사 설정 |
 | `utils/chatCharacter.js` | - | 저장 캐릭터 조회와 캐릭터 ID 정규화 |
 | `utils/chatScene.js` | - | 시간대 장면과 배경 장식 계산 |
-| `styles/chat-view.css` | - | 기존 scoped 화면 스타일 |
+| `styles/chat-view.css` | - | 기존 캐스케이드 순서를 유지하는 scoped 스타일 진입점 |
+| `styles/sections/` | - | 화면 계층·기능·반응형 구간별 chat 스타일 |
 
 > InnerCouncilView(SCR-004 이너 카운슬)는 스코프 제외로 삭제됨 (`_archive/frontend_removed/` 보관, 2026-07-02)
 
