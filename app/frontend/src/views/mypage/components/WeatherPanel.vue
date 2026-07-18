@@ -118,7 +118,11 @@
 
           <hr class="weather-section-divider" aria-hidden="true" />
 
-          <div class="weather-guide-grid" aria-label="오늘의 생활 참고 지표">
+          <div
+            v-if="conditionGuide.length"
+            class="weather-guide-grid"
+            aria-label="오늘의 생활 참고 지표"
+          >
             <article
               v-for="item in conditionGuide"
               :key="item.label"
@@ -157,7 +161,10 @@
               </div>
             </article>
           </div>
-          <p class="weather-index-note">생활 판단을 돕는 참고값이며, 건강 상태를 진단하거나 의료적 판단을 대신하지 않습니다.</p>
+          <p v-else class="weather-empty-message" role="status">
+            생활 참고 지표를 현재 계산할 수 없습니다.
+          </p>
+          <p v-if="conditionGuide.length" class="weather-index-note">생활 판단을 돕는 참고값이며, 건강 상태를 진단하거나 의료적 판단을 대신하지 않습니다.</p>
 
           <details class="weather-alert-card weather-alert-fold" :class="weatherAlertClass" :open="weatherAlerts.status === 'active' || undefined">
             <summary class="weather-alert-head">
@@ -200,7 +207,11 @@
             <p>나갈 시간을 떠올리며 가볍게 살펴보세요.</p>
           </div>
 
-          <div class="weather-rhythm-list" aria-label="시간대별 단기 예보 목록">
+          <div
+            v-if="hourlyForecasts.length"
+            class="weather-rhythm-list"
+            aria-label="시간대별 단기 예보 목록"
+          >
             <article
               v-for="(item, index) in hourlyForecasts"
               :key="index"
@@ -215,6 +226,9 @@
               </div>
             </article>
           </div>
+          <p v-else class="weather-empty-message" role="status">
+            시간대별 예보를 현재 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.
+          </p>
           
           <div class="weekly-forecast-summary">
             <h4>이번 주는</h4>
@@ -229,7 +243,7 @@
             <p>오늘 날씨에 어울리는 것부터 하나씩 골라보세요.</p>
           </div>
 
-          <div class="weather-recommend-list">
+          <div v-if="recommendations.length" class="weather-recommend-list">
             <article
               v-for="(item, index) in recommendations"
               :key="`${item.title}-${index}`"
@@ -247,6 +261,9 @@
               </div>
             </article>
           </div>
+          <p v-else class="weather-empty-message" role="status">
+            개인화 추천을 현재 제공할 수 없습니다. 실황과 예보 정보만 확인해 주세요.
+          </p>
         </section>
 
         <footer class="weather-provenance" aria-label="날씨 데이터 출처">
@@ -291,6 +308,17 @@
 </template>
 
 <script>
+import { DEFAULT_WEATHER_REGION } from "../config/mypage.constants";
+import {
+  DEFAULT_KMA_ATTRIBUTION,
+  WEATHER_DAY_END_HOUR,
+  WEATHER_DAY_START_HOUR,
+  WEATHER_EMOJI_NIGHT_START_HOUR,
+  WEATHER_INDEX_COLORS,
+  WEATHER_SCORE_THRESHOLDS,
+  WEATHER_SECTIONS,
+} from "../config/weather.constants";
+
 export default {
   name: "WeatherPanel",
   props: {
@@ -305,11 +333,7 @@ export default {
     return {
       activeWeatherSection: "summary",
       regionMenuOpen: false,
-      weatherSections: [
-        { key: "summary", label: "오늘" },
-        { key: "rhythm", label: "예보" },
-        { key: "choices", label: "추천" }
-      ]
+      weatherSections: WEATHER_SECTIONS
     };
   },
   watch: {
@@ -337,10 +361,7 @@ export default {
       return Array.isArray(this.payload?.attributions) ? this.payload.attributions : [];
     },
     kmaAttribution() {
-      return this.attributions.find(item => item?.id === "kma") || {
-        label: "기상청 API허브",
-        url: "https://apihub.kma.go.kr/apiInfo.do"
-      };
+      return this.attributions.find(item => item?.id === "kma") || DEFAULT_KMA_ATTRIBUTION;
     },
     tavilyAttribution() {
       return this.attributions.find(item => item?.id === "tavily") || this.insight?.webSearchProvider || null;
@@ -369,7 +390,7 @@ export default {
       return "AI 생성이 제한되면 관측값 기반 기본 안내로 자동 전환됩니다.";
     },
     locationName() {
-      return this.weather?.location?.name || this.location?.region || "서울";
+      return this.weather?.location?.name || this.location?.region || DEFAULT_WEATHER_REGION;
     },
     selectedRegion() {
       if (this.location?.mode === "auto") {
@@ -395,7 +416,9 @@ export default {
     timeOfDayClass() {
       const hour = this.weatherHour;
       if (hour === null) return "is-day";
-      return hour >= 6 && hour < 18 ? "is-day" : "is-night";
+      return hour >= WEATHER_DAY_START_HOUR && hour < WEATHER_DAY_END_HOUR
+        ? "is-day"
+        : "is-night";
     },
     weatherHour() {
       const time = this.weather?.base_time;
@@ -420,12 +443,7 @@ export default {
     conditionGuide() {
       const items = this.insight?.conditionGuide;
       if (Array.isArray(items) && items.length) return items;
-      return [
-        { label: "불쾌지수", level: "확인 중", severity: "unavailable", value: null, unit: "", gauge_percent: 0, scale_min: 60, scale_max: 90, scale_min_label: "60", scale_max_label: "90", status: "날씨 정보를 불러오는 중입니다.", bands: [], available: false },
-        { label: "체감온도", level: "확인 중", severity: "unavailable", value: null, unit: "℃", gauge_percent: 0, scale_min: 20, scale_max: 42, scale_min_label: "20℃", scale_max_label: "42℃", status: "날씨 정보를 불러오는 중입니다.", bands: [], available: false },
-        { label: "식중독지수", level: "확인 중", severity: "unavailable", value: null, unit: "", gauge_percent: 0, scale_min: 0, scale_max: 100, scale_min_label: "0", scale_max_label: "100", status: "날씨 정보를 불러오는 중입니다.", bands: [], available: false },
-        { label: "자외선지수", level: "확인 중", severity: "unavailable", value: null, unit: "", gauge_percent: 0, scale_min: 0, scale_max: 15, scale_min_label: "0", scale_max_label: "15", status: "날씨 정보를 불러오는 중입니다.", bands: [], available: false }
-      ];
+      return [];
     },
     weatherAlerts() {
       return this.weather?.weather_alerts || {
@@ -457,9 +475,7 @@ export default {
     hourlyForecasts() {
       const items = this.insight?.hourlyForecasts;
       if (Array.isArray(items) && items.length) return items;
-      return [
-        { time: "-", condition: "확인 중", temperature: "-", rainfall: "-" }
-      ];
+      return [];
     },
     forecastSummary() {
       return this.insight?.forecastSummary || this.insight?.weeklyForecast || "기상청 주간예보를 일시적으로 확인할 수 없습니다.";
@@ -468,26 +484,7 @@ export default {
     recommendations() {
       const items = this.insight?.recommendations;
       if (Array.isArray(items) && items.length) return items;
-      return [
-        {
-          kind: "general",
-          title: "현재 날씨 다시 확인하기",
-          summary: "관측값을 불러오면 시간대별 강수와 기온에 맞춘 준비를 표시합니다.",
-          actions: ["새로고침 후 현재 위치와 기준 시각을 확인하기"]
-        },
-        {
-          kind: "general",
-          title: "외출 시각 정하기",
-          summary: "현재 위치의 시간대별 예보가 준비된 뒤 출발 시각을 정하는 편이 정확합니다.",
-          actions: ["시간대별 예보가 표시된 뒤 강수 구간을 확인하기"]
-        },
-        {
-          kind: "hobby",
-          title: "좋아하는 일 잠깐 즐기기",
-          summary: "저장된 취미를 불러오면 오늘 날씨에 어울리는 즐기는 방법을 함께 보여드립니다.",
-          actions: ["날씨 정보가 표시된 뒤 취미 추천을 확인하기"]
-        }
-      ];
+      return [];
     }
   },
   methods: {
@@ -512,7 +509,10 @@ export default {
       let isNight = false;
       if (timeStr) {
         const hour = parseInt(timeStr.split(":")[0], 10);
-        if (!isNaN(hour) && (hour >= 19 || hour < 6)) {
+        if (!isNaN(hour) && (
+          hour >= WEATHER_EMOJI_NIGHT_START_HOUR
+          || hour < WEATHER_DAY_START_HOUR
+        )) {
           isNight = true;
         }
       } else {
@@ -536,21 +536,16 @@ export default {
       const matchingBand = (item?.bands || []).find((band) => band.level === item?.level);
       if (matchingBand) return this.getBandColor(matchingBand);
       const severity = item?.severity;
-      if (severity === "danger") return "#ef4444";
-      if (severity === "warning") return "#f97316";
-      if (severity === "caution") return "#facc15";
-      if (severity === "interest") return "#3b82f6";
-      if (severity === "safe") return "#22c55e";
-      return "#8ea7ff";
+      return WEATHER_INDEX_COLORS[severity] || WEATHER_INDEX_COLORS.unknown;
     },
     getBandColor(band) {
       const level = String(band?.level || "");
-      if (level.includes("매우 높음") || level.includes("위험")) return "#ef4444";
-      if (level === "높음" || level.includes("경고")) return "#f97316";
-      if (level === "보통" || level.includes("주의")) return "#facc15";
-      if (level.includes("관심")) return "#3b82f6";
-      if (level.includes("낮음") || level.includes("기준 미만")) return "#22c55e";
-      return band?.color || "#8ea7ff";
+      if (level.includes("매우 높음") || level.includes("위험")) return WEATHER_INDEX_COLORS.danger;
+      if (level === "높음" || level.includes("경고")) return WEATHER_INDEX_COLORS.warning;
+      if (level === "보통" || level.includes("주의")) return WEATHER_INDEX_COLORS.caution;
+      if (level.includes("관심")) return WEATHER_INDEX_COLORS.interest;
+      if (level.includes("낮음") || level.includes("기준 미만")) return WEATHER_INDEX_COLORS.safe;
+      return band?.color || WEATHER_INDEX_COLORS.unknown;
     },
     getMeterWidth(item) {
       const percent = Number(item.gauge_percent || 0);
@@ -595,8 +590,8 @@ export default {
       return Number.isFinite(number) ? number : null;
     },
     scoreLevel(score) {
-      if (score >= 66) return "높음";
-      if (score >= 38) return "보통";
+      if (score >= WEATHER_SCORE_THRESHOLDS.high) return "높음";
+      if (score >= WEATHER_SCORE_THRESHOLDS.medium) return "보통";
       return "낮음";
     }
   }

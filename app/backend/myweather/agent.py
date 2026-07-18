@@ -1,6 +1,5 @@
 import hashlib
 import json
-import math
 import os
 import re
 import time
@@ -12,14 +11,13 @@ from django.utils import timezone
 
 from myweather.constants import (
     TAVILY_DEFAULT_DOMAINS,
-    DISCOMFORT_INDEX_BANDS,
-    APPARENT_TEMP_SUMMER_BANDS,
-    APPARENT_TEMP_WINTER_BANDS,
-    FOOD_POISONING_INDEX_BANDS,
-    UV_INDEX_BANDS,
+    TAVILY_RETRYABLE_STATUS_CODES,
+    WEATHER_PERSONALIZATION_FIELDS,
+    WEATHER_INDEX_ORDER,
     STATIC_PHRASING_FALLBACK_REPLACEMENTS,
     STATIC_PHRASING_FALLBACK_SUNNY_REPLACEMENTS,
 )
+from myweather.service.weather_index_service import calculate_weather_indices
 
 TAVILY_SEARCH_URL = os.environ.get("TAVILY_SEARCH_URL", "https://api.tavily.com/search")
 TAVILY_MAX_RESULTS = max(1, min(5, int(os.environ.get("TAVILY_MAX_RESULTS", "3"))))
@@ -88,7 +86,7 @@ class WeatherWebAgent:
                     headers={"Authorization": f"Bearer {tavily_key}"},
                     timeout=TAVILY_TIMEOUT_SECONDS,
                 )
-                if response.status_code not in {429, 500, 502, 503, 504}:
+                if response.status_code not in TAVILY_RETRYABLE_STATUS_CODES:
                     response.raise_for_status()
                     break
                 if attempt < TAVILY_RETRY_COUNT:
@@ -139,280 +137,7 @@ class WeatherWebAgent:
 
     @staticmethod
     def _calculate_weather_indices(weather):
-        temperature = WeatherWebAgent._to_float(weather.get("temperature"))
-        humidity = WeatherWebAgent._to_float(weather.get("humidity"))
-        wind_speed = WeatherWebAgent._to_float(weather.get("wind_speed"))
-        base_date = str(weather.get("base_date") or "")
-        base_time = str(weather.get("base_time") or "")
-        try:
-            month = int(base_date[4:6]) if len(base_date) >= 6 else timezone.localdate().month
-        except ValueError:
-            month = timezone.localdate().month
-        try:
-            hour = int(base_time[:2]) if len(base_time) >= 2 else timezone.localtime().hour
-        except ValueError:
-            hour = timezone.localtime().hour
-
-        def item(
-            label,
-            value,
-            unit,
-            level,
-            severity,
-            minimum,
-            maximum,
-            status,
-            method,
-            derived,
-            bands,
-            source_url,
-        ):
-            available = value is not None
-            gauge_percent = 0.0
-            if available and maximum > minimum:
-                gauge_percent = max(0.0, min(100.0, ((value - minimum) / (maximum - minimum)) * 100))
-            rounded = round(value, 1) if available else None
-
-            normalized_bands = []
-            for band in bands:
-                start = max(minimum, min(maximum, band["from"]))
-                end = max(minimum, min(maximum, band["to"]))
-                normalized_bands.append({
-                    **band,
-                    "start_percent": round(((start - minimum) / (maximum - minimum)) * 100, 1),
-                    "width_percent": round(((end - start) / (maximum - minimum)) * 100, 1),
-                })
-
-            return {
-                "label": label,
-                "score": rounded,
-                "value": rounded,
-                "unit": unit,
-                "level": level if available else "정보 없음",
-                "severity": severity if available else "unavailable",
-                "gauge_percent": round(gauge_percent, 1),
-                "scale_min": minimum,
-                "scale_max": maximum,
-                "scale_min_label": f"{minimum:g}{unit}",
-                "scale_max_label": f"{maximum:g}{unit}",
-                "status": status,
-                # 이전 프런트와의 호환을 위해 당분간 같은 문장을 유지한다.
-                "reason": status,
-                "method": method,
-                "derived": derived,
-                "available": available,
-                "bands": normalized_bands,
-                "source_url": source_url,
-            }
-
-        discomfort = None
-        discomfort_level = "정보 없음"
-        discomfort_severity = "unavailable"
-        discomfort_status = "기온·습도 관측값이 없어 계산하지 못했습니다."
-        if temperature is not None and humidity is not None:
-            discomfort = (
-                1.8 * temperature
-                - 0.55 * (1 - humidity / 100.0) * (1.8 * temperature - 26)
-                + 32
-            )
-            if discomfort >= 80:
-                discomfort_level = "매우 높음"
-                discomfort_severity = "danger"
-                discomfort_status = "대부분이 불쾌감을 느끼는 범위입니다."
-            elif discomfort >= 75:
-                discomfort_level = "높음"
-                discomfort_severity = "warning"
-                discomfort_status = "절반가량이 불쾌감을 느끼는 범위입니다."
-            elif discomfort >= 68:
-                discomfort_level = "보통"
-                discomfort_severity = "caution"
-                discomfort_status = "일부가 불쾌감을 느끼기 시작하는 범위입니다."
-            else:
-                discomfort_level = "낮음"
-                discomfort_severity = "safe"
-                discomfort_status = "현재는 대체로 쾌적한 범위입니다."
-
-        apparent = None
-        apparent_method = "기상청 계절별 체감온도 산식"
-        apparent_level = "정보 없음"
-        apparent_severity = "unavailable"
-        apparent_status = "계산에 필요한 관측값이 없습니다."
-        apparent_minimum = 20
-        apparent_maximum = 42
-        apparent_bands = APPARENT_TEMP_SUMMER_BANDS
-        if 5 <= month <= 9 and temperature is not None and humidity is not None:
-            wet_bulb = (
-                temperature * math.atan(0.151977 * math.sqrt(humidity + 8.313659))
-                + math.atan(temperature + humidity)
-                - math.atan(humidity - 1.67633)
-                + 0.00391838 * (humidity ** 1.5) * math.atan(0.023101 * humidity)
-                - 4.686035
-            )
-            apparent = (
-                -0.2442
-                + 0.55399 * wet_bulb
-                + 0.45535 * temperature
-                - 0.0022 * (wet_bulb ** 2)
-                + 0.00278 * wet_bulb * temperature
-                + 3.0
-            )
-            apparent_method = "기상청 여름철 체감온도 산식(기온·습도)"
-            if apparent >= 38:
-                apparent_level = "위험"
-                apparent_severity = "danger"
-            elif apparent >= 35:
-                apparent_level = "경고"
-                apparent_severity = "warning"
-            elif apparent >= 33:
-                apparent_level = "주의"
-                apparent_severity = "caution"
-            elif apparent >= 31:
-                apparent_level = "관심"
-                apparent_severity = "interest"
-            else:
-                apparent_level = "기준 미만"
-                apparent_severity = "safe"
-            apparent_status = f"현재는 폭염 영향 {apparent_level} 범위입니다."
-        elif temperature is not None and wind_speed is not None:
-            wind_kmh = max(0.0, wind_speed) * 3.6
-            apparent_minimum = -50
-            apparent_maximum = 10
-            apparent_bands = APPARENT_TEMP_WINTER_BANDS
-            if temperature <= 10 and wind_speed >= 1.3:
-                apparent = (
-                    13.12
-                    + 0.6215 * temperature
-                    - 11.37 * (wind_kmh ** 0.16)
-                    + 0.3965 * temperature * (wind_kmh ** 0.16)
-                )
-                apparent_method = "기상청 겨울철 체감온도 산식(기온·풍속)"
-                if apparent <= -45:
-                    apparent_level = "위험"
-                    apparent_severity = "danger"
-                elif apparent <= -25:
-                    apparent_level = "경고"
-                    apparent_severity = "warning"
-                elif apparent <= -10:
-                    apparent_level = "주의"
-                    apparent_severity = "caution"
-                else:
-                    apparent_level = "관심"
-                    apparent_severity = "interest"
-                apparent_status = f"현재는 한랭 체감 {apparent_level} 범위입니다."
-            else:
-                apparent_method = "기상청 겨울철 산출 조건: 기온 10℃ 이하·풍속 1.3m/s 이상"
-                apparent_status = "겨울철 공식 산출 조건 밖입니다."
-
-        food_poisoning = None
-        food_poisoning_level = "정보 없음"
-        food_poisoning_severity = "unavailable"
-        food_poisoning_status = "기온·습도 관측값이 없어 계산하지 못했습니다."
-        if temperature is not None and humidity is not None:
-            food_poisoning = 1.79 * (1.03 ** temperature) * (1.04 ** humidity)
-            if food_poisoning >= 86:
-                food_poisoning_level = "위험"
-                food_poisoning_severity = "danger"
-                food_poisoning_status = "식중독 발생 위험이 매우 높으니 조리 후 즉시 섭취하세요."
-            elif food_poisoning >= 70:
-                food_poisoning_level = "경고"
-                food_poisoning_severity = "warning"
-                food_poisoning_status = "식중독 발생 위험이 높으니 조리 시 각별히 주의하세요."
-            elif food_poisoning >= 55:
-                food_poisoning_level = "주의"
-                food_poisoning_severity = "caution"
-                food_poisoning_status = "식중독 발생 가능성이 있으니 조리 기구의 위생을 챙기세요."
-            else:
-                food_poisoning_level = "관심"
-                food_poisoning_severity = "safe"
-                food_poisoning_status = "식중독 발생 위험이 낮으나 개인위생을 유지하세요."
-
-        uv = None
-        uv_level = "정보 없음"
-        uv_severity = "unavailable"
-        uv_status = "시간·날씨 정보가 없어 계산하지 못했습니다."
-        if hour is not None and month is not None:
-            if hour < 6 or hour > 18:
-                uv = 0.0
-            else:
-                uv_factor = math.cos(math.pi * (hour - 12.5) / 6.5)
-                uv_factor = max(0.0, uv_factor)
-                
-                if month in (6, 7, 8):
-                    month_peak = 10.0
-                elif month in (5, 9):
-                    month_peak = 8.0
-                elif month in (4, 10):
-                    month_peak = 6.0
-                elif month in (3, 11):
-                    month_peak = 4.0
-                else:
-                    month_peak = 2.0
-                    
-                cond = str(weather.get("condition") or "")
-                sky_code = str(weather.get("sky_code") or "")
-                
-                if any(term in cond for term in ("비", "눈", "소나기")):
-                    attenuation = 0.2
-                elif "흐림" in cond or sky_code == "4":
-                    attenuation = 0.3
-                elif "구름많음" in cond or sky_code == "3":
-                    attenuation = 0.7
-                else:
-                    attenuation = 1.0
-                    
-                uv = uv_factor * month_peak * attenuation
-
-            if uv is not None:
-                if uv >= 11:
-                    uv_level = "위험"
-                    uv_severity = "danger"
-                    uv_status = "바깥 활동을 피하고 실내에 머무르세요."
-                elif uv >= 8:
-                    uv_level = "매우 높음"
-                    uv_severity = "warning"
-                    uv_status = "오전 10시~오후 3시에는 야외 활동을 피하세요."
-                elif uv >= 6:
-                    uv_level = "높음"
-                    uv_severity = "warning"
-                    uv_status = "외출 시 모자, 선글라스를 쓰고 자외선 차단제를 바르세요."
-                elif uv >= 3:
-                    uv_level = "보통"
-                    uv_severity = "caution"
-                    uv_status = "햇볕 노출 시 2~3시간 내에 화상을 입을 수 있으니 대비하세요."
-                else:
-                    uv_level = "낮음"
-                    uv_severity = "safe"
-                    uv_status = "자외선 노출 위험이 매우 낮아 안전한 상태입니다."
-
-        return {
-            "불쾌지수": item(
-                "불쾌지수", discomfort, "", discomfort_level, discomfort_severity, 60, 90,
-                discomfort_status,
-                "기상청 과거 불쾌지수 산식: DI=1.8T-0.55(1-RH/100)(1.8T-26)+32", True,
-                DISCOMFORT_INDEX_BANDS,
-                "https://www.kma.go.kr/kma/servlet/NeoboardProcess?bid=press2&mode=download&num=1553&fno=1",
-            ),
-            "체감온도": item(
-                "체감온도", apparent, "℃", apparent_level, apparent_severity,
-                apparent_minimum, apparent_maximum, apparent_status,
-                apparent_method, True, apparent_bands,
-                "https://data.kma.go.kr/climate/windChill/selectWindChillChart.do",
-            ),
-            "식중독지수": item(
-                "식중독지수", food_poisoning, "", food_poisoning_level, food_poisoning_severity, 0, 100,
-                food_poisoning_status,
-                "기상청·식약처식중독 예측 모델식: 1.79 * 1.03^T * 1.04^H", True,
-                FOOD_POISONING_INDEX_BANDS,
-                "https://www.weather.go.kr/w/theme/daily-life-weather/lifestyle.do",
-            ),
-            "자외선지수": item(
-                "자외선지수", uv, "", uv_level, uv_severity, 0, 15,
-                uv_status,
-                "기상청 시간·계절·기상 기반 자외선 추정식", True,
-                UV_INDEX_BANDS,
-                "https://data.kma.go.kr/climate/uv/selectUvChart.do",
-            ),
-        }
+        return calculate_weather_indices(weather, WeatherWebAgent._to_float)
 
     @staticmethod
     def _generate_analysis(weather, user_profile, tavily_context):
@@ -574,10 +299,16 @@ class WeatherWebAgent:
                 ),
                 "personalization_fields": [
                     field
-                    for field in ("선택한 취미", "오늘의 감정")
+                    for field in WEATHER_PERSONALIZATION_FIELDS
                     if (
-                        (field == "선택한 취미" and (user_profile or {}).get("hobbies"))
-                        or (field == "오늘의 감정" and (user_profile or {}).get("today_emotion"))
+                        (
+                            field == WEATHER_PERSONALIZATION_FIELDS[0]
+                            and (user_profile or {}).get("hobbies")
+                        )
+                        or (
+                            field == WEATHER_PERSONALIZATION_FIELDS[1]
+                            and (user_profile or {}).get("today_emotion")
+                        )
                     )
                 ],
             },
@@ -586,52 +317,20 @@ class WeatherWebAgent:
     @staticmethod
     def _fallback(weather, tavily_context=None, generation_error="", user_profile=None):
         condition = weather.get("condition") or "현재 날씨"
-        humidity = WeatherWebAgent._to_float(weather.get("humidity"))
-        temperature = WeatherWebAgent._to_float(weather.get("temperature"))
         condition_guide = WeatherWebAgent._fallback_condition_guide(weather)
-        time_rhythm = WeatherWebAgent._fallback_time_rhythm(weather)
-
-        recommendations = [
-            {
-                "kind": "general",
-                "title": "외출 전 3분 점검",
-                "summary": f"현재 {condition}, {temperature:g}℃ 기준으로 가까운 시간의 비와 기온 변화를 먼저 확인하세요." if temperature is not None else f"현재 {condition} 기준으로 가까운 시간의 비와 기온 변화를 먼저 확인하세요.",
-                "actions": [
-                    "시간대별 예보에서 출발 시각의 강수를 확인하기",
-                    "귀가 시각 기온에 맞춰 얇은 겉옷을 정하기",
-                ],
-            },
-            {
-                "kind": "general",
-                "title": "실내 온습도 맞추기",
-                "summary": f"실외 습도 {humidity:g}%를 참고해 실내는 40~60% 범위로 조절하면 머무는 동안 더 편합니다." if humidity is not None else "실외 상태를 참고해 실내 습도를 40~60% 범위로 조절하면 머무는 동안 더 편합니다.",
-                "actions": [
-                    "실내 습도계를 확인하고 60% 이상이면 제습하기",
-                    "비가 멎은 시간에 창문을 5~10분 맞통풍하기",
-                ],
-            },
-        ]
-        hobbies = (user_profile or {}).get("hobbies") or []
-        hobby = str(hobbies[0]).strip() if hobbies else "좋아하는 취미"
-        recommendations.append({
-            "kind": "hobby",
-            "title": f"{hobby}, 오늘 날씨에 맞춰 즐기기",
-            "summary": f"{condition}인 오늘은 가까운 시간대 예보를 살펴 {hobby}에 집중할 시간을 편하게 잡아보세요.",
-            "actions": [
-                f"{hobby}에 쓸 20~30분을 일정에 먼저 비워두기",
-                "야외 활동이면 출발 직전 강수와 특보 확인하기",
-            ],
-        })
 
         return {
-            "weatherAnalysis": f"현재 날씨는 {condition}입니다. 분석 데이터 로딩이 지연되고 있으나, 이 기상 정보를 바탕으로 가볍게 오늘의 페이스를 조절해보세요.",
+            "weatherAnalysis": (
+                f"현재 {condition} 관측 데이터는 확인했지만 개인화 해설을 생성하지 "
+                "못했습니다. 아래 기상청 실황과 예보를 기준으로 확인해 주세요."
+            ),
             "moodImpact": "",
             "conditionGuide": condition_guide,
             "hourlyForecasts": weather.get("hourly_forecasts", []) if weather else [],
             "weeklyForecasts": weather.get("weekly_forecasts", []) if weather else [],
             "forecastSummary": WeatherWebAgent._fallback_weekly_summary(weather),
             "weeklyForecast": WeatherWebAgent._fallback_weekly_summary(weather),
-            "recommendations": recommendations[:3],
+            "recommendations": [],
             "careNote": "",
             "sources": (tavily_context or {}).get("sources", []),
             "webSearchUsed": bool((tavily_context or {}).get("available")),
@@ -642,8 +341,8 @@ class WeatherWebAgent:
                 "model": os.environ.get("MYWEATHER_OPENAI_MODEL", "gpt-5.4-mini"),
                 "status": "fallback",
                 "reason": generation_error or "generation_failed",
-                "personalized": bool(hobbies),
-                "personalization_fields": ["선택한 취미"] if hobbies else [],
+                "personalized": False,
+                "personalization_fields": [],
             },
             "is_fallback": True,
         }
@@ -763,74 +462,9 @@ class WeatherWebAgent:
             return json.loads(match.group(0))
 
     @staticmethod
-    def _normalize_condition_guide(items, weather=None):
-        return WeatherWebAgent._fallback_condition_guide(weather or {})
-
-    @staticmethod
-    def _normalize_time_rhythm(items, weather=None):
-        if not isinstance(items, list):
-            return WeatherWebAgent._fallback_time_rhythm(weather or {})
-
-        default_times = ["지금", "이후", "밤"]
-        normalized = []
-        for index, item in enumerate(items[:3]):
-            if not isinstance(item, dict):
-                continue
-            normalized.append({
-                "time": WeatherWebAgent._soften_phrasing(item.get("time") or default_times[index], weather),
-                "title": WeatherWebAgent._soften_phrasing(item.get("title") or "날씨 리듬", weather),
-                "description": WeatherWebAgent._soften_phrasing(
-                    item.get("description") or "현재 날씨를 기준으로 편하게 참고해보세요.",
-                    weather,
-                ),
-            })
-
-        if len(normalized) < 3:
-            fallback = WeatherWebAgent._fallback_time_rhythm(weather or {})
-            normalized.extend(fallback[len(normalized):])
-        return normalized[:3]
-
-    @staticmethod
     def _fallback_condition_guide(weather):
         indices = WeatherWebAgent._calculate_weather_indices(weather)
-        return [indices[label] for label in ("불쾌지수", "체감온도", "식중독지수", "자외선지수")]
-
-    @staticmethod
-    def _fallback_time_rhythm(weather):
-        condition = (weather or {}).get("condition") or "현재 날씨"
-        humidity = WeatherWebAgent._to_float((weather or {}).get("humidity"))
-        temperature = WeatherWebAgent._to_float((weather or {}).get("temperature"))
-        later_note = "예보가 바뀔 수 있어 외출 전 한 번 더 확인하면 좋아요."
-        if humidity is not None and humidity >= 70:
-            later_note = "습도가 높게 느껴지면 환기보다 제습이나 온도 조절이 먼저예요."
-        elif temperature is not None and temperature >= 28:
-            later_note = "기온 부담이 이어질 수 있어 물과 쉬는 시간을 가까이 두면 좋아요."
-
-        return [
-            {
-                "time": "지금",
-                "title": condition,
-                "description": "현재 관측값 기준으로 창밖 분위기를 먼저 확인했어요.",
-            },
-            {
-                "time": "이후",
-                "title": "생활 리듬 조절",
-                "description": later_note,
-            },
-            {
-                "time": "밤",
-                "title": "실내 컨디션",
-                "description": "밤에는 방 안 온도와 습도를 편한 쪽으로 맞춰두면 좋아요.",
-            },
-        ]
-
-    @staticmethod
-    def _score_level(score):
-        if score >= 67:
-            return "높음"
-        if score >= 34:
-            return "보통"
-        return "낮음"
+        return [indices[label] for label in WEATHER_INDEX_ORDER]
 
     @staticmethod
     def _normalize_recommendations(recommendations, weather=None, user_profile=None):
@@ -849,46 +483,19 @@ class WeatherWebAgent:
                 for action in actions[:2]
                 if isinstance(action, str) and action.strip()
             ]
-            if not actions:
-                actions = ["시간대별 예보와 현재 특보를 확인한 뒤 일정을 정하세요."]
+            title = str(item.get("title") or "").strip()
+            summary = str(item.get("summary") or item.get("reason") or "").strip()
+            if not title or not summary:
+                continue
             normalized.append({
                 "kind": kind,
-                "title": WeatherWebAgent._soften_phrasing(item.get("title") or "작은 날씨 루틴", weather),
-                "summary": WeatherWebAgent._soften_phrasing(
-                    item.get("summary") or item.get("reason") or "현재 관측값과 가까운 시간대 예보에 맞춰 일정을 조절하세요.",
-                    weather,
-                ),
+                "title": WeatherWebAgent._soften_phrasing(title, weather),
+                "summary": WeatherWebAgent._soften_phrasing(summary, weather),
                 "actions": actions,
             })
 
         general_items = [item for item in normalized if item["kind"] == "general"]
         hobby_items = [item for item in normalized if item["kind"] == "hobby"]
-
-        while len(general_items) < 2:
-            fallback_index = len(general_items) + 1
-            general_items.append({
-                "kind": "general",
-                "title": "외출 전 날씨 한 번 더 보기" if fallback_index == 1 else "실내 온습도 가볍게 맞추기",
-                "summary": "가까운 시간의 강수와 기온 변화를 확인해 오늘 일정을 무리 없이 조절하세요.",
-                "actions": [
-                    "출발 시각의 강수와 현재 특보 확인하기",
-                    "귀가 시각 기온에 맞춰 준비물 정하기",
-                ],
-            })
-
-        if not hobby_items:
-            hobbies = (user_profile or {}).get("hobbies") or []
-            hobby = str(hobbies[0]).strip() if hobbies else "좋아하는 취미"
-            condition = (weather or {}).get("condition") or "오늘 날씨"
-            hobby_items.append({
-                "kind": "hobby",
-                "title": f"{hobby}, 오늘 날씨에 맞춰 즐기기",
-                "summary": f"{condition}인 오늘은 예보를 살펴 {hobby}에 집중할 시간을 편하게 잡아보세요.",
-                "actions": [
-                    f"{hobby}에 쓸 20~30분을 일정에 먼저 비워두기",
-                    "야외 활동이면 출발 직전 강수와 특보 확인하기",
-                ],
-            })
 
         return general_items[:2] + hobby_items[:1]
 

@@ -131,6 +131,14 @@
 </template>
 
 <script>
+import {
+  BOOK_THEME_CAPTIONS,
+  BOOK_THEME_LABELS,
+  BOOK_THEME_NAMES,
+  BOOK_THEME_ORDER,
+  DEFAULT_BOOK_SOURCE_PROVIDER,
+} from "../config/book.config";
+
 export default {
   name: "BookPanel",
   props: {
@@ -148,11 +156,10 @@ export default {
       return Array.isArray(this.payload?.themes) ? this.payload.themes : [];
     },
     tabItems() {
-      const order = ["emotion", "interests", "hobbies"];
       const booksByTheme = new Map(this.bookList.map(book => [book.theme_id, book]));
       const themesById = new Map(this.themeList.map(theme => [theme.id, theme]));
 
-      return order.map((id) => {
+      return BOOK_THEME_ORDER.map((id) => {
         const book = booksByTheme.get(id) || {};
         const theme = themesById.get(id) || {};
         return {
@@ -175,12 +182,9 @@ export default {
       return this.currentBook.source_result || this.currentBook;
     },
     sourceProvider() {
-      return this.currentSource.provider || this.currentBook.source_provider || {
-        label: "Kakao Daum 책 검색",
-        short_label: "Kakao 도서정보",
-        detail_url: "https://developers.kakao.com/docs/latest/ko/daum-search/dev-guide#search-book",
-        attribution: "책 정보·표지: Kakao Daum 책 검색"
-      };
+      return this.currentSource.provider
+        || this.currentBook.source_provider
+        || DEFAULT_BOOK_SOURCE_PROVIDER;
     },
     hasCurrentBook() {
       return Boolean(this.currentTab?.hasBook);
@@ -252,28 +256,13 @@ export default {
       this.$emit("refresh", true);
     },
     tabLabel(book, index) {
-      const labels = {
-        emotion: "감정 추천",
-        interests: "관심사 추천",
-        hobbies: "취미 추천"
-      };
-      return labels[book?.theme_id] || book?.theme || `추천 ${index + 1}`;
+      return BOOK_THEME_LABELS[book?.theme_id] || book?.theme || `추천 ${index + 1}`;
     },
     tabCaption(book) {
-      const captions = {
-        emotion: "오늘의 마음",
-        interests: "프로필 관심사",
-        hobbies: "프로필 취미"
-      };
-      return captions[book?.theme_id] || "맞춤 추천";
+      return BOOK_THEME_CAPTIONS[book?.theme_id] || "맞춤 추천";
     },
     defaultThemeName(id) {
-      const names = {
-        emotion: "오늘의 감정 추천",
-        interests: "관심사 기반 추천",
-        hobbies: "취미 기반 추천"
-      };
-      return names[id] || "오늘의 추천";
+      return BOOK_THEME_NAMES[id] || "오늘의 추천";
     }
   }
 };

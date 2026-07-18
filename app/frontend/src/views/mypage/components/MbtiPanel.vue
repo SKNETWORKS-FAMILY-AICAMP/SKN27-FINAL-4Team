@@ -15,7 +15,7 @@
         <section class="mbti-result-board mbti-onboarding-board">
           <div>
             <span class="mbti-kicker">온보딩 MBTI 유형</span>
-            <template v-if="mbtiData.onboarding.type === '----'">
+            <template v-if="!onboardingData || onboardingData.type === '----'">
               <div class="mbti-input-area">
                 <div class="mbti-grid">
                   <button
@@ -33,16 +33,16 @@
               </div>
             </template>
             <template v-else>
-              <div class="mbti-type">{{ mbtiData.onboarding.type }}</div>
+              <div class="mbti-type">{{ onboardingData.type }}</div>
             </template>
-            <div class="mbti-confidence">{{ mbtiData.onboarding.period }}</div>
+            <div v-if="onboardingData" class="mbti-confidence">{{ onboardingData.period }}</div>
           </div>
         </section>
-        <section class="card report-panel mbti-type-description">
+        <section v-if="onboardingData" class="card report-panel mbti-type-description">
           <h3>온보딩 MBTI 유형 설명</h3>
-          <p>{{ mbtiData.onboarding.description }}</p>
+          <p>{{ onboardingData.description }}</p>
           <ol class="report-lines compact-report">
-            <li v-for="line in mbtiData.onboarding.report" :key="line">{{ line }}</li>
+            <li v-for="line in onboardingData.report" :key="line">{{ line }}</li>
           </ol>
         </section>
       </div>
@@ -55,8 +55,8 @@
         <p>대화 기반 응답이 충분해지면 네 가지 선호 지표와 변화 이유를 이 화면에서 확인할 수 있어요.</p>
         <div class="mbti-empty-baseline">
           <span>현재 참고 기준</span>
-          <strong>{{ mbtiData.onboarding.type }}</strong>
-          <small>온보딩에서 직접 입력한 유형</small>
+          <strong>{{ onboardingData?.type || '미등록' }}</strong>
+          <small>{{ onboardingData ? '온보딩에서 직접 입력한 유형' : '온보딩 MBTI를 먼저 등록해주세요.' }}</small>
         </div>
       </section>
 
@@ -67,47 +67,37 @@
             <article class="mbti-type-panel current">
               <span>현재 기준 MBTI</span>
               <strong class="mbti-letter-row">
-                <span v-if="isMonthlyPreparing" class="mbti-preparing-label">분석 준비 중</span>
-                <template v-else>
-                  <span
-                    v-for="(letter, index) in currentTypeLetters"
-                    :key="letter + index"
-                    class="mbti-type-letter"
-                    :style="{ color: isMbtiTypeLetterChanged(letter, index) ? '#ffcf5a' : 'inherit' }"
-                  >{{ letter }}</span>
-                </template>
+                <span
+                  v-for="(letter, index) in currentTypeLetters"
+                  :key="letter + index"
+                  class="mbti-type-letter"
+                  :style="{ color: isMbtiTypeLetterChanged(letter, index) ? '#ffcf5a' : 'inherit' }"
+                >{{ letter }}</span>
               </strong>
               <small>{{ mbtiData.current.monthLabel }}</small>
             </article>
             <article class="mbti-type-panel previous">
               <span>이전 기준 MBTI</span>
-              <strong>{{ mbtiData.previous.type }}</strong>
-              <small>{{ mbtiData.previous.monthLabel }}</small>
+              <strong>{{ mbtiData.previous?.type || '기준 없음' }}</strong>
+              <small>{{ mbtiData.previous?.monthLabel || '' }}</small>
             </article>
           </div>
 
           <article class="mbti-current-graph">
             <div class="mbti-combined-head">
               <div>
-                <h3>{{ isMonthlyPreparing ? 'MBTI 선호성향 그래프 준비 중' : '현재 MBTI 선호성향 그래프' }}</h3>
-                <p v-if="isMonthlyPreparing">아직 확정된 월간 점수가 없어 기본 상태로 표시됩니다.</p>
+                <h3>현재 MBTI 선호성향 그래프</h3>
               </div>
               <div class="mbti-type mbti-type-current mbti-letter-row">
-                <span v-if="isMonthlyPreparing" class="mbti-preparing-label">준비 중</span>
-                <template v-else>
-                  <span
-                    v-for="(letter, index) in currentTypeLetters"
-                    :key="'header-' + letter + index"
-                    class="mbti-type-letter"
-                    :style="{ color: isMbtiTypeLetterChanged(letter, index) ? '#ffcf5a' : 'inherit' }"
-                  >{{ letter }}</span>
-                </template>
+                <span
+                  v-for="(letter, index) in currentTypeLetters"
+                  :key="'header-' + letter + index"
+                  class="mbti-type-letter"
+                  :style="{ color: isMbtiTypeLetterChanged(letter, index) ? '#ffcf5a' : 'inherit' }"
+                >{{ letter }}</span>
               </div>
             </div>
-            <div v-if="isMonthlyPreparing" class="mbti-graph-placeholder">
-              대화 기록이 충분히 쌓이면 I/E, S/N, T/F, J/P 네 가지 선호 지표를 보여드립니다.
-            </div>
-            <div v-else class="axis-list graph-only-list">
+            <div class="axis-list graph-only-list">
               <div
                 class="axis-item"
                 v-for="axis in mbtiData.current.axes"
@@ -131,7 +121,7 @@
           </article>
 
           <article class="mbti-evidence-report">
-            <h3>{{ isMonthlyPreparing ? '준비 중 안내' : '근거 리포트' }}</h3>
+            <h3>근거 리포트</h3>
             <ol class="report-lines compact-report">
               <li v-for="line in mbtiData.report" :key="line">{{ line }}</li>
             </ol>
@@ -148,7 +138,7 @@
           <p class="qna-subtitle">무작위 질문에 답하며 나만의 성향 데이터를 쌓아보세요.</p>
           
           <div class="qna-progress-bar" v-if="mockData.counts">
-            <div v-for="(count, axis) in mockData.counts" :key="axis" class="progress-pill" :class="{ 'is-complete': count >= 5 }">
+            <div v-for="(count, axis) in mockData.counts" :key="axis" class="progress-pill" :class="{ 'is-complete': count >= requiredAnswersPerAxis }">
               <span class="axis-name">{{ axis }}</span>
               <span class="axis-count">{{ count }}/5</span>
             </div>
@@ -207,7 +197,7 @@
       </section>
     </template>
 
-    <div v-if="mbtiData.onboarding.type !== '----'" class="actions mbti-switch-actions" aria-label="MBTI 화면 전환">
+    <div v-if="onboardingData?.type && onboardingData.type !== '----'" class="actions mbti-switch-actions" aria-label="MBTI 화면 전환">
       <button
         v-for="view in mbtiViews"
         :key="view.key"
@@ -225,11 +215,16 @@
 
 <script>
 import { fetchMockQuestion, saveMockAnswer, resetMockQna } from "../mypage.api";
+import {
+  MBTI_AXIS_COUNT,
+  MBTI_OPTIONS,
+  MBTI_REQUIRED_ANSWERS_PER_AXIS,
+} from "../config/mbti.constants";
 
 export default {
   name: "MbtiPanel",
   props: {
-    mbtiData: { type: Object, required: true },
+    mbtiData: { type: Object, default: null },
     mbtiViewMode: { type: String, required: true },
     mbtiViews: { type: Array, required: true },
     currentMbtiView: { type: Object, required: true }
@@ -238,12 +233,8 @@ export default {
   data() {
     return {
       newMbti: "",
-      mbtiOptions: [
-        'INTJ', 'INTP', 'ENTJ', 'ENTP',
-        'INFJ', 'INFP', 'ENFJ', 'ENFP',
-        'ISTJ', 'ISTP', 'ESTJ', 'ESTP',
-        'ISFJ', 'ISFP', 'ESFJ', 'ESFP'
-      ],
+      mbtiOptions: MBTI_OPTIONS,
+      requiredAnswersPerAxis: MBTI_REQUIRED_ANSWERS_PER_AXIS,
       mockData: {
         axis: "",
         question: "",
@@ -254,22 +245,31 @@ export default {
     };
   },
   computed: {
+    onboardingData() {
+      return this.mbtiData?.onboarding || null;
+    },
     canFinishMock() {
       if (!this.mockData.counts) return false;
       const axes = Object.keys(this.mockData.counts);
-      return axes.length >= 4 && Object.values(this.mockData.counts).every(count => count >= 5);
+      return axes.length >= MBTI_AXIS_COUNT
+        && Object.values(this.mockData.counts).every(
+          (count) => count >= MBTI_REQUIRED_ANSWERS_PER_AXIS
+        );
     },
     isMonthlyPreparing() {
-      return this.mbtiData.current?.type === "----";
+      const currentType = this.mbtiData?.current?.type;
+      return !currentType || currentType === "----";
     },
     currentTypeLetters() {
-      return Array.from(this.mbtiData.current?.type || "----");
+      return this.isMonthlyPreparing
+        ? []
+        : Array.from(this.mbtiData.current.type);
     }
   },
   methods: {
     isMbtiTypeLetterChanged(letter, index) {
       if (this.isMonthlyPreparing || letter === "-") return false;
-      return this.mbtiData.previous?.type?.[index] !== letter;
+      return this.mbtiData?.previous?.type?.[index] !== letter;
     },
     saveMbti() {
       const type = this.newMbti.trim().toUpperCase();

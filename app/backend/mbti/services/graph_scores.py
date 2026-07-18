@@ -3,12 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Protocol
 
-from mbti.services.monthly_questions import MBTI_AXES
+from mbti.constants import AXIS_LETTER_DIRECTIONS, MBTI_AXES, TIE_EPSILON
 from mbti.services.opening_rules import SecondaryOpeningResult
-
-
-from mbti.services.mbti_utils import AXIS_LETTER_DIRECTIONS
-TIE_EPSILON = 1e-12
 
 
 class ResponseScoreLike(Protocol):

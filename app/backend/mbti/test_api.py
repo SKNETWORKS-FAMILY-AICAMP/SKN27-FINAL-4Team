@@ -17,7 +17,7 @@ class MbtiMockQnaApiTests(APITestCase):
         )
         self.client.force_authenticate(self.user)
 
-    @patch('mbti.services.llm_mbti_question_node.generate_random_axis_mbti_question')
+    @patch('mbti.services.qna_service.generate_random_axis_mbti_question')
     def test_question_endpoint_returns_question_and_axis_counts(self, mock_generate):
         mock_generate.return_value = {
             'id': None,
@@ -39,6 +39,17 @@ class MbtiMockQnaApiTests(APITestCase):
         response = self.client.get('/api/mbti/mock-qna/question/?axis=XX')
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    @patch('mbti.services.qna_service.generate_random_axis_mbti_question')
+    def test_question_endpoint_uses_curated_bank_when_llm_fails(self, mock_generate):
+        mock_generate.side_effect = RuntimeError('temporary LLM failure')
+
+        with self.assertLogs('mbti.services.qna_service', level='WARNING'):
+            response = self.client.get('/api/mbti/mock-qna/question/?axis=IE')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['question']['axis'], 'IE')
+        self.assertTrue(response.data['question']['text'])
 
     def test_save_answer_persists_response_and_updates_counts(self):
         response = self.client.post(

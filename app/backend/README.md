@@ -63,6 +63,9 @@ docker compose down -v && docker compose up -d --build
 | `KMA_API_HUB_VILAGE_ENDPOINT` | N | 기본 API허브 `VilageFcstInfoService_2.0` 호스트 |
 | `KMA_API_HUB_MID_ENDPOINT` | N | 기본 API허브 `MidFcstInfoService` 호스트 |
 | `KMA_API_HUB_WARNING_ENDPOINT` | N | 기본 API허브 `wrn_now_data.php` 호스트 |
+| `KMA_LIFE_INDEX_SERVICE_KEY` | 자외선지수 | 공공데이터포털의 `기상청_생활기상지수 조회서비스(3.0)` 활용신청 키. 미설정 시 같은 서비스에 승인된 `KMA_API_KEY` 재사용 |
+| `KMA_LIFE_INDEX_SERVICE_CONFIRMED` | 운영 필수 | `getUVIdxV5` 실호출 성공 후 `true` |
+| `KMA_UV_INDEX_ENDPOINT` | N | 기본 공공데이터포털 `LivingWthrIdxServiceV5/getUVIdxV5` 주소 |
 | `KMA_WEEKLY_CACHE_SECONDS` | N | 단기·중기 7일 예보 공동 캐시, 기본 10,800초(3시간) |
 | `KMA_WARNING_CACHE_SECONDS` | N | 전국 현재 특보현황 공동 캐시, 기본 300초 |
 
@@ -70,7 +73,8 @@ docker compose down -v && docker compose up -d --build
 
 ### 날씨 API 배포 기준 (2026-07-15 확인)
 
-- 구조화 기상 데이터는 기상청 API허브로 단일화했습니다. `getUltraSrtNcst`, `getUltraSrtFcst`, `getVilageFcst`, `getMidTa`, `getMidLandFcst`, `wrn_now_data.php`가 하나의 `KMA_API_HUB_AUTH_KEY`를 사용하며 기존 `KMA_API_KEY` 공공데이터포털 호출은 사용하지 않습니다. API허브 일반회원 한도는 일 20,000건·5GB입니다.
+- 실황·예보·특보 데이터는 기상청 API허브로 단일화했습니다. `getUltraSrtNcst`, `getUltraSrtFcst`, `getVilageFcst`, `getMidTa`, `getMidLandFcst`, `wrn_now_data.php`가 하나의 `KMA_API_HUB_AUTH_KEY`를 사용합니다. API허브 일반회원 한도는 일 20,000건·5GB입니다.
+- 자외선지수는 관측값으로 추정하지 않습니다. 공공데이터포털의 기상청 생활기상지수 V5 `getUVIdxV5` 공식 발표값만 사용하며, 별도 활용신청 키가 없거나 값이 없으면 `정보 없음`으로 표시합니다.
 - 서버는 실황·초단기예보를 격자/발표시각별 10분 공동 캐시하고 일시 장애 때 최대 2시간 내 직전 정상값을 사용합니다. 전국 특보는 5분 공동 캐시한 뒤 선택 지역만 표시합니다.
 - Tavily 무료 플랜은 월 1,000크레딧입니다. 검색은 네이버 날씨·웨더아이·케이웨더 공개 결과만 `basic` 깊이로 조회하고 지역·검색일별 30분 공동 캐시합니다. `검색 기반 주간예보 참고`는 API허브 단기·중기 7일 자료를 GPT가 요약하고, 민간 검색 결과는 설명·생활 추천 문맥만 보완합니다. 수치·예보·특보가 API허브와 다르면 API허브를 우선합니다.
 - Tavily production 키는 유료 플랜 또는 PAYGO가 필요합니다. 고객용 배포 전 Tavily 서비스 약관·AUP를 서비스 이용약관에 반영하고 `TAVILY_PLAN_NAME`, `TAVILY_KEY_ENVIRONMENT`, `TAVILY_COMMERCIAL_USE_CONFIRMED`를 실제 계약 상태대로 설정합니다.
@@ -84,6 +88,12 @@ API허브 배포 순서:
 3. 중기예보의 `중기기온조회`, `중기육상예보조회`와 기상특보의 `특보현황 조회`를 활용 신청합니다.
 4. `KMA_API_HUB_AUTH_KEY`를 설정하고 실황·초단기·7일 주간예보·특보 스모크 테스트를 실행합니다.
 5. 성공한 뒤에만 `KMA_API_HUB_SERVICES_CONFIRMED=true`로 설정합니다.
+
+자외선지수 배포 순서:
+
+1. 공공데이터포털에서 `기상청_생활기상지수 조회서비스(3.0)`를 별도로 활용 신청합니다.
+2. 승인된 키를 `KMA_LIFE_INDEX_SERVICE_KEY`에 설정하거나, 기존 `KMA_API_KEY`에 해당 서비스 승인을 추가합니다.
+3. `getUVIdxV5` 실호출 성공을 확인한 뒤 `KMA_LIFE_INDEX_SERVICE_CONFIRMED=true`로 설정합니다.
 
 ### Kakao Daum 책 검색 기반 추천
 

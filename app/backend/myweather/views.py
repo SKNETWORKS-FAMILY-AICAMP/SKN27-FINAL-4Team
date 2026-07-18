@@ -1,16 +1,24 @@
+import logging
+
 from rest_framework import status
-from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from user.models import UserProfile
 from user.views import CsrfExemptSessionAuthentication
 
 from .agent import WeatherWebAgent
-from .services import WeatherInputError, WeatherServiceError, fetch_current_weather
-from user.constants import EMOTION_LABELS_KO, WEATHER_INSIGHT_CACHE_VERSION
-import logging
+from .constants import (
+    API_LIMITS_CHECKED_AT,
+    OPENAI_WEATHER_SHARED_FIELDS,
+    STATIC_DEFAULT_WEATHER_REPRESENTATIVE_NAMES,
+    TAVILY_WEATHER_SHARED_FIELDS,
+)
+from .models import WeatherRegion
+from .service.exceptions import WeatherInputError, WeatherServiceError
+from .service.insight_cache_service import get_or_create_weather_insight
+from .service.user_profile_service import build_weather_user_profile
+from .services import fetch_current_weather
 
 logger = logging.getLogger(__name__)
 
@@ -23,33 +31,6 @@ def _request_value(request, key):
     if isinstance(value, str):
         value = value.strip()
     return value or None
-
-
-def _build_user_profile(user):
-    profile = UserProfile.objects.filter(user=user).first()
-    today_emotion = None
-    try:
-        from chat.models import ChatMessage
-        from django.utils import timezone
-        from django.db.models import Count
-        
-        today = timezone.localdate()
-        emotion_counts = ChatMessage.objects.filter(
-            session__user=user,
-            emotion_label__isnull=False,
-            created_at__date=today
-        ).exclude(emotion_label__in=['', 'normal']).values('emotion_label').annotate(count=Count('emotion_label')).order_by('-count')
-        
-        if emotion_counts.exists():
-            raw_emotion = emotion_counts.first()['emotion_label']
-            today_emotion = EMOTION_LABELS_KO.get(raw_emotion, raw_emotion)
-    except Exception as e:
-        print(f"Failed to fetch today emotion: {e}")
-
-    return {
-        "hobbies": getattr(profile, "hobbies", []) if profile else [],
-        "today_emotion": today_emotion,
-    }
 
 
 @api_view(["GET", "POST"])
@@ -78,55 +59,15 @@ def current_weather(request):
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
-    user_profile = _build_user_profile(request.user)
-
-    # 토큰 소모 최적화: 유저의 상태(감정, 취미 등)와 날씨 기준 시각이 동일하면 LLM 결과를 캐싱
-    import hashlib
-    import json
-    from django.core.cache import cache
-
-    cache_state = {
-        "version": WEATHER_INSIGHT_CACHE_VERSION,
-        "user_id": request.user.id,
-        "base_date": weather.get("base_date"),
-        "base_time": weather.get("base_time"),
-        "location_name": weather.get("location", {}).get("name"),
-        "condition": weather.get("condition"),
-        "temperature": weather.get("temperature"),
-        "weekly_forecasts": [
-            (
-                item.get("date"),
-                item.get("condition"),
-                item.get("min_temperature"),
-                item.get("max_temperature"),
-                item.get("precipitation_probability"),
-            )
-            for item in weather.get("weekly_forecasts", [])
-        ],
-        "weather_alert_status": weather.get("weather_alerts", {}).get("status"),
-        "weather_alerts": [
-            (
-                item.get("type"),
-                item.get("level"),
-                item.get("region"),
-                item.get("effective_at"),
-            )
-            for item in weather.get("weather_alerts", {}).get("items", [])
-        ],
-        "emotion": user_profile.get("today_emotion"),
-        "hobbies": user_profile.get("hobbies"),
-    }
-    
-    state_str = json.dumps(cache_state, sort_keys=True)
-    cache_key = "weather_insight_" + hashlib.md5(state_str.encode('utf-8')).hexdigest()
-
-    insight = cache.get(cache_key)
-    if not insight:
+    user_profile = build_weather_user_profile(request.user)
+    insight, cache_hit = get_or_create_weather_insight(
+        weather,
+        request.user.id,
+        user_profile,
+        WeatherWebAgent.analyze,
+    )
+    if not cache_hit:
         logger.info("[LLM 분석 실행] 캐시가 없으므로 LLM API를 호출합니다!")
-        insight = WeatherWebAgent.analyze(weather, user_profile)
-        # LLM 실패로 인한 Fallback 응답일 경우 60초만 캐시, 정상 응답은 1시간 캐시
-        timeout_seconds = 60 if insight.get("is_fallback") else 3600
-        cache.set(cache_key, insight, timeout=timeout_seconds)
     else:
         logger.debug("[캐시 적중] 저장된 LLM 리포트를 즉시 반환합니다! (토큰 0 소모)")
 
@@ -166,7 +107,7 @@ def current_weather(request):
                 "browser_storage": "현재 위치 좌표는 브라우저 탭 종료 시까지, 수동 선택 지역은 변경 또는 삭제 시까지",
             },
             "openai": {
-                "data": ["선택한 취미", "오늘의 감정", "지역 단위 날씨"],
+                "data": list(OPENAI_WEATHER_SHARED_FIELDS),
                 "purpose": "개인화된 날씨 해설과 생활 추천 생성",
                 "service_cache": "최대 1시간",
                 "vendor_retention": "OpenAI API 정책에 따라 일반적으로 최대 30일의 부정사용 모니터링 로그",
@@ -174,7 +115,7 @@ def current_weather(request):
                 "policy_url": "https://platform.openai.com/docs/models/default-usage-policies-by-endpoint",
             },
             "tavily": {
-                "data": ["지역명", "검색 기준일"],
+                "data": list(TAVILY_WEATHER_SHARED_FIELDS),
                 "purpose": "네이버 날씨·웨더아이·케이웨더 공개 검색 결과를 활용한 주간예보 설명과 생활 추천 맥락 검색",
                 "service_cache": f"지역·검색일별 최대 {tavily_cache_minutes}분 공동 캐시",
                 "personal_profile_sent": False,
@@ -183,14 +124,15 @@ def current_weather(request):
             },
         },
         "methodology": {
-            "summary": "체감온도는 기상청 계절별 산식을, 불쾌지수는 기상청 과거 공식 산식을 재현합니다. 식중독지수는 기상청·식약처의 식중독 예측 모델식으로, 자외선지수는 기상청 기준 등급을 적용하여 추정·계산한 값입니다.",
-            "graph": "막대 색은 공식 단계 구간, 흰색 표식은 현재 계산값의 위치입니다. 특보는 환산하지 않고 기상청 발표 단계를 그대로 표시합니다.",
+            "summary": "체감온도는 기상청 계절별 산식을, 불쾌지수는 기상청 과거 공식 산식을 재현합니다. 식중독지수는 기상청·식약처의 식중독 예측 모델식을 사용합니다. 자외선지수는 추정하지 않고 기상청 생활기상지수 V5 API의 공식 발표값만 표시합니다.",
+            "graph": "막대 색은 공식 단계 구간, 흰색 표식은 현재 지수값의 위치입니다. 특보는 환산하지 않고 기상청 발표 단계를 그대로 표시합니다.",
             "indices": insight.get("conditionGuide", []),
             "formula_source_url": "https://data.kma.go.kr/climate/windChill/selectWindChillChart.do",
             "discomfort_source_url": "https://data.kma.go.kr/data/lwi/lwiList.do?pgmNo=635",
+            "uv_index_source_url": "https://www.weather.go.kr/w/forecast/life/index-info.do",
         },
         "api_limits": {
-            "checked_at": "2026-07-15",
+            "checked_at": API_LIMITS_CHECKED_AT,
             "kma_api_hub": {
                 "free": "일반회원 일 최대 20,000건·5GB, 동네예보·중기예보·특보현황 세부 API 활용신청 필요",
                 "applied": (
@@ -202,6 +144,13 @@ def current_weather(request):
                 "url": "https://apihub.kma.go.kr/apiList.do?seqApi=10&seqApiSub=286",
                 "warning_url": weather.get("weather_alerts", {}).get("docs_url", "https://apihub.kma.go.kr/apiInfo.do"),
             },
+            "kma_life_index": {
+                "free": "공공데이터포털 개발계정 일 10,000건, 별도 활용신청 필요",
+                "applied": "지역·발표시각별 1시간 공동 캐시, 장애 시 최대 6시간 내 공식 발표값만 명시적으로 재사용",
+                "configured": weather.get("uv_index", {}).get("status") != "unconfigured",
+                "available": weather.get("uv_index", {}).get("status") == "available",
+                "url": "https://www.data.go.kr/data/15085288/openapi.do",
+            },
             "tavily": {
                 "free": "월 1,000크레딧, development 키 분당 100회",
                 "production": "production 키 분당 1,000회; 유료 플랜 또는 PAYGO 필요",
@@ -210,7 +159,7 @@ def current_weather(request):
             },
             "openai": {
                 "limit": "프로젝트·사용 등급별 요청/토큰 한도가 다름",
-                "applied": "사용자·날씨 상태별 최대 1시간 생성문 캐시, 제한 오류 재시도 후 안전한 기본 안내",
+                "applied": "사용자·날씨 상태별 최대 1시간 생성문 캐시, 생성 실패 시 임의 추천 없이 미제공 상태 표시",
                 "url": "https://platform.openai.com/docs/guides/rate-limits",
             },
         },
@@ -221,12 +170,7 @@ def current_weather(request):
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([IsAuthenticated])
 def get_weather_regions(request):
-    from myweather.models import WeatherRegion
     ordered_names = list(WeatherRegion.objects.order_by("id").values_list("name", flat=True))
     if not ordered_names:
-        ordered_names = [
-            "서울", "부산", "대구", "인천", "대전", "울산", "세종", "전남광주",
-            "경기", "강원", "충북", "충남", "전북", "경북", "경남", "제주"
-        ]
+        ordered_names = list(STATIC_DEFAULT_WEATHER_REPRESENTATIVE_NAMES)
     return Response(ordered_names)
-

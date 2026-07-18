@@ -3,9 +3,12 @@ from datetime import datetime
 from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
 
+from django.core.cache import cache
 from django.test import SimpleTestCase
 
 from .agent import WeatherWebAgent
+from .service.insight_cache_service import get_or_create_weather_insight
+from .service.life_index_service import fetch_uv_index
 from .services import (
     _request_kma_json,
     fetch_current_weather,
@@ -43,7 +46,43 @@ class RainfallMergeTests(SimpleTestCase):
         self.assertEqual(merge_forecast_rainfall("0", forecast), "0")
 
 
+class WeatherInsightCacheServiceTests(SimpleTestCase):
+    def setUp(self):
+        cache.clear()
+
+    def test_reuses_analysis_when_relevant_weather_state_is_unchanged(self):
+        weather = {
+            "base_date": "20260718",
+            "base_time": "1200",
+            "condition": "맑음",
+            "temperature": 28,
+            "location": {"name": "서울"},
+            "weekly_forecasts": [],
+            "weather_alerts": {"status": "none", "items": []},
+        }
+        profile = {"hobbies": ["산책"], "today_emotion": "평온"}
+        analyzer = Mock(return_value={"weatherAnalysis": "안내", "is_fallback": False})
+
+        first, first_cache_hit = get_or_create_weather_insight(
+            weather, 7, profile, analyzer
+        )
+        second, second_cache_hit = get_or_create_weather_insight(
+            weather, 7, profile, analyzer
+        )
+
+        self.assertFalse(first_cache_hit)
+        self.assertTrue(second_cache_hit)
+        self.assertEqual(first, second)
+        analyzer.assert_called_once_with(weather, profile)
+
+
 class WeatherLocationResolutionTests(SimpleTestCase):
+    def test_default_location_is_a_plain_serializable_mapping(self):
+        location = resolve_location()
+
+        self.assertIsInstance(location, dict)
+        self.assertTrue({"name", "lat", "lon"}.issubset(location))
+
     def test_current_coordinates_are_labeled_with_nearest_supported_region(self):
         location = resolve_location(
             lat=37.5665,
@@ -159,6 +198,7 @@ class WeatherExternalProcessingTests(SimpleTestCase):
             'temperature': 30,
             'humidity': 70,
             'wind_speed': 2,
+            'uv_index': {'status': 'available', 'value': 9},
         }
         indices = WeatherWebAgent._calculate_weather_indices(weather)
 
@@ -179,11 +219,30 @@ class WeatherExternalProcessingTests(SimpleTestCase):
         )
         self.assertEqual(indices['식중독지수']['value'], 67.7)
         self.assertEqual(indices['식중독지수']['level'], '주의')
-        self.assertEqual(indices['자외선지수']['value'], 9.7)
+        self.assertEqual(indices['자외선지수']['value'], 9.0)
         self.assertEqual(indices['자외선지수']['level'], '매우 높음')
+        self.assertFalse(indices['자외선지수']['derived'])
+        self.assertIn('getUVIdxV5', indices['자외선지수']['method'])
         self.assertNotIn('습도', indices)
         self.assertNotIn('풍속', indices)
         self.assertNotIn('감기가능지수', indices)
+
+    def test_uv_index_has_no_calculated_or_dummy_fallback(self):
+        official = WeatherWebAgent._calculate_weather_indices({
+            'uv_index': {'status': 'available', 'value': 6.2},
+        })['자외선지수']
+        unavailable = WeatherWebAgent._calculate_weather_indices({
+            'temperature': 35,
+            'humidity': 15,
+            'wind_speed': 10,
+        })['자외선지수']
+
+        self.assertEqual(official['value'], 6.2)
+        self.assertEqual(official['level'], '높음')
+        self.assertTrue(official['available'])
+        self.assertFalse(unavailable['available'])
+        self.assertIsNone(unavailable['value'])
+        self.assertEqual(unavailable['severity'], 'unavailable')
 
     def test_winter_apparent_temperature_uses_official_calculation_boundary(self):
         applicable = WeatherWebAgent._calculate_weather_indices({
@@ -233,7 +292,7 @@ class WeatherExternalProcessingTests(SimpleTestCase):
         self.assertEqual([item['kind'] for item in recommendations], ['general', 'general', 'hobby'])
         self.assertEqual([item['title'] for item in recommendations], ['우산 준비', '겉옷 준비', '사진 산책'])
 
-    def test_fallback_keeps_hobby_recommendation_last(self):
+    def test_fallback_does_not_expose_synthetic_recommendations(self):
         result = WeatherWebAgent._fallback(
             {'condition': '맑음', 'temperature': 24, 'humidity': 50},
             WeatherWebAgent._empty_tavily_context(),
@@ -241,8 +300,18 @@ class WeatherExternalProcessingTests(SimpleTestCase):
             {'hobbies': ['사진']},
         )
 
-        self.assertEqual([item['kind'] for item in result['recommendations']], ['general', 'general', 'hobby'])
-        self.assertIn('사진', result['recommendations'][2]['title'])
+        self.assertEqual(result['recommendations'], [])
+        self.assertFalse(result['generation']['personalized'])
+        self.assertEqual(result['generation']['personalization_fields'], [])
+
+    def test_normalizer_does_not_fill_missing_recommendations_with_dummy_data(self):
+        recommendations = WeatherWebAgent._normalize_recommendations(
+            [{'kind': 'general', 'title': '제목만 있음'}],
+            {'condition': '맑음'},
+            {'hobbies': ['사진']},
+        )
+
+        self.assertEqual(recommendations, [])
 
     def test_llm_cannot_replace_index_values(self):
         weather = {
@@ -399,6 +468,10 @@ class KmaRateLimitTests(SimpleTestCase):
 
 class KmaApiHubUnificationTests(SimpleTestCase):
     @patch.dict(os.environ, {'KMA_API_HUB_AUTH_KEY': 'hub-key'})
+    @patch(
+        'myweather.services.fetch_uv_index',
+        return_value={'status': 'available', 'value': 5, 'cache_status': 'miss'},
+    )
     @patch('myweather.services.fetch_weather_warnings')
     @patch('myweather.services.fetch_weekly_forecast', return_value={'days': []})
     @patch('myweather.services.fetch_sky_forecast', return_value={})
@@ -411,6 +484,7 @@ class KmaApiHubUnificationTests(SimpleTestCase):
         fetch_sky_forecast,
         fetch_weekly_forecast,
         fetch_weather_warnings,
+        fetch_uv_index_mock,
     ):
         request_kma_json.return_value = {
             'response': {
@@ -436,7 +510,56 @@ class KmaApiHubUnificationTests(SimpleTestCase):
         self.assertEqual(fetch_sky_forecast.call_args.args[0], 'hub-key')
         fetch_weekly_forecast.assert_called_once()
         self.assertEqual(fetch_weekly_forecast.call_args.args[0], 'hub-key')
+        fetch_uv_index_mock.assert_called_once()
+        self.assertEqual(result['uv_index']['value'], 5)
         self.assertEqual(result['provider'], 'KMA API Hub')
+
+
+class KmaLifeIndexTests(SimpleTestCase):
+    def setUp(self):
+        cache.clear()
+
+    @patch.dict(os.environ, {'KMA_LIFE_INDEX_SERVICE_KEY': 'life-key'})
+    @patch('myweather.service.life_index_service.requests.get')
+    def test_fetches_official_uv_index_without_local_calculation(self, request_get):
+        response = Mock(status_code=200, content=b'')
+        response.json.return_value = {
+            'response': {
+                'header': {'resultCode': '00'},
+                'body': {'items': {'item': {
+                    'areaNo': '1100000000',
+                    'date': '2026071812',
+                    'h0': '8.4',
+                }}},
+            }
+        }
+        request_get.return_value = response
+
+        result = fetch_uv_index({'name': '서울'})
+
+        self.assertEqual(result['value'], 8.4)
+        self.assertEqual(result['provider'], '기상청 생활기상지수 V5')
+        self.assertFalse(result['stale'])
+        request_url = request_get.call_args.args[0]
+        request_params = request_get.call_args.kwargs['params']
+        self.assertEqual(
+            request_url,
+            'https://apis.data.go.kr/1360000/LivingWthrIdxServiceV5/getUVIdxV5',
+        )
+        self.assertEqual(request_params['ServiceKey'], 'life-key')
+        self.assertEqual(request_params['areaNo'], '1100000000')
+
+    @patch.dict(
+        os.environ,
+        {'KMA_LIFE_INDEX_SERVICE_KEY': '', 'KMA_API_KEY': ''},
+    )
+    @patch('myweather.service.life_index_service.requests.get')
+    def test_missing_key_returns_unavailable_instead_of_dummy(self, request_get):
+        result = fetch_uv_index({'name': '서울'})
+
+        self.assertEqual(result['status'], 'unconfigured')
+        self.assertIsNone(result['value'])
+        request_get.assert_not_called()
 
 
 class KmaWarningTests(SimpleTestCase):

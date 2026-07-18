@@ -28,7 +28,7 @@ def tavily_commercial_plan_check(app_configs, **kwargs):
 
     if not os.environ.get('OPENAI_API_KEY', '').strip():
         warnings.append(Warning(
-            'OPENAI_API_KEY가 없어 날씨 개인화 생성문이 기본 안내로 대체됩니다.',
+            'OPENAI_API_KEY가 없어 날씨 개인화 해설과 추천을 제공하지 않습니다.',
             hint='개인화 생성문을 사용하려면 배포 환경의 OPENAI_API_KEY와 결제·한도를 확인하세요.',
             id='myweather.W003',
         ))
@@ -70,6 +70,29 @@ def tavily_commercial_plan_check(app_configs, **kwargs):
             id='myweather.W008',
         ))
 
+    life_index_key = (
+        os.environ.get('KMA_LIFE_INDEX_SERVICE_KEY', '')
+        or os.environ.get('KMA_API_KEY', '')
+    ).strip()
+    if not life_index_key:
+        warnings.append(Warning(
+            '기상청 생활기상지수 V5 키가 없어 자외선지수를 제공하지 않습니다.',
+            hint=(
+                '공공데이터포털에서 기상청_생활기상지수 조회서비스(3.0)를 활용 신청한 뒤 '
+                'KMA_LIFE_INDEX_SERVICE_KEY를 설정하세요. 기존 KMA_API_KEY에 해당 서비스의 '
+                '활용신청을 추가한 경우 그 키도 재사용할 수 있습니다.'
+            ),
+            id='myweather.W009',
+        ))
+    elif os.environ.get(
+        'KMA_LIFE_INDEX_SERVICE_CONFIRMED', 'false'
+    ).strip().lower() not in {'1', 'true', 'yes', 'on'}:
+        warnings.append(Warning(
+            '생활기상지수 키는 있으나 자외선지수 실호출 확인 표시가 없습니다.',
+            hint='getUVIdxV5 호출 성공 후 KMA_LIFE_INDEX_SERVICE_CONFIRMED=true를 설정하세요.',
+            id='myweather.W010',
+        ))
+
     if tavily_key:
         configured_domains = {
             domain.strip().lower()
@@ -106,6 +129,14 @@ def tavily_commercial_plan_check(app_configs, **kwargs):
                 '내부 프록시를 의도한 경우에도 원천 데이터가 기상청 API허브인지 별도로 확인하세요.'
             ),
             id='myweather.W007',
+        ))
+
+    life_index_endpoint = os.environ.get('KMA_UV_INDEX_ENDPOINT', '').strip()
+    if life_index_endpoint and urlparse(life_index_endpoint).hostname != 'apis.data.go.kr':
+        warnings.append(Warning(
+            '자외선지수 API 주소가 공공데이터포털 공식 호스트가 아닙니다.',
+            hint='KMA_UV_INDEX_ENDPOINT를 apis.data.go.kr 공식 주소로 설정하세요.',
+            id='myweather.W011',
         ))
 
     return warnings

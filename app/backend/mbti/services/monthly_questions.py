@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime, tzinfo
 from typing import Iterable, Protocol
 
-
-from mbti.services.mbti_utils import MBTI_AXES, SEOUL_TZ, PERIOD_KEY_PATTERN
+from mbti.constants import MBTI_AXES
+from mbti.services.mbti_utils import PERIOD_KEY_PATTERN, SEOUL_TZ
 
 
 class QuestionResponseLike(Protocol):

@@ -4,18 +4,14 @@ from dataclasses import dataclass
 import json
 from typing import Any, Mapping, Protocol, Sequence
 
+from mbti.constants import AXIS_DIRECTION_LABELS, MBTI_AXES, VALID_CODING_STATUSES
 from mbti.services.llm_config import MbtiScoringLlmConfig, build_scoring_llm_config
 from mbti.services.monthly_questions import (
-    MBTI_AXES,
     MbtiMonthlyQuestionBatch,
     MbtiQuestionResponseItem,
 )
 from mbti.services.opening_rules import PrimaryOpeningResult
 from mbti.services.persona import build_axis_scoring_system_prompt
-
-
-from mbti.services.mbti_utils import AXIS_DIRECTION_LABELS, VALID_CODING_STATUSES
-
 
 @dataclass(frozen=True)
 class MbtiResponseScore:

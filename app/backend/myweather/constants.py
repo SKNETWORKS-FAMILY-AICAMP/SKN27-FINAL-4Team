@@ -144,6 +144,44 @@ WARNING_LEVEL_LABELS = {
 
 WARNING_RELEASE_COMMANDS = {"3", "4", "7", "해제", "취소"}
 
+KMA_WARNING_EXPECTED_FIELDS = (
+    "REG_UP",
+    "REG_UP_KO",
+    "REG_ID",
+    "REG_KO",
+    "TM_FC",
+    "TM_EF",
+    "WRN",
+    "LVL",
+    "CMD",
+)
+
+KMA_WARNING_LEVEL_PRIORITY = {"예비특보": 1, "주의보": 2, "경보": 3}
+
+METROPOLITAN_WARNING_DISPLAY_NAMES = {
+    "서울특별시": "서울",
+    "부산광역시": "부산",
+    "대구광역시": "대구",
+    "인천광역시": "인천",
+    "광주광역시": "광주",
+    "대전광역시": "대전",
+    "울산광역시": "울산",
+    "세종특별자치시": "세종",
+}
+
+KMA_RESPONSE_ENCODINGS = ("utf-8", "cp949", "euc-kr")
+KMA_RETRYABLE_STATUS_CODES = frozenset((429, 500, 502, 503, 504))
+KMA_SHORT_FORECAST_RELEASE_HOURS = (2, 5, 8, 11, 14, 17, 20, 23)
+KOREAN_WEEKDAY_LABELS = ("월", "화", "수", "목", "금", "토", "일")
+KMA_EMPTY_VALUES = frozenset((None, "", "-", "null"))
+KMA_PRECIPITATION_EMPTY_VALUES = KMA_EMPTY_VALUES | {"강수없음"}
+WEEKLY_FORECAST_FILL_FIELDS = (
+    "min_temperature",
+    "max_temperature",
+    "precipitation_probability",
+)
+JEJU_WARNING_CITY_PREFIXES = ("제주시", "서귀포시")
+
 PTY_LABELS = {
     "0": "맑음",
     "1": "비",
@@ -179,6 +217,13 @@ TAVILY_DEFAULT_DOMAINS = [
     "kweather.co.kr",
 ]
 
+TAVILY_RETRYABLE_STATUS_CODES = frozenset((429, 500, 502, 503, 504))
+WEATHER_PERSONALIZATION_FIELDS = ("선택한 취미", "오늘의 감정")
+OPENAI_WEATHER_SHARED_FIELDS = ("선택한 취미", "오늘의 감정", "지역 단위 날씨")
+TAVILY_WEATHER_SHARED_FIELDS = ("지역명", "검색 기준일")
+IGNORED_WEATHER_EMOTION_LABELS = ("", "normal")
+API_LIMITS_CHECKED_AT = "2026-07-15"
+
 # 불쾌지수 구간 설정
 DISCOMFORT_INDEX_BANDS = [
     {"level": "낮음", "from": 60, "to": 68, "color": "#3b8edb"},
@@ -212,14 +257,55 @@ FOOD_POISONING_INDEX_BANDS = [
     {"level": "위험", "from": 86, "to": 100, "color": "#d9424e"},
 ]
 
-# 자외선지수 구간 설정
-UV_INDEX_BANDS = [
-    {"level": "낮음", "from": 0, "to": 3, "color": "#36a269"},
-    {"level": "보통", "from": 3, "to": 6, "color": "#c3a832"},
-    {"level": "높음", "from": 6, "to": 8, "color": "#ed982f"},
-    {"level": "매우 높음", "from": 8, "to": 11, "color": "#e8663a"},
-    {"level": "위험", "from": 11, "to": 15, "color": "#d9424e"},
-]
+# 기상청 자외선지수 공식 구간.
+UV_INDEX_BANDS = (
+    {"level": "낮음", "from": 0, "to": 3, "severity": "safe", "color": "#36a269"},
+    {"level": "보통", "from": 3, "to": 6, "severity": "interest", "color": "#c3a832"},
+    {"level": "높음", "from": 6, "to": 8, "severity": "caution", "color": "#ed982f"},
+    {"level": "매우 높음", "from": 8, "to": 11, "severity": "warning", "color": "#e8663a"},
+    {"level": "위험", "from": 11, "to": 15, "severity": "danger", "color": "#d9424e"},
+)
+
+UV_INDEX_STATUS = {
+    "낮음": "햇볕 노출 위험이 낮지만 장시간 야외 활동에는 기본적인 차단이 필요합니다.",
+    "보통": "한낮에는 모자나 자외선 차단제를 준비하세요.",
+    "높음": "한낮의 장시간 야외 활동을 줄이고 피부와 눈을 보호하세요.",
+    "매우 높음": "한낮 외출을 피하고 그늘·긴소매·모자·선글라스를 활용하세요.",
+    "위험": "가능하면 한낮 야외 활동을 피하고 햇볕 노출을 최소화하세요.",
+}
+
+# 생활기상지수 API가 요구하는 행정표준코드. 서비스 대표 지역과 함께 관리한다.
+KMA_LIFE_INDEX_AREA_CODES = {
+    "서울": "1100000000",
+    "부산": "2600000000",
+    "대구": "2700000000",
+    "인천": "2800000000",
+    "대전": "3000000000",
+    "울산": "3100000000",
+    "세종": "3611000000",
+    "전남광주": "2900000000",
+    "경기": "4100000000",
+    "강원": "5100000000",
+    "충북": "4300000000",
+    "충남": "4400000000",
+    "전북": "5200000000",
+    "경북": "4700000000",
+    "경남": "4800000000",
+    "제주": "5000000000",
+}
+
+WEATHER_INDEX_ORDER = ("불쾌지수", "체감온도", "식중독지수", "자외선지수")
+
+WEATHER_INSIGHT_WEEKLY_STATE_FIELDS = (
+    "date",
+    "condition",
+    "min_temperature",
+    "max_temperature",
+    "precipitation_probability",
+)
+WEATHER_INSIGHT_ALERT_STATE_FIELDS = ("type", "level", "region", "effective_at")
+WEATHER_INSIGHT_FALLBACK_CACHE_SECONDS = 60
+WEATHER_INSIGHT_SUCCESS_CACHE_SECONDS = 3600
 
 # 기상 문구 필터링 기본 폴백 규칙 (DB 미연동 대비)
 STATIC_PHRASING_FALLBACK_REPLACEMENTS = {

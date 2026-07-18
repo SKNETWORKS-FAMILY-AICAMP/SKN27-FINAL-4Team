@@ -1,4 +1,3 @@
-import csv
 import math
 import os
 import re
@@ -11,6 +10,30 @@ from datetime import timedelta
 import requests
 from django.core.cache import cache
 from django.utils import timezone
+
+from .constants import (
+    CATEGORY_MAP,
+    KMA_EMPTY_VALUES,
+    KMA_PRECIPITATION_EMPTY_VALUES,
+    KMA_RESPONSE_ENCODINGS,
+    KMA_RETRYABLE_STATUS_CODES,
+    KMA_SHORT_FORECAST_RELEASE_HOURS,
+    KOREAN_WEEKDAY_LABELS,
+    PTY_LABELS,
+    SKY_LABELS,
+    WEEKLY_FORECAST_FILL_FIELDS,
+)
+from .service.exceptions import WeatherServiceError
+from .service.life_index_service import fetch_uv_index
+from .service.region_service import (
+    resolve_location,
+    resolve_mid_forecast_codes,
+)
+from .service.warning_service import (
+    filter_kma_warnings,
+    parse_kma_warning_rows,
+    warning_region_aliases,
+)
 
 
 KMA_API_HUB_VILAGE_ENDPOINT = os.environ.get(
@@ -54,202 +77,6 @@ KMA_WEEKLY_STALE_SECONDS = max(
     int(os.environ.get("KMA_WEEKLY_STALE_SECONDS", "86400")),
 )
 
-_db_regions_cache = None
-
-def clear_db_regions_cache():
-    global _db_regions_cache
-    _db_regions_cache = None
-
-def _load_db_regions():
-    global _db_regions_cache
-    if _db_regions_cache is not None:
-        return _db_regions_cache
-
-    from myweather.models import WeatherRegion
-    try:
-        regions = list(WeatherRegion.objects.all())
-    except Exception:
-        regions = []
-
-    if not regions:
-        from .constants import (
-            STATIC_DEFAULT_KNOWN_LOCATIONS,
-            STATIC_DEFAULT_WEATHER_REPRESENTATIVE_NAMES,
-            STATIC_DEFAULT_WARNING_REGION_ALIASES,
-            STATIC_DEFAULT_WARNING_REGION_CODE_PREFIXES,
-            STATIC_DEFAULT_WARNING_REGION_DISPLAY_NAMES,
-            STATIC_DEFAULT_MID_FORECAST_REGIONS,
-        )
-        _db_regions_cache = (
-            STATIC_DEFAULT_KNOWN_LOCATIONS,
-            STATIC_DEFAULT_WEATHER_REPRESENTATIVE_NAMES,
-            STATIC_DEFAULT_WARNING_REGION_ALIASES,
-            STATIC_DEFAULT_WARNING_REGION_CODE_PREFIXES,
-            STATIC_DEFAULT_WARNING_REGION_DISPLAY_NAMES,
-            STATIC_DEFAULT_MID_FORECAST_REGIONS,
-        )
-        return _db_regions_cache
-
-    known_locations = {}
-    weather_representative_names = []
-    warning_region_aliases = {}
-    warning_region_code_prefixes = {}
-    warning_region_display_names = {}
-    mid_forecast_regions = {}
-
-    for r in regions:
-        loc_data = {"name": r.name, "lat": r.lat, "lon": r.lon}
-        known_locations[r.name] = loc_data
-        for alias in r.aliases:
-            known_locations[alias] = loc_data
-
-        weather_representative_names.append(r.name)
-
-        all_aliases = [r.name] + r.aliases
-        warning_region_aliases[r.name] = tuple(all_aliases)
-        warning_region_code_prefixes[r.name] = tuple(r.warning_code_prefixes)
-        warning_region_display_names[r.name] = r.warning_display_name or r.name
-
-        mid_forecast_regions[r.name] = {
-            "land": r.mid_land_code,
-            "temperature": r.mid_temp_code,
-        }
-        for alias in r.aliases:
-            mid_forecast_regions[alias] = {
-                "land": r.mid_land_code,
-                "temperature": r.mid_temp_code,
-            }
-
-    _db_regions_cache = (
-        known_locations,
-        tuple(weather_representative_names),
-        warning_region_aliases,
-        warning_region_code_prefixes,
-        warning_region_display_names,
-        mid_forecast_regions
-    )
-    return _db_regions_cache
-
-
-class DynamicDict(object):
-    def __init__(self, index):
-        self.index = index
-
-    def _get_dict(self):
-        return _load_db_regions()[self.index]
-
-    def __getitem__(self, key):
-        return self._get_dict()[key]
-
-    def __contains__(self, key):
-        return key in self._get_dict()
-
-    def get(self, key, default=None):
-        return self._get_dict().get(key, default)
-
-    def keys(self):
-        return self._get_dict().keys()
-
-    def values(self):
-        return self._get_dict().values()
-
-    def items(self):
-        return self._get_dict().items()
-
-
-class DynamicTuple(object):
-    def __init__(self, index):
-        self.index = index
-
-    def _get_tuple(self):
-        return _load_db_regions()[self.index]
-
-    def __iter__(self):
-        return iter(self._get_tuple())
-
-    def __len__(self):
-        return len(self._get_tuple())
-
-    def __getitem__(self, index):
-        return self._get_tuple()[index]
-
-
-class DynamicDefaultLocation(object):
-    def _get_dict(self):
-        default_name = os.environ.get("DEFAULT_WEATHER_REGION_NAME", "서울").strip()
-        try:
-            from myweather.models import WeatherRegion
-            r = WeatherRegion.objects.filter(name=default_name).first()
-            if r:
-                return {"name": r.name, "lat": r.lat, "lon": r.lon}
-        except Exception:
-            pass
-
-        from .constants import STATIC_DEFAULT_KNOWN_LOCATIONS, DEFAULT_LOCATION
-        return STATIC_DEFAULT_KNOWN_LOCATIONS.get(default_name) or DEFAULT_LOCATION
-
-    def __getitem__(self, key):
-        return self._get_dict()[key]
-
-    def get(self, key, default=None):
-        return self._get_dict().get(key, default)
-
-    def keys(self):
-        return self._get_dict().keys()
-
-    def values(self):
-        return self._get_dict().values()
-
-    def items(self):
-        return self._get_dict().items()
-
-    def __str__(self):
-        return str(self._get_dict())
-
-    def __repr__(self):
-        return repr(self._get_dict())
-
-
-DEFAULT_LOCATION = DynamicDefaultLocation()
-KNOWN_LOCATIONS = DynamicDict(0)
-WEATHER_REPRESENTATIVE_NAMES = DynamicTuple(1)
-WARNING_REGION_ALIASES = DynamicDict(2)
-WARNING_REGION_CODE_PREFIXES = DynamicDict(3)
-WARNING_REGION_DISPLAY_NAMES = DynamicDict(4)
-
-
-def _nearest_weather_region_name(latitude, longitude):
-    latitude = float(latitude)
-    longitude = float(longitude)
-
-    def distance_squared(candidate_name):
-        candidate = KNOWN_LOCATIONS[candidate_name]
-        latitude_delta = latitude - candidate["lat"]
-        longitude_delta = (longitude - candidate["lon"]) * math.cos(math.radians(latitude))
-        return latitude_delta ** 2 + longitude_delta ** 2
-
-    return min(WEATHER_REPRESENTATIVE_NAMES, key=distance_squared)
-
-from .constants import (
-    WARNING_TYPE_LABELS,
-    WARNING_LEVEL_LABELS,
-    WARNING_RELEASE_COMMANDS,
-    PTY_LABELS,
-    SKY_LABELS,
-    CATEGORY_MAP,
-)
-
-MID_FORECAST_REGIONS = DynamicDict(5)
-
-
-class WeatherServiceError(Exception):
-    pass
-
-
-class WeatherInputError(WeatherServiceError):
-    pass
-
-
 def get_kma_api_hub_key():
     """실황·예보·특보에 공통으로 사용하는 기상청 API허브 인증키."""
     return (
@@ -259,193 +86,12 @@ def get_kma_api_hub_key():
     ).strip()
 
 
-def _warning_line_tokens(line):
-    stripped = line.strip().lstrip("#").strip()
-    if not stripped:
-        return []
-    if "," in stripped:
-        return [value.strip() for value in next(csv.reader([stripped]))]
-    return re.split(r"\s+", stripped)
-
-
-def parse_kma_warning_rows(text):
-    """API허브 help 헤더를 기준으로 CSV와 공백 구분 응답을 모두 해석한다."""
-    expected = [
-        "REG_UP", "REG_UP_KO", "REG_ID", "REG_KO", "TM_FC",
-        "TM_EF", "WRN", "LVL", "CMD",
-    ]
-    header = None
-    rows = []
-    for raw_line in str(text or "").splitlines():
-        tokens = _warning_line_tokens(raw_line)
-        upper_tokens = [token.upper() for token in tokens]
-        if "REG_UP" in upper_tokens and "WRN" in upper_tokens:
-            start = upper_tokens.index("REG_UP")
-            header = [
-                re.match(r"[A-Z][A-Z0-9_]*", token).group(0)
-                if re.match(r"[A-Z][A-Z0-9_]*", token)
-                else token
-                for token in upper_tokens[start:]
-            ]
-            continue
-        if not tokens or raw_line.lstrip().startswith("#"):
-            continue
-        if header and len(tokens) >= len(header):
-            row = dict(zip(header, tokens[:len(header)]))
-        elif len(tokens) == len(expected):
-            row = dict(zip(expected, tokens))
-        else:
-            continue
-        if row.get("REG_ID") and row.get("WRN"):
-            rows.append(row)
-    return rows
-
-
-def _warning_region_aliases(location_name):
-    name = str(location_name or "").strip()
-    if not name or name == "현재 위치":
-        return ()
-    if name in WARNING_REGION_ALIASES:
-        return WARNING_REGION_ALIASES[name]
-    resolved = KNOWN_LOCATIONS.get(name)
-    if resolved:
-        return WARNING_REGION_ALIASES.get(resolved["name"], (resolved["name"],))
-    return (name,)
-
-
-def _warning_region_name(location_name):
-    name = str(location_name or "").strip()
-    if name in WARNING_REGION_CODE_PREFIXES:
-        return name
-    resolved = KNOWN_LOCATIONS.get(name)
-    if resolved and resolved["name"] in WARNING_REGION_CODE_PREFIXES:
-        return resolved["name"]
-    return name
-
-
-def _warning_row_matches_region(row, region_name, aliases):
-    reg_id = str(row.get("REG_ID") or "").strip().upper()
-    reg_up = str(row.get("REG_UP") or "").strip().upper()
-    prefixes = WARNING_REGION_CODE_PREFIXES.get(region_name, ())
-    region_text = " ".join((row.get("REG_UP_KO") or "", row.get("REG_KO") or ""))
-
-    # REG_ID가 실제 특보 대상 세부 구역이다. REG_UP과 REG_ID가 서로 다른
-    # 광역단체 코드를 담은 비정상/경계 응답에서도 상위 코드만 보고 섞지 않는다.
-    if reg_id.startswith("L") and reg_id != "L1000000":
-        return any(reg_id.startswith(prefix) for prefix in prefixes)
-
-    # L1000000은 육상 최상위 코드이므로 한글 명칭도 전국으로 확인될 때만
-    # 모든 지역에 포함한다. 그렇지 않으면 구체적인 상위 코드를 보조로 쓴다.
-    if reg_id == "L1000000" and "전국" in region_text:
-        return True
-    if reg_up.startswith("L") and reg_up != "L1000000":
-        return any(reg_up.startswith(prefix) for prefix in prefixes)
-    if reg_up == "L1000000" and "전국" in region_text:
-        return True
-
-    # 구형/테스트 응답처럼 코드가 없는 경우에만 한글 지역명으로 보완한다.
-    return "전국" in region_text or any(alias in region_text for alias in aliases)
-
-
-def _warning_type_label(value):
-    text = str(value or "").strip()
-    return WARNING_TYPE_LABELS.get(text.upper(), text or "기상특보")
-
-
-def _warning_level_label(value):
-    text = str(value or "").strip()
-    return WARNING_LEVEL_LABELS.get(text, "특보")
-
-
-def _warning_area_display_name(value):
-    text = re.sub(r"\s+", " ", str(value or "")).strip()
-    if not text:
-        return ""
-    metropolitan_names = {
-        "서울특별시": "서울",
-        "부산광역시": "부산",
-        "대구광역시": "대구",
-        "인천광역시": "인천",
-        "광주광역시": "광주",
-        "대전광역시": "대전",
-        "울산광역시": "울산",
-        "세종특별자치시": "세종",
-    }
-    if text in metropolitan_names:
-        return metropolitan_names[text]
-    if text.startswith(("제주시", "서귀포시")):
-        return text
-    return re.sub(
-        r"(?<=[가-힣])(시|군)(?=([가-힣]+|$|\())",
-        "",
-        text,
-    )
-
-
-def _format_warning_region(region_name, areas):
-    display_name = WARNING_REGION_DISPLAY_NAMES.get(region_name, region_name)
-    compact_areas = [area for area in areas if area and area != display_name]
-    if not compact_areas:
-        return display_name
-    return f"{display_name}({', '.join(compact_areas)})"
-
-
-def filter_kma_warnings(rows, location_name):
-    aliases = _warning_region_aliases(location_name)
-    if not aliases:
-        return None
-    region_name = _warning_region_name(location_name)
-    grouped = {}
-    for row in rows:
-        if str(row.get("CMD") or "").strip() in WARNING_RELEASE_COMMANDS:
-            continue
-        if not _warning_row_matches_region(row, region_name, aliases):
-            continue
-        warning_code = str(row.get("WRN") or "").strip().upper()
-        level_code = str(row.get("LVL") or "").strip()
-        warning_type = _warning_type_label(warning_code)
-        warning_level = _warning_level_label(level_code)
-        group_key = (warning_type, warning_level)
-        item = grouped.setdefault(group_key, {
-            "type": warning_type,
-            "level": warning_level,
-            "region_name": WARNING_REGION_DISPLAY_NAMES.get(region_name, region_name),
-            "areas": [],
-            "issued_times": set(),
-            "effective_times": set(),
-            "warning_code": warning_code,
-            "level_code": level_code,
-        })
-        area = _warning_area_display_name(row.get("REG_KO") or row.get("REG_UP_KO"))
-        if area and area not in item["areas"]:
-            item["areas"].append(area)
-        if row.get("TM_FC"):
-            item["issued_times"].add(row["TM_FC"])
-        if row.get("TM_EF"):
-            item["effective_times"].add(row["TM_EF"])
-
-    alerts = []
-    for item in grouped.values():
-        issued_times = item.pop("issued_times")
-        effective_times = item.pop("effective_times")
-        item["issued_at"] = next(iter(issued_times)) if len(issued_times) == 1 else ""
-        item["effective_at"] = next(iter(effective_times)) if len(effective_times) == 1 else ""
-        item["region"] = _format_warning_region(region_name, item["areas"])
-        alerts.append(item)
-
-    return sorted(
-        alerts,
-        key=lambda item: (
-            {"예비특보": 1, "주의보": 2, "경보": 3}.get(item["level"], 0),
-            item["type"],
-        ),
-        reverse=True,
-    )
+_warning_region_aliases = warning_region_aliases
 
 
 def _decode_kma_hub_response(response):
     content = response.content
-    for encoding in ("utf-8", "cp949", "euc-kr"):
+    for encoding in KMA_RESPONSE_ENCODINGS:
         try:
             return content.decode(encoding)
         except UnicodeDecodeError:
@@ -468,7 +114,7 @@ def _request_kma_warning_rows(auth_key):
                 },
                 timeout=KMA_TIMEOUT_SECONDS,
             )
-            if response.status_code in {429, 500, 502, 503, 504} and attempt < KMA_RETRY_COUNT:
+            if response.status_code in KMA_RETRYABLE_STATUS_CODES and attempt < KMA_RETRY_COUNT:
                 time.sleep(0.25 * (2 ** attempt))
                 continue
             response.raise_for_status()
@@ -591,48 +237,6 @@ def get_mid_land_url():
     return f"{endpoint}/{KMA_MID_LAND_OPERATION}"
 
 
-def resolve_location(lat=None, lon=None, region=None):
-    if (lat is None) != (lon is None):
-        raise WeatherInputError("lat/lon은 함께 전달해야 합니다.")
-
-    if lat is not None and lon is not None:
-        latitude = float(lat)
-        longitude = float(lon)
-        requested_name = str(region or "").strip()
-        resolved_name = (
-            requested_name
-            if requested_name and requested_name != "현재 위치"
-            else _nearest_weather_region_name(latitude, longitude)
-        )
-        return {
-            "name": resolved_name,
-            "lat": latitude,
-            "lon": longitude,
-            "is_current_location": True,
-            "location_resolution": "nearest_supported_region",
-        }
-
-    if region:
-        key = str(region).strip()
-        if key in KNOWN_LOCATIONS:
-            return KNOWN_LOCATIONS[key]
-        raise WeatherInputError(f"지원하지 않는 지역입니다: {key}")
-
-    return DEFAULT_LOCATION
-
-
-def resolve_mid_forecast_codes(location):
-    """중기예보용 광역 육상코드와 가장 가까운 대표 기온지점 코드를 고른다."""
-    name = str(location.get("name") or "").strip()
-    if name in MID_FORECAST_REGIONS:
-        return MID_FORECAST_REGIONS[name]
-
-    latitude = float(location.get("lat", DEFAULT_LOCATION["lat"]))
-    longitude = float(location.get("lon", DEFAULT_LOCATION["lon"]))
-    nearest_name = _nearest_weather_region_name(latitude, longitude)
-    return MID_FORECAST_REGIONS[nearest_name]
-
-
 def latlon_to_grid(lat, lon):
     """기상청 동네예보 격자 변환 공식."""
     re = 6371.00877
@@ -690,10 +294,9 @@ def ultra_short_forecast_base_time():
 def short_forecast_base_time():
     """단기예보 발표시각 중 API 반영 여유 15분을 지난 가장 최근 회차를 선택한다."""
     safe_time = timezone.localtime() - timedelta(minutes=15)
-    release_hours = (2, 5, 8, 11, 14, 17, 20, 23)
     release_candidates = [
         safe_time.replace(hour=hour, minute=0, second=0, microsecond=0)
-        for hour in release_hours
+        for hour in KMA_SHORT_FORECAST_RELEASE_HOURS
         if hour <= safe_time.hour
     ]
     if release_candidates:
@@ -718,7 +321,7 @@ def mid_forecast_base_time():
 
 
 def normalize_obsr_value(value):
-    if value in (None, "", "-", "null"):
+    if value in KMA_EMPTY_VALUES:
         return None
     try:
         numeric = float(value)
@@ -763,13 +366,13 @@ def parse_kma_items(items):
 
 
 def normalize_forecast_value(value):
-    if value in (None, "", "-", "null"):
+    if value in KMA_EMPTY_VALUES:
         return None
     return str(value)
 
 
 def has_precipitation_amount(value):
-    if value in (None, "", "-", "null", "강수없음"):
+    if value in KMA_PRECIPITATION_EMPTY_VALUES:
         return False
     try:
         return float(value) > 0
@@ -866,12 +469,11 @@ def _numeric_forecast_value(value):
 
 
 def _day_label(date_value):
-    weekdays = ("월", "화", "수", "목", "금", "토", "일")
     try:
         parsed_date = datetime.strptime(date_value, "%Y%m%d").date()
     except (TypeError, ValueError):
         return ""
-    return f"{parsed_date.month}/{parsed_date.day}({weekdays[parsed_date.weekday()]})"
+    return f"{parsed_date.month}/{parsed_date.day}({KOREAN_WEEKDAY_LABELS[parsed_date.weekday()]})"
 
 
 def _conditions_for_slots(slots):
@@ -999,7 +601,7 @@ def merge_weekly_forecasts(short_forecasts, mid_forecasts, today=None):
         date_key = short_item["date"]
         existing = merged.get(date_key, {})
         combined = {**existing, **deepcopy(short_item)}
-        for field in ("min_temperature", "max_temperature", "precipitation_probability"):
+        for field in WEEKLY_FORECAST_FILL_FIELDS:
             if combined.get(field) is None and existing.get(field) is not None:
                 combined[field] = existing[field]
         if existing:
@@ -1027,7 +629,7 @@ def _request_kma_json(url, params):
     for attempt in range(KMA_RETRY_COUNT + 1):
         try:
             response = requests.get(url, params=params, timeout=KMA_TIMEOUT_SECONDS)
-            if response.status_code in {429, 500, 502, 503, 504} and attempt < KMA_RETRY_COUNT:
+            if response.status_code in KMA_RETRYABLE_STATUS_CODES and attempt < KMA_RETRY_COUNT:
                 if response.status_code == 429:
                     try:
                         retry_after = float(response.headers.get("Retry-After", "0.25"))
@@ -1241,6 +843,7 @@ def fetch_current_weather(lat=None, lon=None, region=None):
     sky_forecast = fetch_sky_forecast(auth_key, grid)
     weekly_forecast = fetch_weekly_forecast(auth_key, grid, location)
     weather_alerts = fetch_weather_warnings(location)
+    uv_index = fetch_uv_index(location)
     if sky_forecast.get("condition"):
         parsed["condition"] = sky_forecast["condition"]
     if sky_forecast:
@@ -1283,8 +886,10 @@ def fetch_current_weather(lat=None, lon=None, region=None):
             "forecast_cache": sky_forecast.get("cache_status", "unavailable"),
             "weekly_forecast_cache": weekly_forecast.get("cache_status", "unavailable"),
             "warning_cache": weather_alerts.get("cache_status", "unavailable"),
+            "uv_index_cache": uv_index.get("cache_status", "unavailable"),
             "cache_seconds": KMA_CACHE_SECONDS,
         },
         "weather_alerts": weather_alerts,
+        "uv_index": uv_index,
         **parsed,
     }

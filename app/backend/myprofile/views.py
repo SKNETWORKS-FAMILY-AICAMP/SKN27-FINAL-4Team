@@ -6,6 +6,10 @@ from django.db import transaction
 from django.db.models import Count
 from django.utils import timezone
 from user.models import UserProfile
+from .constants import (
+    PROFILE_PREFERENCE_MINIMUM_ERROR,
+    has_minimum_preferences,
+)
 from user.views import CsrfExemptSessionAuthentication
 from .serializers import MyProfileSerializer
 from datetime import datetime
@@ -34,6 +38,18 @@ def profile_detail(request):
         serializer = MyProfileSerializer(data=request.data.get('profile', request.data))
         if serializer.is_valid():
             data = serializer.validated_data
+
+            if 'interests' in data or 'hobbies' in data:
+                next_interests = data.get('interests', profile.interests or [])
+                next_hobbies = data.get('hobbies', profile.hobbies or [])
+                if not has_minimum_preferences(
+                    hobbies=next_hobbies,
+                    interests=next_interests,
+                ):
+                    return Response(
+                        {'preferences': [PROFILE_PREFERENCE_MINIMUM_ERROR]},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
             # Keep the existing request/response contract, but commit the user
             # and profile rows together so book recommendation never observes a

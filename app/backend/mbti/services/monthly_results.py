@@ -3,11 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping
 
+from mbti.constants import AXIS_ALLOWED_LETTERS, AXIS_TYPE_INDEX, MBTI_AXES
 from mbti.services.graph_scores import GraphScoreResult
-from mbti.services.monthly_questions import MBTI_AXES, MbtiMonthlyQuestionBatch
-
-
-from mbti.services.mbti_utils import AXIS_TYPE_INDEX, AXIS_ALLOWED_LETTERS
+from mbti.services.monthly_questions import MbtiMonthlyQuestionBatch
 
 
 @dataclass(frozen=True)

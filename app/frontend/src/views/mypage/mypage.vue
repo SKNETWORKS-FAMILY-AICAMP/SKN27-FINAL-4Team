@@ -122,7 +122,6 @@
         <ProfilePanel
           v-if="activePanel === 'profile'"
           :profile="profile"
-          :profile-options="profileOptions"
           :profile-edit="profileEdit"
           :profile-saved-at="profileSavedAt"
           :current-character="currentCharacter"
@@ -182,19 +181,6 @@
           @delete-selected="deleteMemoryItems"
         />
 
-        <TastePanel
-          v-if="activePanel === 'taste'"
-          :taste="taste"
-          @refresh="refreshTaste"
-        />
-
-        <SettingsPanel
-          v-if="activePanel === 'settings'"
-          :account="account"
-          :settings="settings"
-          @show-toast="showToast"
-          @reset-settings="resetSettings"
-        />
     </MypageModal>
 
     <transition name="fade">
@@ -224,14 +210,20 @@
 <script>
 import { MEMORY_API_ENABLED, fetchCurrentWeather, fetchMbtiDemoPayload, fetchMyProfile, updateMyProfile, saveOnboardingMbti, fetchBookRecommendation, fetchMemoryVault, deleteMemoryVaultItem, fetchWeatherRegions } from "./mypage.api";
 import { LOCATION_CONSENT_VERSION } from "../../constants/consentVersions";
-import { createMypageState, i18n } from "./mypage.data";
+import { createMypageState, i18n } from "./state/mypage.state";
+import {
+  DEFAULT_WEATHER_REGION,
+  MOVABLE_PANEL_IDS,
+  MYPAGE_STORAGE_KEYS,
+  MYPAGE_TIMING,
+  NAVIGATION_CONFIRM_OPTIONS,
+  PANEL_DESCRIPTIONS,
+} from "./config/mypage.constants";
 import CharacterPanel from "./components/CharacterPanel.vue";
 import MbtiPanel from "./components/MbtiPanel.vue";
 import MypageModal from "./components/MypageModal.vue";
 import MypageRoom from "./components/MypageRoom.vue";
 import ProfilePanel from "./components/ProfilePanel.vue";
-import SettingsPanel from "./components/SettingsPanel.vue";
-import TastePanel from "./components/TastePanel.vue";
 import WeatherPanel from "./components/WeatherPanel.vue";
 import BookPanel from "./components/BookPanel.vue";
 import MemoryPanel from "./components/MemoryPanel.vue";
@@ -244,16 +236,14 @@ export default {
     MypageModal,
     MypageRoom,
     ProfilePanel,
-    SettingsPanel,
-    TastePanel,
     WeatherPanel,
     BookPanel,
     MemoryPanel
   },
   async beforeRouteEnter(to, from, next) {
     try {
-      await fetchMyProfile();
-      next();
+      const profilePayload = await fetchMyProfile();
+      next((view) => view.applyProfilePayload(profilePayload));
     } catch (e) {
       next("/login");
     }
@@ -273,19 +263,12 @@ export default {
       return this.t[this.activePanel];
     },
     currentPanelDescription() {
-      const descriptions = {
-        book: "관심사와 취미, 오늘의 감정을 바탕으로 지금 읽어볼 만한 책을 추천해요.",
-        memory: MEMORY_API_ENABLED
+      if (this.activePanel === "memory") {
+        return MEMORY_API_ENABLED
           ? "대화에서 저장된 기억을 확인하고 직접 관리할 수 있어요."
-          : "예시 화면에서 기억 검색·상세 보기·숨기기 흐름을 미리 체험할 수 있어요.",
-        profile: "내 기본 정보와 관심사·취미를 확인하고 수정할 수 있어요.",
-        character: "방 안의 동행 캐릭터를 고르고, 적용 전에 말투와 성향 정보를 확인할 수 있어요.",
-        weather: "현재 날씨와 오늘의 활동 제안을 확인할 수 있어요.",
-        mbti: "대화 중 자연스럽게 나눈 성향 답변을 바탕으로, 내가 요즘 어떤 방식으로 생각하고 소통하는지 MBTI 유형으로 돌아봐요.",
-        taste: "최근 30일 대화 로그에서 반복적으로 나타난 관심사·취향 키워드를 집계해 보여줍니다. 일정 횟수 이상 등장한 키워드만 대시보드에 표시됩니다.",
-        settings: "계정 기본 정보와 언어, 접근성 설정을 관리합니다."
-      };
-      return descriptions[this.activePanel] || "";
+          : "예시 화면에서 기억 검색·상세 보기·숨기기 흐름을 미리 체험할 수 있어요.";
+      }
+      return PANEL_DESCRIPTIONS[this.activePanel] || "";
     },
     currentCharacter() {
       const found = this.characters.find(character => character.id === this.selectedCharacter);
@@ -320,9 +303,6 @@ export default {
     todayEmotionLabel() {
       return this.bookPayload?.profile_basis?.today_emotion || "아직 기록 없음";
     },
-    profileInterestCount() {
-      return this.normalizeList(this.profile?.interests).length;
-    },
     interestPreview() {
       return this.previewList(this.profile?.interests, "관심사 미등록");
     },
@@ -339,26 +319,30 @@ export default {
     }
   },
   mounted() {
-    const saved = localStorage.getItem("mindroom-settings");
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      this.settings = {
-        ...this.settings,
-        language: parsed.language || this.settings.language,
-        fontScale: parsed.fontScale || this.settings.fontScale,
-        highContrast: Boolean(parsed.highContrast)
-      };
+    try {
+      const saved = localStorage.getItem(MYPAGE_STORAGE_KEYS.settings);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        this.settings = {
+          ...this.settings,
+          language: parsed.language || this.settings.language,
+          fontScale: parsed.fontScale || this.settings.fontScale,
+          highContrast: Boolean(parsed.highContrast)
+        };
+      }
+    } catch (error) {
+      console.warn("Failed to restore mypage settings:", error);
     }
     this.applySettings();
     this.loadMbtiDemoData();
-    this.loadProfileData();
     this.loadWeatherRegions();
     this.weatherRefreshTimer = window.setInterval(() => {
       if (this.activePanel === "weather") this.loadWeatherData();
-    }, 60 * 1000);
+    }, MYPAGE_TIMING.weatherRefreshIntervalMs);
   },
   beforeUnmount() {
     if (this.weatherRefreshTimer) window.clearInterval(this.weatherRefreshTimer);
+    if (this.toastTimer) window.clearTimeout(this.toastTimer);
   },
   methods: {
     normalizeList(value) {
@@ -403,19 +387,7 @@ export default {
       this.requestNavigationConfirm("chat");
     },
     requestNavigationConfirm(type) {
-      const options = {
-        chat: {
-          title: "대화하러 갈까요?",
-          message: "현재 마이룸을 벗어나 대화 페이지로 이동합니다.",
-          path: "/chat"
-        },
-        report: {
-          title: "마음리포트를 볼까요?",
-          message: "현재 마이룸을 벗어나 마음리포트 페이지로 이동합니다.",
-          path: "/report"
-        }
-      };
-      this.navigationConfirm = options[type] || null;
+      this.navigationConfirm = NAVIGATION_CONFIRM_OPTIONS[type] || null;
     },
     cancelNavigationConfirm() {
       this.navigationConfirm = null;
@@ -436,28 +408,11 @@ export default {
         console.error("Failed to load weather regions:", error);
       }
     },
-    async loadProfileData() {
-      try {
-        const data = await fetchMyProfile();
-        if (data && data.profile) {
-          this.profile = { ...this.profile, ...data.profile };
-          if (data.profile.selectedCharacter) {
-            this.selectedCharacter = data.profile.selectedCharacter;
-            
-            if (this.selectedCharacter === 'otter' || this.selectedCharacter === 'sol') {
-              try {
-                const stored = JSON.parse(localStorage.getItem('binteumsaiCharacter') || '{}');
-                if (stored && stored.characterId && stored.characterId !== this.selectedCharacter) {
-                  this.selectedCharacter = stored.characterId;
-                  updateMyProfile({ selectedCharacter: stored.characterId }).catch(() => {});
-                }
-              } catch (err) {}
-            }
-          }
-        }
-      } catch (e) {
-        console.error("Failed to load profile, redirecting to login", e);
-        this.$router.push("/login");
+    applyProfilePayload(data) {
+      if (!data?.profile) return;
+      this.profile = { ...this.profile, ...data.profile };
+      if (data.profile.selectedCharacter) {
+        this.selectedCharacter = data.profile.selectedCharacter;
       }
     },
     openPanel(panel) {
@@ -478,7 +433,7 @@ export default {
       this.activatePanel(panel);
     },
     shouldMoveBeforeOpen(panel) {
-      return ["profile", "mbti", "weather", "book", "memory", "character", "settings"].includes(panel);
+      return MOVABLE_PANEL_IDS.includes(panel);
     },
     activatePanel(panel) {
       this.pendingPanel = null;
@@ -566,7 +521,7 @@ export default {
       this.selectedCharacter = id;
       try {
         await updateMyProfile({ selectedCharacter: id });
-        localStorage.setItem('binteumsaiCharacter', JSON.stringify({ characterId: id }));
+        localStorage.setItem(MYPAGE_STORAGE_KEYS.character, JSON.stringify({ characterId: id }));
         this.showToast("대화 대상 캐릭터가 교체되었습니다.");
       } catch (e) {
         console.error(e);
@@ -576,9 +531,13 @@ export default {
     },
     getSavedWeatherLocation() {
       try {
-        const sessionLocation = JSON.parse(sessionStorage.getItem("mindroom-weather-auto-location") || "null");
+        const sessionLocation = JSON.parse(
+          sessionStorage.getItem(MYPAGE_STORAGE_KEYS.weatherAutoLocation) || "null"
+        );
         if (sessionLocation?.mode === "auto") return sessionLocation;
-        const saved = JSON.parse(localStorage.getItem("mindroom-weather-location") || "null");
+        const saved = JSON.parse(
+          localStorage.getItem(MYPAGE_STORAGE_KEYS.weatherLocation) || "null"
+        );
         return saved;
       } catch (error) {
         return null;
@@ -587,12 +546,12 @@ export default {
     saveWeatherLocation(location) {
       this.weatherLocation = location;
       if (location?.mode === "auto") {
-        sessionStorage.setItem("mindroom-weather-auto-location", JSON.stringify(location));
-        localStorage.removeItem("mindroom-weather-location");
+        sessionStorage.setItem(MYPAGE_STORAGE_KEYS.weatherAutoLocation, JSON.stringify(location));
+        localStorage.removeItem(MYPAGE_STORAGE_KEYS.weatherLocation);
         return;
       }
-      sessionStorage.removeItem("mindroom-weather-auto-location");
-      localStorage.setItem("mindroom-weather-location", JSON.stringify(location));
+      sessionStorage.removeItem(MYPAGE_STORAGE_KEYS.weatherAutoLocation);
+      localStorage.setItem(MYPAGE_STORAGE_KEYS.weatherLocation, JSON.stringify(location));
     },
     getBrowserLocation() {
       return new Promise((resolve, reject) => {
@@ -608,7 +567,11 @@ export default {
             lon: position.coords.longitude
           }),
           reject,
-          { enableHighAccuracy: false, timeout: 5000, maximumAge: 10 * 60 * 1000 }
+          {
+            enableHighAccuracy: false,
+            timeout: MYPAGE_TIMING.geolocationTimeoutMs,
+            maximumAge: MYPAGE_TIMING.geolocationMaximumAgeMs
+          }
         );
       });
     },
@@ -619,7 +582,7 @@ export default {
         return saved;
       }
       if (!force) {
-        const fallback = { mode: "manual", region: "서울" };
+        const fallback = { mode: "manual", region: DEFAULT_WEATHER_REGION };
         this.saveWeatherLocation(fallback);
         return fallback;
       }
@@ -628,15 +591,14 @@ export default {
         this.saveWeatherLocation(browserLocation);
         return browserLocation;
       } catch (error) {
-        const fallback = saved || { mode: "manual", region: "서울" };
+        const fallback = saved || { mode: "manual", region: DEFAULT_WEATHER_REGION };
         this.saveWeatherLocation(fallback);
         return fallback;
       }
     },
     async loadWeatherData({ force = false, refreshLocation = false } = {}) {
-      const weatherFreshnessMs = 30 * 60 * 1000;
       const hasFreshPayload = this.weatherPayload
-        && Date.now() - this.weatherLastFetchedAt < weatherFreshnessMs;
+        && Date.now() - this.weatherLastFetchedAt < MYPAGE_TIMING.weatherFreshnessMs;
       if (!force && (hasFreshPayload || this.weatherLoading)) return;
 
       const requestId = ++this.weatherRequestId;
@@ -646,7 +608,7 @@ export default {
         const location = await this.resolveWeatherLocation(refreshLocation);
         const requestLocation = location.mode === "auto"
           ? { lat: location.lat, lon: location.lon, region: location.region }
-          : { region: location.region || "서울" };
+          : { region: location.region || DEFAULT_WEATHER_REGION };
         const payload = await fetchCurrentWeather(requestLocation);
         if (requestId !== this.weatherRequestId) return;
         this.weatherPayload = payload;
@@ -670,7 +632,7 @@ export default {
           if (!confirmed) return;
           localStorage.setItem(consentKey, "true");
         }
-        localStorage.removeItem("mindroom-weather-location");
+        localStorage.removeItem(MYPAGE_STORAGE_KEYS.weatherLocation);
         await this.loadWeatherData({ force: true, refreshLocation: true });
         return;
       }
@@ -846,20 +808,19 @@ export default {
         const hasMonthlyAnalysis = this.hasRenderableMonthlyMbtiData(payload.mbti_data);
         const hasOnboardingProfile = this.hasRenderableOnboardingMbtiData(payload.mbti_data);
 
-        if (hasMonthlyAnalysis || hasOnboardingProfile) {
-          this.mbtiData = payload.mbti_data;
-        }
+        this.mbtiData = payload.mbti_data || null;
         if (payload.mbti_data?.onboarding?.type === '----') {
           this.mbtiViewMode = "onboardingType";
         } else if (hasMonthlyAnalysis) {
-          this.mbtiViewMode = payload.mbti_view_mode || "onboardingNext";
+          this.mbtiViewMode = payload.mbti_view_mode
+            || "onboardingNext";
         } else if (hasOnboardingProfile) {
           this.mbtiViewMode = "onboardingType";
         }
         this.mbtiApiStatus = payload.status || "ready";
       } catch (error) {
         console.warn(error);
-        this.mbtiApiStatus = "demo-fallback";
+        this.mbtiApiStatus = "error";
       }
     },
     hasRenderableOnboardingMbtiData(data) {
@@ -885,36 +846,27 @@ export default {
     async refreshMbtiDemoData() {
       this.showToast("데이터베이스 기반으로 성향 분석을 시작합니다...");
       await this.loadMbtiDemoData(true);
-      const message = this.mbtiApiStatus === "demo-fallback"
-        ? "분석 파이프라인 호출에 실패해 기존 데이터를 유지합니다."
-        : "성향 분석이 완료되어 결과가 업데이트되었습니다!";
+      const message = this.mbtiApiStatus === "error"
+        ? "분석 파이프라인 호출에 실패했습니다."
+        : this.mbtiApiStatus === "preparing"
+          ? "아직 확정된 월간 분석 결과가 없습니다."
+          : "성향 분석이 완료되어 결과가 업데이트되었습니다!";
       this.showToast(message);
-    },
-    refreshTaste() {
-      this.showToast("아직 백엔드 API가 연동되지 않은 기능입니다.");
-    },
-    resetSettings() {
-      this.settings = {
-        language: "ko",
-        fontScale: 1,
-        highContrast: false
-      };
-      this.showToast("설정이 기본값으로 복원되었습니다.");
     },
     applySettings() {
       document.documentElement.dataset.contrast = String(this.settings.highContrast);
       document.documentElement.style.setProperty("--font-scale", this.settings.fontScale);
-      localStorage.setItem("mindroom-settings", JSON.stringify(this.settings));
+      localStorage.setItem(MYPAGE_STORAGE_KEYS.settings, JSON.stringify(this.settings));
     },
     showToast(message) {
       this.toast = message;
       window.clearTimeout(this.toastTimer);
       this.toastTimer = window.setTimeout(() => {
         this.toast = "";
-      }, 2400);
+      }, MYPAGE_TIMING.toastDurationMs);
     }
   }
 };
 </script>
 
-<style src="./mypage.css"></style>
+<style src="./styles/mypage.css"></style>

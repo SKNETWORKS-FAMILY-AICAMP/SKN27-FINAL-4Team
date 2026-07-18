@@ -1,6 +1,6 @@
 from django.db import models
 
-from mbti.services.mbti_utils import (
+from mbti.constants import (
     AXIS_CHOICES,
     CODING_STATUS_CHOICES,
     BASELINE_SOURCE_CHOICES,
