@@ -1,4 +1,6 @@
 from django.db import models
+
+from .crypto_fields import EncryptedTextField
 from django.conf import settings
 # NOTE: v6.0 — 캐릭터 4종(포리·까미·토토·여울), UserMemory/MbtiAnswer 추가
 
@@ -65,7 +67,7 @@ class ChatMessage(models.Model):
 
     session = models.ForeignKey(ChatSession, on_delete=models.CASCADE, related_name='messages')
     role = models.CharField(max_length=10, choices=ROLE_CHOICES)
-    content = models.TextField()
+    content = EncryptedTextField()   # DB 채팅 암호화 (2026-07-15 팀 안건) — 저장 시 Fernet
     emotion_label = models.CharField(max_length=20, choices=EMOTION4_CHOICES, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -89,7 +91,7 @@ class UserMemory(models.Model):
         related_name='memory',
         primary_key=True,
     )
-    summary_text = models.TextField(blank=True, default='', verbose_name='장기 요약')
+    summary_text = EncryptedTextField(blank=True, default='', verbose_name='장기 요약')   # 대화 파생이라 함께 암호화
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
