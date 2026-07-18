@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import os
 
 
-DEFAULT_OPENAI_SCORING_MODEL = 'gpt-5.4-mini'
+from mbti.services.mbti_utils import DEFAULT_OPENAI_SCORING_MODEL
 DEFAULT_SCORING_TEMPERATURE = 0.0
 DEFAULT_SCORING_MAX_OUTPUT_TOKENS = 1200
 

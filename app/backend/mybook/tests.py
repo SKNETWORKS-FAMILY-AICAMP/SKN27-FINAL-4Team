@@ -13,20 +13,18 @@ from .agent import (
     KAKAO_BOOK_PROVIDER_INFO,
     OPEN_LIBRARY_COVER_PROVIDER_INFO,
     _cached_external_book_info,
-    _catalog_search_terms,
     _is_general_book,
     _is_recent_book,
     _daum_book_search_url,
     _nlk_items,
     _nlk_probe_page_numbers,
-    _nlk_search_terms,
     _rank_personalized_books,
     _request_kakao_book_info,
-    _request_kakao_book_search,
     _request_nlk_books,
     _semantic_search_terms,
     _without_excluded_books,
 )
+from .utils import _catalog_search_terms, _nlk_search_terms
 from .models import DailyBookRecommendation
 from .views import book_recommendation
 
@@ -448,7 +446,7 @@ class NationalBibliographyBookSearchTests(SimpleTestCase):
             ['사진, 빛으로 그린 이야기'],
         )
 
-    @patch('mybook.agent.time.sleep')
+    @patch('mybook.services.catalog_service.time.sleep')
     @patch('mybook.agent.requests.get')
     def test_transport_timeout_is_retried(self, request_get, sleep):
         response = Mock(status_code=200)
@@ -478,6 +476,24 @@ class NationalBibliographyBookSearchTests(SimpleTestCase):
 
         self.assertEqual(search_books.call_args_list[1].args[0], '사진 실용')
         self.assertTrue(theme['search_fallback_used'])
+
+    @patch.object(
+        BookRecommendationAgent,
+        '_generate_single_review',
+        side_effect=RuntimeError('llm unavailable'),
+    )
+    def test_review_failure_does_not_create_dummy_review(self, generate_review):
+        theme = {
+            'id': 'hobbies',
+            'name': '취미 추천',
+            'candidates': [{'candidate_id': 'book_1', 'title': '실제 책'}],
+        }
+
+        with self.assertRaises(BookRecommendationUnavailable) as raised:
+            BookRecommendationAgent._generate_reviews({}, [theme])
+
+        self.assertEqual(raised.exception.code, 'BOOK_REVIEW_GENERATION_FAILED')
+        generate_review.assert_called_once()
 
     @patch.dict('os.environ', {'NLK_BIBLIO_SERVICE_KEY': 'public-data-key'}, clear=False)
     @patch('mybook.agent.requests.get')
@@ -1116,6 +1132,46 @@ class BookRecommendationViewStabilityTests(TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertTrue(response.data['retryable'])
         self.assertEqual(response.data['code'], 'NLK_SERVICE_UNAVAILABLE')
+
+    @patch('mybook.views._build_user_profile')
+    @patch('mybook.views.BookRecommendationAgent.recommend')
+    def test_legacy_dummy_review_is_not_served_as_cached_fallback(
+        self,
+        recommend,
+        build_profile,
+    ):
+        build_profile.return_value = self.profile
+        DailyBookRecommendation.objects.create(
+            user=self.user,
+            recommendation_date=self.today,
+            payload={
+                'books': [
+                    {
+                        'theme_id': 'hobbies',
+                        'title': '실제 후보였던 책',
+                        'review': (
+                            '실제 후보였던 책은 지금 펼쳐 들었을 때 부담 없이 '
+                            '호흡을 맞추기 좋은 책입니다.'
+                        ),
+                    }
+                ],
+                'themes': [],
+            },
+            profile_basis=self.profile,
+        )
+        recommend.side_effect = BookRecommendationUnavailable(
+            '서평 서비스 장애',
+            code='BOOK_REVIEW_GENERATION_FAILED',
+        )
+        request = self.factory.get('/api/mybook/recommendation/')
+        force_authenticate(request, user=self.user)
+
+        with patch('mybook.views.timezone.localdate', return_value=self.today):
+            response = book_recommendation(request)
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.data['code'], 'BOOK_REVIEW_GENERATION_FAILED')
+        self.assertIsNone(recommend.call_args.kwargs['cached_data'])
 
     @patch('mybook.views._build_user_profile')
     @patch('mybook.views.BookRecommendationAgent.recommend')

@@ -1,43 +1,11 @@
 from django.db import models
 
-
-AXIS_CHOICES = [
-    ('IE', 'IE'),
-    ('SN', 'SN'),
-    ('TF', 'TF'),
-    ('JP', 'JP'),
-]
-CODING_STATUS_CHOICES = [
-    ('coded', 'coded'),
-    ('insufficient_context', 'insufficient_context'),
-    ('failed', 'failed'),
-]
-BASELINE_SOURCE_CHOICES = [
-    ('latest_monthly_result', 'latest_monthly_result'),
-    ('onboarding', 'onboarding'),
-    ('none', 'none'),
-]
-AXIS_DATA_STATUS_CHOICES = [
-    ('current_month', 'current_month'),
-    ('primary_closed', 'primary_closed'),
-    ('secondary_closed', 'secondary_closed'),
-    ('tie_carried', 'tie_carried'),
-    ('carried_from_previous', 'carried_from_previous'),
-    ('carried_from_onboarding', 'carried_from_onboarding'),
-    ('insufficient_axis_data', 'insufficient_axis_data'),
-]
-ANALYSIS_JOB_STATUS_CHOICES = [
-    ('pending', 'pending'),
-    ('running', 'running'),
-    ('complete', 'complete'),
-    ('skipped', 'skipped'),
-    ('failed', 'failed'),
-]
-ANALYSIS_JOB_TRIGGER_CHOICES = [
-    ('monthly_scheduler', 'monthly_scheduler'),
-    ('dashboard_on_demand', 'dashboard_on_demand'),
-    ('manual', 'manual'),
-]
+from mbti.services.mbti_utils import (
+    AXIS_CHOICES,
+    CODING_STATUS_CHOICES,
+    BASELINE_SOURCE_CHOICES,
+    AXIS_DATA_STATUS_CHOICES,
+)
 
 
 class MbtiQuestionResponse(models.Model):

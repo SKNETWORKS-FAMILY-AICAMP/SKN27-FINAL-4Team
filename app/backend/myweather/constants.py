@@ -171,3 +171,74 @@ CATEGORY_MAP = {
     "VEC": ("wind_direction", "풍향", "deg"),
     "WSD": ("wind_speed", "풍속", "m/s"),
 }
+
+# Tavily 관련 기본 설정 도메인
+TAVILY_DEFAULT_DOMAINS = [
+    "weather.naver.com",
+    "weatheri.co.kr",
+    "kweather.co.kr",
+]
+
+# 불쾌지수 구간 설정
+DISCOMFORT_INDEX_BANDS = [
+    {"level": "낮음", "from": 60, "to": 68, "color": "#3b8edb"},
+    {"level": "보통", "from": 68, "to": 75, "color": "#36a269"},
+    {"level": "높음", "from": 75, "to": 80, "color": "#ed982f"},
+    {"level": "매우 높음", "from": 80, "to": 90, "color": "#d9424e"},
+]
+
+# 체감온도 구간 설정 (여름철)
+APPARENT_TEMP_SUMMER_BANDS = [
+    {"level": "기준 미만", "from": 20, "to": 31, "color": "#36a269"},
+    {"level": "관심", "from": 31, "to": 33, "color": "#c3a832"},
+    {"level": "주의", "from": 33, "to": 35, "color": "#ed982f"},
+    {"level": "경고", "from": 35, "to": 38, "color": "#e8663a"},
+    {"level": "위험", "from": 38, "to": 42, "color": "#d9424e"},
+]
+
+# 체감온도 구간 설정 (겨울철)
+APPARENT_TEMP_WINTER_BANDS = [
+    {"level": "위험", "from": -50, "to": -45, "color": "#d9424e"},
+    {"level": "경고", "from": -45, "to": -25, "color": "#e8663a"},
+    {"level": "주의", "from": -25, "to": -10, "color": "#ed982f"},
+    {"level": "관심", "from": -10, "to": 10, "color": "#c3a832"},
+]
+
+# 식중독지수 구간 설정
+FOOD_POISONING_INDEX_BANDS = [
+    {"level": "관심", "from": 0, "to": 55, "color": "#36a269"},
+    {"level": "주의", "from": 55, "to": 70, "color": "#c3a832"},
+    {"level": "경고", "from": 70, "to": 86, "color": "#ed982f"},
+    {"level": "위험", "from": 86, "to": 100, "color": "#d9424e"},
+]
+
+# 자외선지수 구간 설정
+UV_INDEX_BANDS = [
+    {"level": "낮음", "from": 0, "to": 3, "color": "#36a269"},
+    {"level": "보통", "from": 3, "to": 6, "color": "#c3a832"},
+    {"level": "높음", "from": 6, "to": 8, "color": "#ed982f"},
+    {"level": "매우 높음", "from": 8, "to": 11, "color": "#e8663a"},
+    {"level": "위험", "from": 11, "to": 15, "color": "#d9424e"},
+]
+
+# 기상 문구 필터링 기본 폴백 규칙 (DB 미연동 대비)
+STATIC_PHRASING_FALLBACK_REPLACEMENTS = {
+    "혈액 순환": "기분 전환",
+    "면역": "컨디션",
+    "치료": "돌봄",
+    "증상": "몸의 신호",
+    "완화": "덜어내기",
+}
+
+STATIC_PHRASING_FALLBACK_SUNNY_REPLACEMENTS = {
+    "따뜻한 햇살": "밝은 바깥 분위기",
+    "강한 햇살": "밝은 바깥 분위기",
+    "햇살": "바깥 분위기",
+    "햇빛": "바깥 공기",
+    "신선한 공기와 ": "바깥 공기가 ",
+    "맑은 공기": "가벼운 바깥 공기",
+    "맑고": "비 소식은 적고",
+    "맑은": "비 소식이 적은",
+    "자외선 차단제를 바르는": "외출 전 바깥 상황을 한 번 확인하는",
+    "자외선 차단제": "외출 준비",
+}

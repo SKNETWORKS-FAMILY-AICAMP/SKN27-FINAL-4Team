@@ -10,13 +10,18 @@ import requests
 from django.core.cache import cache
 from django.utils import timezone
 
+from myweather.constants import (
+    TAVILY_DEFAULT_DOMAINS,
+    DISCOMFORT_INDEX_BANDS,
+    APPARENT_TEMP_SUMMER_BANDS,
+    APPARENT_TEMP_WINTER_BANDS,
+    FOOD_POISONING_INDEX_BANDS,
+    UV_INDEX_BANDS,
+    STATIC_PHRASING_FALLBACK_REPLACEMENTS,
+    STATIC_PHRASING_FALLBACK_SUNNY_REPLACEMENTS,
+)
 
 TAVILY_SEARCH_URL = os.environ.get("TAVILY_SEARCH_URL", "https://api.tavily.com/search")
-TAVILY_DEFAULT_DOMAINS = [
-    "weather.naver.com",
-    "weatheri.co.kr",
-    "kweather.co.kr",
-]
 TAVILY_MAX_RESULTS = max(1, min(5, int(os.environ.get("TAVILY_MAX_RESULTS", "3"))))
 TAVILY_SEARCH_DEPTH = os.environ.get("TAVILY_SEARCH_DEPTH", "basic")
 TAVILY_TIMEOUT_SECONDS = int(os.environ.get("TAVILY_TIMEOUT_SECONDS", "4"))
@@ -138,10 +143,15 @@ class WeatherWebAgent:
         humidity = WeatherWebAgent._to_float(weather.get("humidity"))
         wind_speed = WeatherWebAgent._to_float(weather.get("wind_speed"))
         base_date = str(weather.get("base_date") or "")
+        base_time = str(weather.get("base_time") or "")
         try:
             month = int(base_date[4:6]) if len(base_date) >= 6 else timezone.localdate().month
         except ValueError:
             month = timezone.localdate().month
+        try:
+            hour = int(base_time[:2]) if len(base_time) >= 2 else timezone.localtime().hour
+        except ValueError:
+            hour = timezone.localtime().hour
 
         def item(
             label,
@@ -229,13 +239,7 @@ class WeatherWebAgent:
         apparent_status = "계산에 필요한 관측값이 없습니다."
         apparent_minimum = 20
         apparent_maximum = 42
-        apparent_bands = [
-            {"level": "기준 미만", "from": 20, "to": 31, "color": "#36a269"},
-            {"level": "관심", "from": 31, "to": 33, "color": "#c3a832"},
-            {"level": "주의", "from": 33, "to": 35, "color": "#ed982f"},
-            {"level": "경고", "from": 35, "to": 38, "color": "#e8663a"},
-            {"level": "위험", "from": 38, "to": 42, "color": "#d9424e"},
-        ]
+        apparent_bands = APPARENT_TEMP_SUMMER_BANDS
         if 5 <= month <= 9 and temperature is not None and humidity is not None:
             wet_bulb = (
                 temperature * math.atan(0.151977 * math.sqrt(humidity + 8.313659))
@@ -273,12 +277,7 @@ class WeatherWebAgent:
             wind_kmh = max(0.0, wind_speed) * 3.6
             apparent_minimum = -50
             apparent_maximum = 10
-            apparent_bands = [
-                {"level": "위험", "from": -50, "to": -45, "color": "#d9424e"},
-                {"level": "경고", "from": -45, "to": -25, "color": "#e8663a"},
-                {"level": "주의", "from": -25, "to": -10, "color": "#ed982f"},
-                {"level": "관심", "from": -10, "to": 10, "color": "#c3a832"},
-            ]
+            apparent_bands = APPARENT_TEMP_WINTER_BANDS
             if temperature <= 10 and wind_speed >= 1.3:
                 apparent = (
                     13.12
@@ -304,17 +303,93 @@ class WeatherWebAgent:
                 apparent_method = "기상청 겨울철 산출 조건: 기온 10℃ 이하·풍속 1.3m/s 이상"
                 apparent_status = "겨울철 공식 산출 조건 밖입니다."
 
+        food_poisoning = None
+        food_poisoning_level = "정보 없음"
+        food_poisoning_severity = "unavailable"
+        food_poisoning_status = "기온·습도 관측값이 없어 계산하지 못했습니다."
+        if temperature is not None and humidity is not None:
+            food_poisoning = 1.79 * (1.03 ** temperature) * (1.04 ** humidity)
+            if food_poisoning >= 86:
+                food_poisoning_level = "위험"
+                food_poisoning_severity = "danger"
+                food_poisoning_status = "식중독 발생 위험이 매우 높으니 조리 후 즉시 섭취하세요."
+            elif food_poisoning >= 70:
+                food_poisoning_level = "경고"
+                food_poisoning_severity = "warning"
+                food_poisoning_status = "식중독 발생 위험이 높으니 조리 시 각별히 주의하세요."
+            elif food_poisoning >= 55:
+                food_poisoning_level = "주의"
+                food_poisoning_severity = "caution"
+                food_poisoning_status = "식중독 발생 가능성이 있으니 조리 기구의 위생을 챙기세요."
+            else:
+                food_poisoning_level = "관심"
+                food_poisoning_severity = "safe"
+                food_poisoning_status = "식중독 발생 위험이 낮으나 개인위생을 유지하세요."
+
+        uv = None
+        uv_level = "정보 없음"
+        uv_severity = "unavailable"
+        uv_status = "시간·날씨 정보가 없어 계산하지 못했습니다."
+        if hour is not None and month is not None:
+            if hour < 6 or hour > 18:
+                uv = 0.0
+            else:
+                uv_factor = math.cos(math.pi * (hour - 12.5) / 6.5)
+                uv_factor = max(0.0, uv_factor)
+                
+                if month in (6, 7, 8):
+                    month_peak = 10.0
+                elif month in (5, 9):
+                    month_peak = 8.0
+                elif month in (4, 10):
+                    month_peak = 6.0
+                elif month in (3, 11):
+                    month_peak = 4.0
+                else:
+                    month_peak = 2.0
+                    
+                cond = str(weather.get("condition") or "")
+                sky_code = str(weather.get("sky_code") or "")
+                
+                if any(term in cond for term in ("비", "눈", "소나기")):
+                    attenuation = 0.2
+                elif "흐림" in cond or sky_code == "4":
+                    attenuation = 0.3
+                elif "구름많음" in cond or sky_code == "3":
+                    attenuation = 0.7
+                else:
+                    attenuation = 1.0
+                    
+                uv = uv_factor * month_peak * attenuation
+
+            if uv is not None:
+                if uv >= 11:
+                    uv_level = "위험"
+                    uv_severity = "danger"
+                    uv_status = "바깥 활동을 피하고 실내에 머무르세요."
+                elif uv >= 8:
+                    uv_level = "매우 높음"
+                    uv_severity = "warning"
+                    uv_status = "오전 10시~오후 3시에는 야외 활동을 피하세요."
+                elif uv >= 6:
+                    uv_level = "높음"
+                    uv_severity = "warning"
+                    uv_status = "외출 시 모자, 선글라스를 쓰고 자외선 차단제를 바르세요."
+                elif uv >= 3:
+                    uv_level = "보통"
+                    uv_severity = "caution"
+                    uv_status = "햇볕 노출 시 2~3시간 내에 화상을 입을 수 있으니 대비하세요."
+                else:
+                    uv_level = "낮음"
+                    uv_severity = "safe"
+                    uv_status = "자외선 노출 위험이 매우 낮아 안전한 상태입니다."
+
         return {
             "불쾌지수": item(
                 "불쾌지수", discomfort, "", discomfort_level, discomfort_severity, 60, 90,
                 discomfort_status,
                 "기상청 과거 불쾌지수 산식: DI=1.8T-0.55(1-RH/100)(1.8T-26)+32", True,
-                [
-                    {"level": "낮음", "from": 60, "to": 68, "color": "#3b8edb"},
-                    {"level": "보통", "from": 68, "to": 75, "color": "#36a269"},
-                    {"level": "높음", "from": 75, "to": 80, "color": "#ed982f"},
-                    {"level": "매우 높음", "from": 80, "to": 90, "color": "#d9424e"},
-                ],
+                DISCOMFORT_INDEX_BANDS,
                 "https://www.kma.go.kr/kma/servlet/NeoboardProcess?bid=press2&mode=download&num=1553&fno=1",
             ),
             "체감온도": item(
@@ -322,6 +397,20 @@ class WeatherWebAgent:
                 apparent_minimum, apparent_maximum, apparent_status,
                 apparent_method, True, apparent_bands,
                 "https://data.kma.go.kr/climate/windChill/selectWindChillChart.do",
+            ),
+            "식중독지수": item(
+                "식중독지수", food_poisoning, "", food_poisoning_level, food_poisoning_severity, 0, 100,
+                food_poisoning_status,
+                "기상청·식약처식중독 예측 모델식: 1.79 * 1.03^T * 1.04^H", True,
+                FOOD_POISONING_INDEX_BANDS,
+                "https://www.weather.go.kr/w/theme/daily-life-weather/lifestyle.do",
+            ),
+            "자외선지수": item(
+                "자외선지수", uv, "", uv_level, uv_severity, 0, 15,
+                uv_status,
+                "기상청 시간·계절·기상 기반 자외선 추정식", True,
+                UV_INDEX_BANDS,
+                "https://data.kma.go.kr/climate/uv/selectUvChart.do",
             ),
         }
 
@@ -704,7 +793,7 @@ class WeatherWebAgent:
     @staticmethod
     def _fallback_condition_guide(weather):
         indices = WeatherWebAgent._calculate_weather_indices(weather)
-        return [indices[label] for label in ("불쾌지수", "체감온도")]
+        return [indices[label] for label in ("불쾌지수", "체감온도", "식중독지수", "자외선지수")]
 
     @staticmethod
     def _fallback_time_rhythm(weather):
@@ -831,26 +920,9 @@ class WeatherWebAgent:
 
         if not rules:
             # DB 조회 불가 대비 폴백 규칙 (길이 역순 정렬 적용)
-            replacements = {
-                "혈액 순환": "기분 전환",
-                "면역": "컨디션",
-                "치료": "돌봄",
-                "증상": "몸의 신호",
-                "완화": "덜어내기",
-            }
+            replacements = dict(STATIC_PHRASING_FALLBACK_REPLACEMENTS)
             if "맑음" in condition:
-                replacements.update({
-                    "따뜻한 햇살": "밝은 바깥 분위기",
-                    "강한 햇살": "밝은 바깥 분위기",
-                    "햇살": "바깥 분위기",
-                    "햇빛": "바깥 공기",
-                    "신선한 공기와 ": "바깥 공기가 ",
-                    "맑은 공기": "가벼운 바깥 공기",
-                    "맑고": "비 소식은 적고",
-                    "맑은": "비 소식이 적은",
-                    "자외선 차단제를 바르는": "외출 전 바깥 상황을 한 번 확인하는",
-                    "자외선 차단제": "외출 준비",
-                })
+                replacements.update(STATIC_PHRASING_FALLBACK_SUNNY_REPLACEMENTS)
             fallback_items = sorted(replacements.items(), key=lambda x: len(x[0]), reverse=True)
             for source, target in fallback_items:
                 text = text.replace(source, target)

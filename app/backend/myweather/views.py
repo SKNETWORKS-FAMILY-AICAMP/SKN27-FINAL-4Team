@@ -183,7 +183,7 @@ def current_weather(request):
             },
         },
         "methodology": {
-            "summary": "체감온도는 기상청 계절별 산식과 영향 단계를 적용했습니다. 불쾌지수는 2020년 종료된 기상청 서비스의 공식 산식·과거 단계를 참고값으로 재현합니다.",
+            "summary": "체감온도는 기상청 계절별 산식을, 불쾌지수는 기상청 과거 공식 산식을 재현합니다. 식중독지수는 기상청·식약처의 식중독 예측 모델식으로, 자외선지수는 기상청 기준 등급을 적용하여 추정·계산한 값입니다.",
             "graph": "막대 색은 공식 단계 구간, 흰색 표식은 현재 계산값의 위치입니다. 특보는 환산하지 않고 기상청 발표 단계를 그대로 표시합니다.",
             "indices": insight.get("conditionGuide", []),
             "formula_source_url": "https://data.kma.go.kr/climate/windChill/selectWindChillChart.do",

@@ -1,0 +1,63 @@
+from django.utils import timezone
+
+from user.constants import EMOTION_LABELS_KO
+from user.models import UserProfile
+
+
+def build_user_profile(user):
+    profile = UserProfile.objects.filter(user=user).first()
+    age = getattr(profile, "age", None) if profile else None
+    birth_date = getattr(profile, "birth_date", None) if profile else None
+    if age is None and birth_date:
+        today = timezone.localdate()
+        age = today.year - birth_date.year - (
+            (today.month, today.day) < (birth_date.month, birth_date.day)
+        )
+
+    return {
+        "age": age,
+        "gender": getattr(profile, "gender", "") if profile else "",
+        "interests": getattr(profile, "interests", []) if profile else [],
+        "hobbies": getattr(profile, "hobbies", []) if profile else [],
+        "today_emotion": get_today_dominant_emotion(user),
+    }
+
+
+def get_today_dominant_emotion(user):
+    """Return the recency-weighted dominant assistant emotion for today."""
+    try:
+        from chat.models import ChatMessage
+
+        messages = (
+            ChatMessage.objects.filter(
+                session__user=user,
+                role="assistant",
+                emotion_label__isnull=False,
+                created_at__date=timezone.localdate(),
+            )
+            .exclude(emotion_label="")
+            .order_by("created_at")
+        )
+        if not messages.exists():
+            return None
+
+        scores = {}
+        total = messages.count()
+        for index, message in enumerate(messages):
+            label = message.emotion_label
+            scores[label] = scores.get(label, 0.0) + ((index + 1) / total)
+
+        raw_emotion = max(scores, key=scores.get)
+        return EMOTION_LABELS_KO.get(raw_emotion, raw_emotion)
+    except Exception as exc:
+        # Emotion is optional personalization data. Its failure must not stop books.
+        print(f"[BookAgent] Failed to fetch today's emotion: {exc}")
+        return None
+
+
+def public_profile_basis(user_profile):
+    return {
+        "today_emotion": user_profile.get("today_emotion"),
+        "interests": user_profile.get("interests"),
+        "hobbies": user_profile.get("hobbies"),
+    }

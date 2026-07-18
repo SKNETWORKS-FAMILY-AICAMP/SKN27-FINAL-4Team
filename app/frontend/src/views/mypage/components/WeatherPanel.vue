@@ -151,21 +151,10 @@
                   :style="{ left: `${getMeterWidth(item)}%`, background: getMeterColor(item) }"
                 ></i>
               </div>
-              <div v-if="item.bands?.length" class="weather-guide-legend" aria-label="단계별 색상">
-                <span
-                  v-for="band in item.bands"
-                  :key="`${item.label}-${band.level}-legend`"
-                  :class="{ current: band.level === item.level }"
-                >
-                  <i :style="{ background: getBandColor(band) }"></i>{{ band.level }}
-                </span>
-              </div>
               <div class="weather-guide-scale" aria-hidden="true">
                 <span>{{ item.scale_min_label }}</span>
-                <b>▲ 현재</b>
                 <span>{{ item.scale_max_label }}</span>
               </div>
-              <p>{{ item.status || item.reason }}</p>
             </article>
           </div>
           <p class="weather-index-note">생활 판단을 돕는 참고값이며, 건강 상태를 진단하거나 의료적 판단을 대신하지 않습니다.</p>
@@ -433,7 +422,9 @@ export default {
       if (Array.isArray(items) && items.length) return items;
       return [
         { label: "불쾌지수", level: "확인 중", severity: "unavailable", value: null, unit: "", gauge_percent: 0, scale_min: 60, scale_max: 90, scale_min_label: "60", scale_max_label: "90", status: "날씨 정보를 불러오는 중입니다.", bands: [], available: false },
-        { label: "체감온도", level: "확인 중", severity: "unavailable", value: null, unit: "℃", gauge_percent: 0, scale_min: 20, scale_max: 42, scale_min_label: "20℃", scale_max_label: "42℃", status: "날씨 정보를 불러오는 중입니다.", bands: [], available: false }
+        { label: "체감온도", level: "확인 중", severity: "unavailable", value: null, unit: "℃", gauge_percent: 0, scale_min: 20, scale_max: 42, scale_min_label: "20℃", scale_max_label: "42℃", status: "날씨 정보를 불러오는 중입니다.", bands: [], available: false },
+        { label: "식중독지수", level: "확인 중", severity: "unavailable", value: null, unit: "", gauge_percent: 0, scale_min: 0, scale_max: 100, scale_min_label: "0", scale_max_label: "100", status: "날씨 정보를 불러오는 중입니다.", bands: [], available: false },
+        { label: "자외선지수", level: "확인 중", severity: "unavailable", value: null, unit: "", gauge_percent: 0, scale_min: 0, scale_max: 15, scale_min_label: "0", scale_max_label: "15", status: "날씨 정보를 불러오는 중입니다.", bands: [], available: false }
       ];
     },
     weatherAlerts() {

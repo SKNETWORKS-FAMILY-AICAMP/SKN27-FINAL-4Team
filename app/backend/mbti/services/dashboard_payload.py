@@ -7,8 +7,7 @@ from django.core.exceptions import AppRegistryNotReady, ImproperlyConfigured
 from django.db import DatabaseError
 
 from mbti.services.baseline_sources import load_onboarding_snapshot
-from mbti.services.monthly_questions import MBTI_AXES
-from mbti.services.monthly_results import AXIS_TYPE_INDEX
+from mbti.services.mbti_utils import MBTI_AXES, AXIS_TYPE_INDEX, is_valid_mbti_type
 
 
 MBTI_TYPE_DESCRIPTIONS: dict[str, dict[str, Any]] = {
@@ -175,13 +174,6 @@ MBTI_TYPE_DESCRIPTIONS: dict[str, dict[str, Any]] = {
 }
 
 
-def _valid_mbti_type(mbti_type: str | None) -> str | None:
-    if not mbti_type:
-        return None
-    normalized = mbti_type.strip().upper()
-    return normalized if normalized in MBTI_TYPE_DESCRIPTIONS else None
-
-
 def _axis_score_for_frontend(axis_result) -> int:
     selected = axis_result.selected_letter
     ratios = axis_result.axis_ratios_json or {}
@@ -195,7 +187,7 @@ def _onboarding_payload(user_id: int) -> dict[str, Any]:
         onboarding = load_onboarding_snapshot(user_id=user_id)
     except (AppRegistryNotReady, ImproperlyConfigured, DatabaseError):
         onboarding = None
-    onboarding_type = _valid_mbti_type(onboarding.mbti_type if onboarding else None)
+    onboarding_type = is_valid_mbti_type(onboarding.mbti_type if onboarding else None)
     description = MBTI_TYPE_DESCRIPTIONS.get(onboarding_type or '')
 
     if description:
@@ -217,7 +209,7 @@ def _onboarding_payload(user_id: int) -> dict[str, Any]:
 
 
 def _changed_axes_from_types(previous_type: str, current_type: str) -> list[str]:
-    if not _valid_mbti_type(previous_type) or not _valid_mbti_type(current_type):
+    if not is_valid_mbti_type(previous_type) or not is_valid_mbti_type(current_type):
         return []
 
     changed_axes = []
@@ -243,15 +235,15 @@ def build_frontend_payload_from_monthly_record(monthly_result) -> dict[str, Any]
     report = getattr(monthly_result, 'report', None)
     report_sections = report.report_sections_json if report else []
     onboarding_payload = _onboarding_payload(monthly_result.user_id)
-    onboarding_type = _valid_mbti_type(onboarding_payload['type'])
-    current_type = _valid_mbti_type(monthly_result.estimated_mbti_type) or '----'
+    onboarding_type = is_valid_mbti_type(onboarding_payload['type'])
+    current_type = is_valid_mbti_type(monthly_result.estimated_mbti_type) or '----'
     if monthly_result.status != 'complete' or current_type == '----':
         return build_frontend_preparing_payload(
             user_id=monthly_result.user_id,
             period_key=monthly_result.period_key,
         )
 
-    stored_previous_type = _valid_mbti_type(monthly_result.previous_estimated_mbti_type)
+    stored_previous_type = is_valid_mbti_type(monthly_result.previous_estimated_mbti_type)
     previous_type = stored_previous_type or onboarding_type or '----'
     previous_label = (
         f'{monthly_result.previous_period_key} 기준'
@@ -339,7 +331,7 @@ def build_frontend_payload_from_monthly_record(monthly_result) -> dict[str, Any]
 
 def build_frontend_preparing_payload(*, user_id: int, period_key: str | None = None) -> dict[str, Any]:
     onboarding_payload = _onboarding_payload(user_id)
-    onboarding_type = _valid_mbti_type(onboarding_payload['type'])
+    onboarding_type = is_valid_mbti_type(onboarding_payload['type'])
     previous_type = onboarding_type or '----'
     resolved_period_key = period_key or datetime.now().strftime('%Y-%m')
 

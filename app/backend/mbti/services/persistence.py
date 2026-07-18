@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from django.db import transaction
 from django.utils import timezone
 
-from mbti.services.graph_scores import AXIS_LETTER_DIRECTIONS
+from mbti.services.mbti_utils import AXIS_LETTER_DIRECTIONS
 from mbti.services.monthly_pipeline import MonthlyMbtiPipelineResult
 from mbti.services.response_scoring import MbtiResponseScore
 

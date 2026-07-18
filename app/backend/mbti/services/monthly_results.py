@@ -7,18 +7,7 @@ from mbti.services.graph_scores import GraphScoreResult
 from mbti.services.monthly_questions import MBTI_AXES, MbtiMonthlyQuestionBatch
 
 
-AXIS_TYPE_INDEX = {
-    'IE': 0,
-    'SN': 1,
-    'TF': 2,
-    'JP': 3,
-}
-AXIS_ALLOWED_LETTERS = {
-    'IE': {'I', 'E'},
-    'SN': {'S', 'N'},
-    'TF': {'T', 'F'},
-    'JP': {'J', 'P'},
-}
+from mbti.services.mbti_utils import AXIS_TYPE_INDEX, AXIS_ALLOWED_LETTERS
 
 
 @dataclass(frozen=True)

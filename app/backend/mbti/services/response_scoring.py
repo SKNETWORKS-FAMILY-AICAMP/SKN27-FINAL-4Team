@@ -14,13 +14,7 @@ from mbti.services.opening_rules import PrimaryOpeningResult
 from mbti.services.persona import build_axis_scoring_system_prompt
 
 
-AXIS_DIRECTION_LABELS = {
-    'IE': ('I', 'E'),
-    'SN': ('N', 'S'),
-    'TF': ('F', 'T'),
-    'JP': ('P', 'J'),
-}
-VALID_CODING_STATUSES = {'coded', 'insufficient_context', 'failed'}
+from mbti.services.mbti_utils import AXIS_DIRECTION_LABELS, VALID_CODING_STATUSES
 
 
 @dataclass(frozen=True)

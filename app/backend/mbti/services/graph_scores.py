@@ -7,12 +7,7 @@ from mbti.services.monthly_questions import MBTI_AXES
 from mbti.services.opening_rules import SecondaryOpeningResult
 
 
-AXIS_LETTER_DIRECTIONS = {
-    'IE': {'positive': 'E', 'negative': 'I'},
-    'SN': {'positive': 'S', 'negative': 'N'},
-    'TF': {'positive': 'T', 'negative': 'F'},
-    'JP': {'positive': 'J', 'negative': 'P'},
-}
+from mbti.services.mbti_utils import AXIS_LETTER_DIRECTIONS
 TIE_EPSILON = 1e-12
 
 

@@ -155,13 +155,14 @@ class WeatherExternalProcessingTests(SimpleTestCase):
     def test_indices_use_deterministic_observations_and_explicit_scales(self):
         weather = {
             'base_date': '20260715',
+            'base_time': '1200',
             'temperature': 30,
             'humidity': 70,
             'wind_speed': 2,
         }
         indices = WeatherWebAgent._calculate_weather_indices(weather)
 
-        self.assertEqual(list(indices), ['불쾌지수', '체감온도'])
+        self.assertEqual(list(indices), ['불쾌지수', '체감온도', '식중독지수', '자외선지수'])
         self.assertEqual(indices['불쾌지수']['value'], 81.4)
         self.assertEqual(indices['불쾌지수']['gauge_percent'], 71.3)
         self.assertEqual(indices['불쾌지수']['level'], '매우 높음')
@@ -176,9 +177,12 @@ class WeatherExternalProcessingTests(SimpleTestCase):
             [band['level'] for band in indices['체감온도']['bands']],
             ['기준 미만', '관심', '주의', '경고', '위험'],
         )
+        self.assertEqual(indices['식중독지수']['value'], 67.7)
+        self.assertEqual(indices['식중독지수']['level'], '주의')
+        self.assertEqual(indices['자외선지수']['value'], 9.7)
+        self.assertEqual(indices['자외선지수']['level'], '매우 높음')
         self.assertNotIn('습도', indices)
         self.assertNotIn('풍속', indices)
-        self.assertNotIn('식중독지수', indices)
         self.assertNotIn('감기가능지수', indices)
 
     def test_winter_apparent_temperature_uses_official_calculation_boundary(self):
@@ -243,6 +247,7 @@ class WeatherExternalProcessingTests(SimpleTestCase):
     def test_llm_cannot_replace_index_values(self):
         weather = {
             'base_date': '20260715',
+            'base_time': '1200',
             'condition': '맑음',
             'temperature': 30,
             'humidity': 70,
@@ -262,9 +267,11 @@ class WeatherExternalProcessingTests(SimpleTestCase):
             {},
         )
 
+        self.assertEqual(len(normalized['conditionGuide']), 4)
         self.assertEqual(normalized['conditionGuide'][0]['label'], '불쾌지수')
         self.assertEqual(normalized['conditionGuide'][0]['value'], 81.4)
-        self.assertNotIn('식중독지수', [item['label'] for item in normalized['conditionGuide']])
+        self.assertEqual(normalized['conditionGuide'][2]['label'], '식중독지수')
+        self.assertEqual(normalized['conditionGuide'][2]['value'], 67.7)
 
     def test_fallback_preserves_tavily_sources(self):
         context = {

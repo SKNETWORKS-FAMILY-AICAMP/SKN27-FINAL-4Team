@@ -1,18 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone, tzinfo
-import re
+from datetime import datetime, tzinfo
 from typing import Iterable, Protocol
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
-MBTI_AXES = ('IE', 'SN', 'TF', 'JP')
-try:
-    SEOUL_TZ = ZoneInfo('Asia/Seoul')
-except ZoneInfoNotFoundError:
-    SEOUL_TZ = timezone(timedelta(hours=9), name='Asia/Seoul')
-PERIOD_KEY_PATTERN = re.compile(r'^\d{4}-(0[1-9]|1[0-2])$')
+from mbti.services.mbti_utils import MBTI_AXES, SEOUL_TZ, PERIOD_KEY_PATTERN
 
 
 class QuestionResponseLike(Protocol):

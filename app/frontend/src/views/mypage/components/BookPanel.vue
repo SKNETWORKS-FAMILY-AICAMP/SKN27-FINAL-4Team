@@ -57,6 +57,8 @@
             <p class="book-meta">
               {{ currentSource.author || "저자 정보 없음" }}
               <span v-if="currentSource.publisher"> · {{ currentSource.publisher }}</span>
+              <span v-if="currentSource.published_at"> · {{ currentSource.published_at.slice(0, 10) }}</span>
+              <span v-else-if="currentSource.issued_year"> · {{ currentSource.issued_year }}년</span>
             </p>
           </section>
 
@@ -69,7 +71,7 @@
             <div v-if="basisTags.length" class="basis-list" aria-label="추천에 사용한 정보">
               <span v-for="tag in basisTags" :key="tag">{{ tag }}</span>
             </div>
-            <section class="review-box">
+            <section v-if="currentReview" class="review-box">
               <span>AI 맞춤 추천사</span>
               <p>{{ currentReview }}</p>
             </section>
@@ -106,7 +108,6 @@
             <p v-if="currentSource.isbn"><strong>ISBN</strong> {{ currentSource.isbn }}</p>
             <p v-if="currentSource.published_at"><strong>출간일</strong> {{ currentSource.published_at.slice(0, 10) }}</p>
             <p v-else-if="currentSource.issued_year"><strong>발행연도</strong> {{ currentSource.issued_year }}년</p>
-            <p v-if="currentSource.status"><strong>판매상태</strong> {{ currentSource.status }}</p>
             <p v-if="currentSource.link_provider"><strong>책 정보 링크</strong> {{ currentSource.link_provider.attribution }}</p>
             <p v-if="currentSource.cover_provider"><strong>표지</strong> {{ currentSource.cover_provider.attribution }}</p>
             <nav aria-label="도서 출처 상세 링크">
@@ -191,14 +192,12 @@ export default {
       return [...new Set(tags)];
     },
     currentReview() {
-      return this.currentBook.ai_curation?.review || this.currentBook.review || "AI 추천사를 준비하지 못했습니다. 새로 추천받기를 눌러 다시 생성해 주세요.";
+      return this.currentBook.ai_curation?.review || this.currentBook.review || "";
     },
     curationDetails() {
       return [
         { label: "검색 키워드", value: this.currentBook.keyword },
-        { label: "추천 기준", value: this.currentBook.keyword_basis },
-        { label: "출간일", value: this.currentSource.published_at?.slice(0, 10) },
-        { label: "판매상태", value: this.currentSource.status }
+        { label: "추천 기준", value: this.currentBook.keyword_basis }
       ].filter(detail => detail.value);
     },
     currentThemeReason() {

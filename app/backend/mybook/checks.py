@@ -2,14 +2,19 @@ import os
 
 from django.core.checks import Warning, register
 
+from .constants import KAKAO_API_KEY_ENV_VARS
+
 
 @register()
 def kakao_book_credentials_check(app_configs, **kwargs):
-    service_key = (
-        os.environ.get('KAKAO_REST_API_KEY')
-        or os.environ.get('KAKAO_CLIENT_ID')
-        or ''
-    ).strip()
+    service_key = next(
+        (
+            os.environ.get(name, '').strip()
+            for name in KAKAO_API_KEY_ENV_VARS
+            if os.environ.get(name, '').strip()
+        ),
+        '',
+    )
     if service_key:
         return []
     return [

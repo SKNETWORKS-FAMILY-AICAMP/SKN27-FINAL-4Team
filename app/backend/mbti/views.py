@@ -71,9 +71,9 @@ def set_onboarding_mbti(request):
         return Response({'error': '유효한 4자리 MBTI 유형을 입력해주세요.'}, status=400)
     
     mbti_type = mbti_type.upper()
-    from mbti.services.dashboard_payload import _valid_mbti_type
+    from mbti.services.mbti_utils import is_valid_mbti_type
     
-    if not _valid_mbti_type(mbti_type):
+    if not is_valid_mbti_type(mbti_type):
         return Response({'error': '지원하지 않는 MBTI 유형입니다.'}, status=400)
 
     from django.utils.timezone import now
