@@ -101,6 +101,9 @@ def _extract(message: str):
          "사용자 메시지에서 '기억할 가치가 있는' 것을 뽑아 JSON으로만 출력하라.\n"
          "[반드시 기록 — 최우선 규칙. 아래 항목은 일상처럼 보여도 기록한다]\n"
          "- 계획·약속, 사건(과거의 일 포함), 관계·이름 소개(가족·친구·반려동물), 취향, 구매.\n"
+         "- ★지속 고민·스트레스·상태도 사건으로 기록★ ('요즘 이직할까 고민이 많아'→'이직 고민', "
+         "'야근 3일 연속이야'→'연속 야근', '발표 준비 때문에 스트레스야'→'발표 준비 스트레스'). "
+         "마음 상태를 말하는 발화는 잡담이 아니다 — 버리지 마라.\n"
          "- ★한 메시지에 사실이 여러 개면 하나도 빼지 말고 각각 기록★ "
          "(예: '20일에 병원 가고, 갔다 와서 엄마랑 맛있는 거 먹기로 했어' → "
          "events에 '병원 방문'(date 있음) + '엄마와 외식 약속' 2개).\n"
@@ -216,8 +219,11 @@ _EXPIRY_HINT = re.compile(
 
 
 def _store(tx, uid: int, data: dict, salience: float = 1.0, vectors: dict = None,
-           expired_vectors: dict = None) -> None:
+           expired_vectors: dict = None, emotion_probs: dict = None) -> None:
     tx.run('MERGE (u:User {uid:$uid})', uid=uid)
+    # 감정: 학습 모델(KcELECTRA)의 4감정 확률을 그래프 감정으로 통일 (LLM 자유형 대신).
+    # top_emo = 대표 감정(argmax) — 회상 시 한 개만 빠르게 읽도록 이벤트에 비정규화.
+    top_emo = max(emotion_probs, key=emotion_probs.get) if emotion_probs else None
     this_turn_keys = []   # 이번 턴에 저장한 사건 키 — 만료에서 보호 (종결 기록 생존)
     for ev in (data.get('events') or []):
         name = (ev.get('name') or '').strip()
@@ -240,16 +246,19 @@ def _store(tx, uid: int, data: dict, salience: float = 1.0, vectors: dict = None
             'SET e.embedding = coalesce(e.embedding, $vec) '   # 의미 검색용 벡터 (없으면 유지)
             'SET e.salience = CASE WHEN coalesce(e.salience, 0) < $sal '
             '                 THEN $sal ELSE e.salience END '
+            'SET e.top_emotion = coalesce($top_emo, e.top_emotion) '   # 대표 감정 비정규화
             'MERGE (u)-[:HAS_EVENT]->(e)',
             uid=uid, key=key, name=name, date=(ev.get('date') or '').strip() or None,
-            today=_today_iso(), sal=salience, vec=vec)
-        emo = (ev.get('emotion') or '').strip()
-        if emo:
+            today=_today_iso(), sal=salience, vec=vec, top_emo=top_emo)
+        # 감정 = 학습 모델(KcELECTRA) 4감정 확률만 점수째로 (기쁨·슬픔·분노·일반).
+        # 모델이 확률을 못 주면 감정은 저장하지 않는다 (LLM 폴백 없음 — 감정 소스는 모델 하나).
+        for etype, escore in (emotion_probs or {}).items():
             tx.run(
                 'MATCH (e:Event {uid:$uid, key:$key}) '
-                'MERGE (m:Emotion {uid:$uid, type:$emo}) '
-                'MERGE (e)-[:FELT]->(m)',
-                uid=uid, key=key, emo=emo)
+                'MERGE (m:Emotion {uid:$uid, type:$etype}) '
+                'MERGE (e)-[r:FELT]->(m) '
+                'SET r.score = $escore',
+                uid=uid, key=key, etype=etype, escore=float(escore))
         for pn in (ev.get('people') or []):
             pn = (pn or '').strip()
             pkey = _norm_key(pn)
@@ -443,7 +452,19 @@ def _capture(uid: int, message: str, emotion: str = None) -> None:
             word = next((w for p, w in _CLOSURE_WORD if re.search(p, xreason + ' ' + message)), '종료')
             data.setdefault('events', []).append({'name': f'{xname} {word}'})
             print(f'[graph_memory] 종결 기록 합성: {xname} {word} (kind={xkind or "없음"})')
-        sal = _SALIENCE.get(emotion or '', 1.0)
+        # 감정 확률(학습 모델) — 그래프 감정·salience를 KcELECTRA 4감정으로 통일.
+        # 로컬 추론이라 비용 미미. 모델 비활성이면 probs 빈 dict → 기존 salience 폴백.
+        emotion_probs = {}
+        try:
+            from ai.emotion.emotion_model import predict_emotion_full
+            _, _, emotion_probs = predict_emotion_full(message)
+            emotion_probs = emotion_probs or {}
+        except Exception:
+            emotion_probs = {}
+        # weight = 1 + 부정감정 최대 점수(슬픔·분노) — 모델 확률에서 계산 (하드코딩 _SALIENCE 대체).
+        # 모델이 확률을 못 주면 기본 1.0 (감정 소스는 모델 하나).
+        sal = 1.0 + max(emotion_probs.get('슬픔', 0.0), emotion_probs.get('분노', 0.0)) \
+            if emotion_probs else 1.0
         # 벡터 준비 (모델 없으면 전부 None → 기존 동작 그대로)
         from chat import embedder
         vectors = {}
@@ -501,7 +522,8 @@ def _capture(uid: int, message: str, emotion: str = None) -> None:
                 except Exception:
                     pass   # 인덱스 미생성 등 — 병합 없이 진행
             s.execute_write(lambda tx: _store(tx, uid, data, salience=sal, vectors=vectors,
-                                               expired_vectors=expired_vectors))
+                                               expired_vectors=expired_vectors,
+                                               emotion_probs=emotion_probs))
     except Exception as e:
         print(f'[graph_memory] 캡처 실패: {e}')
 
@@ -646,21 +668,19 @@ def recall(user_id, limit: int = 6, message: str = None) -> str:
             events = s.run(
                 'MATCH (u:User {uid:$uid})-[:HAS_EVENT]->(e:Event) '
                 'WHERE (e.date IS NULL OR e.date < $today) AND e.valid_until IS NULL '   # 만료 필터 누락 봉합 — F03 원인 (2026-07-12)
-                'OPTIONAL MATCH (e)-[:FELT]->(m:Emotion) '
                 'OPTIONAL MATCH (e)-[:INVOLVES]->(p:Person) '
                 'RETURN e.key AS key, e.name AS name, e.date AS date, '
                 'coalesce(e.salience, 1.0) + 0.1 * CASE WHEN coalesce(e.recall_count, 0) > 5 '
                 'THEN 5 ELSE coalesce(e.recall_count, 0) END AS sal, '   # 재강화 보정(상한 +0.5 — 고착 방지)
-                'collect(DISTINCT m.type) AS emotions, collect(DISTINCT p.name) AS people '
+                'e.top_emotion AS emotion, collect(DISTINCT p.name) AS people '
                 'ORDER BY coalesce(date, \'\') DESC, sal DESC LIMIT $limit',   # 집계 RETURN에선 반환 컬럼만 정렬 가능
                 uid=user_id, today=today, limit=limit).data()
             for e in events:
                 parts = [e['name']]
                 if e.get('date'):
                     parts.append(f"({e['date']})")
-                emos = [x for x in (e.get('emotions') or []) if x]
-                if emos:
-                    parts.append('· 감정: ' + ', '.join(emos))
+                if e.get('emotion'):
+                    parts.append('· 감정: ' + e['emotion'])
                 ppl = [x for x in (e.get('people') or []) if x]
                 if ppl:
                     parts.append('· 함께: ' + ', '.join(ppl))
@@ -711,9 +731,8 @@ def recall(user_id, limit: int = 6, message: str = None) -> str:
                             'YIELD node, score '
                             'WHERE node.uid = $uid AND node.valid_until IS NULL '
                             'AND score >= $min '
-                            'OPTIONAL MATCH (node)-[:FELT]->(m:Emotion) '
                             'RETURN node.key AS key, node.name AS name, node.date AS date, '
-                            'collect(DISTINCT m.type) AS emotions, score '
+                            'node.top_emotion AS emotion, score '
                             'ORDER BY score DESC LIMIT 4',
                             vec=qvec, uid=user_id, min=VEC_RECALL_MIN).data()
                 except Exception:
@@ -727,9 +746,8 @@ def recall(user_id, limit: int = 6, message: str = None) -> str:
                         '     OR (size(e.key) >= 2 AND $msgnorm CONTAINS e.key) '
                         '     OR any(t IN split(e.name, \' \') '
                         '            WHERE size(t) >= 2 AND $msg CONTAINS t)) '
-                        'OPTIONAL MATCH (e)-[:FELT]->(m:Emotion) '
                         'RETURN e.key AS key, e.name AS name, e.date AS date, '
-                        'collect(DISTINCT m.type) AS emotions LIMIT 4',
+                        'e.top_emotion AS emotion LIMIT 4',
                         uid=user_id, msg=message, msgnorm=msgnorm).data()
                 for r in asked:
                     if (r.get('key') and r['key'] in seen_keys) \
@@ -738,9 +756,8 @@ def recall(user_id, limit: int = 6, message: str = None) -> str:
                     parts = [r['name']]
                     if r.get('date'):
                         parts.append(f"({r['date']})")
-                    emos = [x for x in (r.get('emotions') or []) if x]
-                    if emos:
-                        parts.append('· 감정: ' + ', '.join(emos))
+                    if r.get('emotion'):
+                        parts.append('· 감정: ' + r['emotion'])
                     lines.append('- (방금 물어본 기억) ' + ' '.join(parts))
                     events.append(r)   # 재강화 매칭 범위에 포함 — 꺼낸 기억은 선명해진다
 

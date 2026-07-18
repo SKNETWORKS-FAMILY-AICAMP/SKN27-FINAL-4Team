@@ -273,7 +273,8 @@ def chat_turn(request):
         # 위기 턴은 구조화 기억(그래프)에서 제외 — 민감 발화 영구 박제·오회상 방지 (2026-07-12)
         # (텍스트 요약에는 남겨 위로 연속성 유지 — 그래프/요약 역할 분리 원칙)
         if not result.get('crisis'):
-            graph_memory.capture_async(uid, stored_user_msg, emotion=emotion_label)  # 구조화 기억 병행 — 감정 가중 응고화 (Neo4j 미설정 시 no-op)
+            from chat import memory_backend
+            memory_backend.capture_async(uid, stored_user_msg, emotion=emotion_label)  # v1/v2 스위치 경유 (Neo4j 미설정 시 no-op)
         memory.update_async(uid, session.id)      # 8턴 경계 압축·정리
 
         # 응답에 MBTI 질문을 얹었으면, 다음 사용자 메시지를 그 답변으로 받도록 pending 설정
@@ -330,7 +331,9 @@ def tts_audio(request, task_id):
     audio = tts_service.consume_audio(task_id)
     if audio is None:
         return _err('AUDIO_GONE', '이미 재생되었거나 존재하지 않는 음성입니다.', status.HTTP_404_NOT_FOUND)
-    return HttpResponse(audio, content_type='audio/mpeg')
+    # 포맷 자동 감지: Typecast=wav(RIFF), ElevenLabs=mp3
+    ctype = 'audio/wav' if audio[:4] == b'RIFF' else 'audio/mpeg'
+    return HttpResponse(audio, content_type=ctype)
 
 
 # ═════════════════════════════════════════════════════════════

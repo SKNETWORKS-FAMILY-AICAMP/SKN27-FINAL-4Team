@@ -62,7 +62,8 @@ class CaptureGuardTests(TestCase):
             mock.patch.object(gm, 'is_enabled', return_value=True),
             mock.patch.object(gm, '_store',
                               side_effect=lambda tx, uid, data, salience=1.0,
-                              vectors=None, expired_vectors=None: self.captured.update(data)),
+                              vectors=None, expired_vectors=None,
+                              emotion_probs=None: self.captured.update(data)),
             mock.patch('chat.embedder.embed', return_value=[1.0, 0.0]),
             mock.patch('chat.embedder.is_available', return_value=True),
         ]
@@ -286,7 +287,36 @@ class AnswerGuardTests(TestCase):
         v.assert_called_once()
 
     def test_verifier_failure_is_harmless(self):
-        """검증 LLM이 죽어도 통과 처리 — 챗봇 흐름 무중단"""
+        """검증 LLM이 죽어도 통과 처리 — 챗봇 흐름 무중단 (근거가 있을 때)"""
         with mock.patch.object(ag, '_verify_llm', side_effect=RuntimeError('down')):
-            ok, _ = ag.check_grounded('전에 말했잖아', '', 'q')
+            ok, _ = ag.check_grounded('전에 말했잖아', '- 발표 준비', 'q')
+        self.assertTrue(ok)
+
+    def test_empty_evidence_assertion_blocked_deterministically(self):
+        """빈 근거 + 과거 단정 = LLM 검증 없이 결정적 차단 (2026-07-19, 환각 20% 사고)"""
+        with mock.patch.object(ag, '_verify_llm') as v:
+            ok, why = ag.check_grounded("여동생 이름은 '지민'이었지?", '', 'q')
+        self.assertFalse(ok)
+        v.assert_not_called()   # LLM 0회 — 결정적 경로
+
+    def test_name_assertion_goes_to_verifier(self):
+        """v2 T01·T03 실측: 명사 단정형('루비였잖아')·헤지 보고형('지민이라고 했던 것
+        같은데')이 게이트를 빠져나가던 사고 — 근거 있으면 검증 경유, 빈 근거면 결정 차단"""
+        for a in ("고양이 이름은 '루비'였잖아!", '여동생 이름은 지민이었지?',
+                  "여동생 이름은 '지민'이라고 했던 것 같은데 맞지?"):
+            # 근거가 있는 경우 → 검증자 경유로 차단
+            with mock.patch.object(ag, '_verify_llm', return_value='지어낸 이름') as v:
+                ok, _ = ag.check_grounded(a, '- 피곤한 하루', 'q')
+            self.assertFalse(ok, a)
+            v.assert_called_once()
+            # 근거가 비면 → 검증자 없이 결정적 차단
+            with mock.patch.object(ag, '_verify_llm') as v2:
+                ok, _ = ag.check_grounded(a, '', 'q')
+            self.assertFalse(ok, a)
+            v2.assert_not_called()
+
+    def test_grounded_name_assertion_passes(self):
+        """근거 있는 이름 단정('콩이잖아')은 검증 경유 후 통과 — 과탐지는 2차가 거른다"""
+        with mock.patch.object(ag, '_verify_llm', return_value=None):
+            ok, _ = ag.check_grounded('응, 콩이잖아!', '- 인물: 콩이(반려동물)', 'q')
         self.assertTrue(ok)

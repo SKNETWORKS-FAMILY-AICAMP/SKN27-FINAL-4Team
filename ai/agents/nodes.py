@@ -372,7 +372,7 @@ def analysis_node(state: ChatState) -> dict:
 # ── [컨텍스트 조회: 라우팅 직후 1회만] ────────────────────────
 
 def load_context_node(state: ChatState) -> dict:
-    """최근 N턴 원문 + 장기 요약(user_memory) 1회 조회. 시크릿 모드는 RAM 캐시.
+    """최근 N턴 원문 + 그래프 기억(recall) 1회 조회. 시크릿 모드는 RAM 캐시.
     (흐름도 CTX — 4개 에이전트가 각각 조회하지 않음)"""
     RECENT_N = 10
     history, summary = [], ''
@@ -381,7 +381,7 @@ def load_context_node(state: ChatState) -> dict:
         from chat.secret_cache import get_history
         history = get_history(state['session_id'])[-RECENT_N:]
     else:
-        from chat.models import ChatMessage, UserMemory
+        from chat.models import ChatMessage
         recent = list(
             ChatMessage.objects
             .filter(session_id=state['session_id'])
@@ -390,19 +390,16 @@ def load_context_node(state: ChatState) -> dict:
         recent.reverse()
         history = [{'role': m.role, 'content': m.content} for m in recent]
         if state.get('user_id'):
-            summary = (
-                UserMemory.objects
-                .filter(user_id=state['user_id'])
-                .values_list('summary_text', flat=True)
-                .first()
-            ) or ''
-            # 그래프(구조화 관계) 기억 병행 회상 — Neo4j 미설정 시 '' 이라 영향 없음
+            # 장기 기억 = 그래프 단독 (2026-07-16 요약 계층 은퇴 — 주입 차단).
+            # user_memory 요약은 더 이상 챗봇에 주입하지 않음. 생성은 유지(마음리포트·opener 사용).
+            # 근거: 27종 평가 96%는 그래프 recall 단독 수치 + 요약 주입발 사고 이력(위기 재인용 등).
+            # Neo4j 미설정/장애 시 '' — 최근 N턴 원문만으로 동작 (무중단).
             try:
-                from chat.graph_memory import recall as graph_recall
+                from chat.memory_backend import recall as graph_recall   # v1/v2 스위치 경유
                 g = graph_recall(state['user_id'],
                                  message=state.get('user_message'))   # 재강화: 언급된 기억만 강화
                 if g:
-                    summary = (summary + '\n\n[관계 기억]\n' + g).strip()
+                    summary = '[관계 기억]\n' + g
             except Exception:
                 pass
 

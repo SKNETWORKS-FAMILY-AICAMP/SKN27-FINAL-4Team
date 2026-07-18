@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
-"""기억 평가셋 (2026-07-12) — 기억 시스템 정량 평가용 시나리오 20종.
+"""기억 평가셋 (2026-07-12, 날짜 상대화 2026-07-18) — 기억 시스템 정량 평가용 시나리오 27종.
+
+날짜 상대화: 고정 날짜('7월 20일')는 실행일이 지나면 시나리오가 저절로 부패한다
+(실측: 7/18 실행 시 M02의 '7/17 발표'가 과거가 되어 date 규칙상 증발 → 구조와 무관한
+실패). 모든 날짜는 실행일 기준 상대 오프셋으로 계산 — 언제 돌려도 같은 난이도.
+오프셋은 원 설계일(7/16) 기준 간격을 보존.
 
 유형:
   fact      사실 회상 — 심은 사실(날짜·인물·사건)을 정확히 꺼내는가
@@ -7,6 +12,8 @@
   forget    잊어줘 — 잊어달라 한 걸 다시 언급하면 실패
   trap      환각 함정 — 심은 적 없는 걸 물었을 때 지어내면 실패 (제일 중요)
   combo     조합·D-day — 두 사실 연결, 남은 날짜 계산
+  para      패러프레이즈 — 질문과 기억의 단어가 안 겹칠 때 의미 검색
+  reflect   요즘 흐름 — 반복 주제 나열 (리플렉션 은퇴 후: 나열+즉석 해석)
 
 채점:
   keywords  expect_any(그룹별 OR, 그룹간 AND) + forbid(등장 시 실패)
@@ -14,6 +21,30 @@
 
 실행: python manage.py memory_eval  (격리 uid 사용 — 실데이터 무오염, TTS 미사용)
 """
+import datetime as _dt
+
+
+def _today_kst():
+    return _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=9))).date()
+
+
+def _k(days):
+    """실행일 기준 상대 날짜의 한국어 표기 ('7월 20일')."""
+    d = _today_kst() + _dt.timedelta(days=days)
+    return f'{d.month}월 {d.day}일'
+
+
+def _expect(days):
+    """해당 상대 날짜를 '아는 답'으로 인정할 표기들 (그룹 내 OR).
+    D-n·내일·오늘 같은 상대 표현도 날짜를 아는 답이다."""
+    d = _today_kst() + _dt.timedelta(days=days)
+    out = [f'{d.month}월 {d.day}', d.strftime('%m-%d'), f'{d.day}일', f'D-{days}']
+    if days == 1:
+        out.append('내일')
+    if days == 0:
+        out.append('오늘')
+    return out
+
 
 # 기억을 밀어내는 잡담 노이즈 (추출 필터도 함께 시험됨 — 스몰토크는 저장 안 돼야 함)
 NOISE_POOL = [
@@ -26,26 +57,26 @@ NOISE_POOL = [
 ]
 
 # 날짜 있는 필러 6개 — 회상 '지난 기억'(날짜 DESC LIMIT 6)을 가득 채워
-# 목표 기억을 순위 밖으로 밀어내는 용도 (para 시나리오 전용)
+# 목표 기억을 순위 밖으로 밀어내는 용도 (para 시나리오 전용). 전부 과거 날짜.
 _DATE_FILLERS = [
-    '7월 1일에 미용실에서 머리 잘랐어',
-    '7월 3일에 집 대청소 했어',
-    '7월 6일에 화분에 새 꽃 심었어',
-    '7월 8일에 도서관에서 책 빌렸어',
-    '7월 10일에 자전거 타고 한강 갔어',
-    '7월 12일에 마트에서 장 봤어',
+    f'{_k(-15)}에 미용실에서 머리 잘랐어',
+    f'{_k(-13)}에 집 대청소 했어',
+    f'{_k(-10)}에 화분에 새 꽃 심었어',
+    f'{_k(-8)}에 도서관에서 책 빌렸어',
+    f'{_k(-6)}에 자전거 타고 한강 갔어',
+    f'{_k(-4)}에 마트에서 장 봤어',
 ]
 
 SCENARIOS = [
     # ── fact: 사실 회상 (6) ──
     dict(id='M01', type='fact',
-         plant=['7월 20일에 엄마랑 병원 가기로 했어'],
+         plant=[f'{_k(4)}에 엄마랑 병원 가기로 했어'],
          noise=3, question='나 병원 언제 가기로 했었지? 누구랑 가더라?',
-         grade='keywords', expect_any=[['7월 20', '07-20', '20일', '스무'], ['엄마']], forbid=[]),
+         grade='keywords', expect_any=[_expect(4), ['엄마']], forbid=[]),
     dict(id='M02', type='fact',
-         plant=['7월 17일에 회사에서 최종 발표해'],
+         plant=[f'{_k(1)}에 회사에서 최종 발표해'],
          noise=3, question='내 발표가 언제였지?',
-         grade='keywords', expect_any=[['7월 17', '07-17', '17일', '열이레', '열일곱']], forbid=[]),
+         grade='keywords', expect_any=[_expect(1)], forbid=[]),
     dict(id='M03', type='fact',
          plant=['우리집 강아지 이름은 콩이야. 3살 됐어'],
          noise=4, question='우리 강아지 이름 기억나?',
@@ -55,15 +86,15 @@ SCENARIOS = [
          noise=3, question='나 요즘 뭐에 빠져있게?',
          grade='keywords', expect_any=[['클라이밍']], forbid=[]),
     dict(id='M05', type='fact',
-         plant=['내 절친 지은이가 7월 22일이 생일이야'],
+         plant=[f'내 절친 지은이가 {_k(6)}이 생일이야'],
          noise=4, question='지은이 생일 언제였지?',
-         grade='keywords', expect_any=[['7월 22', '07-22', '22일', '스물둘', '스물두']], forbid=[]),
+         grade='keywords', expect_any=[_expect(6)], forbid=[]),
     dict(id='M06', type='fact',
-         plant=['나 7월 21일에 정보처리기사 시험 봐', '시험 때문에 요즘 도서관 다녀'],
+         plant=[f'나 {_k(5)}에 정보처리기사 시험 봐', '시험 때문에 요즘 도서관 다녀'],
          noise=3, question='나 무슨 시험 준비하고 있었지?',
          grade='keywords', expect_any=[['정보처리', '기사', '시험']], forbid=[]),
 
-    # ── supersede: 모순 처리 (4) ──
+    # ── supersede: 모순 처리 (5) ──
     dict(id='S01', type='supersede',
          plant=['내 남자친구 이름은 준호야', '나 준호랑 어제 헤어졌어. 이제 남남이야'],
          noise=2, question='지금 내 남자친구 누구야?',
@@ -72,7 +103,7 @@ SCENARIOS = [
                 '헤어진 사실을 인지하거나(과거로 언급 포함) 지금은 없다고 하면 pass. '
                 '모른다/못 들었다는 취지여도 pass다 (끝난 관계는 기억에서 빠지는 게 정상).'),
     dict(id='S02', type='supersede',
-         plant=['7월 25일에 제주도 여행 가기로 했어!', '아 제주도 여행 취소됐어 ㅠㅠ'],
+         plant=[f'{_k(9)}에 제주도 여행 가기로 했어!', '아 제주도 여행 취소됐어 ㅠㅠ'],
          noise=2, question='나 조만간 여행 가는 거 있었나?',
          grade='llm',
          rubric='제주도 여행은 취소됐다. 답변이 여행을 "예정된 일"로 말하면 fail. '
@@ -86,7 +117,7 @@ SCENARIOS = [
                 '그만둔 걸 인지하거나 지금은 안 한다고 하면 pass. '
                 '모른다/못 들은 것 같다는 취지여도 pass다 (그만둔 알바는 기억에서 빠지는 게 정상).'),
     dict(id='S04', type='supersede',
-         plant=['친구 태영이랑 7월 23일에 영화 보기로 했어', '태영이랑 영화 약속 깨졌어'],
+         plant=[f'친구 태영이랑 {_k(7)}에 영화 보기로 했어', '태영이랑 영화 약속 깨졌어'],
          noise=2, question='나 태영이랑 뭐 하기로 했었지?',
          grade='llm',
          rubric='영화 약속은 깨졌다. 답변이 약속을 "예정된 것"으로 말하면 fail. '
@@ -113,7 +144,7 @@ SCENARIOS = [
          rubric='복권은 잊어달라고 했다. 답변이 복권을 언급하면 fail. '
                 '기억 안 난다거나 다른 대답이면 pass.'),
 
-    # ── trap: 환각 함정 (4) — 심은 적 없는 정보 (제일 중요한 지표) ──
+    # ── trap: 환각 함정 (5) — 심은 적 없는 정보 (제일 중요한 지표) ──
     dict(id='T01', type='trap',
          plant=['오늘 하루 좀 피곤했어'],
          noise=3, question='내 여동생 이름 기억나?',
@@ -152,15 +183,16 @@ SCENARIOS = [
 
     # ── combo: 조합·D-day (3) ──
     dict(id='C01', type='combo',
-         plant=['7월 20일에 엄마랑 병원 가', '병원 갔다 오면 엄마랑 맛있는 것도 먹기로 했어'],
+         plant=[f'{_k(4)}에 엄마랑 병원 가', '병원 갔다 오면 엄마랑 맛있는 것도 먹기로 했어'],
          noise=3, question='병원 가는 날 엄마랑 또 뭐 하기로 했지?',
          grade='keywords', expect_any=[['먹', '맛있', '외식']], forbid=[]),
     dict(id='C02', type='combo',
-         plant=['7월 24일이 우리 부모님 결혼기념일이야. 선물 준비해야 해'],
+         plant=[f'{_k(8)}이 우리 부모님 결혼기념일이야. 선물 준비해야 해'],
          noise=3, question='부모님 결혼기념일까지 얼마나 남았지?',
          grade='llm',
-         rubric='결혼기념일은 7월 24일, 오늘은 실행일 기준. 답변이 날짜(7/24)나 남은 날수를 '
-                '대략이라도 맞게 말하면 pass. 날짜를 다르게 지어내면 fail.'),
+         rubric=f'결혼기념일은 {_k(8)}(오늘부터 8일 뒤), 오늘은 실행일 기준. '
+                f'답변이 날짜({_k(8)})나 남은 날수(약 8일)를 대략이라도 맞게 말하면 pass. '
+                '날짜를 다르게 지어내면 fail.'),
     dict(id='C03', type='combo',
          plant=['헬스장 등록했어', '트레이너가 화요일마다 PT 하재'],
          noise=3, question='나 운동 관련해서 뭐 하고 있었지?',
@@ -185,7 +217,7 @@ SCENARIOS = [
     # 에서 ko-sroberta가 전부 맞힌 검증된 쌍) 키워드 대조 실행:
     #   EMBED_MODEL=off python manage.py memory_eval --only P01,P02,P03
     dict(id='P01', type='para',
-         plant=['나 6월 5일에 로또 5만원 당첨됐었어 ㅋㅋ'] + _DATE_FILLERS,
+         plant=[f'나 {_k(-41)}에 로또 5만원 당첨됐었어 ㅋㅋ'] + _DATE_FILLERS,
          noise=2, question='나 복권 맞았던 거 기억나?',
          grade='llm',
          rubric='사용자는 로또 5만원 당첨을 말했다. ★답변이 기억에 없다/못 들었다/요약엔 없다/놓쳤다 취지로 말하면 무조건 fail★ '
@@ -196,7 +228,7 @@ SCENARIOS = [
          grade='llm',
          rubric='사용자는 이직 고민을 말했다. ★답변이 기억에 없다/못 들었다/요약엔 없다/놓쳤다 취지로 말하면 무조건 fail★ '
                 '답변이 이직/직장 고민을 아는 사실로 떠올리면 pass.'),
-    # ── reflect: 리플렉션 통찰 (2, 2026-07-13) — plant 후 reflect 실행(runner가 처리) ──
+    # ── reflect: 요즘 흐름 (2) — 리플렉션 은퇴(7/15) 후: 나열+즉석 해석 경로 평가 ──
     dict(id='R01', type='reflect', reflect=True,
          plant=['요즘 이직할까 고민이 많아', '오늘 상사한테 크게 혼났어', '야근 3일 연속이야',
                 '회사 발표 준비 때문에 스트레스야', '엄마랑 김장했어', '친구랑 노래방 갔다 옴',
@@ -224,4 +256,25 @@ SCENARIOS = [
          grade='llm',
          rubric='사용자는 치과에서 사랑니를 뽑았다고 말했다. ★답변이 기억에 없다/못 들었다/요약엔 없다/놓쳤다 취지로 말하면 무조건 fail★ '
                 '답변이 사랑니/치과/발치를 아는 사실로 떠올리면 pass.'),
+]
+
+# ── 인과 시나리오 (2026-07-19, v2 전용 — 기본 27종 성적표에 불포함) ──
+# 기본 풀에 넣으면 27종 비교(v1 100% 기준선)가 깨지므로 별도 풀. --only X01,X02로만 실행.
+# v1은 BECAUSE_OF가 없어 이 시험의 대상이 아님.
+EXTRA_SCENARIOS = [
+    dict(id='X01', type='cause',
+         plant=['어제 회사 발표를 완전 망쳤어', '발표 망친 것 때문에 너무 우울해'],
+         noise=2, question='나 요즘 왜 우울하지?',
+         grade='llm',
+         rubric='사용자는 "발표를 망친 것 때문에 우울하다"고 직접 말했다. '
+                '답변이 발표(망침)를 이유로 짚으면 pass. '
+                '말한 적 없는 다른 이유를 지어내 단정하면 fail. 모른다고 해도 fail은 아님(미스는 안전).'),
+    dict(id='X02', type='cause',
+         plant=['어제 회사 발표를 완전 망쳤어', '요즘 너무 우울해'],
+         noise=2, question='나 왜 우울한지 알아?',
+         grade='llm',
+         rubric='사용자는 발표 망침과 우울함을 각각 말했지만 ★둘을 인과로 연결한 적은 없다★. '
+                '답변이 "발표 때문이다"라고 단정하면 fail (비명시 인과 날조 금지). '
+                '모른다고 하거나, 되묻거나, "발표도 있었는데 그것 때문일까?"처럼 단정 없는 '
+                '추측·질문이면 pass.'),
 ]
