@@ -10,13 +10,13 @@
         class="room-character"
         type="button"
         :aria-label="currentCharacter.name"
-        :class="{ walking: isWalking, arrived: arrivalPulse }"
+        :class="[{ walking: isWalking, arrived: arrivalPulse }, expressionAnimationClass]"
         :data-facing="facing"
         :data-character="currentCharacter.id"
         :style="characterStyle"
         @click="$emit('open-panel', 'character')"
       >
-        <img :src="`/characters/${currentCharacter.id}/default.png`" :alt="currentCharacter.name" />
+        <img :key="characterImage" :src="characterImage" :alt="currentCharacter.name" />
       </button>
       <button
         class="hotspot door"
@@ -34,6 +34,30 @@
       <button class="hotspot mbti" type="button" :aria-label="labels.mbti" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-panel', 'mbti')"></button>
       <button class="hotspot book" type="button" :aria-label="labels.book || '오늘의 책 추천'" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-panel', 'book')"></button>
       <button class="hotspot memory" type="button" :aria-label="labels.memory || '기억 보관함'" title="기억 보관함" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-panel', 'memory')"></button>
+      <button
+        class="hotspot emotion"
+        type="button"
+        :aria-label="labels.emotion || '오늘의 표정'"
+        title="오늘의 표정"
+        @mouseenter="showHotspotLabel"
+        @mouseleave="hideHotspotLabel"
+        @focus="showHotspotLabel"
+        @blur="hideHotspotLabel"
+        @click="$emit('open-panel', 'emotion')"
+      >
+        <svg
+          class="emotion-hotspot-frame"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path
+            class="emotion-hotspot-shape"
+            d="M98.3 42.3 C98.6 44.8 99.3 47.5 99.2 50.1 C99.2 52.6 98.1 55 97.8 57.8 C97.6 60.6 98.3 63.9 97.8 66.9 C97.3 69.9 96.4 73.2 94.9 75.9 C93.5 78.7 91.3 81.4 88.9 83.6 C86.5 85.7 83.7 88.2 80.3 88.9 C77 89.7 72.1 86.8 68.8 87.8 C65.6 88.9 63.9 93.7 60.8 95.3 C57.7 97 53.9 97.6 50.4 97.7 C46.9 97.8 43.2 97.1 39.9 96.1 C36.6 95.1 33.4 93.2 30.5 91.5 C27.7 89.7 25.7 86.9 22.6 85.6 C19.6 84.3 15.1 84.9 12 83.6 C8.9 82.2 5.8 80 3.9 77.4 C2.1 74.8 1.4 71.2 0.8 68.1 C0.3 64.9 0.8 61.6 0.6 58.6 C0.5 55.7 -0.4 53 -0.1 50.3 C0.2 47.6 2.4 45 2.6 42.3 C2.7 39.7 0.4 36.9 0.8 34.4 C1.1 31.9 3.5 29.7 4.6 27.3 C5.8 24.9 5.8 22 7.5 20 C9.2 18 12.6 16.9 15.1 15.6 C17.6 14.3 19.9 13.1 22.4 12.3 C24.9 11.4 27.7 11.3 29.9 10.3 C32.1 9.3 33.7 7.7 35.8 6.2 C37.9 4.7 40 2.4 42.4 1.4 C44.8 0.4 47.8 -0.1 50.4 0 C53.1 0.1 55.9 1 58.3 2.2 C60.7 3.3 62.7 5.4 64.8 6.9 C66.8 8.4 68.5 9.8 70.5 11 C72.5 12.2 74 13.4 76.8 14 C79.6 14.6 84.3 13.6 87.1 14.6 C89.9 15.6 91.8 17.9 93.4 20 C94.9 22.1 95.5 24.8 96.2 27.3 C96.9 29.8 97.2 32.3 97.6 34.8 C97.9 37.3 98 39.8 98.3 42.3 Z"
+          />
+        </svg>
+      </button>
       <button class="hotspot wardrobe" type="button" aria-label="마음리포트 보기" title="마음리포트 보기" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-report')"></button>
 
       <div
@@ -61,6 +85,12 @@ import {
   ROOM_STOPS,
   WALKABLE_FLOOR_RECTS,
 } from "../config/room.config";
+import {
+  DEFAULT_ROOM_EXPRESSION,
+  EMOTION_ANIMATION_CLASSES,
+  VALID_ROOM_EXPRESSIONS,
+} from "../config/emotion.constants";
+import { createTransparentCharacterImage } from "../utils/character-image";
 
 export default {
   name: "MypageRoom",
@@ -80,6 +110,10 @@ export default {
     moveKey: {
       type: Number,
       default: 0
+    },
+    roomExpression: {
+      type: String,
+      default: DEFAULT_ROOM_EXPRESSION
     }
   },
   emits: ["open-panel", "open-chat", "open-report", "arrived"],
@@ -91,6 +125,8 @@ export default {
       arrivalPulse: false,
       facing: "right",
       activeWalkCycleMs: null,
+      resolvedCharacterImage: "",
+      characterImageRequestId: 0,
       moveTimers: [],
       moveFrameId: null,
       activeHotspotLabel: "",
@@ -108,6 +144,29 @@ export default {
         "--character-walk-cycle": `${this.activeWalkCycleMs || profile.walkCycleMs}ms`,
         "--character-arrival-duration": `${profile.arrivalMs}ms`
       };
+    },
+    displayExpression() {
+      if (
+        this.isWalking
+        || this.activeTarget !== "emotion"
+        || !VALID_ROOM_EXPRESSIONS.has(this.roomExpression)
+      ) {
+        return DEFAULT_ROOM_EXPRESSION;
+      }
+      return this.roomExpression;
+    },
+    characterPose() {
+      if (!this.isWalking && this.activeTarget === "mbti") return "search";
+      return this.displayExpression;
+    },
+    characterImageSource() {
+      return `/characters/${this.currentCharacter.id}/${this.characterPose}.png`;
+    },
+    characterImage() {
+      return this.resolvedCharacterImage || this.characterImageSource;
+    },
+    expressionAnimationClass() {
+      return EMOTION_ANIMATION_CLASSES[this.displayExpression] || "";
     },
     currentMovementProfile() {
       return CHARACTER_MOVEMENT_PROFILES[this.currentCharacter.id]
@@ -135,6 +194,22 @@ export default {
   watch: {
     moveKey() {
       this.walkTo(this.focusTarget);
+    },
+    characterImageSource: {
+      immediate: true,
+      async handler(src) {
+        const requestId = this.characterImageRequestId + 1;
+        this.characterImageRequestId = requestId;
+
+        if (!src.endsWith("/search.png")) {
+          this.resolvedCharacterImage = src;
+          return;
+        }
+
+        const transparentImage = await createTransparentCharacterImage(src);
+        if (requestId !== this.characterImageRequestId) return;
+        this.resolvedCharacterImage = transparentImage || src;
+      }
     }
   },
   mounted() {
@@ -190,6 +265,7 @@ export default {
 
       this.clearMoveTimers();
       this.arrivalPulse = false;
+      this.activeTarget = target;
 
       if (!route.length) {
         this.isWalking = false;

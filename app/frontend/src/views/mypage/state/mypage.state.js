@@ -3,6 +3,7 @@ import {
   MBTI_VIEWS,
   MYPAGE_CHARACTERS,
 } from "../config/mypage.constants";
+import { DEFAULT_ROOM_EXPRESSION } from "../config/emotion.constants";
 
 export const i18n = {
   ko: {
@@ -14,7 +15,8 @@ export const i18n = {
     weather: "날씨 정보",
     book: "오늘의 책 추천",
     memory: "기억 보관함",
-    mbti: "MBTI 분석"
+    mbti: "MBTI 분석",
+    emotion: "오늘의 표정"
   },
   en: {
     subtitle: "A personal room for conversations and self-insight",
@@ -25,7 +27,8 @@ export const i18n = {
     weather: "Weather",
     book: "Today's Book",
     memory: "Memory Vault",
-    mbti: "MBTI Analysis"
+    mbti: "MBTI Analysis",
+    emotion: "Today's Expression"
   }
 };
 
@@ -38,6 +41,7 @@ export function createMypageState() {
     navigationConfirm: null,
     roomFocusTarget: "character",
     roomMoveKey: 0,
+    activeRoomExpression: DEFAULT_ROOM_EXPRESSION,
     toast: "",
     toastTimer: null,
     weatherPayload: null,

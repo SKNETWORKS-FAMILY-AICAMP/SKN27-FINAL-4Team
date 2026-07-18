@@ -15,7 +15,8 @@ export const ROOM_STOPS = Object.freeze({
   book: { x: 50.0, y: 26.4 },
   mbti: { x: 74.0, y: 20.8 },
   memory: { x: 50.0, y: 53.5 },
-  wardrobe: { x: 78.0, y: 18.5 },
+  emotion: { x: 43.0, y: 65.0 },
+  wardrobe: { x: 88.0, y: 66.3 },
 });
 
 export const CHARACTER_FOOT_OFFSET = Object.freeze({ x: 3.7, y: 16.5 });
@@ -29,7 +30,6 @@ export const ROOM_OBSTACLES = Object.freeze([
   { id: "desk-chair", x1: 63.1, y1: 59.6, x2: 72.4, y2: 80.7, padding: 0.7 },
   { id: "closet", x1: 85.7, y1: 39.3, x2: 96.8, y2: 72.2, padding: 0.8 },
   { id: "trash-bin", x1: 77.5, y1: 75.2, x2: 83.7, y2: 88.2, padding: 0.6 },
-  { id: "heart-box", x1: 85.6, y1: 75.2, x2: 96.6, y2: 90.2, padding: 0.6 },
 ]);
 
 export const WALKABLE_FLOOR_RECTS = Object.freeze([

@@ -1,0 +1,287 @@
+.modal.emotion-modal {
+  --modal-fit-scale: 0.9;
+  width: min(880px, 100%);
+  overflow: hidden;
+}
+
+.emotion-panel-body {
+  padding: 16px;
+}
+
+.emotion-panel-layout {
+  display: grid;
+  grid-template-columns: minmax(270px, 0.82fr) minmax(0, 1.18fr);
+  gap: 16px;
+}
+
+.emotion-preview,
+.emotion-picker {
+  min-width: 0;
+  border: 1px solid rgba(229, 155, 95, 0.2);
+  border-radius: 10px;
+  background: rgba(73, 27, 88, 0.3);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+}
+
+.emotion-preview {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(250px, 1fr) auto;
+  gap: 10px;
+  padding: 16px;
+  background:
+    radial-gradient(circle at 50% 72%, rgba(255, 211, 122, 0.2), transparent 36%),
+    linear-gradient(160deg, rgba(62, 22, 82, 0.64), rgba(26, 13, 44, 0.84));
+  overflow: hidden;
+}
+
+.emotion-zone-badge {
+  position: relative;
+  z-index: 1;
+  width: fit-content;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 211, 122, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 245, 230, 0.78);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.emotion-preview-stage {
+  min-height: 250px;
+  display: grid;
+  place-items: end center;
+  overflow: hidden;
+}
+
+.emotion-preview-stage img {
+  max-width: 88%;
+  max-height: 260px;
+  object-fit: contain;
+  filter: drop-shadow(0 22px 28px rgba(5, 2, 18, 0.5));
+  transform-origin: center bottom;
+}
+
+.emotion-preview-copy {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(15, 10, 49, 0.3);
+  text-align: center;
+}
+
+.emotion-preview-copy strong {
+  color: #fff7df;
+  font-size: 17px;
+}
+
+.emotion-preview-copy span {
+  color: rgba(255, 245, 230, 0.68);
+  font-size: 12px;
+}
+
+.emotion-picker {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  padding: 22px;
+}
+
+.emotion-picker-heading > span {
+  display: inline-flex;
+  margin-bottom: 8px;
+  color: #e59b5f;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.emotion-picker-heading h3 {
+  margin: 0;
+  color: #fff7df;
+  font-size: 26px;
+  line-height: 1.2;
+}
+
+.emotion-picker-heading p {
+  margin: 9px 0 0;
+  color: rgba(255, 245, 230, 0.66);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.emotion-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.emotion-choice {
+  min-width: 0;
+  min-height: 112px;
+  display: grid;
+  grid-template-rows: 74px auto;
+  place-items: center;
+  gap: 5px;
+  padding: 8px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.055);
+  color: rgba(255, 245, 230, 0.78);
+  font-size: 13px;
+  font-weight: 850;
+  transition: transform 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+
+.emotion-choice:hover,
+.emotion-choice:focus-visible {
+  transform: translateY(-2px);
+  border-color: rgba(229, 155, 95, 0.5);
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.emotion-choice.active {
+  border-color: rgba(255, 211, 122, 0.7);
+  background: linear-gradient(145deg, rgba(229, 155, 95, 0.23), rgba(156, 91, 255, 0.16));
+  color: #fff7df;
+  box-shadow: 0 0 0 3px rgba(229, 155, 95, 0.12);
+}
+
+.emotion-choice img {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 10px rgba(5, 2, 18, 0.32));
+}
+
+.emotion-panel-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.emotion-preview-stage img.expression-joy,
+.room-character.expression-joy:not(.walking) img {
+  animation: photo-zone-joy 1.4s ease-in-out infinite;
+}
+
+.emotion-preview-stage img.expression-anger,
+.room-character.expression-anger:not(.walking) img {
+  animation: photo-zone-anger 0.42s ease-in-out infinite;
+}
+
+.emotion-preview-stage img.expression-sadness,
+.room-character.expression-sadness:not(.walking) img {
+  animation: photo-zone-sadness 1.9s ease-in-out infinite;
+}
+
+.emotion-preview-stage img.expression-anxiety,
+.room-character.expression-anxiety:not(.walking) img {
+  animation: photo-zone-anxiety 0.28s linear infinite;
+}
+
+.emotion-preview-stage img.expression-hurt,
+.room-character.expression-hurt:not(.walking) img {
+  animation: photo-zone-hurt 1.7s ease-in-out infinite;
+}
+
+.emotion-preview-stage img.expression-panic,
+.room-character.expression-panic:not(.walking) img {
+  animation: photo-zone-panic 0.68s ease-in-out infinite;
+}
+
+@keyframes photo-zone-joy {
+  0%, 100% { transform: scaleX(var(--facing-scale, 1)) translateY(0) scale(1); }
+  38% { transform: scaleX(var(--facing-scale, 1)) translateY(-7px) scale(1.04); }
+  62% { transform: scaleX(var(--facing-scale, 1)) translateY(1px) scale(0.99); }
+}
+
+@keyframes photo-zone-anger {
+  0%, 100% { transform: scaleX(var(--facing-scale, 1)) translateX(0) rotate(0deg); }
+  25% { transform: scaleX(var(--facing-scale, 1)) translateX(-2px) rotate(-1.5deg); }
+  50% { transform: scaleX(var(--facing-scale, 1)) translateX(2px) rotate(1.5deg); }
+  75% { transform: scaleX(var(--facing-scale, 1)) translateX(-1px) rotate(-0.8deg); }
+}
+
+@keyframes photo-zone-sadness {
+  0%, 100% { transform: scaleX(var(--facing-scale, 1)) translateY(0); opacity: 1; }
+  48% { transform: scaleX(var(--facing-scale, 1)) translateY(5px) rotate(-1deg); opacity: 0.9; }
+}
+
+@keyframes photo-zone-anxiety {
+  0%, 100% { transform: scaleX(var(--facing-scale, 1)) translate(0, 0); }
+  25% { transform: scaleX(var(--facing-scale, 1)) translate(-1px, 1px); }
+  50% { transform: scaleX(var(--facing-scale, 1)) translate(1px, -1px); }
+  75% { transform: scaleX(var(--facing-scale, 1)) translate(-1px, -1px); }
+}
+
+@keyframes photo-zone-hurt {
+  0%, 100% { transform: scaleX(var(--facing-scale, 1)) translateY(0) scale(1); }
+  48% { transform: scaleX(var(--facing-scale, 1)) translateY(4px) scale(0.97); }
+}
+
+@keyframes photo-zone-panic {
+  0%, 100% { transform: scaleX(var(--facing-scale, 1)) translateY(0) rotate(0deg); }
+  25% { transform: scaleX(var(--facing-scale, 1)) translateY(-3px) rotate(-3deg); }
+  50% { transform: scaleX(var(--facing-scale, 1)) translateY(1px) rotate(3deg); }
+  75% { transform: scaleX(var(--facing-scale, 1)) translateY(-2px) rotate(-2deg); }
+}
+
+@media (max-width: 760px) {
+  .modal.emotion-modal {
+    --modal-fit-scale: 1;
+    max-height: calc(100% - 12px);
+    overflow: auto;
+  }
+
+  .emotion-panel-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .emotion-preview {
+    grid-template-columns: minmax(120px, 0.75fr) minmax(0, 1.25fr);
+    grid-template-rows: auto 1fr;
+    align-items: center;
+  }
+
+  .emotion-zone-badge {
+    grid-column: 1 / -1;
+  }
+
+  .emotion-preview-stage {
+    min-height: 150px;
+  }
+
+  .emotion-preview-stage img {
+    max-height: 150px;
+  }
+}
+
+@media (max-width: 480px) {
+  .emotion-panel-body,
+  .emotion-picker {
+    padding: 12px;
+  }
+
+  .emotion-choice-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .emotion-panel-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .emotion-preview-stage img,
+  .room-character[class*="expression-"]:not(.walking) img,
+  .emotion-choice {
+    animation: none !important;
+    transition: none !important;
+  }
+}
