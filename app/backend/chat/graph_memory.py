@@ -205,12 +205,8 @@ _CLOSURE_NAME = re.compile(r'취소|그만두|그만둠|그만뒀|이별|절교|
 # (합성 종결 기록은 구조상 항상 '… 취소/이별'로 끝난다)
 _CLOSURE_TAIL = re.compile(r'(취소|그만둠|그만뒀|이별|절교|퇴사|무산|파토|종료|깨짐|끝남)\s*$')
 
-# ── 리플렉션 (2026-07-13) — 기억 군집 → 통찰 ──
-REFLECT_SIM_MIN = 0.22        # 실측 (memory_reflect_bench): 추출기 스타일(5~15자) 이름 기준 정답 재현 구간 0.19~0.25의 중앙값 — 이름 길이 규칙(추출 프롬프트)과 세트
-REFLECT_MIN_MEMORIES = 8      # 이보다 적으면 스킵 — 며칠 대화도 안 했는데 "요즘~" 아는 척 방지
-REFLECT_MIN_EVIDENCE = 3      # 통찰이 되려면 최소 증거 수 — 두 번은 우연, 세 번은 패턴
-REFLECT_MAX_SHOW = 3          # recall 노출 상한 (그래프엔 전부 저장)
-_NEG_EMOTIONS = ('sadness', 'anger', 'fear', 'anxiety', '슬픔', '분노', '불안')
+# (리플렉션 완전 은퇴 2026-07-19 — reflect()·Insight 채널·REFLECT_* 다이얼 삭제.
+#  '요즘 흐름'은 최근 N턴 원문 + 기억 나열로 즉석 해석 — R01·R02가 이 경로로 통과)
 
 
 # 만료 신호 힌트 — 이 패턴이 있는데 추출이 expired를 안 내면 1회 재시도 (2026-07-12 평가셋 변동성 보정)
@@ -540,88 +536,6 @@ def capture_async(user_id, message: str, emotion: str = None) -> None:
 
 # ── 회상 (서브그래프 → 텍스트) ───────────────────────────────
 
-def _label_cluster(names, emotions):
-    """군집 하나에 이름 붙이기 — LLM은 '이미 묶인 기억'만 보고 요약 (근거 선택 불가 → 환각 차단)."""
-    from ai.agents.llm import get_llm
-    try:
-        resp = get_llm(temperature=0, max_tokens=80).invoke([
-            ('system',
-             '아래는 한 사용자의 서로 관련된 기억 목록이다. 이 기억들을 관통하는 흐름을 '
-             '반말 한 문장(30자 이내)으로 요약하라. ★목록에 없는 사실을 추가하거나 '
-             '추측하지 마라★. 문장만 출력.'),
-            ('user', '기억: ' + ' / '.join(names)
-                     + ('\n느낀 감정: ' + ', '.join(emotions) if emotions else '')),
-        ])
-        text = (resp.content or '').strip().strip('"').strip()
-        return text[:60] if text else None
-    except Exception as e:
-        print(f'[graph_memory] 통찰 라벨링 실패: {e}')
-        return None
-
-
-def reflect(user_id):
-    """리플렉션 (2026-07-13) — 기억 임베딩을 계층 군집(θ=0.22 실측)으로 묶어
-    통찰(Insight) 노드 생성. 증거 선택은 결정적 알고리즘, LLM은 문장화만 (환각 구조 차단).
-    (User)-[:HAS_INSIGHT]->(Insight)-[:SUMMARIZES]->(근거 Event) — 모든 통찰 추적 가능.
-    재실행 시 기존 통찰 전량 갈아끼움 (통찰도 낡는다). 실패해도 챗봇 무영향."""
-    if not user_id or not is_enabled():
-        return {'status': 'disabled'}
-    try:
-        drv = _get_driver()
-        with drv.session() as s:
-            rows = s.run(
-                'MATCH (u:User {uid:$uid})-[:HAS_EVENT]->(e:Event) '
-                'WHERE e.valid_until IS NULL AND e.embedding IS NOT NULL '
-                'OPTIONAL MATCH (e)-[:FELT]->(m:Emotion) '
-                'RETURN e.name AS name, e.embedding AS vec, '
-                'collect(DISTINCT m.type) AS emotions', uid=user_id).data()
-        if len(rows) < REFLECT_MIN_MEMORIES:
-            with drv.session() as s:   # 기억이 줄었으면 낡은 통찰도 치움
-                s.run('MATCH (u:User {uid:$uid})-[:HAS_INSIGHT]->(i:Insight) DETACH DELETE i',
-                      uid=user_id)
-            return {'status': 'skipped', 'memories': len(rows), 'insights': []}
-
-        from sklearn.cluster import AgglomerativeClustering
-        import numpy as np
-        labels = AgglomerativeClustering(
-            n_clusters=None, distance_threshold=1.0 - REFLECT_SIM_MIN,
-            metric='cosine', linkage='average').fit_predict(np.array([r['vec'] for r in rows]))
-        groups = {}
-        for r, l in zip(rows, labels):
-            groups.setdefault(int(l), []).append(r)
-
-        insights = []
-        for g in groups.values():
-            if len(g) < REFLECT_MIN_EVIDENCE:
-                continue   # 증거 부족 — 우연일 수 있음
-            names = [x['name'] for x in g]
-            emos = sorted({e for x in g for e in (x['emotions'] or []) if e})
-            text = _label_cluster(names, emos)
-            if text:
-                insights.append(dict(text=text, size=len(g), emotions=emos, names=names))
-
-        with drv.session() as s:
-            s.run('MATCH (u:User {uid:$uid})-[:HAS_INSIGHT]->(i:Insight) DETACH DELETE i',
-                  uid=user_id)
-            today = _today_iso()
-            for ins in insights:
-                s.run(
-                    'MATCH (u:User {uid:$uid}) '
-                    'CREATE (i:Insight {uid:$uid, text:$text, size:$size, '
-                    'emotions:$emos, created:$today}) '
-                    'MERGE (u)-[:HAS_INSIGHT]->(i) '
-                    'WITH i MATCH (u2:User {uid:$uid})-[:HAS_EVENT]->(e:Event) '
-                    'WHERE e.name IN $names '
-                    'MERGE (i)-[:SUMMARIZES]->(e)',
-                    uid=user_id, text=ins['text'], size=ins['size'],
-                    emos=ins['emotions'], today=today, names=ins['names'])
-        return {'status': 'ok', 'memories': len(rows),
-                'insights': [(i['text'], i['size']) for i in insights]}
-    except Exception as e:
-        print(f'[graph_memory] 리플렉션 실패: {e}')
-        return {'status': 'error', 'error': str(e), 'insights': []}
-
-
 def recall(user_id, limit: int = 6, message: str = None) -> str:
     """사용자의 사건(감정·인물·날짜)과 취향을 그래프에서 꺼내 텍스트로. 비활성/실패 시 ''.
     message가 있으면 재강화(2026-07-12): 사용자가 '직접 언급한' 기억의 강도를 올린다
@@ -633,20 +547,7 @@ def recall(user_id, limit: int = 6, message: str = None) -> str:
         lines = []
         today = _today_iso()
         with drv.session() as s:
-            # ⓪ 요즘 흐름 (리플렉션 통찰, 2026-07-13) — 슬픔·분노 흐름 우선, 없으면 no-op
-            try:
-                ins = s.run(
-                    'MATCH (u:User {uid:$uid})-[:HAS_INSIGHT]->(i:Insight) '
-                    'RETURN i.text AS text, i.size AS size, i.emotions AS emotions',
-                    uid=user_id).data()
-                if ins:
-                    ins.sort(key=lambda r: (
-                        not any(x in _NEG_EMOTIONS for x in (r.get('emotions') or [])),
-                        -(r.get('size') or 0)))
-                    for r in ins[:REFLECT_MAX_SHOW]:
-                        lines.append(f"- 요즘 흐름: {r['text']} (관련 기억 {r['size']}개)")
-            except Exception:
-                pass
+            # (⓪ '요즘 흐름' Insight 채널 삭제 2026-07-19 — 리플렉션 은퇴로 생산자 없음)
             # ① 다가오는 일 (선제 챙김 — "내일 면접이지?" 의 재료, 2026-07-12)
             coming = s.run(
                 'MATCH (u:User {uid:$uid})-[:HAS_EVENT]->(e:Event) '

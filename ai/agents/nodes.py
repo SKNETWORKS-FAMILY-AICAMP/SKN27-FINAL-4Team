@@ -5,6 +5,7 @@
           joy·sadness·anger·normal_agent / resp_prep
 콜드스타트와 TTS·저장(비동기)은 그래프 밖(뷰 레이어)에서 처리한다.
 """
+import os
 import re
 
 from ai.agents.personas import CRISIS_GUIDE, EMOTION_AGENT_GUIDES, COMMON_RULES
@@ -136,12 +137,16 @@ def mbti_save_node(state: ChatState) -> dict:
 
 # ── [감성분석: KcELECTRA + XGBoost + 확신도 게이트] ──────────
 
-CONF_GATE = 0.70   # 모델 확신이 이 미만이면 '찍지 말고' 문맥 아는 LLM으로 재분류
+# 감정 게이트 다이얼 — env 오버라이드 가능 (일원화 2026-07-19, 기본값은 실측 채택치)
+CONF_GATE = float(os.environ.get('EMO_CONF_GATE', '0.70'))
+                   # 모델 확신이 이 미만이면 '찍지 말고' 문맥 아는 LLM으로 재분류
                    # (0.55→0.70 상향, 2026-07-05 — 파인튜닝 모델 확률 보정: 채팅체 150 스윕에서
                    #  채택률 82.7%·채택분 정확도 0.831, calibrate_gate.py 근거)
-SHORT_LEN = 10     # 이 미만의 초단문("응 ㅋㅋ")은 원칙적으로 직전 감정 유지
-SHORT_OVERRIDE = 0.90  # 단, 초단문이어도 모델 확신이 이 이상이면 감정 급변 반영
-                       # ("짜증나!" 4자 → 표정 안 바뀌던 문제 보정, 2026-07-09)
+SHORT_LEN = int(os.environ.get('EMO_SHORT_LEN', '10'))
+                   # 이 미만의 초단문("응 ㅋㅋ")은 원칙적으로 직전 감정 유지
+SHORT_OVERRIDE = float(os.environ.get('EMO_SHORT_OVERRIDE', '0.90'))
+                   # 단, 초단문이어도 모델 확신이 이 이상이면 감정 급변 반영
+                   # ("짜증나!" 4자 → 표정 안 바뀌던 문제 보정, 2026-07-09)
 # (복합 감정은 절 분할 방식으로 감지 — _split_contrast/_clause_emotions 참고.
 #  분포 기반 SECONDARY_MIN 방식은 파인튜닝 모델 과확신(뒤 절 0.96~0.999) 실측으로 폐기, 2026-07-10)
 
@@ -196,7 +201,8 @@ def _split_contrast(message: str):
     return a, b
 
 
-CLAUSE_CONF_MIN = 0.30   # 절 분류 확신도 하한 (실측: "팀장한테 혼나서 열받았는데" 0.38)
+CLAUSE_CONF_MIN = float(os.environ.get('EMO_CLAUSE_CONF_MIN', '0.30'))
+                   # 절 분류 확신도 하한 (실측: "팀장한테 혼나서 열받았는데" 0.38)
 
 
 def _clause_emotions(a: str, b: str):

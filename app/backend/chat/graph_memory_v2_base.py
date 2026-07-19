@@ -40,21 +40,14 @@ _driver = None
 _driver_tried = False
 _lock = threading.Lock()
 
-RECALL_LIMIT = int(os.environ.get('MEM_RECALL_LIMIT', '6'))
-OPENLOOP_MAX_AGE = int(os.environ.get('MEM_OPENLOOP_AGE_DAYS', '30'))
-RELCHANGE_WINDOW = int(os.environ.get('MEM_RELCHANGE_DAYS', '30'))
-CLOSURE_WINDOW = int(os.environ.get('MEM_CLOSURE_DAYS', '14'))     # 종결 단언 노출 창
-ABSENCE_MIN = int(os.environ.get('MEM_ABSENCE_DAYS', '7'))
-_NEG_EMO = ('슬픔', '분노')
+# 다이얼 일원화 (2026-07-19) — 값·근거·env 이름은 memory_config.py 한 곳에서 관리.
+# (CLOSURE_WINDOW=14 삭제 — 종결 단언 노출은 사건 자신의 occurs 날짜에서 유도:
+#  날짜 있는 종결은 그 날짜가 지날 때까지, 날짜 없는 종결은 최신순 LIMIT 3이 양을 제한)
+from .memory_config import (RECALL_LIMIT, OPENLOOP_MAX_AGE, RELCHANGE_WINDOW,
+                            ABSENCE_MIN, VEC_INDEX, VEC_RECALL_MIN,
+                            VEC_DEDUP_MIN, EXPIRE_VEC_MIN)
 
-# 임베딩 복원 (2026-07-18 팀 결정) — 제외 상태 실측 80~85%에서 남은 실패의 뿌리가
-# 전부 임베딩의 빈자리(만료 폴백·의미 검색·병합)로 특정됨. LLM 폴백 3회 수술로도
-# '운동 레슨'↔'PT 첫 수업'을 못 이음 → 데이터가 복원을 명령. 숫자는 v1 실측 잠정치,
-# v2 스키마에서 벤치 재측정 대상.
-VEC_INDEX = 'memory_vec'   # v1과 공유 (Event.embedding, 768, cosine)
-VEC_RECALL_MIN = float(os.environ.get('MEM_VEC_RECALL_MIN', '0.33'))
-VEC_DEDUP_MIN = float(os.environ.get('MEM_VEC_DEDUP_MIN', '0.93'))
-EXPIRE_VEC_MIN = float(os.environ.get('MEM_EXPIRE_VEC_MIN', '0.60'))
+_NEG_EMO = ('슬픔', '분노')
 
 # 잊어줘 명시 표현 — forget 판정의 결정적 게이트 (S05 실측 2026-07-18: 추출 LLM이
 # '취소됐어'를 forget:true로 오분류 → 매칭 성공 시 역사까지 증발할 뻔. LLM 판정을
@@ -63,7 +56,9 @@ _FORGET_HINT = re.compile(r'잊어|기억하지\s*마|지워|꺼내지\s*마|삭
 
 # 종결 어휘 (v1 자산 — '그만두' 어간 포함: '그만두기 그만둠' 이중 접미 사고 방지)
 _CLOSURE_STEM = re.compile(r'취소|그만두|그만둠|그만뒀|이별|절교|퇴사|무산|파토|종료|깨짐|깨졌|깨져|끝남|끝났|헤어')   # 활용형 포함 (S04-off 실측: '깨졌어'가 '깨짐'에 안 걸림)
-_CLOSURE_TAIL = re.compile(r'(취소|그만둠|이별|절교|퇴사|무산|파토|종료|깨짐|끝남)$')   # 끝단 앵커
+_CLOSURE_TAIL = re.compile(r'(취소|그만둠|그만두기|이별|절교|퇴사|무산|파토|종료|깨짐|끝남)$')   # 끝단 앵커
+# '그만두기' 추가 (S03-v2 실측 2026-07-20): 추출기가 종결 기록을 '편의점 알바 그만두기'로
+# 명명 — '그만둠'만 알던 앵커가 못 알아봐 만료 유도가 침묵 (v1 '그만두기 그만둠' 교훈의 완결)
 _CLOSURE_WORD = (('취소', '취소'), ('퇴사|그만', '그만둠'), ('이별|헤어', '이별'),
                  ('절교', '절교'), ('무산|파토|깨져|깨졌|깨짐', '무산'))
 
@@ -216,6 +211,9 @@ def _extract(message):
         "이별·절교·퇴사·취소·약속 깨짐·파토. name은 끝난 '대상'의 이름('편의점 알바' O, "
         "'편의점 알바 그만두기' X). 이유·배경으로만 언급된 사람을 관계 종결로 확대 해석 "
         "금지 — 직접 끝냈다고 말한 대상만.\n"
+        "★kind 판별: relation은 '사람'과의 관계(연인·친구·가족)가 끝날 때만. 알바·직장·"
+        "일정·활동·계획이 끝난 건 전부 event다 ('편의점 알바 그만둠'→event, "
+        "'준호와 이별'→relation).★\n"
         "['잊어줘'] forget:true는 사용자가 '잊어줘/기억하지 마/지워줘/그 얘기 꺼내지 마'라고 "
         "★명시적으로 요청했을 때만★. 취소·이별·퇴사·무산은 forget:false다 — 끝났어도 "
         "역사는 남겨야 한다. 잊어달라는 요청 자체는 events로 저장 금지.\n"
@@ -424,10 +422,29 @@ def _resolve_invalidations(drv, uid, data, message=''):
         if not name:
             continue
         kind = (inv.get('kind') or '').strip().lower()
+        toks = [_norm(t) for t in _tokens(name)] or [_norm(name)]
+
+        # kind 교정 게이트 (S03-v2 실측 2026-07-20): 추출 LLM이 '편의점 알바'를
+        # kind=relation으로 오분류 → 만료 요청이 빈 인물 서랍으로 가서 조용히 증발
+        # ('알바 시작했잖아' 오답의 뿌리). 신고된 kind에 맞는 게 없고 다른 kind에
+        # 정확히(전체 토큰 AND) 맞는 게 있으면 결정적으로 재배달한다.
+        def _hits(k):
+            return any(all(t in _norm(c) for t in toks)
+                       for c in (cand.get(k) or []) if c)
+        if kind not in cand:
+            kind = 'event'
+        if not _hits(kind):
+            alt = next((k2 for k2 in ('event', 'relation', 'preference')
+                        if k2 != kind and _hits(k2)), None)
+            if alt:
+                print(f'[graph_memory_v2_base] 만료 kind 교정: {name} '
+                      f'{kind}→{alt} (신고 서랍 비었음 — 결정 매칭 재배달)')
+                kind = alt
+                inv['kind'] = alt
+
         pool = [c for c in (cand.get(kind) if kind in cand else cand['event']) or [] if c]
         if not pool:
             continue
-        toks = [_norm(t) for t in _tokens(name)] or [_norm(name)]
         if any(all(t in _norm(c) for t in toks) for c in pool):
             continue    # 1차: 결정 매칭 (비용 0 경로)
         if kind not in ('relation', 'preference'):
@@ -625,8 +642,13 @@ def _store(tx, uid, data, msg_probs, message, vectors=None):
         targets = [row['k'] for row in rows
                    if row['k'] and all(t in row['k'] for t in toks)]
         if kind == 'event':
-            # keep 보호: 이번 턴 저장분(종결 기록 포함)은 만료 대상에서 제외
-            targets = [k for k in targets if k not in keep_keys]
+            # keep 보호 축소 (S03-v2 keep 역설, 2026-07-20): 이번 턴 저장분 중
+            # '종결 기록'만 보호한다. 이전엔 전부 보호 → 추출기가 만료 피해자를
+            # 꼬리 붙여 재진술하면("편의점 알바 시작") 파편 필터(같은 이름만 제거)를
+            # 빠져나가 keep이 만료를 막았다 — 조용한 만료 불발의 뿌리.
+            # 재진술이 도장을 맞아도 옳다: 그 사실이 끝났다는 게 이번 턴의 진실이니까.
+            targets = [k for k in targets
+                       if k not in keep_keys or not _CLOSURE_TAIL.search(k)]
         for tk_ in targets:
             tx.run(
                 f'MATCH (u:User {{uid:$uid}})-[r:{etype}]->(n) '
@@ -698,25 +720,29 @@ def recall(user_id, message=None, limit=None):
     try:
         drv = _get_driver()
         lines, today = [], _today_s()
-        closure_cut = (_today() - datetime.timedelta(days=CLOSURE_WINDOW)).isoformat()
         with drv.session() as s:
-            # ⓪ 최근 종결 단언 (§8-4-1c) — 잊어줘(suppressed)는 제외
+            # ⓪ 최근 종결 단언 (§8-4-1c) — 잊어줘(suppressed)는 제외.
+            # 노출 창은 사건 자신의 날짜에서 유도 (2026-07-19): 예정일이 있던 종결은
+            # 그 날짜가 지날 때까지 (그때까지가 "곧 가겠네" 오폭 위험 구간),
+            # 날짜 없는 종결은 창 없이 최신순 — LIMIT 3이 밀어내기로 양을 제한.
             for c in s.run(
                 'MATCH (u:User {uid:$uid})-[h:HAS_EVENT]->(e:Event) '
-                'WHERE h.valid_to IS NOT NULL AND h.valid_to >= $cut '
-                '  AND e.suppressed IS NULL '
+                'WHERE h.valid_to IS NOT NULL AND e.suppressed IS NULL '
+                '  AND (e.occurs_start IS NULL '
+                '       OR coalesce(e.occurs_end, e.occurs_start) >= $today) '
                 'RETURN e.name AS n, h.valid_to AS d, h.end_reason AS why '
                 'ORDER BY h.valid_to DESC LIMIT 3',
-                    uid=user_id, cut=closure_cut).data():
+                    uid=user_id, today=today).data():
                 why = f" ({c['why']})" if c.get('why') else ''
                 lines.append(f"- ★이미 끝난 일★ {c['n']}{why} — 다시 잡혔다는 말 없이는 "
                              '진행 중으로 언급 금지')
+            # 관계 종결은 날짜 유도 불가(occurs 없음) — 창 없이 최신순 LIMIT 3
             for c in s.run(
                 'MATCH (u:User {uid:$uid})-[r:RELATES_TO]->(p:Person) '
-                'WHERE r.valid_to IS NOT NULL AND r.valid_to >= $cut '
-                '  AND p.suppressed IS NULL '
-                'RETURN p.name AS n, r.relation AS rel LIMIT 3',
-                    uid=user_id, cut=closure_cut).data():
+                'WHERE r.valid_to IS NOT NULL AND p.suppressed IS NULL '
+                'RETURN p.name AS n, r.relation AS rel '
+                'ORDER BY r.valid_to DESC LIMIT 3',
+                    uid=user_id).data():
                 lines.append(f"- ★{c['n']}은 이제 {c['rel']} 아님★ (지난 인연 — "
                              '현재 관계로 언급 금지)')
             # ① 다가오는 일 — D-day (occurs_start 기준, 진행 중 판정은 occurs_end)
