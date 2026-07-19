@@ -22,7 +22,7 @@ langchain-core
 langchain-openai>=0.2.0
 langchain-groq>=0.2.0           # 책 추천 에이전트 (mybook)
 langgraph>=0.3.0
-requests>=2.31.0                # 외부 API (날씨, ElevenLabs TTS — 별도 SDK 불필요)
+requests>=2.31.0                # 외부 API (날씨, TTS: OpenAI/ElevenLabs/Typecast — 별도 SDK 불필요)
 
 # ── 감정분류 추론 (KcELECTRA + XGBoost — ai/emotion) ──
 torch
