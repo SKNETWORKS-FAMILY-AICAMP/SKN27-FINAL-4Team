@@ -19,7 +19,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from ai.agents import mbti as mbti_svc
-from . import graph_memory, memory, secret_cache, tts_service
+from . import graph_memory, secret_cache, tts_service   # memory(요약) 완전 은퇴 2026-07-19 — 소비자 0 확인 후 제거
 from .models import ChatMessage, ChatSession
 
 
@@ -269,13 +269,12 @@ def chat_turn(request):
         )
         message_id = assistant_msg.id
         uid = user.id if user else None
-        memory.capture_async(uid, stored_user_msg)   # 중요 정보 즉시 저장 (사진 캡션 포함)
+        # 요약 계층 완전 은퇴 (2026-07-19) — 소비자 0 확인(마음리포트는 ChatMessage만 읽음).
+        # 위기 발화의 위로 연속성은 최근 N턴 원문이 담당 (요약 재인용 사고 F2의 원천도 함께 소멸).
         # 위기 턴은 구조화 기억(그래프)에서 제외 — 민감 발화 영구 박제·오회상 방지 (2026-07-12)
-        # (텍스트 요약에는 남겨 위로 연속성 유지 — 그래프/요약 역할 분리 원칙)
         if not result.get('crisis'):
             from chat import memory_backend
             memory_backend.capture_async(uid, stored_user_msg, emotion=emotion_label)  # v1/v2 스위치 경유 (Neo4j 미설정 시 no-op)
-        memory.update_async(uid, session.id)      # 8턴 경계 압축·정리
 
         # 응답에 MBTI 질문을 얹었으면, 다음 사용자 메시지를 그 답변으로 받도록 pending 설정
         if probe_code:
@@ -403,13 +402,11 @@ def mbti_next_question(request):
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([AllowAny])
 def session_end(request):
-    """세션 종료 — 시크릿: RAM 캐시 파기 / 일반: 8턴 못 채운 잔여 대화 요약 반영."""
+    """세션 종료 — 시크릿: RAM 캐시 파기. (요약 반영은 요약 계층 은퇴로 제거 2026-07-19)"""
     session = _get_session(request.data.get('session_id'), request)
     if session is None:
         return _err('SESSION_NOT_FOUND', '세션을 찾을 수 없습니다.', status.HTTP_404_NOT_FOUND)
     secret_cache.purge(session.id)
-    if not session.is_secret and session.user_id:
-        memory.update_async(session.user_id, session.id, force=True)
     return _ok({'ended': True})   # 음성은 애초에 저장 안 함 (1회 재생 후 파기)
 
 

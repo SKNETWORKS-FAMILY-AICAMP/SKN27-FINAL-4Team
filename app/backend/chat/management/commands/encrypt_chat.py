@@ -11,7 +11,7 @@
 from django.core.management.base import BaseCommand
 
 from chat.crypto_fields import _PREFIX, _fernet
-from chat.models import ChatMessage, UserMemory
+from chat.models import ChatMessage   # UserMemory 제외 — 요약 계층 은퇴로 신규 기록 없음 (2026-07-19)
 
 
 class Command(BaseCommand):
@@ -26,7 +26,7 @@ class Command(BaseCommand):
             return
         # 주의: values_list는 필드 변환(복호화)을 타므로, 원시 판별은 DB 원문 기준으로.
         targets = []
-        for model, field in ((ChatMessage, 'content'), (UserMemory, 'summary_text')):
+        for model, field in ((ChatMessage, 'content'),):
             raw_ids = [
                 pk for pk, raw in model.objects.extra(
                     select={'_raw': field}).values_list('pk', '_raw')
