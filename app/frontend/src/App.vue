@@ -70,7 +70,7 @@ const providerNames = {
   google: "Google 로그인",
 };
 
-const isAuthScreen = computed(() => route.path.startsWith("/login/callback"));
+const isAuthScreen = computed(() => route.path.startsWith("/login"));
 
 const providerLabel = computed(() => {
   const provider = currentUser.value?.provider;
@@ -95,6 +95,7 @@ async function refreshCurrentUser() {
   } catch {
     currentUser.value = null;
   }
+  return currentUser.value;
 }
 
 function onAuthChanged(event) {
@@ -142,10 +143,12 @@ const NAV = {
   character: "/onboarding/character",
   onboardingComplete: "/onboarding/complete",
   calendar: "/calendar",
+  mycard: "/mycard",
   council: "/chat/council",
+  "memory-game": "/memory-game",
 };
-const PROTECTED_PATHS = new Set(["/chat", "/report", "/mypage", "/calendar"]);
-const PROTECTED_NAV_IDS = new Set(["chat", "report", "my", "mypage", "calendar", "council"]);
+const PROTECTED_PATHS = new Set(["/chat", "/report", "/mypage", "/calendar", "/mycard"]);
+const PROTECTED_NAV_IDS = new Set(["chat", "report", "my", "mypage", "calendar", "mycard", "council"]);
 
 function goLogin(redirectPath = "") {
   if (redirectPath) {
@@ -155,8 +158,14 @@ function goLogin(redirectPath = "") {
   router.push("/login");
 }
 
-function goProtected(path) {
-  if (currentUser.value) {
+async function goProtected(path) {
+  const user = currentUser.value || await refreshCurrentUser();
+
+  if (user) {
+    if (!user.onboarding_done && !path.startsWith("/onboarding/")) {
+      router.push({ path: "/onboarding/character", query: { redirect: path } });
+      return;
+    }
     router.push(path);
     return;
   }
@@ -165,23 +174,13 @@ function goProtected(path) {
 }
 
 function onNavigate(id) {
-  if (id === "startWalk") {
-    if (currentUser.value) {
-      router.push("/chat");
-      return;
-    }
-
-    goLogin("/chat");
-    return;
-  }
-
   if (id === "login" && currentUser.value) {
     router.push(currentUser.value.next_path || "/home");
     return;
   }
 
-  if (PROTECTED_NAV_IDS.has(id) && !currentUser.value) {
-    goLogin(NAV[id] || "");
+  if (PROTECTED_NAV_IDS.has(id)) {
+    goProtected(NAV[id]);
     return;
   }
 
@@ -214,6 +213,17 @@ function starStyle(i) {
   --bt-page-max: 1760px;
   --bt-page-x: clamp(28px, 4vw, 72px);
   --bt-header-h: 88px;
+}
+
+/* 입력칸 외 영역에서는 텍스트 선택·삽입 커서가 나타나지 않게 한다. */
+#app * {
+  caret-color: transparent;
+  user-select: none;
+}
+
+#app :is(input, textarea) {
+  caret-color: auto;
+  user-select: text;
 }
 
 #app.auth-screen {

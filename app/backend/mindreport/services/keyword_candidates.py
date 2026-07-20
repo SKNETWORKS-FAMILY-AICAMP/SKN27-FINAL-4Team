@@ -5,7 +5,7 @@ import json
 import os
 from typing import Any, Mapping, Protocol, Sequence
 
-from mindreport.services.alternatives import AlternativePlanResult, alternative_plan_to_payload
+from mindreport.services.alternatives import AlternativePlanResult
 from mindreport.services.emotion_flow import EmotionFlowResult
 from mindreport.services.scoring import EmotionScore, ReportSourceMessage, _extract_json_object
 
@@ -17,6 +17,9 @@ class KeywordCandidate:
     evidence_message_ids: tuple[int, ...]
     evidence_dates: tuple[str, ...]
     rationale: str
+    evidence_type: str = 'unspecified'
+    relationship: str = ''
+    counter_evidence: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -38,47 +41,14 @@ def build_keyword_candidate_payload(
     emotion_flow: EmotionFlowResult,
     alternative_plan: AlternativePlanResult,
 ) -> dict[str, Any]:
-    score_by_date = {score.source_date.isoformat(): score for score in emotion_scores}
-    # Temporary implementation: LLM extraction stands in for the future embedding model.
     return {
         'task': 'mind_report_keyword_candidate_extraction',
-        'emotion_flow': {
-            'flow_type': emotion_flow.flow_type,
-            'maintenance_type': emotion_flow.maintenance_type,
-            'tone_color': emotion_flow.tone_color,
-            'title': emotion_flow.title,
-            'action_direction': emotion_flow.action_direction,
-        },
-        'alternative_plan': alternative_plan_to_payload(alternative_plan),
-        'daily_scores': [
-            {
-                'source_date': score.source_date.isoformat(),
-                'emotion_state': score.emotion_state,
-                'emotion_score': score.emotion_score,
-                'confidence': score.confidence,
-                'emotional_evidence_count': score.emotional_evidence_count,
-                'total_message_count': score.total_message_count,
-                'evidence_message_ids': list(score.evidence_message_ids),
-                'rationale': score.rationale,
-            }
-            for score in emotion_scores
-        ],
         'messages': [
             {
                 'message_id': message.message_id,
                 'source_date': message.source_date.isoformat(),
                 'content': message.content,
                 'current_emotion_label': message.emotion_label,
-                'daily_emotion_state': score_by_date.get(
-                    message.source_date.isoformat()
-                ).emotion_state
-                if score_by_date.get(message.source_date.isoformat())
-                else None,
-                'daily_emotion_score': score_by_date.get(
-                    message.source_date.isoformat()
-                ).emotion_score
-                if score_by_date.get(message.source_date.isoformat())
-                else None,
             }
             for message in source_messages
         ],
@@ -86,6 +56,10 @@ def build_keyword_candidate_payload(
             '입력 메시지에 없는 사실이나 생활 맥락을 만들지 않는다.',
             '진단, 위험도, 성격 판정을 하지 않는다.',
             '후보 키워드는 짧은 명사구로 작성한다.',
+            '사용자가 해당 소재 때문에 부담 또는 편안함을 느꼈다고 표현했거나, 같은 소재가 여러 메시지에서 비슷한 감정 맥락과 함께 반복된 경우에만 후보로 인정한다.',
+            '같은 날짜에 등장했다는 사실만으로 감정 원인 후보로 판단하지 않는다.',
+            '단순 일정, 장소, 인물, 사물의 언급은 원인 후보가 아니다.',
+            '후보 개수를 채우지 말고 충분한 근거가 없으면 candidates를 빈 배열로 반환한다.',
             '반드시 유효한 JSON 객체만 반환한다.',
         ],
         'output_schema': {
@@ -94,7 +68,10 @@ def build_keyword_candidate_payload(
                     'keyword': 'short Korean noun phrase',
                     'confidence': '0.0 to 1.0',
                     'evidence_message_ids': ['message ids used as evidence'],
-                    'rationale': 'short Korean reason',
+                    'evidence_type': 'explicit_causal | repeated_association | before_after_change | insufficient',
+                    'relationship': 'how the topic and the user-described affect are connected',
+                    'counter_evidence': ['conflicting or weakening context, if any'],
+                    'rationale': 'short Korean reason explaining why this is more than a simple mention',
                 }
             ]
         },
@@ -112,7 +89,10 @@ class LangChainKeywordCandidateClient:
                 SystemMessage(
                     content=(
                         '너는 마음리포트의 원인 키워드 후보 추출기다. '
-                        '사용자 대화와 감정 점수 근거에서 반복되거나 감정 변화와 가까운 소재를 짧은 키워드 후보로 뽑는다. '
+                        '사용자 대화에서 감정에 영향을 주었다고 대화 자체로 뒷받침되는 소재만 짧은 키워드 후보로 뽑는다. '
+                        '명시적 인과 표현, 반복된 감정 연관, 행동 전후 변화 중 하나가 있어야 한다. '
+                        '같은 날짜에 함께 등장한 것과 단순 언급은 원인 근거가 아니다. '
+                        '근거가 없으면 빈 배열을 반환하며 후보 수를 억지로 채우지 않는다. '
                         '스트레스 원인/이완 원인 분류는 하지 말고 후보만 반환한다. '
                         '입력 근거 밖의 사실을 만들지 말고 JSON 객체만 반환한다.'
                     )
@@ -171,6 +151,14 @@ def parse_keyword_candidates(
             if message_id in source_by_id and message_id not in evidence_ids:
                 evidence_ids.append(message_id)
 
+        evidence_type = str(row.get('evidence_type') or '').strip().lower()
+        if evidence_type not in {
+            'explicit_causal',
+            'repeated_association',
+            'before_after_change',
+        } or not evidence_ids:
+            continue
+
         try:
             confidence = float(row.get('confidence'))
         except (TypeError, ValueError):
@@ -188,6 +176,15 @@ def parse_keyword_candidates(
                     for message_id in evidence_ids
                 ),
                 rationale=str(row.get('rationale') or ''),
+                evidence_type=evidence_type,
+                relationship=str(row.get('relationship') or ''),
+                counter_evidence=tuple(
+                    str(item).strip()
+                    for item in row.get('counter_evidence', [])
+                    if str(item).strip()
+                )
+                if isinstance(row.get('counter_evidence', []), list)
+                else (),
             )
         )
 
@@ -205,6 +202,7 @@ class MindReportKeywordExtractor:
         emotion_scores: Sequence[EmotionScore],
         emotion_flow: EmotionFlowResult,
         alternative_plan: AlternativePlanResult,
+        revision_instructions: Sequence[str] = (),
     ) -> KeywordCandidateResult:
         if not source_messages or not emotion_scores:
             return KeywordCandidateResult(
@@ -230,12 +228,16 @@ class MindReportKeywordExtractor:
             emotion_flow=emotion_flow,
             alternative_plan=alternative_plan,
         )
+        if revision_instructions:
+            candidate_payload['revision_instructions'] = list(revision_instructions)
         candidates = parse_keyword_candidates(
             payload=client.extract_candidates(payload=candidate_payload),
             source_messages=source_messages,
         )
         return KeywordCandidateResult(
-            status='extracted',
+            status='extracted' if candidates else 'no_supported_candidates',
             candidates=candidates,
-            message='LLM을 통해 키워드 후보를 도출했습니다.',
+            message='LLM을 통해 근거가 있는 키워드 후보를 도출했습니다.'
+            if candidates
+            else '대화에서 충분히 뒷받침되는 원인 키워드 후보를 찾지 못했습니다.',
         )

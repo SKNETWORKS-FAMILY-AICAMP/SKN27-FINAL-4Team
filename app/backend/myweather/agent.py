@@ -176,11 +176,9 @@ class WeatherWebAgent:
     @staticmethod
     def _generate_analysis(weather, user_profile, tavily_context):
         try:
-            from ai.agents.llm import get_llm
-
             indices = WeatherWebAgent._calculate_weather_indices(weather)
             prompt = WeatherWebAgent._build_prompt(weather, user_profile, tavily_context, indices)
-            llm = get_llm(temperature=0.35, max_tokens=4000)
+            llm = _get_openai_llm(temperature=0.35, max_tokens=4000)
             # Remove json_object binding to prevent 400 validation error on certain wrappers,
             # as _parse_json_response robustly handles markdown JSON.
 
@@ -512,3 +510,14 @@ class WeatherWebAgent:
         text = text.replace("밖은 비 소식은", "밖은 비 소식이")
         text = text.replace("비 소식은 적고", "비 소식이 적고")
         return text
+
+
+def _get_openai_llm(temperature=0.35, max_tokens=4000):
+    from langchain_openai import ChatOpenAI
+
+    return ChatOpenAI(
+        model=os.environ.get("MYWEATHER_OPENAI_MODEL", "gpt-5.4-mini"),
+        temperature=temperature,
+        max_tokens=max_tokens,
+        api_key=os.environ.get("OPENAI_API_KEY"),
+    )

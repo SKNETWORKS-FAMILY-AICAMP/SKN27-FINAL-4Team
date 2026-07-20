@@ -6,6 +6,17 @@ from rest_framework.response import Response
 from .models import CharacterPreference
 from .serializers import CharacterPreferenceSerializer
 
+BACKEND_CHARACTER_BY_ASSET = {
+    'redpanda': 'pori',
+    'cat': 'kkami',
+    'otter': 'toto',
+    'bird': 'yeoul',
+    'pori': 'pori',
+    'kkami': 'kkami',
+    'toto': 'toto',
+    'yeoul': 'yeoul',
+}
+
 
 def get_client_id(request):
     value = (
@@ -54,7 +65,10 @@ def character_preference(request):
         defaults=defaults,
     )
     if request.user.is_authenticated:
-        request.user.character = serializer.validated_data['character_id']
+        request.user.character = BACKEND_CHARACTER_BY_ASSET.get(
+            serializer.validated_data['character_id'],
+            serializer.validated_data['character_id'],
+        )
         request.user.onboarding_done = True
         request.user.save(update_fields=['character', 'onboarding_done'])
 

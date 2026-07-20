@@ -13,10 +13,19 @@
       >
         <img :src="`/characters/${currentCharacter.id}/default.png`" :alt="currentCharacter.name" />
       </button>
+      <button
+        class="hotspot door"
+        type="button"
+        aria-label="대화하러 가기"
+        title="대화하러 가기"
+        @click="$emit('open-chat')"
+      ></button>
       <button class="hotspot profile" type="button" :aria-label="labels.profile" @click="$emit('open-panel', 'profile')"></button>
       <button class="hotspot weather" type="button" :aria-label="labels.weather" @click="$emit('open-panel', 'weather')"></button>
       <button class="hotspot mbti" type="button" :aria-label="labels.mbti" @click="$emit('open-panel', 'mbti')"></button>
       <button class="hotspot book" type="button" :aria-label="labels.book || '오늘의 책 추천'" @click="$emit('open-panel', 'book')"></button>
+      <button class="hotspot memory" type="button" :aria-label="labels.memory || '기억 보관함'" @click="$emit('open-panel', 'memory')"></button>
+      <button class="hotspot wardrobe" type="button" aria-label="마음리포트 보기" title="마음리포트 보기" @click="$emit('open-report')"></button>
 
       <!-- 취향 분석 hotspot: 당장 비활성화. 재활성화 시 아래 버튼 주석 해제 -->
       <!-- <button class="hotspot taste" type="button" :aria-label="labels.taste" @click="$emit('open-panel', 'taste')"></button> -->
@@ -48,7 +57,7 @@ export default {
       default: 0
     }
   },
-  emits: ["open-panel", "arrived"],
+  emits: ["open-panel", "open-chat", "open-report", "arrived"],
   data() {
     return {
       characterPosition: { x: 45.2, y: 33.8 },
@@ -69,10 +78,13 @@ export default {
     roomStops() {
       return {
         character: { x: 45.2, y: 33.8 },
+        door: { x: 10.8, y: 17.0 },
         profile: { x: 21.8, y: 20.1 },
         weather: { x: 31.0, y: 16.6 },
-        book: { x: 58.2, y: 20.4 },
+        book: { x: 58.1, y: 26.4 },
         mbti: { x: 74.0, y: 20.8 },
+        memory: { x: 73.5, y: 63.5 },
+        wardrobe: { x: 84.8, y: 58.0 },
         settings: { x: 82.8, y: 60.2 }
       };
     },

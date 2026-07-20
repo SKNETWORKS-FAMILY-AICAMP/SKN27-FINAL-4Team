@@ -717,3 +717,131 @@
 #app .home-view .tarot-game-action::after {
   content: none !important;
 }
+
+/* Two primary content routes: tarot on the left, today's check-in on the right. */
+#app .home-view .tarot-only-actions {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: clamp(12px, 1.2vw, 18px) !important;
+  width: min(680px, 48vw) !important;
+  max-width: 680px !important;
+}
+
+#app .home-view .tarot-game-action {
+  min-width: 0 !important;
+  min-height: clamp(132px, 16dvh, 168px) !important;
+  grid-template-columns: clamp(68px, 7vw, 96px) minmax(0, 1fr) 30px !important;
+  gap: clamp(10px, 1.2vw, 18px) !important;
+  padding: clamp(16px, 1.8vw, 24px) clamp(14px, 1.6vw, 22px) !important;
+  border-radius: 22px !important;
+}
+
+#app .home-view .tarot-game-action .sticker-icon {
+  width: clamp(68px, 7vw, 96px) !important;
+  height: clamp(78px, 9dvh, 112px) !important;
+  background-size: clamp(48px, 4.5vw, 72px) auto, clamp(48px, 4.5vw, 72px) auto, clamp(48px, 4.5vw, 72px) auto !important;
+}
+
+#app .home-view .tarot-game-action.checkin-action .sticker-icon {
+  border-radius: 18px !important;
+  background:
+    linear-gradient(145deg, rgba(255, 214, 157, 0.24), rgba(238, 87, 143, 0.24)),
+    url("/characters/redpanda/joy.png") center bottom / contain no-repeat !important;
+  filter: drop-shadow(0 10px 12px rgba(255, 111, 124, 0.22));
+}
+
+#app .home-view .tarot-game-action.fortune-action {
+  grid-column: 1;
+  order: 1;
+}
+
+#app .home-view .tarot-game-action.mycard-action {
+  grid-column: 2;
+  order: 2;
+}
+
+#app .home-view .tarot-game-action.mycard-action .sticker-icon {
+  border-radius: 18px !important;
+  background:
+    linear-gradient(145deg, rgba(255, 214, 157, 0.12), rgba(238, 87, 143, 0.18)),
+    url("../icons/my-card-feature.png") center / cover no-repeat !important;
+  box-shadow: 0 10px 22px rgba(21, 7, 35, 0.35) !important;
+}
+
+#app .home-view .tarot-game-action.memory-game-action {
+  grid-column: 1 / -1 !important;
+}
+
+#app .home-view .tarot-game-action.memory-game-action .sticker-icon {
+  border-radius: 18px !important;
+  background:
+    linear-gradient(145deg, rgba(255, 214, 157, 0.16), rgba(238, 87, 143, 0.22)),
+    url("../games/memory/back/card-back.webp") center / cover no-repeat !important;
+  box-shadow: 0 10px 22px rgba(21, 7, 35, 0.35) !important;
+}
+
+#app .home-view .tarot-game-action > span:nth-child(2) {
+  min-width: 0 !important;
+  display: grid !important;
+  align-content: center !important;
+  gap: 7px !important;
+  padding-right: 32px !important;
+}
+
+#app .home-view .tarot-game-action strong {
+  overflow: visible !important;
+  font-size: clamp(18px, 1.48vw, 24px) !important;
+  line-height: 1.2 !important;
+  letter-spacing: -0.03em !important;
+  text-overflow: clip !important;
+  white-space: normal !important;
+  word-break: keep-all !important;
+}
+
+#app .home-view .tarot-game-action small {
+  display: -webkit-box !important;
+  overflow: hidden !important;
+  margin-top: 0 !important;
+  color: rgba(255, 235, 230, 0.7) !important;
+  font-size: clamp(12px, 0.95vw, 15px) !important;
+  line-height: 1.45 !important;
+  white-space: normal !important;
+  word-break: keep-all !important;
+  overflow-wrap: anywhere !important;
+  -webkit-box-orient: vertical !important;
+  -webkit-line-clamp: 3 !important;
+}
+
+#app .home-view .tarot-game-action > span:last-child::after {
+  right: 14px !important;
+  width: 32px !important;
+  height: 32px !important;
+  font-size: 24px !important;
+}
+
+@media (max-width: 720px) {
+  #app .home-view .tarot-only-actions {
+    grid-template-columns: 1fr !important;
+    width: 100% !important;
+  }
+
+  #app .home-view .tarot-game-action {
+    min-height: 118px !important;
+    grid-template-columns: 76px minmax(0, 1fr) 28px !important;
+  }
+
+  #app .home-view .tarot-game-action.fortune-action,
+  #app .home-view .tarot-game-action.mycard-action {
+    grid-column: auto;
+  }
+
+  #app .home-view .tarot-game-action .sticker-icon {
+    width: 76px !important;
+    height: 84px !important;
+    background-size: 58px auto, 58px auto, 58px auto !important;
+  }
+
+  #app .home-view .tarot-game-action.checkin-action .sticker-icon {
+    background-size: contain !important;
+  }
+}

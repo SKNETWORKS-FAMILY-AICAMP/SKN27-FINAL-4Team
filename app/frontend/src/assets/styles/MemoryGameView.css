@@ -1,0 +1,369 @@
+/*  MemoryGameView.vue 및 components/memory-game/*.vue  */
+/*  PC(데스크톱) 전용 레이아웃. 모바일 전용 규칙은 두지 않는다.  */
+
+.memory-game-view {
+  width: min(1480px, calc(100% - 40px));
+  min-height: calc(100vh - 160px);
+  margin: 24px auto 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  /* 상위 .view-card 클래스를 쓰지 않으므로 배경은 항상 투명(페이지 배경만 노출). */
+  background: none;
+}
+
+/* ── 게임 소개 ───────────────────────────────────── */
+.memory-game-intro {
+  width: min(880px, 100%);
+  min-height: 640px;
+  padding: 64px 72px;
+  border-radius: 32px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.memory-game-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 16px;
+  margin-bottom: 16px;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  background: rgba(147, 22, 114, 0.28);
+  color: var(--accent-lavender);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.memory-game-title {
+  margin: 0 0 18px;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(34px, 3.6vw, 48px);
+}
+
+.memory-game-desc {
+  margin: 0 0 10px;
+  color: var(--text-secondary);
+  font-size: 18px;
+  line-height: 1.6;
+}
+
+.memory-game-rule {
+  margin: 0 0 34px;
+  color: var(--accent-lavender);
+  font-size: 16px;
+}
+
+.memory-game-back-preview {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 36px;
+}
+
+.memory-game-back-preview span {
+  width: 128px;
+  aspect-ratio: 1060 / 1484;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 196, 150, 0.4);
+  box-shadow: 0 10px 22px rgba(10, 4, 20, 0.4);
+}
+
+.memory-game-back-preview span:nth-child(1) {
+  margin-right: -32px;
+  transform: rotate(-8deg);
+}
+
+.memory-game-back-preview span:nth-child(2) {
+  z-index: 1;
+  transform: translateY(-6px);
+}
+
+.memory-game-back-preview span:nth-child(3) {
+  margin-left: -32px;
+  transform: rotate(8deg);
+}
+
+.memory-game-back-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.memory-game-status {
+  margin: 0 0 20px;
+  color: var(--text-muted);
+  font-size: 14.5px;
+}
+
+.memory-game-status--error {
+  color: var(--accent-orange);
+}
+
+.memory-game-intro-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(420px, 100%);
+}
+
+/* ── 게임 진행 패널 ───────────────────────────────── */
+.memory-game-panel {
+  width: 100%;
+  padding: 28px 36px 36px;
+  border-radius: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.memory-game-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.memory-toolbar-back {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--card-border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.memory-toolbar-title {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 18px;
+}
+
+.memory-toolbar-progress {
+  margin-left: auto;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  font-size: 13.5px;
+}
+
+.memory-toolbar-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  background: rgba(50, 24, 73, 0.6);
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.memory-toolbar-preview {
+  color: var(--accent-gold);
+  font-weight: 700;
+}
+
+.memory-toolbar-timer.warn {
+  border-color: var(--accent-gold);
+  color: var(--accent-gold);
+}
+
+.memory-toolbar-timer.urgent {
+  border-color: var(--accent-orange);
+  color: var(--accent-orange);
+}
+
+.memory-toolbar-restart {
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  background: transparent;
+  color: var(--accent-lavender);
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.memory-toolbar-restart:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ── 카드 게임판 (PC 전용) ───────────────────────── */
+.memory-game-board {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+  max-width: 1320px;
+  margin: 0 auto;
+}
+
+@media (min-width: 1600px) {
+  .memory-game-board {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+}
+
+/* ── 카드 한 장 ───────────────────────────────────── */
+.memory-card {
+  position: relative;
+  aspect-ratio: 1060 / 1484;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  perspective: 1200px;
+}
+
+.memory-card:disabled {
+  cursor: default;
+}
+
+.memory-card:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.memory-card:focus-visible {
+  outline: 2px solid var(--accent-lavender);
+  outline-offset: 3px;
+}
+
+.memory-card__inner {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 380ms cubic-bezier(0.45, 0, 0.2, 1);
+}
+
+.memory-card.is-flipped .memory-card__inner {
+  transform: rotateY(180deg);
+}
+
+.memory-card__face {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 16px;
+  backface-visibility: hidden;
+}
+
+.memory-card__face img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* 뒷면: 얇은 코랄/골드 테두리 + 은은한 그림자. 프레임 장식은 뒷면에만 적용한다. */
+.memory-card__face--back {
+  transform: rotateY(0deg);
+  border: 1px solid rgba(255, 196, 150, 0.45);
+  box-shadow: 0 8px 18px rgba(10, 4, 20, 0.35);
+}
+
+/* 앞면: 캐릭터+배경 일러스트가 카드 전체를 채우며, 별도 CSS 테두리를 추가하지 않는다. */
+.memory-card__face--front {
+  transform: rotateY(180deg);
+}
+
+.memory-card.is-matched .memory-card__face--front {
+  animation: memory-card-matched 420ms ease;
+  border: 2px solid rgba(255, 159, 145, 0.9);
+  box-shadow:
+    0 0 0 1px rgba(255, 217, 176, 0.4) inset,
+    0 0 20px rgba(255, 159, 145, 0.6);
+}
+
+@keyframes memory-card-matched {
+  0% { transform: rotateY(180deg) scale(1); }
+  50% { transform: rotateY(180deg) scale(1.06); }
+  100% { transform: rotateY(180deg) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .memory-card__inner {
+    transition-duration: 120ms;
+  }
+
+  .memory-card.is-matched .memory-card__face--front {
+    animation: none;
+  }
+}
+
+/* ── 모달 공통 (design-system.css가 전역 import되어 있지 않아 여기서 자체 정의) ── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+}
+
+.modal {
+  background: rgba(24, 12, 52, 0.94);
+  border: 1px solid var(--card-border);
+  border-radius: 20px;
+  padding: 32px 30px;
+  max-width: 90vw;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* ── 결과 모달 ────────────────────────────────────── */
+.memory-result-modal {
+  width: min(360px, 100%);
+  text-align: center;
+}
+
+.memory-result-icon {
+  margin: 0 0 6px;
+  color: var(--accent-gold);
+  font-size: 26px;
+}
+
+.memory-result-modal h3 {
+  margin: 0 0 10px;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 20px;
+}
+
+.memory-result-body {
+  margin: 0 0 10px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.memory-result-sub {
+  margin: 0 0 20px;
+  color: var(--accent-lavender);
+  font-size: 13px;
+}
+
+.memory-result-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}

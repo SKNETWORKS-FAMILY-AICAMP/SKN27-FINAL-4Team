@@ -19,6 +19,7 @@ class MindReport(models.Model):
     analysis = models.JSONField(default=list)
     recommendations = models.JSONField(default=list)
     is_fallback = models.BooleanField(default=False)
+    is_safety_response = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:

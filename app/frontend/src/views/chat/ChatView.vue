@@ -7,6 +7,11 @@
       <div class="drop-overlay-inner">📷 여기에 사진을 놓으면 첨부돼요</div>
     </div>
 
+    <!-- 🎉 기쁨 감정 축하 폭죽 효과 오버레이 -->
+    <div v-if="showJoyCelebration" class="joy-celebration-overlay">
+      <div v-for="n in 35" :key="n" class="confetti-particle" :style="confettiStyle(n)"></div>
+    </div>
+
     <!-- 배경: 일반=노을 일러스트 / 시크릿=밤하늘+별똥별 -->
     <div
       class="chat-bg"
@@ -323,6 +328,56 @@ const displayExpressionLabel = computed(() => EXPRESSION_LABELS[displayExpressio
 const displayCharacterImage = computed(() => `/characters/${displayCharacterId.value}/${displayExpressionId.value}.png`)
 const displayAnimationClass = computed(() => EXPRESSION_ANIMATION[displayExpressionId.value] || 'anim-joy')
 
+const showJoyCelebration = ref(false)
+
+function triggerJoyCelebration() {
+  showJoyCelebration.value = true
+  playFanfare()
+  setTimeout(() => {
+    showJoyCelebration.value = false
+  }, 3000)
+}
+
+function playFanfare() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    const now = ctx.currentTime
+    const notes = [261.63, 329.63, 392.00, 523.25]
+    notes.forEach((freq, idx) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'triangle'
+      osc.frequency.setValueAtTime(freq, now + idx * 0.08)
+      gain.gain.setValueAtTime(0.12, now + idx * 0.08)
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.08 + 0.5)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start(now + idx * 0.08)
+      osc.stop(now + idx * 0.08 + 0.6)
+    })
+  } catch (e) {
+    console.warn("Web Audio API not supported or blocked:", e)
+  }
+}
+
+function confettiStyle(n) {
+  const colors = ['#FCD34D', '#F472B6', '#38BDF8', '#34D399', '#A78BFA']
+  const left = Math.random() * 100
+  const delay = Math.random() * 0.8
+  const duration = 1.5 + Math.random() * 1.5
+  const size = 6 + Math.random() * 10
+  const color = colors[n % colors.length]
+  return {
+    left: `${left}%`,
+    backgroundColor: color,
+    animationDelay: `${delay}s`,
+    animationDuration: `${duration}s`,
+    width: `${size}px`,
+    height: `${size}px`,
+    transform: `rotate(${Math.random() * 360}deg)`
+  }
+}
+
 const OPENER_MSG = {
   pori:   isSecret => isSecret
     ? '여긴 비밀이니까 마음 편히 다 풀어놔! 무슨 일 있어?'
@@ -420,7 +475,7 @@ async function initSession() {
   try {
     // 친구 컨셉: 감정 안 묻고 날씨/시간/닉네임 기반 첫인사로 시작
     const coords = await getCoordsOrNull()
-    const sess = await chatApi.startSession(character.value, isSecret.value, coords, ttsEnabled.value)
+    const sess = await chatApi.startSession(character.value, isSecret.value, coords, route.query.checkinId || null, ttsEnabled.value)
     sessionId.value = sess.session_id
     coldStartDone.value = true
     userTurnCount.value = 0
@@ -546,6 +601,9 @@ async function sendMessage() {
     })
     if (res.emotion_label) {
       currentEmotion.value = res.emotion_label
+      if (res.emotion_label === 'joy') {
+        triggerJoyCelebration()
+      }
     }
   } catch {
     messages.value.push({ _tempId: Date.now(), role: 'assistant', content: '잠시 연결이 끊겼어요. 다시 시도해 줄래요? 🙏' })
@@ -1174,8 +1232,6 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   to { opacity: 1; transform: translateY(0); }
 }
 
-
-
 /* 🎤 음성 입력 (STT) */
 .stt-btn.stt-recording {
   background: rgba(248, 113, 113, 0.25);
@@ -1187,13 +1243,11 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   50%      { box-shadow: 0 0 0 7px rgba(248, 113, 113, 0); }
 }
 
-
 /* 🔊 TTS 음소거 토글 */
 .tts-toggle.tts-off {
   opacity: 0.55;
   filter: grayscale(0.6);
 }
-
 
 /* 대화 맥락 바로가기 칩 */
 .suggest-chip {
@@ -1209,5 +1263,32 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
 }
 .suggest-chip:hover { background: rgba(251, 191, 119, 0.28); }
 
+/* 🎉 기쁨 감정 축하 (폭죽/Confetti) 효과 */
+.joy-celebration-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+  overflow: hidden;
+}
+.confetti-particle {
+  position: absolute;
+  top: -20px;
+  border-radius: 3px;
+  opacity: 0.85;
+  animation: fallDown linear forwards;
+}
+@keyframes fallDown {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(110vh) rotate(720deg);
+    opacity: 0;
+  }
+}
 
 </style>
+
+

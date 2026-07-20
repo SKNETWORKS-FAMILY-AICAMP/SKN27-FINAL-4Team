@@ -25,6 +25,7 @@ NET_CHANGE_THRESHOLD = 12.0
 VOLATILITY_STDDEV_THRESHOLD = 16.0
 LARGE_JUMP_THRESHOLD = 18.0
 SIGNIFICANT_DIFF_THRESHOLD = 5.0
+MIN_TREND_DAYS = 3
 
 
 @dataclass(frozen=True)
@@ -56,7 +57,7 @@ def analyze_emotion_flow(scores: Sequence[EmotionScore]) -> EmotionFlowResult:
     state_counts = dict(Counter(summary.emotion_state for summary in daily_summaries))
     metrics = _build_metrics(daily_summaries)
 
-    if not daily_summaries:
+    if len(daily_summaries) < MIN_TREND_DAYS:
         return _insufficient_result(daily_summaries, state_counts, metrics)
 
     flow_type = _classify_time_series_flow(metrics, len(daily_summaries))
@@ -123,6 +124,8 @@ def _build_metrics(summaries: Sequence[DailyScoreSummary]) -> dict[str, Any]:
             'stddev': 0.0,
             'large_jump_count': 0,
             'direction_change_count': 0,
+            'trend_eligible': False,
+            'required_trend_days': MIN_TREND_DAYS,
             'diffs': [],
         }
 
@@ -150,6 +153,8 @@ def _build_metrics(summaries: Sequence[DailyScoreSummary]) -> dict[str, Any]:
             1 for diff in diffs if abs(diff) >= LARGE_JUMP_THRESHOLD
         ),
         'direction_change_count': _count_direction_changes(diffs),
+        'trend_eligible': len(values) >= MIN_TREND_DAYS,
+        'required_trend_days': MIN_TREND_DAYS,
         'diffs': diffs,
     }
 
@@ -340,13 +345,13 @@ def _insufficient_result(
         flow_type=FLOW_SCORE_MAINTENANCE,
         maintenance_type=MAINTENANCE_INSUFFICIENT,
         tone_color=None,
-        title='흐름 판단 보류',
-        interpretation='감정 점수 흐름을 판단할 일 단위 점수 데이터가 아직 없습니다.',
-        action_direction='감정 점수화 결과가 들어오면 흐름을 다시 판단합니다.',
+        title='감정 흐름 근거 부족',
+        interpretation='상승·하락·변동 흐름을 판단하려면 서로 다른 날짜의 기록이 3일 이상 필요합니다.',
+        action_direction='현재 기록은 하루 상태 참고용으로만 보고, 기록일이 늘어나면 흐름을 다시 판단합니다.',
         suggestions=(),
         daily_summaries=daily_summaries,
         state_counts=state_counts,
         metrics=metrics,
-        rationale='일 단위 감정 점수 데이터가 없어 패턴 분류를 적용하지 않았습니다.',
-        detected_by='rule_time_series',
+        rationale='단일·이중 관측으로 시계열 추세를 단정하지 않는 제품 안전 규칙을 적용했습니다.',
+        detected_by='insufficient_repeated_observations',
     )

@@ -1,0 +1,23 @@
+﻿element_id,element_type,display_name,visual_prompt,safety_note
+FX_SPARKLE,EFFECT,반짝임,반짝임,화면 과밀·공포·과도한 고립 금지
+FX_PETAL,EFFECT,꽃잎,꽃잎,화면 과밀·공포·과도한 고립 금지
+FX_MIST,EFFECT,옅은 안개,옅은 안개,화면 과밀·공포·과도한 고립 금지
+FX_RAIN,EFFECT,잔잔한 빗방울,잔잔한 빗방울,화면 과밀·공포·과도한 고립 금지
+FX_AFTER_RAIN,EFFECT,비 갠 반사광,비 갠 반사광,화면 과밀·공포·과도한 고립 금지
+FX_WIND,EFFECT,바람과 잎,바람과 잎,화면 과밀·공포·과도한 고립 금지
+FX_STARS,EFFECT,작은 별빛,작은 별빛,화면 과밀·공포·과도한 고립 금지
+FX_PAPER,EFFECT,흩어지는 종이,흩어지는 종이,화면 과밀·공포·과도한 고립 금지
+FX_STEAM,EFFECT,따뜻한 김,따뜻한 김,화면 과밀·공포·과도한 고립 금지
+FX_PATH,EFFECT,빛나는 길,빛나는 길,화면 과밀·공포·과도한 고립 금지
+COMP_WIDE,COMPOSITION,넓고 역동적인 전신 구도,넓고 역동적인 전신 구도,화면 과밀·공포·과도한 고립 금지
+COMP_BALANCED,COMPOSITION,균형 잡힌 중간 구도,균형 잡힌 중간 구도,화면 과밀·공포·과도한 고립 금지
+COMP_CLOSE,COMPOSITION,가까운 감정 중심 구도,가까운 감정 중심 구도,화면 과밀·공포·과도한 고립 금지
+COMP_COZY,COMPOSITION,포근하고 정적인 구도,포근하고 정적인 구도,화면 과밀·공포·과도한 고립 금지
+COMP_BUSY,COMPOSITION,분주하지만 정돈된 구도,분주하지만 정돈된 구도,화면 과밀·공포·과도한 고립 금지
+COMP_PATH,COMPOSITION,길이 이어지는 깊은 구도,길이 이어지는 깊은 구도,화면 과밀·공포·과도한 고립 금지
+COMP_CENTER,COMPOSITION,캐릭터 중심 구도,캐릭터 중심 구도,화면 과밀·공포·과도한 고립 금지
+COMP_LEFT,COMPOSITION,캐릭터 왼쪽·문구 여백 오른쪽,캐릭터 왼쪽·문구 여백 오른쪽,화면 과밀·공포·과도한 고립 금지
+COMP_RIGHT,COMPOSITION,캐릭터 오른쪽·문구 여백 왼쪽,캐릭터 오른쪽·문구 여백 왼쪽,화면 과밀·공포·과도한 고립 금지
+COMP_LANDSCAPE,COMPOSITION,풍경 중심 구도,풍경 중심 구도,화면 과밀·공포·과도한 고립 금지
+COMP_TOGETHER,COMPOSITION,나란히 있는 관계 구도,나란히 있는 관계 구도,화면 과밀·공포·과도한 고립 금지
+COMP_DISTANCE,COMPOSITION,안전한 거리감 구도,안전한 거리감 구도,화면 과밀·공포·과도한 고립 금지

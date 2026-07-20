@@ -85,9 +85,11 @@ def book_recommendation(request):
 
     today_str = timezone.localdate().isoformat()
     cache_state = {
-        "version": 8,
+        "version": 10,
         "user_id": request.user.id,
         "date": today_str,
+        "age": user_profile.get("age"),
+        "gender": user_profile.get("gender"),
         "emotion": user_profile.get("today_emotion"),
         "interests": user_profile.get("interests"),
         "hobbies": user_profile.get("hobbies"),

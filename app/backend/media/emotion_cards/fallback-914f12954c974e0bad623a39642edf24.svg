@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1536" viewBox="0 0 1024 1536" role="img" aria-label="마음카드 미리보기">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#261349"/><stop offset=".52" stop-color="#853b78"/><stop offset="1" stop-color="#f39168"/></linearGradient>
+    <radialGradient id="glow" cx="50%" cy="29%" r="48%"><stop stop-color="#ffe9af" stop-opacity=".94"/><stop offset="1" stop-color="#ffc47d" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="1024" height="1536" rx="56" fill="url(#sky)"/>
+  <rect width="1024" height="1536" rx="56" fill="url(#glow)"/>
+  <path d="M0 1100 C170 960 330 1170 500 1035 S800 980 1024 1105 V1536 H0Z" fill="#291447" fill-opacity=".68"/>
+  <circle cx="512" cy="448" r="158" fill="#fff0ba" fill-opacity=".88"/>
+  <g fill="#fff8e9" font-family="sans-serif" text-anchor="middle"><text x="512" y="838" font-size="48" font-weight="700">오늘의 마음 카드</text><text x="512" y="922" font-size="31">맑고 따뜻한 하늘 · 집</text><text x="512" y="987" font-size="31">천천히 걷기</text><text x="512" y="1280" font-size="25" letter-spacing="5">JOY</text></g>
+</svg>
