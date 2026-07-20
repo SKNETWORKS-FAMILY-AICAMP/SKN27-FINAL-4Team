@@ -45,7 +45,19 @@ _lock = threading.Lock()
 #  날짜 있는 종결은 그 날짜가 지날 때까지, 날짜 없는 종결은 최신순 LIMIT 3이 양을 제한)
 from .memory_config import (RECALL_LIMIT, OPENLOOP_MAX_AGE, RELCHANGE_WINDOW,
                             ABSENCE_MIN, VEC_INDEX, VEC_RECALL_MIN,
-                            VEC_DEDUP_MIN, EXPIRE_VEC_MIN)
+                            VEC_DEDUP_MIN, EXPIRE_VEC_MIN,
+                            TOPIC_CATEGORIES, TOPIC_SYNONYMS)
+
+_CATS_STR = '/'.join(TOPIC_CATEGORIES)   # 프롬프트 주입용 (정의는 memory_config 한 곳)
+
+
+def _norm_topic_cat(name):
+    """카테고리 정규화 — 동의어 흡수 후 14종 밖이면 '기타' (어휘 분열 실측 봉인)."""
+    n = (name or '').strip()
+    if not n:
+        return ''
+    n = TOPIC_SYNONYMS.get(n, n)
+    return n if n in TOPIC_CATEGORIES else '기타'
 
 _NEG_EMO = ('슬픔', '분노')
 
@@ -210,9 +222,9 @@ def _extract(message):
         "★방향 주의: 'X 때문에 Y'라고 말하면 결과 Y의 caused_by가 원인 X다 — 둘 다 "
         "events로 기록하고, cause 텍스트 필드에 결과를 적는 역전 금지. "
         "X·Y는 자리표시자일 뿐이다 — 사용자가 실제로 말한 사건 이름만 써라.★\n"
-        "events: {name, date, date_end, place, topic(취업/건강/연애/가족/학업/돈/취미 등 "
-        "한 단어), people(배열), cause(이유 텍스트), caused_by(원인인 같은 메시지 내 다른 "
-        "사건 이름)}\n"
+        f"events: {{name, date, date_end, place, topic({_CATS_STR} 중 한 단어 — 이 목록 "
+        "밖 단어 금지), people(배열), cause(이유 텍스트), caused_by(원인인 같은 메시지 내 "
+        "다른 사건 이름)}\n"
         "★place: 발화에 장소가 있으면 반드시 place 필드에 분리해 담아라 — 이름에 뭉치지 "
         "말 것 ('성수동 카페에서 수아랑 만나기로' → name '수아와 만남', place '성수동 카페' / "
         "'홍대에서 놀았어' → place '홍대'). 장소 언급이 없으면 생략.★\n"
@@ -227,8 +239,7 @@ def _extract(message):
         "절대 넣지 마라.★\n"
         "preferences: {topic, polarity: 호|오, category} — ★topic은 좋아하는 대상 그대로"
         "('민트초코','클라이밍'). 카테고리('맛','취미')로 뭉개면 잊어줘가 그 대상을 "
-        "못 찾는다★ category는 그 대상이 속한 분류 한 단어(음식/음료/취미/운동/음악/"
-        "콘텐츠/장소/동물/기타) — 사건의 topic과 같은 어휘를 써라.\n"
+        f"못 찾는다★ category는 위 사건 topic과 같은 목록({_CATS_STR})에서 한 단어.\n"
         "invalidations(끝난 것): {kind: relation|event|preference, name, reason, forget} — "
         "이별·절교·퇴사·취소·약속 깨짐·파토. name은 끝난 '대상'의 이름('편의점 알바' O, "
         "'편의점 알바 그만두기' X). 이유·배경으로만 언급된 사람을 관계 종결로 확대 해석 "
@@ -613,10 +624,10 @@ def _store(tx, uid, data, msg_probs, message, vectors=None):
             tx.run('MATCH (e:Event {uid:$uid,key:$key}) MERGE (p:Place {name:$v}) '
                    'MERGE (e)-[r:AT]->(p) ' + _TSTAMP,
                    uid=uid, key=key, v=ev['place'].strip(), now=now, eid=eid)
-        if (ev.get('topic') or '').strip():
+        if _norm_topic_cat(ev.get('topic')):
             tx.run('MATCH (e:Event {uid:$uid,key:$key}) MERGE (t:Topic {name:$v}) '
                    'MERGE (e)-[r:ABOUT]->(t) ' + _TSTAMP,
-                   uid=uid, key=key, v=ev['topic'].strip(), now=now, eid=eid)
+                   uid=uid, key=key, v=_norm_topic_cat(ev.get('topic')), now=now, eid=eid)
         for pn in (ev.get('people') or []):
             pk = _norm(pn)
             if not pk or _is_character(pn):   # 캐릭터 자기참조 배제 (호격 '까미야' 포함)
@@ -666,7 +677,7 @@ def _store(tx, uid, data, msg_probs, message, vectors=None):
                uid=uid, tk=tk, pol=pol, now=now, eid=eid)
         # Topic 계층 (2026-07-20): 구체 취향 → 카테고리 간선 — 사건의 ABOUT 카테고리와
         # 같은 노드를 공유해 '민트초코 → 음식 ← 맛집 사건'으로 연결된다 (관계 11종째)
-        cat = ((pf.get('category') if isinstance(pf, dict) else None) or '').strip()
+        cat = _norm_topic_cat((pf.get('category') if isinstance(pf, dict) else None))
         if cat and cat != tk:
             tx.run('MATCH (t:Topic {name:$tk}) MERGE (c:Topic {name:$cat}) '
                    'MERGE (t)-[:IN_CATEGORY]->(c)', tk=tk, cat=cat)
