@@ -155,7 +155,7 @@
 
         <footer class="report-actions">
           <button type="button" class="secondary-button">이미지 저장</button>
-          <button type="button" class="primary-button">공유</button>
+          <button type="button" class="primary-button" disabled aria-disabled="true">공유</button>
         </footer>
 
         <section v-if="todayAction" class="report-action-feedback" aria-labelledby="action-feedback-title">
@@ -191,9 +191,10 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onMounted } from 'vue'
+import { computed, ref, watch, onBeforeUnmount, onMounted } from 'vue'
 import { reportApi } from '../../api/report.js'
 import reportBg from '../../assets/report-bg.png'
+import { attachMindReportImageSaver } from './reportImageSaver.js'
 
 const reports = ref([])
 const todayCheckin = ref(null)
@@ -211,6 +212,7 @@ const feedbackOptions = [
 const isLoading = ref(true)
 const isRefreshing = ref(false)
 const fetchError = ref('')
+let detachReportImageSaver = null
 
 const normalizeReport = (report) => ({
   ...report,
@@ -317,8 +319,13 @@ const loadTodayCheckin = async () => {
 }
 
 onMounted(() => {
+  detachReportImageSaver = attachMindReportImageSaver()
   loadReports()
   loadTodayCheckin()
+})
+
+onBeforeUnmount(() => {
+  detachReportImageSaver?.()
 })
 
 async function saveActionFeedback() {

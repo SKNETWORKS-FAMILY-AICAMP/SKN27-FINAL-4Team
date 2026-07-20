@@ -35,6 +35,9 @@ class MindReportNarrativeActionAgent:
         if label_result is None:
             raise ValueError('Narrative generation requires a label display result.')
 
+        collection_result = state.get('collection_result')
+        ltm_context = getattr(collection_result, 'ltm_context', '') if collection_result else ''
+
         narrative_generator = (
             self.narrative_generator
             or MindReportNarrativeGenerator(
@@ -49,6 +52,7 @@ class MindReportNarrativeActionAgent:
             cause_result=cause_result,
             label_result=label_result,
             revision_instructions=state.get('revision_instructions', ()),
+            ltm_context=ltm_context,
         )
         is_generated = (
             narrative_result.status == 'generated'

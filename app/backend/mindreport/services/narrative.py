@@ -43,9 +43,10 @@ def build_narrative_payload(
     alternative_plan: AlternativePlanResult,
     cause_result: CauseKeywordResult,
     label_result: LabelDisplayResult,
+    ltm_context: str | None = None,
 ) -> dict[str, Any]:
     # Internal scores select useful context, but are never exposed to the writer.
-    return {
+    payload = {
         'task': 'mind_report_analysis_and_action_generation',
         'editorial_guidance': {
             'action_direction': emotion_flow.action_direction,
@@ -99,22 +100,28 @@ def build_narrative_payload(
             '상단 요약은 핵심 맥락만 담은 35~80자 한 문장으로 작성하고 자세한 설명은 분석 문단으로 보낸다.',
             '분석은 실제 대화의 주제, 반복 맥락, 부담 또는 도움이 된 장면, 서로 연결되는 이유를 충분히 설명한다.',
             'cause_evidence_status가 no_supported_causes이면 원인을 새로 만들거나 특정 소재를 원인으로 단정하지 않는다.',
-            '분석 문단은 3개 이상 작성하고 각 문단은 2~3문장으로 구성한다.',
-            '첫 문단은 주요 맥락, 둘째 문단은 부담과 도움이 된 요소의 관계, 셋째 문단은 일상에서 살펴볼 단서를 다룬다.',
+            '분석 문단은 2~3개 작성하고 각 문단은 2문장으로 구성한다. 전체 글 분량이 너무 길어지지 않게 간결하고 핵심적인 사실 위주로 작성한다.',
+            '치료나 심리상담 형태의 지시적 조언을 철저히 배제하고, 사용자가 스스로 자신의 생각과 장기 기억을 되돌아보며 스스로를 발견하고 이해할 수 있도록 돕는 "자기 이해(Self-Understanding)"의 다정한 안내자 톤앤매너를 유지한다.',
+            '실천 대안은 일상에서 쉽게, 부담 없이 시작할 수 있는 매우 가벼운 활동(Micro-action)으로 제안한다. 장황하게 설명하지 않고 간결하게 제안한다.',
+            '제공되는 ltm_context(장기 기억 사건 및 관련 인물/감정 정보)는 사용자의 삶의 흐름에 관한 중요한 맥락 정보(GraphRAG)이다. ltm_context가 있는 경우 대화 내용과 연계하여 감정 변화의 맥락과 원인을 해석하는 데 중요하게 참고하고, 비어 있는 경우에는 대화 로그의 내용에만 근거하여 자연스럽게 글을 작성한다. 또한 PostgreSQL상의 실시간 기분 점수와 LTM상의 감정이 다를 경우, 이를 인지 부조화나 입체적인 복합 감정(예: 겉으로는 덤덤해 보였지만 내면에는 은근한 부담감이 공존하는 상태)으로 자연스럽게 해석하여 서술한다.',
             '마치 다정한 친구나 친절한 가이드가 말을 건네는 것처럼 친근하고 따뜻한 해요체로 작성한다.',
             '이모지는 문단 전체에서 최대 2개만 사용하고 내용 대신 장식으로 남발하지 않는다.',
             '실천 대안은 무엇을, 언제, 어느 정도로 시작할지 포함해 구체적으로 제안한다.',
-            '각 실천 대안은 추천 이유와 바로 시작할 수 있는 작은 방법을 2문장 이상으로 설명한다.',
+            '실천 대안은 ltm_context에 표시된 사건의 시점을 고려한다. 이미 지나간 과거 사건인 경우, 그 사건을 겪은 나 자신을 되돌아보고 감정을 가볍게 소화하는 "회고(Reflection)"나 좋았던 정서를 음미하는 "여운 음미(Savoring)", 혹은 고생한 나를 돌보는 "자기 위로(Self-Compassion)" 활동으로 제안한다. 다가올 미래 사건인 경우, 가벼운 주의 환기 및 정서적 대비(Soft Distraction) 활동으로 제안한다.',
+            '각 실천 대안은 추천 이유와 바로 시작할 수 있는 작은 방법을 2문장 이내로 짧고 간결하게 설명한다.',
             '실천 대안은 alternative_plan.candidates 안의 후보를 우선 사용한다.',
             '반드시 유효한 JSON 객체만 반환한다.',
         ],
         'output_schema': {
             'title': '구체적이지만 상태를 판정하지 않는 한국어 제목 1개',
             'summary': '기록의 핵심 맥락만 담은 35~80자 한국어 한 문장',
-            'analysis_sentences': ['3 to 4 substantial Korean paragraphs, each containing 2 to 3 sentences'],
-            'action_recommendations': ['2 to 3 concrete Korean action paragraphs, each containing a reason and a small starting method'],
+            'analysis_sentences': ['2 to 3 concise Korean paragraphs, each containing precisely 2 sentences'],
+            'action_recommendations': ['2 concrete Korean action paragraphs, each containing a reason and a small starting method (1 to 2 short sentences proposing a light activity)'],
         },
     }
+    if ltm_context:
+        payload['ltm_context'] = ltm_context
+    return payload
 
 
 class LangChainNarrativeClient:
@@ -202,6 +209,7 @@ class MindReportNarrativeGenerator:
         cause_result: CauseKeywordResult,
         label_result: LabelDisplayResult,
         revision_instructions: Sequence[str] = (),
+        ltm_context: str | None = None,
     ) -> MindReportNarrativeResult:
         if not source_messages or not emotion_scores:
             return MindReportNarrativeResult(
@@ -228,6 +236,7 @@ class MindReportNarrativeGenerator:
             alternative_plan=alternative_plan,
             cause_result=cause_result,
             label_result=label_result,
+            ltm_context=ltm_context,
         )
         if revision_instructions:
             narrative_payload['revision_instructions'] = list(revision_instructions)

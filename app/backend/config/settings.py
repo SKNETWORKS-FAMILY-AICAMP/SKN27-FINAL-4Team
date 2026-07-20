@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     'emotion_cards',
     'mybook',
     'myweather',
+    'memorystorage',
 ]
 
 MIDDLEWARE = [

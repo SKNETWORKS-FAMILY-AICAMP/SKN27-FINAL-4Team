@@ -9,9 +9,7 @@ export {
 export { fetchMyProfile, updateMyProfile } from "./services/profile.api";
 export { fetchCurrentWeather, fetchWeatherRegions } from "./services/weather.api";
 
-export const MEMORY_API_ENABLED = String(
-  import.meta.env.VITE_MEMORY_API_ENABLED || ""
-).toLowerCase() === "true";
+export const MEMORY_API_ENABLED = true;
 
 export async function fetchMemoryVault(force = false) {
   const queryParams = force ? "?force=true" : "";

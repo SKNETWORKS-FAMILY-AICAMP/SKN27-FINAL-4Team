@@ -62,27 +62,69 @@
           </tr>
         </tbody>
       </table>
-      
-      <!-- 상세정보 팝업 패널 -->
-      <transition name="slide-fade">
-        <aside v-if="selectedNode" class="memory-detail-panel" :aria-label="`${selectedNode.title} 기억 상세`">
-          <button class="close-btn" type="button" aria-label="기억 상세 닫기" @click="selectedNode = null">✕</button>
-          <div class="detail-header">
-            <span v-if="selectedNode.isPreview" class="memory-detail-preview">예시 기억</span>
-            <h4>{{ selectedNode.title }}</h4>
-            <small>{{ selectedNode.savedAt }}</small>
-          </div>
-          <div class="detail-body">
-            <p>{{ selectedNode.content }}</p>
-          </div>
-          <div class="detail-footer">
-            <button class="memory-danger-button" @click="requestDelete(selectedNode)">
-              기억 지우기
-            </button>
-          </div>
-        </aside>
-      </transition>
     </div>
+
+    <!-- 상세정보 팝업 패널 (리스트 컨테이너 외부 배치로 잘림 현상 방지) -->
+    <transition name="slide-fade">
+      <aside v-if="selectedNode" class="memory-detail-panel" :aria-label="`${selectedNode.title} 기억 상세`">
+        <button class="close-btn" type="button" aria-label="기억 상세 닫기" @click="selectedNode = null">✕</button>
+        <div class="detail-header">
+          <span v-if="selectedNode.isPreview" class="memory-detail-preview">예시 기억</span>
+          <h4>{{ selectedNode.title }}</h4>
+          <small>{{ selectedNode.savedAt }}</small>
+        </div>
+        <div class="detail-body">
+          <p class="detail-content" style="white-space: pre-line; margin-bottom: 16px;">{{ selectedNode.content }}</p>
+          
+          <!-- 구조화된 관계형 데이터 상세 노출 -->
+          <div v-if="selectedNode.rawDate || (selectedNode.rawPeople && selectedNode.rawPeople.length) || (selectedNode.rawEmotions && selectedNode.rawEmotions.length) || selectedNode.rawRelation || (selectedNode.rawEvents && selectedNode.rawEvents.length)" class="structured-info-box">
+            <h5 class="info-box-title">기억 속의 핵심 요소들</h5>
+            
+            <div v-if="selectedNode.rawDate" class="info-row">
+              <span class="info-label">📅 일정 날짜</span>
+              <span class="info-value">{{ formatDateOnly ? formatDateOnly(selectedNode.rawDate) : selectedNode.rawDate }}</span>
+            </div>
+            
+            <div v-if="selectedNode.rawRelation" class="info-row">
+              <span class="info-label">🤝 관계 유형</span>
+              <span class="info-value"><span class="info-tag relation-tag">{{ selectedNode.rawRelation }}</span></span>
+            </div>
+            
+            <div v-if="selectedNode.rawPeople && selectedNode.rawPeople.length" class="info-row">
+              <span class="info-label">👥 연관 인물</span>
+              <div class="info-value tags-container">
+                <span v-for="p in selectedNode.rawPeople" :key="p.name" class="info-tag person-tag">
+                  {{ p.name }}<small v-if="p.relation">({{ p.relation }})</small>
+                </span>
+              </div>
+            </div>
+            
+            <div v-if="selectedNode.rawEmotions && selectedNode.rawEmotions.length" class="info-row">
+              <span class="info-label">❤️ 느낀 정서</span>
+              <div class="info-value tags-container">
+                <span v-for="emo in selectedNode.rawEmotions" :key="emo" class="info-tag emotion-tag">
+                  {{ emo }}
+                </span>
+              </div>
+            </div>
+            
+            <div v-if="selectedNode.rawEvents && selectedNode.rawEvents.length" class="info-row">
+              <span class="info-label">📌 관련 사건</span>
+              <div class="info-value tags-container">
+                <span v-for="evt in selectedNode.rawEvents" :key="evt" class="info-tag event-tag">
+                  {{ evt }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="detail-footer">
+          <button class="memory-danger-button" @click="requestDelete(selectedNode)">
+            기억 지우기
+          </button>
+        </div>
+      </aside>
+    </transition>
 
     <section
       v-if="pendingDelete"
@@ -170,7 +212,13 @@ export default {
         title: item.title || item.topic || item.label || `기억 노드 ${index + 1}`,
         content: item.content || item.summary || item.text || item.memory || "",
         savedAt: item.savedAt || this.formatDate(item.saved_at || item.created_at || item.updated_at),
-        isPreview: Boolean(item.is_preview || this.isPreview)
+        isPreview: Boolean(item.is_preview || this.isPreview),
+        type: item.type || "",
+        rawDate: item.raw_date || "",
+        rawPeople: item.raw_people || [],
+        rawEmotions: item.raw_emotions || [],
+        rawRelation: item.raw_relation || "",
+        rawEvents: item.raw_events || []
       };
     },
     formatDate(value) {
@@ -183,6 +231,16 @@ export default {
         day: "2-digit",
         hour: "2-digit",
         minute: "2-digit"
+      });
+    },
+    formatDateOnly(value) {
+      if (!value) return "";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return String(value);
+      return date.toLocaleDateString("ko-KR", {
+        year: "numeric",
+        month: "long",
+        day: "numeric"
       });
     },
     requestDelete(item) {
@@ -500,7 +558,7 @@ export default {
   top: 10px;
   right: 10px;
   bottom: 10px;
-  width: 280px;
+  width: 380px;
   background: rgba(27, 18, 62, 0.95);
   backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -680,5 +738,94 @@ export default {
 .slide-fade-leave-to {
   transform: translateX(30px);
   opacity: 0;
+}
+
+/* 구조화된 기억 상세 정보 스타일 */
+.structured-info-box {
+  margin-top: 18px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  backdrop-filter: blur(10px);
+}
+
+.info-box-title {
+  margin: 0 0 12px 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding-bottom: 6px;
+}
+
+.info-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.info-row:last-child {
+  margin-bottom: 0;
+}
+
+.info-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  font-weight: 600;
+}
+
+.info-value {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.info-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.relation-tag {
+  background: rgba(147, 51, 234, 0.15);
+  border: 1px solid rgba(147, 51, 234, 0.3);
+  color: #e9d5ff;
+}
+
+.person-tag {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #a7f3d0;
+}
+
+.person-tag small {
+  margin-left: 2px;
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+.emotion-tag {
+  background: rgba(236, 72, 153, 0.15);
+  border: 1px solid rgba(236, 72, 153, 0.3);
+  color: #fbcfe8;
+}
+
+.event-tag {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #fde68a;
 }
 </style>

@@ -717,7 +717,11 @@ export default {
             content: "최근 대화에서 직무 전환과 준비 방향에 대한 고민이 반복적으로 언급되었습니다.",
             saved_at: "2026-07-01T09:00:00+09:00",
             last_used_at: "2026-07-01T09:00:00+09:00",
-            is_preview: true
+            is_preview: true,
+            type: "event",
+            raw_date: "2026-07-01",
+            raw_people: [{ name: "김팀장", relation: "직장상사" }],
+            raw_emotions: ["걱정", "불안"]
           },
           {
             id: "preview-relationship",
@@ -725,7 +729,11 @@ export default {
             content: "가까운 관계에서 기대와 거리감 사이를 조절하고 싶다는 이야기가 있었습니다.",
             saved_at: "2026-07-05T14:30:00+09:00",
             last_used_at: "",
-            is_preview: true
+            is_preview: true,
+            type: "event",
+            raw_date: "2026-07-05",
+            raw_people: [{ name: "민우", relation: "친구" }],
+            raw_emotions: ["상처", "우울"]
           },
           {
             id: "preview-routine",
@@ -733,7 +741,10 @@ export default {
             content: "기분이 복잡할 때 산책, 기록, 음악으로 생각을 정리하는 경향이 있습니다.",
             saved_at: "2026-07-10T21:10:00+09:00",
             last_used_at: "2026-07-10T21:10:00+09:00",
-            is_preview: true
+            is_preview: true,
+            type: "event",
+            raw_date: "2026-07-10",
+            raw_emotions: ["기쁨"]
           },
           {
             id: "preview-first-meeting",
@@ -741,7 +752,10 @@ export default {
             content: "AI와 처음 대화를 나누며 앞으로 어떤 이야기를 기록할지 천천히 살펴보았습니다.",
             saved_at: "2026-07-11T18:20:00+09:00",
             last_used_at: "",
-            is_preview: true
+            is_preview: true,
+            type: "event",
+            raw_date: "2026-07-11",
+            raw_emotions: ["설렘"]
           },
           {
             id: "preview-rainy-afternoon",
@@ -749,7 +763,10 @@ export default {
             content: "비 내리는 창밖을 떠올리며 복잡했던 마음을 차분하게 정리했습니다.",
             saved_at: "2026-07-12T16:40:00+09:00",
             last_used_at: "",
-            is_preview: true
+            is_preview: true,
+            type: "event",
+            raw_date: "2026-07-12",
+            raw_emotions: ["슬픔"]
           },
           {
             id: "preview-new-goal",
@@ -757,7 +774,10 @@ export default {
             content: "부담을 줄이고 매일 조금씩 실천할 수 있는 작은 계획을 세웠습니다.",
             saved_at: "2026-07-13T10:15:00+09:00",
             last_used_at: "",
-            is_preview: true
+            is_preview: true,
+            type: "event",
+            raw_date: "2026-07-13",
+            raw_emotions: ["설렘", "기쁨"]
           },
           {
             id: "preview-old-dream",
@@ -765,7 +785,10 @@ export default {
             content: "한동안 미뤄두었던 관심사를 다시 시작해 보고 싶은 마음을 이야기했습니다.",
             saved_at: "2026-07-14T20:05:00+09:00",
             last_used_at: "",
-            is_preview: true
+            is_preview: true,
+            type: "event",
+            raw_date: "2026-07-14",
+            raw_emotions: ["설렘"]
           },
           {
             id: "preview-evening-walk",
@@ -773,7 +796,10 @@ export default {
             content: "짧은 산책과 음악으로 하루의 긴장을 풀어내는 나만의 루틴을 정리했습니다.",
             saved_at: "2026-07-15T19:30:00+09:00",
             last_used_at: "",
-            is_preview: true
+            is_preview: true,
+            type: "event",
+            raw_date: "2026-07-15",
+            raw_emotions: ["기쁨"]
           }
         ]
       };
