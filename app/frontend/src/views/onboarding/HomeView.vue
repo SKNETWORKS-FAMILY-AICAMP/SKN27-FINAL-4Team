@@ -1,28 +1,40 @@
 <script setup>
+import { ref, computed, onMounted } from "vue";
+import { userApi } from "../../api/user.js";
+
 defineEmits(["navigate"]);
 
-import mindChatIcon from "../../assets/icons/mind-chat.png";
-import emotionRecordIcon from "../../assets/icons/emotion-record.png";
-import mindReportIcon from "../../assets/icons/mind-report.png";
+import mindReportIcon from "../../assets/icons/feature-mind-report.png";
+import mindCalendarIcon from "../../assets/icons/feature-mind-calendar.png";
+
+const currentUser = ref(null);
+const displayName = computed(
+  () => currentUser.value?.nickname || currentUser.value?.name || "회원",
+);
+
+onMounted(async () => {
+  try {
+    const data = await userApi.getCurrentUser();
+    if (data?.authenticated) {
+      currentUser.value = data.user || data;
+    }
+  } catch {
+    // 비로그인/오류 시 기본 인사말 유지
+  }
+});
 
 const features = [
-  {
-    id: "chat",
-    iconSrc: mindChatIcon,
-    title: "마음 대화",
-    desc: "대화로 감정을 천천히 풀어내는 공간이에요."
-  },
-  {
-    id: "my",
-    iconSrc: emotionRecordIcon,
-    title: "감정 기록",
-    desc: "오늘의 감정과 생각을 차곡차곡 기록해요."
-  },
   {
     id: "report",
     iconSrc: mindReportIcon,
     title: "마음 리포트",
-    desc: "쌓인 기록을 바탕으로 감정 흐름을 살펴봐요."
+    desc: "나의 감정 패턴과 변화\u00a0추이를\n시각적으로 확인해요."
+  },
+  {
+    id: "calendar",
+    iconSrc: mindCalendarIcon,
+    title: "마음 캘린더",
+    desc: "날짜별 감정과 운세\u00a0기록을\n캘린더로 모아봐요."
   }
 ];
 
@@ -31,18 +43,18 @@ const contentActions = [
     id: "mycard",
     icon: "my-card",
     title: "마음 카드 만들기",
-    desc: "오늘의 마음과 장면을 담아\n나만의 카드를 만들어보세요."
-  },
-  {
-    id: "fortune",
-    title: "카드 운세 보기",
-    desc: "타로카드를 통해 오늘의 운세를 확인하고,\n상황 별 조언을 들어보세요."
+    desc: "나만의 마음 카드를 만들어\n오늘 하루를 되돌아봐요.",
   },
   {
     id: "memory-game",
     icon: "memory-game",
     title: "캐릭터 카드 맞추기",
-    desc: "포리와 친구들의 같은 카드를 찾아\n90초 안에 12쌍을 맞춰보세요."
+    desc: "캐릭터 카드 짝을 맞추며\n재밌게 놀아요."
+  },
+  {
+    id: "fortune",
+    title: "카드 운세보기",
+    desc: "타로 카드를 통해\n오늘의 운세를 알아봐요."
   }
 ];
 </script>
@@ -51,12 +63,12 @@ const contentActions = [
   <section class="view-card home-view">
     <div class="home-copy-zone">
       <div class="eyebrow">
-        <span class="soft-dot"></span>
-        오늘은 잠시 쉬어가도 괜찮아요
+        <span aria-hidden="true">✦</span>
+        반가워요, {{ displayName }}님 <span aria-hidden="true">✦</span>
       </div>
-      <h1>바쁜 하루의 빈틈 사이,<br>마음을 쉬어가요</h1>
+      <h1>오늘도 수고했어요.<br>당신의 마음이 쉬어갈 수 있는 곳,<br><em>빈틈사이✨</em></h1>
       <p class="hero-copy">
-        잠시 생긴 하루의 틈에서 감정을 기록하고, <br>대화와 리포트로 마음의 흐름을 천천히 정리해요.
+        잠시 멈춘 하루의 틈에서 감정을 기록하고,<br>다정한 대화로 마음의 온도를 천천히 올려보세요.
       </p>
 
       <div class="hero-actions">
@@ -67,8 +79,24 @@ const contentActions = [
           다락방 둘러보기
         </button>
       </div>
+    </div>
 
-      <div class="content-actions tarot-only-actions" aria-label="오늘의 콘텐츠 바로가기">
+    <aside class="feature-dock" aria-label="핵심 기능">
+      <button
+        v-for="feature in features"
+        :key="feature.id"
+        class="feature-card"
+        type="button"
+        @click="$emit('navigate', feature.id)"
+      >
+        <img class="feature-icon" :src="feature.iconSrc" :alt="`${feature.title} 아이콘`">
+        <span class="feature-copy"><strong>{{ feature.title }}</strong><small>{{ feature.desc }}</small></span>
+        <span class="feature-meta">{{ feature.meta }}</span>
+        <span class="feature-arrow" aria-hidden="true">›</span>
+      </button>
+    </aside>
+
+    <div class="content-actions tarot-only-actions" aria-label="오늘의 콘텐츠 바로가기">
         <button
           v-for="action in contentActions"
           :key="action.id"
@@ -80,26 +108,13 @@ const contentActions = [
           <span>
             <strong>{{ action.title }}</strong>
             <small>{{ action.desc }}</small>
+            <em>{{ action.meta }}</em>
           </span>
+          <span class="content-action-arrow" aria-hidden="true">›</span>
         </button>
-      </div>
     </div>
 
-    <aside class="feature-dock" aria-label="핵심 기능">
-      <article
-        v-for="feature in features"
-        :key="feature.id"
-        class="feature-card"
-      >
-      <img
-      class="feature-icon"
-      :src="feature.iconSrc"
-      :alt="`${feature.title} 아이콘`"
-      />
-        <strong>{{ feature.title }}</strong>
-        <small>{{ feature.desc }}</small>
-      </article>
-    </aside>
+    <p class="home-closing-note">☆ 기록이 모여, 당신의 마음을 더 단단하게 만들어요. <span>♥</span></p>
   </section>
 </template>
 
@@ -156,7 +171,7 @@ const contentActions = [
 .home-copy-zone h1 {
   margin: 0 0 22px;
   color: #ffd7bd;
-  font-size: clamp(54px, 4.1vw, 70px);
+  font-size: clamp(42px, 3.2vw, 56px);
   line-height: 1.16;
   font-weight: 900;
   letter-spacing: 0;
@@ -186,18 +201,19 @@ const contentActions = [
 }
 
 .tarot-only-actions {
-  width: min(740px, 100%);
-  max-width: 740px !important;
-  grid-template-columns: 1fr;
+  width: 100%;
+  max-width: none !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px;
   margin-bottom: 22px;
 }
 
 .tarot-game-action {
-  min-height: clamp(142px, 16vh, 174px);
-  grid-template-columns: 220px minmax(0, 1fr) 54px !important;
+  min-height: clamp(122px, 14vh, 148px);
+  grid-template-columns: 120px minmax(0, 1fr) 48px !important;
   align-items: center;
-  gap: 28px;
-  padding: 26px 28px;
+  gap: 18px;
+  padding: 22px 22px;
   border-radius: 22px;
   position: relative;
   overflow: hidden;
@@ -212,39 +228,39 @@ const contentActions = [
 }
 
 .tarot-game-action .sticker-icon {
-  width: 190px;
-  height: 124px;
+  width: 112px;
+  height: 96px;
   border-radius: 0;
   background:
-    url("../../assets/tarot/tarot-card-back.png") left center / 86px auto no-repeat,
-    url("../../assets/tarot/tarot-card-back.png") center center / 86px auto no-repeat,
-    url("../../assets/tarot/tarot-card-back.png") right center / 86px auto no-repeat;
+    url("../../assets/tarot/tarot-card-back.png") left center / 52px auto no-repeat,
+    url("../../assets/tarot/tarot-card-back.png") center center / 52px auto no-repeat,
+    url("../../assets/tarot/tarot-card-back.png") right center / 52px auto no-repeat;
   box-shadow: none;
 }
 
 .tarot-game-action strong {
-  font-size: 30px;
+  font-size: 24px;
 }
 
 .tarot-game-action small {
-  margin-top: 12px;
-  font-size: 18px;
-  line-height: 1.55;
+  margin-top: 10px;
+  font-size: 15px;
+  line-height: 1.5;
 }
 
 .tarot-game-action > span:last-child::after {
   content: "›";
   position: absolute;
-  right: 28px;
+  right: 20px;
   top: 50%;
-  width: 48px;
-  height: 48px;
+  width: 42px;
+  height: 42px;
   display: grid;
   place-items: center;
   border: 1px solid rgba(255, 245, 238, 0.22);
   border-radius: 50%;
   color: white;
-  font-size: 34px;
+  font-size: 28px;
   transform: translateY(-50%);
 }
 
@@ -253,11 +269,11 @@ const contentActions = [
   left: auto !important;
   bottom: auto !important;
   z-index: 1;
-  width: min(1140px, calc(100% - 88px));
+  width: min(1140px, 100%);
   margin-top: 18px;
   margin-bottom: 8px;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   gap: 22px;
   background: transparent !important;
   border: 0 !important;
@@ -279,7 +295,7 @@ const contentActions = [
     linear-gradient(145deg, rgba(147, 22, 114, 0.32), rgba(50, 24, 73, 0.62)),
     rgba(20, 9, 31, 0.52) !important;
   box-shadow: inset 0 1px 0 rgba(255, 245, 238, 0.1);
-  cursor: default;
+  transition: transform 0.15s ease, border-color 0.15s ease;
 }
 
 .feature-card .sticker-icon {
@@ -312,8 +328,19 @@ const contentActions = [
   font-size: 26px;
 }
 
+.feature-card {
+  cursor: pointer;
+}
+
 .feature-card:hover {
-  transform: none;
+  transform: translateY(-2px);
+  border-color: rgba(255, 129, 150, 0.55);
+}
+
+@media (max-width: 1100px) {
+  .tarot-only-actions {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 720px) {
@@ -328,10 +355,6 @@ const contentActions = [
   .hero-actions .btn {
     width: 100%;
     min-width: 0;
-  }
-
-  .tarot-only-actions {
-    grid-template-columns: 1fr;
   }
 
   .tarot-game-action {

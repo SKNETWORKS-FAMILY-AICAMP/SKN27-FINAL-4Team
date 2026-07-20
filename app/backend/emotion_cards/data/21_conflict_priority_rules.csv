@@ -1,13 +1,19 @@
 ﻿priority_rank,rule_group,source,score,resolution
-1,SAFETY,안전 규칙,후보 제외 또는 +1000,다른 모든 규칙보다 우선
-2,EXPLICIT_FACT,사용자 직접 장소·행동·소품·기억,+100,"사실 유지, 개인정보 일반화"
-3,PRIVACY,privacy_level,+95,실명·주소·학교·회사·계정 제거
-4,EVENT,사건 규칙,+60,행동·소품·장소 결정
-5,NEED,필요 규칙,+45,회복 공간·행동 보완
-6,ENERGY,에너지 규칙,+40,자세·움직임·구도 결정
-7,SOCIAL,관계 규칙,+35,동반자·거리·익명화
-8,EMOTION,감정 규칙,+30~50,하늘·조명·색감·표정
-9,INTEREST,취미·관심사,+15~20,보조 소품·행동 다양화
-10,MESSAGE,문장 규칙,+65~95,사용자 문장이 없을 때
-11,DIVERSITY,최근 카드 이력,반복 -20,최근 7장과 같은 요소 완화
-12,STYLE,그림체,장면 점수 영향 없음,렌더링 방식만 변경
+1,SAFETY_HARD,safety rule,hard_forbidden,blocks every lower-priority rule
+2,EXPLICIT_NEGATION,user negation,hard_forbidden,negated elements cannot be generated
+3,EXPLICIT_CAUSE,user fact,+1000,preserve visible emotional cause
+4,EXPLICIT_WEATHER,user fact,+1000,explicit weather overrides emotion weather
+5,EXPLICIT_TIME,user fact,+1000,explicit time overrides style defaults
+6,EXPLICIT_PLACE,user fact,+1000,preserve generalized place
+7,EXPLICIT_ACTION,user fact,+1000,preserve safe action
+8,EXPLICIT_OBJECT,user fact,+1000,preserve safe object
+9,PRIVACY,privacy rule,hard_forbidden,remove identifiers and readable documents
+10,EVENT_REQUIRED_CUE,event rule,+200,keep event cause recognizable
+11,SOCIAL_CONTEXT,explicit/high-confidence social fact,+60,respect alone/companion limits
+12,EMOTION_VISUAL,emotion rule,+50,provide compatible candidates only
+13,EXPLICIT_ENERGY,user selection,+40,soft preference only
+14,EXPLICIT_NEED,user selection,+40,soft preference only
+15,INFERRED_ENERGY_NEED,confidence>=0.75,+15,low-weight soft preference
+16,INTEREST,profile preference,+5,optional decoration
+17,DIVERSITY,history,+1..10,avoid repetitive scenes
+18,STYLE,style preset,0,rendering only; cannot change scene IDs

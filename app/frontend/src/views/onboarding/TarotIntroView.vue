@@ -7,6 +7,8 @@ import { userApi } from "../../api/user.js";
 import { getTarotCardImage } from "../../assets/tarot/cardImages.js";
 import tarotCardBackImage from "../../assets/tarot/tarot-card-back.png";
 import tarotDeckBoxImage from "../../assets/tarot/tarot-deck-box.png";
+import dailyCardHeadingIcon from "../../assets/icons/tarot-daily-card.png";
+import situationCardsHeadingIcon from "../../assets/icons/tarot-situation-cards.png";
 
 const router = useRouter();
 
@@ -23,6 +25,7 @@ const USER_PROFILE_KEY = "binteumsaiUserProfile";
 
 const dailyMajor = ref(null);
 const isDailyMajorLoading = ref(false);
+const isDailyMajorSaving = ref(false);
 const dailyMajorError = ref("");
 const isDailyCardRevealed = ref(false);
 const currentUser = ref(null);
@@ -33,6 +36,7 @@ const dailyCardImage = computed(() => getTarotCardImage(dailyMajor.value?.card_n
 const dailyPillLabel = computed(() => {
   if (!isAuthenticated.value) return "로그인 후 오늘의 카드 확인하기";
   if (isDailyMajorLoading.value) return "오늘의 카드를 불러오는 중";
+  if (isDailyMajorSaving.value) return "오늘의 카드를 저장하는 중";
   if (!dailyMajor.value) return "로그인 후 오늘의 카드 확인하기";
   if (!isDailyCardRevealed.value) return "덱을 열어 카드 확인";
   return `오늘의 메이저 카드 · ${dailyMajor.value.card_name_ko || dailyMajor.value.card_name}`;
@@ -63,10 +67,22 @@ function goDraw() {
   router.push({ path: "/onboarding/fortune/draw" });
 }
 
-function revealDailyCard() {
-  if (!dailyMajor.value || isDailyMajorLoading.value) return;
-  isDailyCardRevealed.value = true;
-  saveDailyMajorCache(true);
+async function revealDailyCard() {
+  if (!dailyMajor.value || isDailyMajorLoading.value || isDailyMajorSaving.value) return;
+
+  isDailyMajorSaving.value = true;
+  dailyMajorError.value = "";
+
+  try {
+    dailyMajor.value = await tarotApi.revealDailyMajor(getLocalDateString());
+    isDailyCardRevealed.value = true;
+    saveDailyMajorCache(true);
+  } catch (error) {
+    dailyMajorError.value =
+      error.response?.data?.error || "오늘의 카드 기록을 저장하지 못했어요. 잠시 후 다시 시도해주세요.";
+  } finally {
+    isDailyMajorSaving.value = false;
+  }
 }
 
 function handleDailyCardClick() {
@@ -100,6 +116,13 @@ async function loadDailyMajor() {
     dailyMajorError.value = "";
     isDailyCardRevealed.value = true;
     isDailyMajorLoading.value = false;
+
+    try {
+      dailyMajor.value = await tarotApi.revealDailyMajor(today);
+      saveDailyMajorCache(true);
+    } catch {
+      // 이전에 확인한 카드는 캐시로 보여주고, 다음 확인 시 저장을 다시 시도한다.
+    }
     return;
   }
 
@@ -177,7 +200,10 @@ onMounted(async () => {
 
     <div class="tarot-panels">
       <article class="glass-panel daily-major-panel">
-        <span class="panel-tab">✦ 오늘의 운세 ›</span>
+        <h2 class="daily-panel-title tarot-icon-heading">
+          <img :src="dailyCardHeadingIcon" alt="" aria-hidden="true">
+          <span>오늘의 카드</span>
+        </h2>
 
         <div class="daily-main-content">
           <div class="daily-deck-stage">
@@ -185,7 +211,7 @@ onMounted(async () => {
               class="daily-deck-button"
               :class="{ revealed: isDailyCardRevealed }"
               type="button"
-              :disabled="isDailyMajorLoading || !authChecked"
+              :disabled="isDailyMajorLoading || isDailyMajorSaving || !authChecked"
               @click="handleDailyCardClick"
             >
               <img
@@ -204,22 +230,25 @@ onMounted(async () => {
           </div>
 
           <div class="daily-major-copy">
-            <h2>오늘의 타로 운세</h2>
+            <h2>오늘 당신의 하루는<br>빛나는 날이에요.✨</h2>
             <p>오늘의 메이저 카드 한 장을 뽑고, <br>하루의 운세 메시지를 확인해보세요.</p>
-            <button class="tarot-glow-button" type="button" :disabled="isDailyMajorLoading || !authChecked" @click="handleDailyCardClick">
+            <button class="tarot-glow-button" type="button" :disabled="isDailyMajorLoading || isDailyMajorSaving || !authChecked" @click="handleDailyCardClick">
               {{ dailyPillLabel }}
             </button>
           </div>
         </div>
 
         <section class="meaning-box">
-          <h3>✦ 카드에 담긴 의미 ✦</h3>
+          <h3>오늘의 키워드</h3>
           <p>{{ dailyCardMeaning }}</p>
         </section>
       </article>
 
       <article class="glass-panel situation-panel">
-        <h2>✦ 상황별 카드 운세 보러가기 ✦</h2>
+        <h2 class="tarot-icon-heading">
+          <img :src="situationCardsHeadingIcon" alt="" aria-hidden="true">
+          <span>상황별 카드 운세</span>
+        </h2>
         <p>궁금한 상황을 선택하고, 3장의 카드가 전하는 조언을 확인해보세요.</p>
 
         <div class="category-chip-row" aria-label="상황 카테고리 안내">
@@ -242,7 +271,6 @@ onMounted(async () => {
 
     <footer class="glass-panel tarot-reference-bar">
       <span>오늘의 운세카드는 하루에 한 번 확인할 수 있어요. 운세 결과는 하루를 가볍게 돌아보고 마음을 정리하는 참고용으로 활용해 주세요.</span>
-      <button type="button">이용 안내 ›</button>
     </footer>
   </section>
 </template>
@@ -306,6 +334,49 @@ onMounted(async () => {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 22px;
   align-items: start;
+}
+
+.tarot-icon-heading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.tarot-icon-heading img {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  object-fit: contain;
+  transform-origin: center;
+}
+
+.daily-major-panel .tarot-icon-heading img {
+  transform: scale(2);
+}
+
+.daily-major-panel .tarot-icon-heading {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 44px max-content 44px;
+  justify-content: center;
+  column-gap: 10px;
+  color: #fff1cd;
+  font-family: var(--font-display) !important;
+  font-size: clamp(26px, 2vw, 34px);
+  font-weight: 400 !important;
+  line-height: 1.25;
+  letter-spacing: 0 !important;
+}
+
+.daily-major-panel .tarot-icon-heading::after {
+  width: 44px;
+  height: 44px;
+  content: "";
+}
+
+.situation-panel .tarot-icon-heading img {
+  transform: scale(1.45);
 }
 
 .daily-major-panel,
@@ -1025,6 +1096,29 @@ onMounted(async () => {
   }
 }
 
+:global(#app .tarot-intro-view .tarot-panels) {
+  align-items: stretch !important;
+}
+
+:global(#app .tarot-intro-view .daily-major-panel),
+:global(#app .tarot-intro-view .situation-panel) {
+  height: auto !important;
+  align-self: stretch !important;
+}
+
+:global(#app .tarot-intro-view .daily-panel-title) {
+  color: #fff1cd !important;
+  font-family: var(--font-display) !important;
+  font-size: clamp(26px, 2vw, 34px) !important;
+  font-weight: 400 !important;
+  line-height: 1.25 !important;
+  letter-spacing: 0 !important;
+}
+
+:global(#app .tarot-intro-view .daily-major-copy h2) {
+  font-size: 32px !important;
+}
+
 @media (max-width: 1280px) {
   :global(#app .tarot-intro-view) {
     width: calc(100% - 48px) !important;
@@ -1053,5 +1147,35 @@ onMounted(async () => {
   :global(#app .tarot-intro-view) {
     width: calc(100% - 24px) !important;
   }
+}
+
+@media (min-width: 1025px) {
+  :global(#app .tarot-intro-view .situation-panel) {
+    justify-content: flex-start !important;
+    padding-top: 64px !important;
+  }
+
+  :global(#app .tarot-intro-view .situation-panel .tarot-icon-heading) {
+    transform: translateY(-6px) !important;
+  }
+
+  :global(#app .tarot-intro-view .intro-card-spread) {
+    width: 360px !important;
+    height: 248px !important;
+  }
+
+  :global(#app .tarot-intro-view .intro-card-spread span) {
+    width: 132px !important;
+  }
+}
+
+:global(#app .tarot-intro-view .tarot-reference-bar) {
+  justify-content: center !important;
+  text-align: center !important;
+}
+
+:global(#app .tarot-intro-view .tarot-reference-bar span) {
+  width: 100% !important;
+  text-align: center !important;
 }
 </style>

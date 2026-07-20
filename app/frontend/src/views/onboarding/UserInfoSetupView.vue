@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { userApi } from "../../api/user.js";
 import hobbyCsv from "../../assets/data/preference_hobbies.csv?raw";
 import interestCsv from "../../assets/data/preference_interests.csv?raw";
@@ -54,7 +54,23 @@ const selectedPreferenceItems = computed(() => [
 ]);
 const activePreferenceItems = computed(() => activePreferenceType.value === "hobby" ? hobbyItems : interestItems);
 const activePreferenceTitle = computed(() => activePreferenceType.value === "hobby" ? "취미/활동" : "관심 주제");
-const visiblePreferenceItems = computed(() => activePreferenceItems.value);
+const activeCategory = ref("전체");
+const categoryOptions = computed(() => {
+  const seen = [];
+  activePreferenceItems.value.forEach((item) => {
+    const category = item.onboardingCategory || "기타";
+    if (!seen.includes(category)) seen.push(category);
+  });
+  return ["전체", ...seen];
+});
+watch(activePreferenceType, () => {
+  activeCategory.value = "전체";
+});
+const visiblePreferenceItems = computed(() =>
+  activeCategory.value === "전체"
+    ? activePreferenceItems.value
+    : activePreferenceItems.value.filter((item) => (item.onboardingCategory || "기타") === activeCategory.value),
+);
 const preferenceGridItems = computed(() => {
   const slots = visiblePreferenceItems.value.map((item) => ({ ...item, placeholder: false }));
 
@@ -176,7 +192,7 @@ function getOnboardingCategory(raw, type) {
   if (/여행|장소|공간|맛집|카페|팝업|사진/.test(source)) return "공간·취향";
   if (/라이프|패션|뷰티|반려|식물|홈|루틴|자기관리|쇼핑|음식|커피|차/.test(source)) return "라이프스타일";
   if (/관계|소통|연애|성장|자기이해|자기계발|심리/.test(source)) return "관계·성장";
-  if (/감성|무드|창작|표현|사진 감성/.test(source)) return "감성·표현";
+  if (/감성|무드|창작|표현/.test(source)) return "감성·표현";
   if (/트렌드|레트로|뉴트로|호러|오컬트|로맨스|판타지|디지털/.test(source)) return "트렌드";
   return "라이프스타일";
 }
@@ -242,7 +258,8 @@ function getKeywordIcon(label, type) {
   if (/카페|커피|차|맛집|요리|베이킹/.test(text)) return "☕";
   if (/영화|드라마|웹툰|예능|애니|콘텐츠|유튜브|OTT시청/.test(text)) return "🎬";
   if (/게임|디지털|트렌드|방탈출/.test(text)) return "🎮";
-  if (/독서|글쓰기|자기계발|학습|심리/.test(text)) return "📚";
+  if (/독서|글쓰기|자기계발|학습/.test(text)) return "📚";
+  if (/심리/.test(text)) return "💞 ";
   if (/전시|문화|공연/.test(text)) return "🎟️";
   if (/창작|드로잉|표현/.test(text)) return "🖋️";
   if (/사진/.test(text)) return "📷";
@@ -507,7 +524,7 @@ function formatBirthDateForDisplay(value) {
   <section class="view-card userinfo-setup-view">
     <article class="glass-panel userinfo-panel">
       <div class="setup-stepper" aria-label="첫 로그인 설정 단계">
-        <span class="done"><b>✓</b>로그인</span>
+        <span class="done"><b>1</b>로그인</span>
         <span class="done"><b>2</b>캐릭터</span>
         <span class="active"><b>3</b>정보와 취향</span>
         <span><b>4</b>완료</span>
@@ -615,11 +632,19 @@ function formatBirthDateForDisplay(value) {
               </button>
             </div>
 
-            <div class="preference-choice-box">
-              <div class="preference-choice-box-header">
-                <strong>{{ activePreferenceTitle }} 항목</strong>
-              </div>
+            <div class="preference-category-row" role="group" aria-label="카테고리 필터">
+              <button
+                v-for="category in categoryOptions"
+                :key="category"
+                type="button"
+                :class="{ active: activeCategory === category }"
+                @click="activeCategory = category"
+              >
+                {{ category }}
+              </button>
+            </div>
 
+            <div class="preference-choice-box">
               <div class="preference-chip-grid" :aria-label="`${activePreferenceTitle} 선택 목록`">
                 <template v-for="item in preferenceGridItems" :key="item.id">
                   <span
@@ -637,7 +662,7 @@ function formatBirthDateForDisplay(value) {
                   >
                     <span class="chip-icon" aria-hidden="true">{{ item.icon }}</span>
                     <strong>{{ item.label }}</strong>
-                    <i>{{ isKeywordSelected(item) ? "✓" : "" }}</i>
+                    <i v-if="isKeywordSelected(item)">✓</i>
                   </button>
                 </template>
               </div>

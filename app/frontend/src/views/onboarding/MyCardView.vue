@@ -1,8 +1,9 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { emotionCardsApi } from '../../api/emotionCards.js'
 import { userApi } from '../../api/user.js'
+import MindCardDrawingLoader from '../../components/emotion-card/MindCardDrawingLoader.vue'
 import cardThumb from '../../assets/icons/my-card-feature.png'
 import style3d from '../../assets/styles-preview/style-3d.jpg'
 import styleWatercolor from '../../assets/styles-preview/style-watercolor.jpg'
@@ -29,9 +30,11 @@ const resettingUsage = ref(false)
 const generation = reactive({ status: 'PENDING', progress: 0 })
 const showExitModal = ref(false)
 const showRegenerationModal = ref(false)
+const memoryTextarea = ref(null)
 let timer = null
 
 const form = reactive({ memory_text: '' })
+const MIN_MEMORY_TEXTAREA_HEIGHT = 154
 // 그림체 프리셋(11_style_presets.csv와 동일). generate 시 백엔드가 available_styles로 재검증한다.
 const styles = [
   ['STYLE_3D', '3D 렌더', style3d],
@@ -65,6 +68,23 @@ function errorOf(error) { return error?.response?.data?.error?.message || error?
 function goHome() { if (!['INPUT', 'RESULT'].includes(stage.value)) { showExitModal.value = true; return }; router.push('/home') }
 function confirmExit() { showExitModal.value = false; router.push('/home') }
 function reset() { Object.assign(form, { memory_text:'' }); analysis.value=null; scene.value=null; card.value=null; feedbackSaved.value=false; imagePreviewError.value=false; errorMessage.value=''; stage.value='INPUT'; router.replace({ query:{} }) }
+function resizeMemoryTextarea() {
+  const textarea = memoryTextarea.value
+  if (!textarea) return
+  textarea.style.height = 'auto'
+  const borderHeight = textarea.offsetHeight - textarea.clientHeight
+  textarea.style.height = `${Math.max(textarea.scrollHeight + borderHeight, MIN_MEMORY_TEXTAREA_HEIGHT)}px`
+}
+
+watch(() => form.memory_text, async () => {
+  await nextTick()
+  resizeMemoryTextarea()
+})
+watch(stage, async (value) => {
+  if (value !== 'INPUT') return
+  await nextTick()
+  resizeMemoryTextarea()
+})
 
 async function loadUsage() { try { const data = await emotionCardsApi.today(); Object.assign(usage, data.daily_generation_count || usage); if (data.card) { card.value = data.card; imagePreviewError.value = false } } catch { /* 로그인 가드와 API 오류는 화면에서만 안내 */ } }
 async function resetUsage() {
@@ -89,7 +109,7 @@ async function createCard() {
   try {
     // 한 문장 입력을 LLM이 감정·사건·장면 단서까지 함께 해석한다.
     const text = form.memory_text.trim()
-    const a = await emotionCardsApi.analyze({ emotion_text: text, memory_text: text }); analysis.value = a
+    const a = await emotionCardsApi.analyze({ raw_text: text, emotion_text: text }); analysis.value = a
     if (a.safety_status && a.safety_status !== 'SAFE') { errorMessage.value = '지금은 카드를 만들기보다 마음을 먼저 안전하게 살펴보는 게 좋아요.'; stage.value = 'INPUT'; return }
     const s = await emotionCardsApi.createScene(a.analysis_id); scene.value = s
     const options = s.available_styles || []
@@ -152,15 +172,21 @@ onBeforeUnmount(()=>{if(timer) clearTimeout(timer)})
       <section v-if="stage==='INPUT'" class="form-card input-grid simple-input-card">
         <label class="wide memory-input">오늘 카드에 남기고 싶은 것은?
           <small>오늘 있었던 일과 마음을 편하게 적어주세요. LLM이 감정과 장면을 분석해 카드로 만들어요.</small>
-          <textarea v-model="form.memory_text" maxlength="500" placeholder="오늘의 장면을 짧게 적어보세요." />
+          <textarea ref="memoryTextarea" v-model="form.memory_text" maxlength="500" placeholder="오늘의 장면을 짧게 적어보세요." />
         </label>
         <div class="wide style-block"><span class="block-title">어떤 그림체로 그릴까요?</span><div class="style-grid"><button v-for="item in styles" :key="item[0]" :class="{chosen:selectedStyle===item[0]}" type="button" @click="selectedStyle=item[0]"><span class="style-thumb-wrap"><img :src="item[2]" :alt="`${item[1]} 예시`" class="style-thumb" /></span>{{ item[1] }}</button></div></div>
         <button class="primary-cta wide" type="button" :disabled="!canCreate" @click="createCard">오늘의 카드 만들기</button>
         <p class="generation-count wide">{{ usageLabel }}</p>
       </section>
 
-      <section v-else-if="stage==='GENERATING'" class="form-card loading-card ai-loading-card">
-        <div class="ai-image-loader" aria-hidden="true"><i></i><i></i><i></i></div>
+      <section
+        v-else-if="stage==='GENERATING'"
+        class="form-card loading-card ai-loading-card"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+      >
+        <MindCardDrawingLoader unique-id="emotion-card-generation-loader" />
         <strong>{{ generationLabel }}</strong>
         <p>AI가 오늘의 마음을 한 장의 장면으로 그리고 있어요.</p>
       </section>
@@ -306,7 +332,7 @@ input, textarea, select {
   color: #f8ece9;
   font: inherit;
 }
-textarea { min-height: 82px; resize: vertical; }
+textarea { min-height: 82px; overflow-y: hidden; resize: none; }
 .quick-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .quick-chips button { padding: 5px 8px; font-size: 11px; }
 
@@ -324,13 +350,7 @@ textarea { min-height: 82px; resize: vertical; }
 .loading-card { min-height: 260px; display: grid; place-content: center; justify-items: center; gap: 13px; color: #e5d6e9; text-align: center; }
 .loading-card strong { color: #fff0d8; font-size: 25px; }
 .loading-card p { margin: 0; }
-.ai-loading-card { min-height: 300px; padding: 32px; }
-.ai-image-loader { position: relative; width: 116px; height: 116px; border-radius: 50%; isolation: isolate; background: radial-gradient(circle, rgba(255, 224, 250, .98) 0 17%, rgba(255, 111, 205, .92) 34%, rgba(113, 84, 255, .86) 62%, rgba(18, 8, 54, 0) 72%); box-shadow: 0 0 34px rgba(255, 89, 197, .65), 0 0 76px rgba(83, 121, 255, .38); animation: aiOrbPulse 2.4s ease-in-out infinite; }
-.ai-image-loader::before, .ai-image-loader::after, .ai-image-loader i { position: absolute; inset: 4px; z-index: -1; display: block; border: 2px solid rgba(211, 133, 255, .68); border-radius: 46% 54% 58% 42% / 46% 43% 57% 54%; content: ''; filter: drop-shadow(0 0 8px rgba(255, 191, 249, .72)); animation: aiOrbit 3.8s linear infinite; }
-.ai-image-loader::after { inset: -9px 7px; border-color: rgba(97, 211, 255, .68); animation-direction: reverse; animation-duration: 4.8s; }
-.ai-image-loader i:nth-child(1) { inset: 12px -11px; border-color: rgba(255, 125, 215, .7); animation-duration: 3.2s; }
-.ai-image-loader i:nth-child(2) { inset: -12px 15px; border-color: rgba(147, 134, 255, .65); animation-duration: 5.4s; animation-direction: reverse; }
-.ai-image-loader i:nth-child(3) { display: none; }
+.ai-loading-card { min-height: 360px; padding: 28px 32px 32px; overflow: visible; }
 .ai-loading-caption { color: #c9b2d9; font-size: 12px; }
 
 .style-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
@@ -371,9 +391,7 @@ textarea { min-height: 82px; resize: vertical; }
 .card-modal h2 { margin: 0 0 10px; font-size: 22px; line-height: 1.25; white-space: nowrap; }.card-modal p, .card-modal small { color: #d0c1da; }.card-modal > div { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
 
 @keyframes thumbPulse { 50% { transform: scale(1.04); filter: brightness(1.18); } }
-@keyframes aiOrbit { to { transform: rotate(360deg) scale(1.06); } }
-@keyframes aiOrbPulse { 50% { transform: scale(1.08); filter: saturate(1.28) brightness(1.16); } }
 @media (max-width: 1100px) { .mind-card-layout { grid-template-columns: 1fr; width: min(1060px, 100%); margin-inline: auto; } .card-preview-panel { position: static; } }
 @media (max-width: 720px) { .mind-card-page { padding: 18px 11px 42px; } .mind-card-shell { padding: 24px 17px; } .head-row { margin: 20px 0; } .panel-thumb { width: 80px; height: 80px; } .input-grid, .result-card { grid-template-columns: 1fr; } .style-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .shell-footer { display: block; } .shell-footer p + p { margin-top: 6px; } .primary-cta { position: sticky; bottom: 12px; z-index: 2; } .card-modal > div { flex-wrap: wrap; } }
-@media (prefers-reduced-motion: reduce) { .pulsing, .ai-image-loader, .ai-image-loader::before, .ai-image-loader::after, .ai-image-loader i { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) { .pulsing, .card-preview-frame.generating .card-preview-empty img { animation: none !important; } }
 </style>

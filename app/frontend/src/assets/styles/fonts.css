@@ -1,0 +1,120 @@
+/* ==========================================================
+   빈틈사이 폰트 시스템
+   - MaruBuri        : 감성 헤드라인·환영 문구·서정적 강조
+   - Cafe24 Ssurround: 서비스명·게임형 제목·완료 화면 핵심 제목
+   - Gmarket Sans    : 내비게이션·버튼·카드·입력 필드 등 일반 UI 전체
+   폰트 파일: src/assets/fonts/ (로컬 관리, 외부 CDN 미사용)
+   ========================================================== */
+
+@font-face {
+  font-family: "MaruBuri";
+  src: url("../fonts/MaruBuri-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "MaruBuri";
+  src: url("../fonts/MaruBuri-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Cafe24 Ssurround";
+  src: url("../fonts/Cafe24Ssurround.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Gmarket Sans";
+  src: url("../fonts/GmarketSans-Light.woff2") format("woff2");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Gmarket Sans";
+  src: url("../fonts/GmarketSans-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Gmarket Sans";
+  src: url("../fonts/GmarketSans-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --font-emotional: "MaruBuri", "Noto Serif KR", "Apple Color Emoji", "Segoe UI Emoji", serif;
+  --font-display: "Cafe24 Ssurround", "Gmarket Sans", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  --font-ui: "Gmarket Sans", "Pretendard", "Noto Sans KR", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  /* 기존 변수명 호환 */
+  --font-soft: var(--font-emotional);
+}
+
+html,
+body,
+#app {
+  font-family: "Gmarket Sans", sans-serif; /* TEST: 명시 이름 */
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+/* ── 역할별 적용 (TEST: 폰트 파일 이름 직접 지정) ── */
+.hero-eyebrow,
+.hero-description,
+.emotional-copy,
+.welcome-copy,
+#app .home-view .eyebrow,
+#app .home-view .hero-copy,
+#app .home-view .home-closing-note {
+  font-family: "MaruBuri", serif; /* TEST */
+  font-weight: 400;
+}
+
+.hero-title-line,
+#app .home-copy-zone h1,
+.login-panel__header h2 {
+  font-family: "MaruBuri", serif !important; /* TEST */
+  font-weight: 600 !important;
+}
+
+.hero-brand,
+.display-title,
+.completion-title,
+.character-select-title,
+#app .home-copy-zone h1 em,
+.brand-name,
+.screen-heading h2 {
+  font-family: "Cafe24 Ssurround", sans-serif !important; /* TEST */
+  font-weight: 700 !important;
+  font-style: normal;
+}
+
+.nav-link,
+.nav-links a,
+.button,
+.btn,
+.cta-button,
+.form-label,
+.form-input,
+.tag,
+.badge {
+  font-family: "Gmarket Sans", sans-serif; /* TEST */
+  font-weight: 500;
+}

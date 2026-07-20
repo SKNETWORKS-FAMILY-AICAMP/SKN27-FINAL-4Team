@@ -62,34 +62,6 @@
           </button>
         </nav>
 
-        <aside class="home-sidebar" aria-label="오늘의 상태판">
-          <div class="panel-caption">
-            <span class="dashboard-kicker">ROOM NOTE</span>
-            <strong>방 안 상태판</strong>
-          </div>
-          <section class="summary-grid" aria-label="내 상태 요약">
-            <button class="summary-card" type="button" @click="goToReport">
-              <span>오늘 기분</span>
-              <strong>{{ todayEmotionLabel }}</strong>
-              <small>마음 리포트에서 확인</small>
-            </button>
-            <button class="summary-card" type="button" @click="openPanel('mbti')">
-              <span>MBTI</span>
-              <strong>{{ profileMbtiLabel }}</strong>
-              <small>{{ mbtiSummaryText }}</small>
-            </button>
-            <button class="summary-card" type="button" @click="openPanel('profile')">
-              <span>관심사</span>
-              <strong>{{ interestPreview }}</strong>
-              <small>프로필 기준</small>
-            </button>
-            <button class="summary-card" type="button" @click="openPanel('profile')">
-              <span>취미</span>
-              <strong>{{ hobbyPreview }}</strong>
-              <small>개인화 보정</small>
-            </button>
-          </section>
-        </aside>
       </aside>
 
       <section class="room-section" aria-label="내 공간">
@@ -110,6 +82,34 @@
           @open-report="goToReport"
           @arrived="activatePanelAfterRoomMove"
         />
+
+        <aside class="home-sidebar" aria-label="오늘의 상태판">
+          <div class="panel-caption">
+            <span class="dashboard-kicker">ROOM NOTE</span>
+          </div>
+          <section class="summary-grid" aria-label="내 상태 요약">
+            <button class="summary-card mood" type="button" @click="goToReport">
+              <span>오늘 기분</span>
+              <strong>{{ todayEmotionLabel }}</strong>
+              <small>마음이 차분하고 편안해요.</small>
+            </button>
+            <button class="summary-card mbti" type="button" @click="openPanel('mbti')">
+              <span>MBTI</span>
+              <strong>{{ profileMbtiLabel }}</strong>
+              <small>{{ mbtiSummaryText }}</small>
+            </button>
+            <button class="summary-card interest" type="button" @click="openPanel('profile')">
+              <span>관심사</span>
+              <strong>{{ interestPreview }}</strong>
+              <small>프로필 기준</small>
+            </button>
+            <button class="summary-card hobby" type="button" @click="openPanel('profile')">
+              <span>취미</span>
+              <strong>{{ hobbyPreview }}</strong>
+              <small>기록 기반</small>
+            </button>
+          </section>
+        </aside>
       </section>
     </section>
 

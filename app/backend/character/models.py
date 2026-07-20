@@ -10,6 +10,7 @@ class CharacterPreference(models.Model):
         ('bird', 'Bird'),
     ]
     EXPRESSION_CHOICES = [
+        ('default', 'Default'),
         ('joy', 'Joy'),
         ('anger', 'Anger'),
         ('sadness', 'Sadness'),
@@ -27,7 +28,7 @@ class CharacterPreference(models.Model):
     )
     client_id = models.CharField(max_length=64, blank=True, db_index=True)
     character_id = models.CharField(max_length=24, choices=CHARACTER_CHOICES, default='otter')
-    expression_id = models.CharField(max_length=24, choices=EXPRESSION_CHOICES, default='joy')
+    expression_id = models.CharField(max_length=24, choices=EXPRESSION_CHOICES, default='default')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

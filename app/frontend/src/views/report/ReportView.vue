@@ -153,7 +153,27 @@
           </p>
         </section>
 
+        <section class="report-metric-grid" aria-label="이번 주 마음 지표">
+          <article class="metric-card trend-card">
+            <strong>이번 주 감정 흐름</strong>
+            <div class="mini-bars" aria-hidden="true">
+              <i v-for="(day, index) in currentReport.emotions.slice(0, 7)" :key="day.day" :style="{ '--metric-height': `${38 + ((index * 11) % 44)}%` }"></i>
+            </div>
+          </article>
+          <article class="metric-card temperature-card">
+            <strong>마음 평균 온도</strong>
+            <p><span aria-hidden="true">☾</span><b>64점</b></p>
+            <small>지난 주 대비 <em>+8 ↑</em></small>
+          </article>
+          <article class="metric-card emotion-card">
+            <strong>가장 많이 느낀 감정</strong>
+            <p><span aria-hidden="true">🙂</span><b>걱정 <small>(28%)</small></b></p>
+            <small>그 다음으로 불안 (21%)</small>
+          </article>
+        </section>
+
         <footer class="report-actions">
+          <p>☆ 작은 기록이 모여, 당신의 내일을 더 단단하게 만듭니다. <span>♥</span></p>
           <button type="button" class="secondary-button">이미지 저장</button>
           <button type="button" class="primary-button">공유</button>
         </footer>

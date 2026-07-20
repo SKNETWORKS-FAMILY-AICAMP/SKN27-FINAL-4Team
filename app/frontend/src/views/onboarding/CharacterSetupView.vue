@@ -8,10 +8,15 @@ const route = useRoute();
 
 const expressions = [
   { id: "joy", label: "기쁨", desc: "통통 튀는 밝은 반응" },
-  { id: "anger", label: "화남", desc: "부들부들 화난 반응" },
-  { id: "sadness", label: "슬픔", desc: "축 처진 공감 반응" },
-  { id: "anxiety", label: "불안", desc: "작게 떨리는 긴장 반응" },
+  { id: "sadness", label: "슬픔", desc: "고개를 살짝 숙여요" },
+  { id: "anger", label: "화남", desc: "살짝 눈썹을 찌푸려요" },
+  { id: "anxiety", label: "불안", desc: "눈을 동그랗게 떠요" },
 ];
+const defaultExpression = {
+  id: "default",
+  label: "기본",
+  desc: "기본 표정",
+};
 
 const characters = [
   {
@@ -52,17 +57,19 @@ const storedCharacter = getStoredCharacter();
 const selectedCharacter = ref(
   characters.some((character) => character.id === storedCharacter.characterId)
     ? storedCharacter.characterId
-    : "bird"
+    : "cat"
 );
-const selectedExpression = ref(
-  expressions.some((expression) => expression.id === storedCharacter.expressionId)
-    ? storedCharacter.expressionId
-    : "anxiety"
-);
+const selectedExpression = ref(null);
 
 const selected = computed(() => characters.find((character) => character.id === selectedCharacter.value) || characters[0]);
-const selectedExpressionData = computed(() => expressions.find((expression) => expression.id === selectedExpression.value) || expressions[0]);
-const selectedExpressionImage = computed(() => characterImage(selected.value, selectedExpression.value));
+const selectedExpressionData = computed(
+  () => expressions.find((expression) => expression.id === selectedExpression.value) || defaultExpression
+);
+const selectedExpressionImage = computed(() => (
+  selectedExpression.value
+    ? characterImage(selected.value, selectedExpression.value)
+    : characterDefaultImage(selected.value)
+));
 
 function characterImage(character, expressionId = "joy") {
   return `/characters/${character.id}/${expressionId}.png`;
@@ -73,7 +80,20 @@ function characterDefaultImage(character) {
 }
 
 function emotionClass(expressionId) {
-  return `emotion-${expressionId}`;
+  return expressionId ? `emotion-${expressionId}` : "";
+}
+
+function selectCharacter(characterId) {
+  selectedCharacter.value = characterId;
+  selectedExpression.value = null;
+}
+
+function toggleExpression(expressionId) {
+  selectedExpression.value = (
+    selectedExpression.value === expressionId
+      ? null
+      : expressionId
+  );
 }
 
 function getStoredCharacter() {
@@ -87,7 +107,7 @@ function getStoredCharacter() {
 async function saveCharacterAndContinue() {
   const payload = {
     character_id: selected.value.id,
-    expression_id: selectedExpression.value,
+    expression_id: selectedExpression.value || "default",
   };
 
   localStorage.setItem(
@@ -125,7 +145,7 @@ async function saveCharacterAndContinue() {
 
         <header class="screen-heading text-area">
           <h2>대화 동행자를 선택해요 ✦</h2>
-          <p>사용자와 대화할 마음 동행자의 기본 성격, 표정, 말투를 첫 로그인 때만 설정하는 화면이에요.</p>
+          <p>사용자와 대화할 마음 동행자의 기본 성격, 표정, 말투를 설정하는 화면이에요.</p>
         </header>
 
         <div class="character-grid" aria-label="캐릭터 선택">
@@ -135,13 +155,13 @@ async function saveCharacterAndContinue() {
             type="button"
             class="character-card"
             :class="{ selected: selectedCharacter === character.id }"
-            @click="selectedCharacter = character.id"
+            @click="selectCharacter(character.id)"
           >
             <span v-if="selectedCharacter === character.id" class="selected-badge">선택됨</span>
             <span class="character-card-image image-area">
               <img
                 :src="characterDefaultImage(character)"
-                :alt="`${character.name} ${selectedExpressionData.label}`"
+                :alt="`${character.name} 기본 표정`"
                 class="character-img"
               >
             </span>
@@ -168,7 +188,8 @@ async function saveCharacterAndContinue() {
               type="button"
               class="expression-card"
               :class="{ selected: selectedExpression === expression.id }"
-              @click="selectedExpression = expression.id"
+              :aria-pressed="selectedExpression === expression.id"
+              @click="toggleExpression(expression.id)"
             >
               <span class="expression-image image-area">
                 <img
@@ -189,7 +210,7 @@ async function saveCharacterAndContinue() {
         <div class="preview-image image-area">
           <img
             :src="selectedExpressionImage"
-            :alt="`${selected.name} ${selectedExpressionData.label}`"
+            :alt="`${selected.name} ${selectedExpressionData.label} 표정`"
             class="character-img"
             :class="emotionClass(selectedExpression)"
           >
@@ -246,6 +267,7 @@ async function saveCharacterAndContinue() {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
+  width: min(100%, 560px);
   max-width: 820px;
   margin: 0 auto;
 }
@@ -435,11 +457,11 @@ async function saveCharacterAndContinue() {
 
 .face-options {
   display: grid;
-  grid-template-columns: repeat(4, minmax(104px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   justify-content: center;
-  width: min(100%, 620px);
+  width: min(100%, 760px);
   margin-inline: auto;
-  gap: 10px;
+  gap: 12px;
 }
 
 .expression-card {

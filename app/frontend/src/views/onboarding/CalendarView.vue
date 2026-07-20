@@ -4,7 +4,11 @@ import { useRouter } from "vue-router";
 import { getLocalDateString } from "../../api/client.js";
 import { calendarApi } from "../../api/calendar.js";
 import { tarotApi } from "../../api/tarot.js";
-import tarotCardIcon from "../../assets/icons/tarot-card.png";
+import calendarFortuneIcon from "../../assets/icons/calendar-fortune.png";
+import calendarRecordIcon from "../../assets/icons/calendar-record.png";
+import calendarStreakIcon from "../../assets/icons/calendar-streak.png";
+import calendarTrendIcon from "../../assets/icons/calendar-trend.png";
+import calendarEmptyIcon from "../../assets/icons/calendar-empty.png";
 
 const today = new Date();
 const router = useRouter();
@@ -105,6 +109,43 @@ const dailyMajorSummary = computed(() => {
     "오늘의 카드가 전하는 메시지를 잠시 후 다시 확인해 주세요.";
 
   return cardName ? `${cardName} · ${cardMeaning}` : cardMeaning;
+});
+
+// 선택한 날짜에 저장된 그 날의 카드 내용을 표시 (오늘의 daily-major로 덮어쓰지 않음)
+const selectedFortuneSummary = computed(() => {
+  const fortune = selectedFortune.value;
+  if (!fortune) return "";
+
+  const storedCard = Array.isArray(fortune.cards) ? fortune.cards[0] : fortune.card;
+  const cardName =
+    fortune.card_name_ko ||
+    fortune.card_name ||
+    fortune.major_card_name ||
+    storedCard?.card_name_ko ||
+    storedCard?.card_name ||
+    storedCard?.name_ko ||
+    storedCard?.name ||
+    "";
+  const cardMeaning =
+    fortune.card_defined_meaning ||
+    fortune.card_description ||
+    fortune.message ||
+    fortune.summary ||
+    fortune.description ||
+    fortune.content ||
+    fortune.keyword ||
+    "";
+
+  if (cardName && cardMeaning && cardName !== cardMeaning) {
+    return `${cardName} · ${cardMeaning}`;
+  }
+
+  // 오늘 날짜이면서 그날 저장 카드에 상세 내용이 없을 때만 오늘의 카드 내용으로 보완
+  if (selectedDate.value === todayString.value && dailyMajor.value) {
+    return dailyMajorSummary.value;
+  }
+
+  return cardName || cardMeaning || "이 날 저장된 운세 기록이에요.";
 });
 
 const fortuneByDate = computed(() => {
@@ -476,25 +517,25 @@ function getErrorMessage(error) {
 
       <section class="calendar-stats" aria-label="이번 달 기록 요약">
         <article>
-          <span>▣</span>
+          <img class="calendar-stat-icon" :src="calendarRecordIcon" alt="" aria-hidden="true">
           <div>
             <strong>{{ recordCount }}일</strong>
             <p>이번 달 기록</p>
           </div>
         </article>
         <article>
-          <span>🔥</span>
+          <img class="calendar-stat-icon" :src="calendarStreakIcon" alt="" aria-hidden="true">
           <div>
             <strong>{{ streakCount }}일</strong>
             <p>현재 연속 기록</p>
           </div>
         </article>
         <article class="wide">
-          <span>↗</span>
+          <img class="calendar-stat-icon" :src="calendarTrendIcon" alt="" aria-hidden="true">
           <div>
             <p>이번 달 감정 요약</p>
           </div>
-          <img :src="selectedCharacterDefaultUrl" alt="" aria-hidden="true">
+          <img class="calendar-stats-character" :src="selectedCharacterDefaultUrl" alt="" aria-hidden="true">
         </article>
       </section>
 
@@ -539,26 +580,18 @@ function getErrorMessage(error) {
         <img :src="selectedDetailCharacterUrl" alt="" aria-hidden="true">
       </div>
 
-      <div v-if="isDayLoading" class="daily-summary">
-        <span class="sticker-icon calendar"></span>
-        <div>
-          <strong>불러오는 중</strong>
-          <p>선택한 날짜의 운세 기록을 확인하고 있어요.</p>
-        </div>
-      </div>
-
-      <template v-else-if="selectedFortune">
+      <template v-if="selectedFortune">
         <div class="daily-summary today-fortune-summary">
-          <img class="daily-summary-icon" :src="tarotCardIcon" alt="" aria-hidden="true">
+          <img class="daily-summary-icon" :src="calendarFortuneIcon" alt="" aria-hidden="true">
           <div>
-            <strong>오늘의 운세</strong>
-            <p>{{ dailyMajorSummary }}</p>
+            <strong>{{ selectedDate === todayString ? '오늘의 운세' : '이 날의 운세' }}</strong>
+            <p>{{ selectedFortuneSummary }}</p>
           </div>
         </div>
       </template>
 
       <div v-else class="empty-detail-card">
-        <span>💬</span>
+        <img class="empty-detail-icon" :src="calendarEmptyIcon" alt="" aria-hidden="true">
         <strong>저장된 운세 없음</strong>
         <p class="selected-date-guide">
           {{ selectedDateGuide }}
@@ -567,7 +600,7 @@ function getErrorMessage(error) {
         <template v-if="selectedDateState === 'today' && !hasViewedTodayCard">
           <h4>오늘의 카드 확인하기</h4>
           <p>오늘의 운세카드를 확인하면 캘린더에서 다시 돌아볼 수 있어요.</p>
-          <button class="btn secondary full" type="button" @click="goTodayFortune">오늘의 운세카드 보러가기</button>
+          <button class="btn primary full" type="button" @click="goTodayFortune">오늘의 운세카드 보러가기 ›</button>
         </template>
         <template v-else>
           <h4>오늘의 마음을 지켜봐요</h4>
@@ -808,6 +841,14 @@ function getErrorMessage(error) {
   font-size: 23px;
 }
 
+.calendar-stat-icon {
+  width: 44px;
+  height: 44px;
+  display: block;
+  object-fit: contain;
+  filter: drop-shadow(0 7px 10px rgba(20, 4, 34, 0.3));
+}
+
 .calendar-stats strong {
   color: #fff1cd;
   font-size: 28px;
@@ -830,7 +871,7 @@ function getErrorMessage(error) {
   font-size: 18px;
 }
 
-.calendar-stats .wide img {
+.calendar-stats .wide .calendar-stats-character {
   position: absolute;
   right: 18px;
   bottom: 0;
@@ -981,6 +1022,14 @@ function getErrorMessage(error) {
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.08);
   font-size: 34px;
+}
+
+.empty-detail-icon {
+  width: 74px;
+  height: 74px;
+  display: block;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 14px rgba(20, 4, 34, 0.3));
 }
 
 .empty-detail-card strong,
