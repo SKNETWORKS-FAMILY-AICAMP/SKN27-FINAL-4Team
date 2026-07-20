@@ -19,7 +19,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from ai.agents import mbti as mbti_svc
-from . import graph_memory, memory, secret_cache, tts_service
+from . import graph_memory, secret_cache, tts_service   # memory(요약) 완전 은퇴 2026-07-19 — 소비자 0 확인 후 제거
 from .models import ChatMessage, ChatSession
 
 
@@ -28,7 +28,6 @@ class CsrfExemptSessionAuthentication(SessionAuthentication):
         return
 
 VALID_CHARACTERS = {'pori', 'kkami', 'toto', 'yeoul'}
-BACKEND_CHARACTER_BY_ASSET = {'redpanda': 'pori', 'cat': 'kkami', 'otter': 'toto', 'bird': 'yeoul'}
 
 
 # ── 공통 헬퍼 ────────────────────────────────────────────────
@@ -73,10 +72,6 @@ def _strip_tags(text: str) -> str:
     return re.sub(r'\s{2,}', ' ', _TAG_RE.sub('', text)).strip()
 
 
-def _normalize_character_id(value):
-    return BACKEND_CHARACTER_BY_ASSET.get(value or '', value or 'pori')
-
-
 # 페이지 안내 룰 (2026-07-12) — 사용자가 관련 얘기를 꺼냈을 때만 바로가기 칩 제안 (잔소리 방지)
 _SUGGEST_REPORT = re.compile(r'리포트|내\s*감정\s*(기록|통계|어땠|흐름)|감정\s*캘린더|이번\s*주\s*나\s*어땠|기록\s*보고')
 _SUGGEST_MYPAGE = re.compile(r'마이\s*페이지|프로필|닉네임|MBTI|엠비티아이|내\s*성향|설정\s*바꾸')
@@ -103,7 +98,7 @@ def session_start(request):
     """세션 시작 — 친구 컨셉: 감정 안 묻고 날씨·시간·닉네임으로 먼저 말 건다.
 
     (구 콜드스타트 감정 선택지는 폐지. cold_start_done은 항상 True로 시작.)"""
-    character = _normalize_character_id(request.data.get('character_id', 'pori'))
+    character = request.data.get('character_id', 'pori')
     is_secret = bool(request.data.get('is_secret', False))
     if character not in VALID_CHARACTERS:
         return _err('INVALID_CHARACTER', '유효하지 않은 캐릭터입니다.')
@@ -121,26 +116,6 @@ def session_start(request):
     # 기억 기반 첫인사는 일반 모드 전용 (시크릿에서 지난 대화 언급 금지)
     memory_uid = user.id if (user and not is_secret) else None
     opener = generate_opener(nickname, lat, lon, user_id=memory_uid)
-
-    # 오늘의 나 찾기에서 이미 고른 내용을 첫 대사에 이어 붙인다.
-    # checkin_id만 전달받고 실제 내용은 로그인 사용자 본인의 기록에서 조회한다.
-    checkin_id = request.data.get('checkin_id')
-    if checkin_id and user:
-        try:
-            from checkin.models import DailyCheckin
-            checkin = DailyCheckin.objects.select_related('reflection', 'cause', 'need', 'selected_action').get(
-                id=int(checkin_id), user=user, completed_at__isnull=False,
-            )
-        except (DailyCheckin.DoesNotExist, TypeError, ValueError):
-            checkin = None
-        if checkin and checkin.reflection and checkin.need:
-            cause_text = checkin.cause_display_text_snapshot or (checkin.cause.label if checkin.cause else '자세히 말하고 싶지 않은 마음')
-            action_text = f" 추천 행동으로는 '{checkin.selected_action.title}'을 골라두었고." if checkin.selected_action_id else ''
-            opener = (
-                f"오늘의 나 찾기에서 '{checkin.reflection.label}'에 가장 가까웠고, "
-                f"'{cause_text}'이 마음에 남았다고 골랐어. 지금 필요한 도움은 '{checkin.need.label}'이었지.{action_text} "
-                f"그 흐름에서 조금 더 이야기하고 싶은 부분부터 천천히 꺼내볼까?"
-            )
 
     # 첫인사도 대화 이력에 남긴다 (다음 턴 컨텍스트 연결)
     if is_secret:
@@ -186,6 +161,11 @@ def chat_turn(request):
             return _err('INVALID_IMAGE', '이미지 형식이 올바르지 않습니다.')
         if len(image_data_url) > 5_000_000:   # base64 ~3.7MB 초과 차단
             return _err('IMAGE_TOO_LARGE', '이미지가 너무 큽니다. 더 작게 보내주세요.')
+
+    # PII 마스킹 (2026-07-15 팀 안건): 입구에서 완전 제거 — 이후의 LLM 전송·원본 저장·
+    # 요약·그래프가 전부 자동으로 안전. 값은 [종류] 태그로 치환 (0비트 보존, pii_mask.py).
+    from . import pii_mask
+    message, pii_found = pii_mask.mask(message)
 
     user = _session_user(request, session)
     session_mode = 'secret' if session.is_secret else 'normal'
@@ -238,6 +218,13 @@ def chat_turn(request):
     is_mbti_answer = bool(result.get('is_mbti_answer'))
     image_caption = (result.get('image_caption') or '').strip()   # 사진 캡션 (저장·리포트·기억용)
 
+    # PII 감지 턴엔 투명성 안내 한 줄 — 조용히 가리면 "봇이 기억 못 함"이 고장처럼 보임.
+    # 결정적 문자열(LLM에 안 맡김) — 안내 자체도 환각 0.
+    if pii_found:
+        _pii_note = pii_mask.notice(pii_found)
+        final_response += _pii_note
+        tagged_response += _pii_note
+
     # ── MBTI 질문을 대화 흐름에 자연스럽게 엮기 (유휴 타이머 대신) ──
     #  트리거가 '침묵(초)'이 아니라 '방금 사용자가 한 말'이 되도록 이 턴 안에서 판단.
     #  조건: 로그인 · 일반모드 · 이번 턴이 MBTI 답변 턴이 아님 · 감정이 안 무거움(joy/normal)
@@ -282,12 +269,12 @@ def chat_turn(request):
         )
         message_id = assistant_msg.id
         uid = user.id if user else None
-        memory.capture_async(uid, stored_user_msg)   # 중요 정보 즉시 저장 (사진 캡션 포함)
+        # 요약 계층 완전 은퇴 (2026-07-19) — 소비자 0 확인(마음리포트는 ChatMessage만 읽음).
+        # 위기 발화의 위로 연속성은 최근 N턴 원문이 담당 (요약 재인용 사고 F2의 원천도 함께 소멸).
         # 위기 턴은 구조화 기억(그래프)에서 제외 — 민감 발화 영구 박제·오회상 방지 (2026-07-12)
-        # (텍스트 요약에는 남겨 위로 연속성 유지 — 그래프/요약 역할 분리 원칙)
         if not result.get('crisis'):
-            graph_memory.capture_async(uid, stored_user_msg, emotion=emotion_label)  # 구조화 기억 병행 — 감정 가중 응고화 (Neo4j 미설정 시 no-op)
-        memory.update_async(uid, session.id)      # 8턴 경계 압축·정리
+            from chat import memory_backend
+            memory_backend.capture_async(uid, stored_user_msg, emotion=emotion_label)  # v1/v2 스위치 경유 (Neo4j 미설정 시 no-op)
 
         # 응답에 MBTI 질문을 얹었으면, 다음 사용자 메시지를 그 답변으로 받도록 pending 설정
         if probe_code:
@@ -343,7 +330,9 @@ def tts_audio(request, task_id):
     audio = tts_service.consume_audio(task_id)
     if audio is None:
         return _err('AUDIO_GONE', '이미 재생되었거나 존재하지 않는 음성입니다.', status.HTTP_404_NOT_FOUND)
-    return HttpResponse(audio, content_type='audio/mpeg')
+    # 포맷 자동 감지: Typecast=wav(RIFF), ElevenLabs=mp3
+    ctype = 'audio/wav' if audio[:4] == b'RIFF' else 'audio/mpeg'
+    return HttpResponse(audio, content_type=ctype)
 
 
 # ═════════════════════════════════════════════════════════════
@@ -413,13 +402,11 @@ def mbti_next_question(request):
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([AllowAny])
 def session_end(request):
-    """세션 종료 — 시크릿: RAM 캐시 파기 / 일반: 8턴 못 채운 잔여 대화 요약 반영."""
+    """세션 종료 — 시크릿: RAM 캐시 파기. (요약 반영은 요약 계층 은퇴로 제거 2026-07-19)"""
     session = _get_session(request.data.get('session_id'), request)
     if session is None:
         return _err('SESSION_NOT_FOUND', '세션을 찾을 수 없습니다.', status.HTTP_404_NOT_FOUND)
     secret_cache.purge(session.id)
-    if not session.is_secret and session.user_id:
-        memory.update_async(session.user_id, session.id, force=True)
     return _ok({'ended': True})   # 음성은 애초에 저장 안 함 (1회 재생 후 파기)
 
 

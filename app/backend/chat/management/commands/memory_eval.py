@@ -17,7 +17,7 @@ import json
 from django.core.management.base import BaseCommand
 
 from chat import graph_memory
-from chat.memory_eval_scenarios import NOISE_POOL, SCENARIOS
+from chat.memory_eval_scenarios import EXTRA_SCENARIOS, NOISE_POOL, SCENARIOS
 
 EVAL_UID_BASE = 987000
 
@@ -98,8 +98,8 @@ def _grade_llm(answer: str, rubric: str, today: str, question: str = ''):
             votes.append(_grade_llm_once(answer, rubric, today, question, temperature=0.5))
         except Exception:
             votes.append(False)
-        if len(votes) == 2 and votes[0] == votes[1]:
-            break   # 만장일치 조기 종료
+        if len(votes) == 2 and votes[0] and votes[1]:
+            break   # pass 만장일치만 조기 종료 — F/F는 3표째로 구제 기회 (감사 P2-5)
     ok = votes.count(True) > len(votes) / 2
     detail = '표결 ' + '/'.join('P' if v else 'F' for v in votes)
     return ok, detail
@@ -115,8 +115,15 @@ class Command(BaseCommand):
                             help='추출 LLM의 JSON 출력을 그대로 표시 (진단용)')
         parser.add_argument('--runs', type=int, default=1,
                             help='반복 실행 횟수 — LLM 변동성 보정, 평균±범위 보고 (권장 3)')
+        parser.add_argument('--v2', action='store_true',
+                            help='v2 기본 스키마(graph_memory_v2_base) 평가 — 전환 게이트(§8-4-6)용')
 
     def handle(self, *args, **opts):
+        if opts.get('v2'):
+            # 전환 게이트(§8-4-6): 동일 27종·동일 채점으로 대상 모듈만 교체 — 공정 비교
+            from chat import graph_memory_v2_base
+            globals()['graph_memory'] = graph_memory_v2_base
+            self.stdout.write('※ v2 기본 스키마(graph_memory_v2_base) 평가 모드 — 기준선은 v1 96%')
         if not graph_memory.is_enabled():
             self.stderr.write('Neo4j 비활성 — .env NEO4J_* 설정 확인')
             return
@@ -127,7 +134,8 @@ class Command(BaseCommand):
         def _timed_get_llm(temperature=0.7, max_tokens=300):
             llm = _orig_get_llm(temperature=temperature, max_tokens=max_tokens)
             try:
-                llm.request_timeout = 45
+                llm.request_timeout = 45   # 구버전 langchain 속성명
+                llm.timeout = 45           # 신버전 속성명 — 어느 쪽이든 걸리게 (행 방지)
                 llm.max_retries = 1
             except Exception:
                 pass
@@ -145,7 +153,8 @@ class Command(BaseCommand):
         scenarios = SCENARIOS
         if opts['only']:
             wanted = {x.strip() for x in opts['only'].split(',') if x.strip()}
-            scenarios = [s for s in scenarios if s['id'] in wanted]
+            # 인과(X) 등 추가 시나리오는 명시 지정 시에만 — 기본 27종 성적표 불변 유지
+            scenarios = [s for s in SCENARIOS + EXTRA_SCENARIOS if s['id'] in wanted]
         if opts['limit']:
             scenarios = scenarios[:opts['limit']]
 
@@ -171,10 +180,8 @@ class Command(BaseCommand):
                     graph_memory._capture(uid, turn)
                 for j in range(sc.get('noise', 0)):
                     graph_memory._capture(uid, NOISE_POOL[j % len(NOISE_POOL)])
-                if sc.get('reflect'):   # 리플렉션 시나리오 — 심기 후 통찰 생성 (2026-07-13)
-                    rr = graph_memory.reflect(uid)
-                    if opts.get('debug'):
-                        self.stdout.write(f"    [리플렉션] {rr}")
+                # (리플렉션 은퇴 2026-07-16 — reflect 미호출.
+                #  R01·R02는 recall의 "감정 딸린 사건 나열"을 근거로 채점 — rubric이 나열 인정)
 
                 # 질문을 message로 전달 — 언급 기반 직접 검색(벡터·키워드)까지 평가 대상 (2026-07-13)
                 recall_text = graph_memory.recall(uid, message=sc['question'])

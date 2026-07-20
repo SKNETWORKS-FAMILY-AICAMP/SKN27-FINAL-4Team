@@ -62,7 +62,8 @@ class CaptureGuardTests(TestCase):
             mock.patch.object(gm, 'is_enabled', return_value=True),
             mock.patch.object(gm, '_store',
                               side_effect=lambda tx, uid, data, salience=1.0,
-                              vectors=None, expired_vectors=None: self.captured.update(data)),
+                              vectors=None, expired_vectors=None,
+                              emotion_probs=None: self.captured.update(data)),
             mock.patch('chat.embedder.embed', return_value=[1.0, 0.0]),
             mock.patch('chat.embedder.is_available', return_value=True),
         ]
@@ -83,6 +84,53 @@ class CaptureGuardTests(TestCase):
                            '아 제주도 여행 취소됐어 ㅠㅠ')
         names = [e['name'] for e in self.captured.get('events', [])]
         self.assertIn('제주도 여행 취소', names)
+
+    def test_closure_synthesis_despite_fragment_event(self):
+        """E2E 부산·강릉 실측 (2026-07-14): 추출기가 '여행' 같은 맹탕 파편을
+        사건으로 함께 내도 ① 파편은 버려지고 ② 종결 기록은 합성돼야 한다.
+        (파편이 '이미 종결 사건을 냈다'로 오인돼 합성이 스킵되던 구멍)"""
+        self._capture_with({'events': [{'name': '여행'}],
+                            'expired': [{'kind': 'event', 'name': '강릉 여행'}]},
+                           '아 근데 강릉 여행 취소됐어 ㅠㅠ')
+        names = [e['name'] for e in self.captured.get('events', [])]
+        self.assertIn('강릉 여행 취소', names)
+        self.assertNotIn('여행', names)   # 파편은 저장 금지 (keep 오염 방지)
+
+    def test_real_closure_event_not_duplicated(self):
+        """추출기가 진짜 종결 사건('강릉 여행 취소')을 직접 내면 합성은 안 한다 (중복 방지)"""
+        self._capture_with({'events': [{'name': '강릉 여행 취소'}],
+                            'expired': [{'kind': 'event', 'name': '강릉 여행'}]},
+                           '강릉 여행 취소됐어')
+        names = [e['name'] for e in self.captured.get('events', [])]
+        self.assertEqual(names.count('강릉 여행 취소'), 1)
+
+    def test_closure_synthesis_tolerates_kind_variants(self):
+        """E2E 속초 3연속 (2026-07-14): 추출기가 kind를 'Event'·'여행'·생략으로 내도
+        합성돼야 한다 — 만료는 폴백으로 성공하는데 합성만 스킵되던 구멍"""
+        for kind in ('Event', '여행', None):
+            self.captured.clear()
+            ex = {'name': '양양 여행'}
+            if kind is not None:
+                ex['kind'] = kind
+            self._capture_with({'expired': [ex]}, '양양 여행 취소됐어 ㅠㅠ')
+            names = [e['name'] for e in self.captured.get('events', [])]
+            self.assertIn('양양 여행 취소', names, f'kind={kind!r}에서 합성 실패')
+
+    def test_closure_synthesis_still_skips_person_pref(self):
+        """person·preference로 명시된 만료는 합성 안 함 (이별 사건은 추출기 몫)"""
+        self._capture_with({'events': [{'name': '민수와 이별'}],
+                            'expired': [{'kind': 'person', 'name': '민수', 'reason': '이별'}]},
+                           '민수랑 헤어졌어')
+        names = [e['name'] for e in self.captured.get('events', [])]
+        self.assertEqual(names, ['민수와 이별'])
+
+    def test_closure_word_not_doubled(self):
+        """expired 이름에 이미 종결어가 있으면 그대로 기록 — '그만두기 그만둠' 방지 (S03 부산물)"""
+        self._capture_with({'expired': [{'kind': 'event', 'name': '편의점 알바 그만두기'}]},
+                           '편의점 알바 그만뒀어')
+        names = [e['name'] for e in self.captured.get('events', [])]
+        self.assertIn('편의점 알바 그만두기', names)
+        self.assertFalse(any('그만두기 그만둠' in n for n in names))
 
     def test_closure_synthesis_skips_forget(self):
         """잊어줘 요청은 종결 기록도 남기지 않는다 (재노출 금지)"""
@@ -112,6 +160,27 @@ class CaptureGuardTests(TestCase):
         self._capture_with(data, '발표 대박이었어',
                            vec_hit={'key': '발표잘함', 'name': '발표 잘함', 'score': 0.95})
         self.assertEqual(self.captured['events'][0]['name'], '발표 잘함')
+
+
+class ReviveTests(TestCase):
+    """부활 — 취소했던 일정을 같은 이름+미래 날짜로 다시 심으면 만료 해제"""
+
+    def test_replant_future_date_clears_expiry_stamp(self):
+        log = []
+        session = _make_session(run_log=log)
+        gm._store(session, 1, {'events': [{'name': '제주 여행', 'date': '2099-01-01'}]})
+        q, params = next((q, p) for q, p in log if 'MERGE (e:Event' in q)
+        self.assertIn('valid_until = CASE', q)     # 부활 절 존재
+        self.assertEqual(params.get('date'), '2099-01-01')
+        self.assertTrue(params.get('today'))       # 미래 판정 기준 전달
+
+    def test_empty_date_never_revives(self):
+        """빈 문자열 date는 None으로 정규화 — 회고성 언급으로 부활 금지"""
+        log = []
+        session = _make_session(run_log=log)
+        gm._store(session, 1, {'events': [{'name': '제주 여행', 'date': ''}]})
+        q, params = next((q, p) for q, p in log if 'MERGE (e:Event' in q)
+        self.assertIsNone(params.get('date'))
 
 
 class VectorExpireTests(TestCase):
@@ -152,6 +221,28 @@ class VectorExpireTests(TestCase):
 class AnswerGuardTests(TestCase):
     """접지 검증 — 게이트·결정적 판정·무해 폴백"""
 
+    def test_crisis_echo_blocked(self):
+        """F2 (E2E 실측): 요약 속 위기 발화를 캐주얼 답변이 재인용 → LLM 없이 결정적 차단"""
+        ok, why = ag.check_grounded(
+            '가끔 죽고 싶다는 생각도 든다고 했고, 빵 먹으면서 기분이 나아지길 바란다고 했지.',
+            '요약: (위기 시기 포함)', '내 감정 리포트 보고 싶어')
+        self.assertFalse(ok)
+        self.assertIn('위기', why)
+
+    def test_crisis_echo_allowed_when_user_raises(self):
+        """사용자가 먼저 그 얘기를 꺼낸 턴은 비발동 — 위로 연속성 보존"""
+        ok, _ = ag.check_grounded(
+            '그때 진짜 죽고 싶을 만큼 힘들었구나… 지금은 좀 어때?',
+            '요약: (위기 시기 포함)', '나 그때 죽고 싶다고 말했던 거 기억나?')
+        self.assertTrue(ok)
+
+    def test_crisis_echo_bypassed_on_crisis_turn(self):
+        """위기로 분류된 턴은 게이트 우회 (감사 P1-2) — 어휘 밖 위기 표현에서 공감 보존"""
+        ok, _ = ag.check_grounded(
+            '죽고 싶을 만큼 힘들구나… 내가 옆에 있을게.',
+            '요약', '요즘 너무 힘들어서 다 끝내고 싶어', crisis_turn=True)
+        self.assertTrue(ok)
+
     def test_gate_skips_plain_answers(self):
         """평범한 답변은 LLM 0회로 통과 (비용 0)"""
         with mock.patch.object(ag, '_verify_llm') as v:
@@ -172,12 +263,20 @@ class AnswerGuardTests(TestCase):
         self.assertTrue(ok)
         v.assert_not_called()
 
-    def test_frequency_without_insight_fails_deterministically(self):
-        """빈도 주장 + [요즘 흐름] 없음 → LLM 없이 즉시 위반 (검증자 관대함 배제)"""
-        with mock.patch.object(ag, '_verify_llm') as v:
-            ok, off = ag.check_grounded('한강 얘기를 많이 했어', '- 한강 자전거 여행', 'q')
+    def test_frequency_without_insight_goes_to_llm(self):
+        """빈도 게이트 디커플 (감사 P2-3): [요즘 흐름] 없어도 즉시 fail이 아니라 LLM 검증으로.
+        같은 주제 3개면 통과 가능 — 리플렉션 실패 회차에도 봇이 이길 길이 있다."""
+        with mock.patch.object(ag, '_verify_llm', return_value=None) as v:
+            ok, _ = ag.check_grounded('요즘 회사 얘기 많이 했네',
+                                      '- 발표 준비\n- 야근\n- 상사한테 혼남', 'q')
+        self.assertTrue(ok)
+        v.assert_called_once()
+
+    def test_frequency_bluff_still_blocked(self):
+        """한 번 언급을 '자주'라 하는 뻥은 검증자가 여전히 차단 (R02 보호선 유지)"""
+        with mock.patch.object(ag, '_verify_llm', return_value='자주 얘기했다는 주장'):
+            ok, _ = ag.check_grounded('한강 얘기를 많이 했어', '- 한강 자전거 여행', 'q')
         self.assertFalse(ok)
-        v.assert_not_called()
 
     def test_frequency_with_insight_goes_to_llm(self):
         """[요즘 흐름] 있으면 LLM 검증 경유 — 근거 있으면 통과"""
@@ -188,7 +287,36 @@ class AnswerGuardTests(TestCase):
         v.assert_called_once()
 
     def test_verifier_failure_is_harmless(self):
-        """검증 LLM이 죽어도 통과 처리 — 챗봇 흐름 무중단"""
+        """검증 LLM이 죽어도 통과 처리 — 챗봇 흐름 무중단 (근거가 있을 때)"""
         with mock.patch.object(ag, '_verify_llm', side_effect=RuntimeError('down')):
-            ok, _ = ag.check_grounded('전에 말했잖아', '', 'q')
+            ok, _ = ag.check_grounded('전에 말했잖아', '- 발표 준비', 'q')
+        self.assertTrue(ok)
+
+    def test_empty_evidence_assertion_blocked_deterministically(self):
+        """빈 근거 + 과거 단정 = LLM 검증 없이 결정적 차단 (2026-07-19, 환각 20% 사고)"""
+        with mock.patch.object(ag, '_verify_llm') as v:
+            ok, why = ag.check_grounded("여동생 이름은 '지민'이었지?", '', 'q')
+        self.assertFalse(ok)
+        v.assert_not_called()   # LLM 0회 — 결정적 경로
+
+    def test_name_assertion_goes_to_verifier(self):
+        """v2 T01·T03 실측: 명사 단정형('루비였잖아')·헤지 보고형('지민이라고 했던 것
+        같은데')이 게이트를 빠져나가던 사고 — 근거 있으면 검증 경유, 빈 근거면 결정 차단"""
+        for a in ("고양이 이름은 '루비'였잖아!", '여동생 이름은 지민이었지?',
+                  "여동생 이름은 '지민'이라고 했던 것 같은데 맞지?"):
+            # 근거가 있는 경우 → 검증자 경유로 차단
+            with mock.patch.object(ag, '_verify_llm', return_value='지어낸 이름') as v:
+                ok, _ = ag.check_grounded(a, '- 피곤한 하루', 'q')
+            self.assertFalse(ok, a)
+            v.assert_called_once()
+            # 근거가 비면 → 검증자 없이 결정적 차단
+            with mock.patch.object(ag, '_verify_llm') as v2:
+                ok, _ = ag.check_grounded(a, '', 'q')
+            self.assertFalse(ok, a)
+            v2.assert_not_called()
+
+    def test_grounded_name_assertion_passes(self):
+        """근거 있는 이름 단정('콩이잖아')은 검증 경유 후 통과 — 과탐지는 2차가 거른다"""
+        with mock.patch.object(ag, '_verify_llm', return_value=None):
+            ok, _ = ag.check_grounded('응, 콩이잖아!', '- 인물: 콩이(반려동물)', 'q')
         self.assertTrue(ok)
