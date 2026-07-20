@@ -1,28 +1,30 @@
 ﻿file_name,row_count,column_count,purpose,encoding,list_separator,runtime_role
-00_manifest.csv,26,7,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-01_analysis_schema.csv,19,8,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-02_feature_codes.csv,64,9,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-03_event_types.csv,61,9,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-04_weather_catalog.csv,10,6,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-05_location_catalog.csv,31,7,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-06_lighting_palette_catalog.csv,23,5,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-07_character_visual_catalog.csv,20,5,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-08_action_catalog.csv,53,5,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-09_object_symbol_catalog.csv,65,5,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-10_effect_composition_catalog.csv,22,5,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-11_style_presets.csv,8,8,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-12_emotion_visual_rules.csv,27,12,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-13_event_scene_rules.csv,61,14,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-14_energy_rules.csv,6,8,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-15_need_environment_rules.csv,10,9,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-16_interest_scene_rules.csv,96,13,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-17_card_messages.csv,8,4,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-18_message_mapping_rules.csv,13,7,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-19_safety_visual_rules.csv,17,10,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-20_fallback_rules.csv,10,9,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-21_conflict_priority_rules.csv,12,5,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-22_prompt_templates.csv,7,6,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-23_output_scene_schema.csv,27,6,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-24_llm_extraction_examples.csv,50,19,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-25_scene_mapping_test_cases.csv,45,12,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
-26_validation_report.csv,6,4,운영 데이터/규칙/테스트,UTF-8-SIG,|,DB seed/규칙/테스트
+00_manifest.csv,29,7,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,manifest
+01_analysis_schema.csv,39,8,emotion card v2.1 timeline candidate/constraint/runtime data,UTF-8-SIG,|,extraction schema
+02_feature_codes.csv,95,9,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,core code registry
+03_event_types.csv,61,15,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,candidate catalog
+04_weather_catalog.csv,11,18,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,candidate catalog and required cues
+05_location_catalog.csv,31,15,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,candidate catalog
+06_lighting_palette_catalog.csv,25,12,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,candidate catalog
+07_character_visual_catalog.csv,23,14,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,candidate catalog
+08_action_catalog.csv,54,12,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,candidate catalog
+09_object_symbol_catalog.csv,66,14,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,candidate catalog
+10_effect_composition_catalog.csv,23,14,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,candidate catalog
+11_style_presets.csv,8,13,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,rendering-only style
+12_emotion_visual_rules.csv,27,24,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,scoring rule
+13_event_scene_rules.csv,61,21,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,scoring rule and required cue
+14_energy_rules.csv,6,13,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,soft scoring rule
+15_need_environment_rules.csv,10,14,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,soft scoring rule
+16_interest_scene_rules.csv,96,17,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,optional scoring rule
+17_card_messages.csv,8,7,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,UI message catalog
+18_message_mapping_rules.csv,13,9,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,UI message mapping
+19_safety_visual_rules.csv,17,15,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,hard safety constraint
+20_fallback_rules.csv,10,14,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,deterministic fallback
+21_conflict_priority_rules.csv,18,5,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,hard constraint priority
+22_prompt_templates.csv,11,6,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,director and prompt compiler
+23_output_scene_schema.csv,67,6,emotion card v2.1 timeline candidate/constraint/runtime data,UTF-8-SIG,|,scene validation schema
+24_llm_extraction_examples.csv,50,29,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,few-shot extraction examples
+25_scene_mapping_test_cases.csv,45,25,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,regression test
+26_validation_report.csv,12,4,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,generated validation report
+27_feature_codes_extended.csv,53,9,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,extended code registry
+28_social_companion_rules.csv,11,13,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,companion candidate constraint

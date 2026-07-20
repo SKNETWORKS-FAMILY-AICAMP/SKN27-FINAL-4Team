@@ -9,12 +9,32 @@ event_type_id,ENUM,예,03_event_types.csv,질문2/자유입력,90,EVT_UNSPECIFIE
 event_outcome,ENUM,아니오,OUT_SUCCESS|OUT_POSITIVE|OUT_RELIEF|OUT_NEUTRAL|OUT_MIXED|OUT_DIFFICULT|OUT_LOSS|OUT_UNCERTAIN|OUT_UNKNOWN,결과 표현,60,OUT_UNKNOWN,사건 결과
 event_stage,ENUM,아니오,STARTED|ONGOING|COMPLETED|WAITING|CANCELLED|UNSPECIFIED,시제/완료 표현,40,UNSPECIFIED,사건 단계
 social_context,ENUM,아니오,ALONE|FRIENDS|PARTNER|FAMILY|COLLEAGUES|CLASSMATES|GROUP|CROWD|ONLINE|PET|NOT_DISCLOSED,등장 인물,60,NOT_DISCLOSED,관계 맥락
-energy_code,ENUM,예,ENG_ENERGETIC|ENG_STEADY|ENG_HEAVY|ENG_STOP_REST|ENG_RUSHED|ENG_SLOW_FINISH,질문3/자유입력,80,ENG_STEADY,오늘의 에너지와 리듬
-need_code,ENUM,예,NEED_REST|NEED_COMFORT|NEED_LISTENING|NEED_ORGANIZE|NEED_ENCOURAGEMENT|NEED_REFRESH|NEED_SAVORING|NEED_SOLITUDE|NEED_PRACTICAL|NEED_CONNECTION,질문4/자유입력,85,NEED_COMFORT,현재 필요한 것
+energy_code,ENUM,아니오,ENG_ENERGETIC|ENG_STEADY|ENG_HEAVY|ENG_STOP_REST|ENG_RUSHED|ENG_SLOW_FINISH,질문3/자유입력,80,,명시 또는 confidence>=0.75의 고신뢰 추론만 허용; 그 외 null
+need_code,ENUM,아니오,NEED_REST|NEED_COMFORT|NEED_LISTENING|NEED_ORGANIZE|NEED_ENCOURAGEMENT|NEED_REFRESH|NEED_SAVORING|NEED_SOLITUDE|NEED_PRACTICAL|NEED_CONNECTION,질문4/자유입력,85,,명시 또는 confidence>=0.75의 고신뢰 추론만 허용; 그 외 null
 memory_focus,TEXT,아니오,자유 문장,질문5,95,입력의 안전한 요약,카드에 남길 핵심 순간
-explicit_place,TEXT,아니오,자유 명사,장소 표현,100,,"사용자가 직접 말한 장소, 자동 공간보다 우선"
-explicit_action,TEXT,아니오,자유 동작,행동 표현,100,,"사용자가 직접 말한 행동, 자동 행동보다 우선"
-explicit_objects,ARRAY,아니오,09_objects_symbols.csv 또는 자유 명사,사물 표현,95,,"직접 언급한 소품, 최대 3개"
+explicit_place,TEXT,아니오,자유 명사,장소 표현,100,,"사용자가 직접 말한 장소, 자동 공간보다 우선; source=EXPLICIT일 때만 하드 제약"
+explicit_action,TEXT,아니오,자유 동작,행동 표현,100,,"사용자가 직접 말한 행동, 자동 행동보다 우선; source=EXPLICIT일 때만 하드 제약"
+explicit_objects,ARRAY,아니오,09_objects_symbols.csv 또는 자유 명사,사물 표현,95,,"직접 언급한 소품, 최대 3개; source=EXPLICIT일 때만 하드 제약"
 privacy_level,ENUM,예,PUBLIC_SAFE|ANONYMIZED|PRIVATE_MINIMAL|NOT_DISCLOSED,개인정보/민감도,100,ANONYMIZED,장면 익명화 수준
 analysis_status,ENUM,예,CLEAR|MIXED|AMBIGUOUS|NOT_DISCLOSED|SAFETY_REVIEW,전체 분석,100,AMBIGUOUS,분석 사용 가능 상태
 analysis_confidence,FLOAT,예,0~1,LLM 구조화 출력,100,0,전체 분석 신뢰도
+raw_text,STRING,예,,사용자 입력,100,,중복 제거한 안전한 원문
+emotion_cause_type,ENUM,예,WEATHER|WORK_STUDY|RELATIONSHIP|FAMILY|HEALTH|FINANCE|DAILY_LIFE|SELF_EVALUATION|UNEXPECTED|UNKNOWN,사실 추출,95,UNKNOWN,감정 원인 유형
+emotion_cause_summary,STRING,아니오,,사실 추출,85,,개인정보를 제거한 감정 원인 요약
+explicit_weather,ENUM,아니오,RAIN|SNOW|CLEAR|CLOUDY|FOG|WIND|AFTER_RAIN|UNKNOWN,원문,99,,명시된 날씨
+explicit_time,ENUM,아니오,TODAY|MORNING|DAYTIME|SUNSET|EVENING|NIGHT|DAWN|UNKNOWN,원문,98,,명시된 시간
+explicit_environment,ENUM,아니오,INDOOR|OUTDOOR|UNKNOWN,원문,97,,명시되거나 장소로 확정되는 환경
+negated_elements,ARRAY,아니오,,원문,100,,사용자가 명시적으로 부정한 요소
+evidence_map,OBJECT,예,,원문 근거,100,,필드별 실제 원문 근거
+field_sources,OBJECT,예,EXPLICIT|HIGH_CONFIDENCE_INFERRED|LOW_CONFIDENCE_INFERRED|DEFAULT|NOT_PROVIDED,검증기,100,,필드별 출처
+field_confidences,OBJECT,예,,검증기,100,,필드별 0~1 신뢰도
+analysis_warnings,ARRAY,아니오,,검증기,80,,상충 또는 불명확 요소
+initial_emotion,ENUM,아니오,JOY|SADNESS|ANGER|ANXIETY,시간순 감정 타임라인,88,,가장 이른 명시 감정
+final_emotion,ENUM,아니오,JOY|SADNESS|ANGER|ANXIETY,시간순 감정 타임라인,99,,가장 마지막에 명시된 현재 감정
+emotion_transition,STRING,아니오,,시간순 감정 타임라인,92,NONE,초기 감정에서 마지막 감정으로의 변화 코드
+initial_weather,ENUM,아니오,RAIN|SNOW|CLEAR|CLOUDY|FOG|WIND|AFTER_RAIN|UNKNOWN,시간순 날씨 타임라인,88,,가장 이른 명시 날씨
+final_weather,ENUM,아니오,RAIN|SNOW|CLEAR|CLOUDY|FOG|WIND|AFTER_RAIN|UNKNOWN,시간순 날씨 타임라인,96,,가장 마지막에 명시된 날씨
+weather_transition,ENUM,아니오,RAIN_TO_CLEAR|RAIN_TO_CLOUDY|CLOUDY_TO_CLEAR|SNOW_TO_CLEAR|NONE|UNKNOWN,시간순 날씨 타임라인,96,UNKNOWN,이전 날씨와 마지막 날씨의 변화
+scene_weather,ENUM,아니오,RAIN|SNOW|CLEAR|CLOUDY|FOG|WIND|AFTER_RAIN|UNKNOWN,날씨 변화 합성,97,,마지막 날씨를 중심으로 이전 날씨 흔적을 포함하는 장면 날씨
+scene_time,OBJECT,아니오,,마지막 시간 앵커,75,,anchor·range·source·confidence를 분리하며 추론 범위는 하드 사실이 아님
+timeline,ARRAY,아니오,,원문 시간순 절,100,[],절별 시간 앵커·범위·감정·날씨와 실제 원문 근거

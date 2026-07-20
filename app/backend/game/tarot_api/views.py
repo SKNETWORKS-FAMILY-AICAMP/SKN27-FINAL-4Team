@@ -8,7 +8,10 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from calendar_api.serializers import DailyFortuneSerializer
-from calendar_api.services import save_tarot_result_as_daily_fortune
+from calendar_api.services import (
+    save_daily_major_as_daily_fortune,
+    save_tarot_result_as_daily_fortune,
+)
 from user.models import User
 
 from .serializers import DailyTarotFortuneSerializer, TarotReadingRequestSerializer
@@ -80,11 +83,11 @@ def create_tarot_reading(request):
         )
 
 
-@api_view(['GET'])
+@api_view(['GET', 'POST'])
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([AllowAny])
 def daily_major_fortune(request):
-    raw_date = request.query_params.get('date')
+    raw_date = request.data.get('date') if request.method == 'POST' else request.query_params.get('date')
     target_date = timezone.localdate()
     if raw_date:
         try:
@@ -95,7 +98,18 @@ def daily_major_fortune(request):
     try:
         fortune_user = request.user if request.user.is_authenticated else _get_development_user(request)
         fortune = get_or_create_daily_major_fortune(fortune_user, target_date)
-        return Response(DailyTarotFortuneSerializer(fortune).data, status=status.HTTP_200_OK)
+        result = DailyTarotFortuneSerializer(fortune).data
+
+        if request.method == 'POST':
+            daily_fortune = save_daily_major_as_daily_fortune(
+                request,
+                result.copy(),
+                target_date,
+            )
+            if daily_fortune:
+                result['daily_fortune'] = DailyFortuneSerializer(daily_fortune).data
+
+        return Response(result, status=status.HTTP_200_OK)
 
     except ValueError as exc:
         return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)

@@ -66,3 +66,49 @@ def save_tarot_result_as_daily_fortune(request, result, target_date):
     )
     return fortune
 
+
+def save_daily_major_as_daily_fortune(request, result, target_date):
+    """Persist a revealed daily-major card in the same calendar record format."""
+    from .models import DailyFortune
+
+    owner_filter = get_owner_filter(request)
+    if owner_filter is None:
+        return None
+
+    card_name = result.get('card_name_ko') or result.get('card_name') or ''
+    card_meaning = (
+        result.get('card_defined_meaning')
+        or result.get('card_description')
+        or result.get('message')
+        or ''
+    )
+    card_keywords = result.get('card_keywords') or []
+    keyword = ' · '.join(card_keywords) if card_keywords else card_name
+
+    defaults = {
+        'reading_id': None,
+        'topic': 'daily_major',
+        'title': '오늘의 카드',
+        'content': card_meaning,
+        'keyword': keyword[:80],
+        'question': '',
+        'cards': [
+            {
+                'card_number': result.get('card_number'),
+                'card_name': result.get('card_name') or '',
+                'card_name_ko': result.get('card_name_ko') or '',
+                'orientation': 'upright',
+            }
+        ],
+        'category_results': {'general': card_meaning},
+        'disclaimer': '',
+        'client_id': '' if request.user.is_authenticated else get_client_id(request),
+    }
+
+    fortune, _ = DailyFortune.objects.update_or_create(
+        date=target_date,
+        **owner_filter,
+        defaults=defaults,
+    )
+    return fortune
+

@@ -1,5 +1,12 @@
 <template>
-  <div id="app" :class="{ 'is-secret-app': secret, 'auth-screen': isAuthScreen }">
+  <div
+    id="app"
+    :class="{
+      'is-secret-app': secret,
+      'auth-screen': isAuthScreen,
+      'bright-background': usesBrightPageBackground,
+    }"
+  >
     <div v-if="!isAuthScreen" class="starfield" aria-hidden="true">
       <span v-for="i in 40" :key="i" class="star" :style="starStyle(i)" />
     </div>
@@ -28,10 +35,13 @@
           <template v-else>
             <template v-if="currentUser">
               <router-link to="/mypage" class="profile-pill" :title="currentUser.email || currentUser.nickname">
-                <span class="avatar" aria-hidden="true">{{ profileInitial }}</span>
+                <span class="avatar" aria-hidden="true">
+                  <img :src="profileAvatarSrc" alt="">
+                </span>
                 <span class="profile-text">
                   <strong>{{ currentUser.nickname || "사용자" }}</strong>
                   <small>{{ providerLabel }}</small>
+                  <span class="profile-progress"><i></i></span>
                 </span>
               </router-link>
               <button class="nav-logout" type="button" :disabled="authLoading" @click="handleLogout">
@@ -55,7 +65,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { clearCsrfToken } from "./api/client.js";
 import { userApi } from "./api/user.js";
-import brandLogo from "./assets/brand-logo.png";
+import brandLogo from "./assets/brand-logo-header.png";
 import { useSecret } from "./composables/useSecret.js";
 
 const route = useRoute();
@@ -70,7 +80,23 @@ const providerNames = {
   google: "Google 로그인",
 };
 
+const BRIGHT_BACKGROUND_PATHS = new Set([
+  "/calendar",
+  "/home",
+  "/login",
+  "/memory-game",
+  "/mycard",
+  "/mypage",
+  "/onboarding/character",
+  "/onboarding/complete",
+  "/onboarding/fortune",
+  "/onboarding/fortune/draw",
+  "/onboarding/info",
+  "/onboarding/preferencesetup",
+]);
+
 const isAuthScreen = computed(() => route.path.startsWith("/login"));
+const usesBrightPageBackground = computed(() => BRIGHT_BACKGROUND_PATHS.has(route.path));
 
 const providerLabel = computed(() => {
   const provider = currentUser.value?.provider;
@@ -80,6 +106,22 @@ const providerLabel = computed(() => {
 const profileInitial = computed(() => {
   const name = currentUser.value?.nickname || currentUser.value?.email || "U";
   return name.trim().charAt(0).toUpperCase();
+});
+
+const characterAssetFolders = {
+  pori: "redpanda",
+  kkami: "cat",
+  toto: "otter",
+  yeoul: "bird",
+  redpanda: "redpanda",
+  cat: "cat",
+  otter: "otter",
+  bird: "bird",
+};
+
+const profileAvatarSrc = computed(() => {
+  const folder = characterAssetFolders[currentUser.value?.character] || "cat";
+  return `/characters/${folder}/default.png`;
 });
 
 function normalizeUser(payload) {
@@ -230,6 +272,27 @@ function starStyle(i) {
   background: #fff;
 }
 
+#app.bright-background {
+  background: url("./assets/bg-main.png") center center / cover fixed no-repeat !important;
+  background-blend-mode: normal !important;
+}
+
+#app.bright-background > :is(
+  .view-card,
+  .memory-game-view,
+  .mind-card-page,
+  .onboarding-complete-view,
+  .app-shell
+) {
+  background: transparent !important;
+  background-blend-mode: normal !important;
+}
+
+#app.bright-background > .login-screen .login-main {
+  background: transparent !important;
+  background-blend-mode: normal !important;
+}
+
 .starfield {
   position: fixed;
   inset: 0;
@@ -283,21 +346,21 @@ function starStyle(i) {
 }
 
 .brand-mark {
-  width: 46px;
-  height: 46px;
+  width: 50px;
+  height: 50px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #e73e65, #ee5d5f 48%, #e77e6e);
-  overflow: hidden;
-  box-shadow: 0 0 26px rgba(231, 62, 101, 0.36);
+  border-radius: 0;
+  background: transparent !important;
+  overflow: visible;
+  box-shadow: none !important;
 }
 
 .brand-mark img {
   display: block;
-  width: 86%;
-  height: 86%;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
 }
 
@@ -388,6 +451,17 @@ function starStyle(i) {
   color: #fff;
   font-size: 16px;
   font-weight: 950;
+}
+
+.avatar {
+  overflow: hidden;
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
 }
 
 .profile-text {

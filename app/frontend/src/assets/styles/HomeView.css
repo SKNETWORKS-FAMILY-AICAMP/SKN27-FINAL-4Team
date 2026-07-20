@@ -845,3 +845,92 @@
     background-size: contain !important;
   }
 }
+
+
+/* --- feature card inner layout (feature-copy wrapper aware) --- */
+#app .home-view .feature-card {
+  grid-template-columns: 56px minmax(0, 1fr) 40px !important;
+  grid-template-rows: auto auto !important;
+  row-gap: 6px !important;
+}
+
+#app .home-view .feature-card .feature-copy {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  min-width: 0 !important;
+  display: grid !important;
+  gap: 6px !important;
+  text-align: left !important;
+}
+
+#app .home-view .feature-card .feature-copy strong,
+#app .home-view .feature-card .feature-copy small {
+  display: block !important;
+  white-space: pre-line !important;
+}
+
+#app .home-view .feature-card .feature-meta {
+  grid-column: 2 !important;
+  grid-row: 2 !important;
+  justify-self: start !important;
+  color: #ffcf9e !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+  white-space: nowrap !important;
+}
+
+#app .home-view .feature-card .feature-arrow {
+  grid-column: 3 !important;
+  grid-row: 1 / span 2 !important;
+  width: 38px !important;
+  height: 38px !important;
+  display: grid !important;
+  place-items: center !important;
+  align-self: center !important;
+  border: 1px solid rgba(255, 245, 238, 0.24) !important;
+  border-radius: 50% !important;
+  color: rgba(255, 245, 238, 0.85) !important;
+  font-size: 22px !important;
+}
+
+#app .home-view .feature-card .feature-icon {
+  grid-row: 1 / span 2 !important;
+}
+
+
+/* --- final: match target mockup --- */
+#app .home-copy-zone h1 {
+  max-width: 880px !important;
+  font-size: clamp(40px, 3vw, 52px) !important;
+}
+
+#app .home-view .tarot-only-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  width: 100% !important;
+  max-width: none !important;
+}
+
+#app .home-view .tarot-game-action {
+  grid-column: auto !important;
+}
+
+
+/* --- final order/spans: 마음카드, 캐릭터카드, 카드운세 one row --- */
+#app .home-view .tarot-game-action.mycard-action {
+  grid-column: auto !important;
+  order: 1 !important;
+}
+
+#app .home-view .tarot-game-action.memory-game-action {
+  grid-column: auto !important;
+  order: 2 !important;
+}
+
+#app .home-view .tarot-game-action.fortune-action {
+  grid-column: auto !important;
+  order: 3 !important;
+}
+
+#app .home-copy-zone h1 {
+  font-size: clamp(38px, 2.6vw, 46px) !important;
+}

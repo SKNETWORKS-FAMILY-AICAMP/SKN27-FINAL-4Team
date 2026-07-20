@@ -74,6 +74,9 @@
           <div class="ctrl-btns">
             <button class="ctrl-btn" @click="toggleSecret">🔒 시크릿챗</button>
           </div>
+          <div v-if="displayCharacter.quote" class="char-quote">
+            {{ displayCharacter.quote }}
+          </div>
         </template>
 
         <div v-else class="secret-note">
@@ -90,6 +93,10 @@
           :class="msg.role"
         >
           <!-- 감정 라벨(슬픔 모드 등)은 화면에 표시하지 않음 — 친구 컨셉 (분석은 뒤에서만) -->
+          <div v-if="msg.role !== 'user'" class="char-msg-meta">
+            <img class="bubble-avatar" :src="displayCharacterImage" :alt="displayCharacter.name">
+            <span class="bubble-char-name">{{ displayCharacter.name }}</span>
+          </div>
           <div class="bubble" :class="msg.role === 'user' ? 'bubble-user' : 'bubble-char'">
             <img v-if="msg.image" :src="msg.image" class="bubble-img" alt="첨부 이미지" />
             <span v-if="msg.content" class="bubble-text">{{ (msg.displayed !== undefined ? msg.displayed : msg.content) || '…' }}</span>
@@ -100,6 +107,19 @@
             {{ msg.suggestLabel }}
           </button>
 
+        </div>
+
+        <div v-if="showQuickReplies" class="quick-replies" aria-label="감정 빠른 답장">
+          <button
+            v-for="reply in quickReplies"
+            :key="reply.text"
+            type="button"
+            class="quick-chip"
+            @click="sendQuickReply(reply.text)"
+          >
+            <span aria-hidden="true">{{ reply.icon }}</span>
+            {{ reply.text }}
+          </button>
         </div>
 
         <div v-if="isTyping" class="typing-indicator">
@@ -200,28 +220,32 @@ const CHARACTER_META = {
 
 const DISPLAY_CHARACTER_META = {
   otter: {
-    name: '수달',
+    name: '토토',
     color: '#7DD3FC',
     bg: 'rgba(125,211,252,0.18)',
     backendCharacter: 'toto',
+    quote: '오늘 마음은 내가 옆에서 같이 정리해줄게 ♥',
   },
   cat: {
     name: '까미',
     color: '#C4B5FD',
     bg: 'rgba(196,181,253,0.18)',
     backendCharacter: 'kkami',
+    quote: '피하고 싶은 마음까지 천천히 살펴볼까?',
   },
   redpanda: {
     name: '포리',
     color: '#5EEAD4',
     bg: 'rgba(94,234,212,0.18)',
     backendCharacter: 'pori',
+    quote: '싫은 날엔, 너의 빈틈도 내가 안아줄게 ♥',
   },
   bird: {
     name: '여울',
     color: '#FBBF77',
     bg: 'rgba(251,191,119,0.18)',
     backendCharacter: 'yeoul',
+    quote: '괜찮아, 천천히 말해도 내가 듣고 있을게 ♥',
   },
 }
 
@@ -575,6 +599,23 @@ function onPasteImage(e) {
 }
 function clearImage() { attachedImage.value = null }
 
+const quickReplies = [
+  { icon: '😢', text: '자꾸 눈물이 났어' },
+  { icon: '😶', text: '아무 이유 없이 지쳤어' },
+  { icon: '❤️', text: '누군가에게 위로 받고 싶었어' },
+]
+const quickReplyUsed = ref(false)
+const showQuickReplies = computed(() =>
+  !quickReplyUsed.value && !isTyping.value && messages.value.filter((m) => m.role === 'user').length === 0,
+)
+
+function sendQuickReply(text) {
+  if (isTyping.value) return
+  quickReplyUsed.value = true
+  inputText.value = text
+  sendMessage()
+}
+
 async function sendMessage() {
   const content = inputText.value.trim()
   const image = attachedImage.value
@@ -661,7 +702,7 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   inset: 0;
   z-index: 0;
   background-size: cover;
-  background-position: center 30%;
+  background-position: center 74%;
   background-repeat: no-repeat;
   overflow: hidden;
 }
@@ -1289,6 +1330,72 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   }
 }
 
+
+/* ── 2026-07: 채팅 UI 보강 (인용카드·퀵리플라이·말풍선 아바타) ── */
+.char-quote {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 217, 164, 0.28);
+  border-radius: 14px;
+  background: rgba(255, 245, 238, 0.06);
+  color: #ffe9c9;
+  font-size: 13.5px;
+  line-height: 1.6;
+  text-align: center;
+  word-break: keep-all;
+}
+
+.char-msg-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 6px;
+}
+
+.bubble-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 245, 238, 0.18);
+  padding: 3px;
+}
+
+.bubble-char-name {
+  color: rgba(255, 245, 238, 0.85);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.quick-replies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 0 4px 44px;
+}
+
+.quick-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 18px;
+  border: 1px solid rgba(255, 217, 164, 0.3);
+  border-radius: 999px;
+  background: rgba(30, 14, 44, 0.62);
+  color: #ffeedd;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+}
+
+.quick-chip:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 140, 170, 0.6);
+  background: rgba(60, 26, 70, 0.72);
+}
+
 </style>
-
-

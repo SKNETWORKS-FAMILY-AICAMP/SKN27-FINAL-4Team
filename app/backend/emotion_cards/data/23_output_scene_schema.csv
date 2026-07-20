@@ -1,13 +1,23 @@
 ﻿field_name,data_type,required,allowed_source,description,validation_rule
-scene_version,STRING,예,고정값,스펙 버전,
+scene_version,STRING,예,고정값,장면 스펙 버전 2.1 timeline,2.1-timeline
 character_id,STRING,예,사용자 프로필,선택 캐릭터,
 character_reference_asset,STRING,예,캐릭터 자산,참조 이미지,
 primary_emotion,ENUM,조건부,02_feature_codes,4개 감정,
+initial_emotion,ENUM,아니오,분석 타임라인,가장 이른 감정,
+final_emotion,ENUM,아니오,분석 타임라인,마지막 감정이며 장면의 주 감정,primary_emotion과 일치
+secondary_emotion,ENUM,아니오,분석 타임라인,이전의 서로 다른 감정,인물의 현재 표정을 지배하지 않음
+emotion_transition,STRING,아니오,분석 타임라인,초기 감정에서 마지막 감정으로의 변화,
+initial_weather,ENUM,아니오,분석 타임라인,이전 날씨,
+final_weather,ENUM,아니오,분석 타임라인,마지막 날씨,
+weather_transition,ENUM,아니오,분석 타임라인,날씨 변화,
+scene_weather,ENUM,아니오,분석 타임라인,마지막 날씨와 이전 흔적을 합성한 날씨 후보,
+scene_time,OBJECT,아니오,분석 타임라인,시간 앵커·범위·출처·신뢰도,추론 범위는 하드 시각 사실로 사용 금지
+timeline,ARRAY,아니오,분석 타임라인,시간순 절별 감정·날씨·시간 근거,원문 순서 유지
 state_tags,ARRAY,아니오,02_feature_codes,최대 3개,
 event_type_id,ENUM,예,03_event_types,미확인 EVT_UNSPECIFIED,
 event_outcome,ENUM,예,분석 결과,사건 결과,
-energy_code,ENUM,예,02_feature_codes,에너지,
-need_code,ENUM,예,02_feature_codes,필요,
+energy_code,ENUM,아니오,02_feature_codes,에너지,
+need_code,ENUM,아니오,02_feature_codes,필요,
 weather_id,ENUM,예,04_weather_catalog,마음 날씨,
 time_of_day,ENUM,예,아침|낮|노을|저녁|밤|새벽,명시 시간 우선,
 location_id_or_text,ENUM_OR_TEXT,예,05_location_catalog 또는 일반화 장소,정확 주소 금지,
@@ -26,3 +36,33 @@ style_id,ENUM,예,11_style_presets,장면 내용 불변,style_id는 장면 필�
 privacy_level,ENUM,예,분석 결과,익명화 수준,
 safety_status,ENUM,예,SAFE|REFRAMED|REVIEW|BLOCKED,안전 상태,
 mapping_reason_codes,ARRAY,예,적용 rule_id,디버깅,
+raw_text_safe,STRING,예,분석 정제,개인정보가 제거된 입력 요약,max 200
+emotion_cause_type,ENUM,예,분석,감정 원인 유형,allowed code
+emotion_cause_summary,STRING,예,분석,안전한 원인 요약,max 160
+explicit_fact_constraints,ARRAY,예,제약 resolver,명시 사실 하드 제약,structured
+selected_candidate_scores,OBJECT,예,후보 검색,선택 점수와 근거,selected IDs only
+scene_summary_ko,STRING,예,장면 연출,한국어 장면 요약,max 500
+scene_summary_en,STRING,예,장면 연출,영문 장면 요약,max 1000
+subject_description,STRING,예,장면 연출,주체 설명,privacy safe
+body_language,STRING,예,장면 연출,몸짓,scene consistent
+gaze_direction,STRING,예,장면 연출,시선,scene consistent
+action_narrative,STRING,예,장면 연출,행동 서술,candidate-backed
+spatial_relation,STRING,예,장면 연출,공간 관계,coherent
+environment_narrative,STRING,예,장면 연출,환경 서술,candidate-backed
+cause_visualization,STRING,예,장면 연출,원인 가시성,required
+required_visual_cues,ARRAY,예,제약 resolver,필수 시각 단서,minimum enforced
+optional_visual_cues,ARRAY,아니오,장면 연출,선택 단서,max 5
+object_placements,ARRAY,아니오,장면 연출,소품 배치,catalog IDs only
+lighting_narrative,STRING,예,장면 연출,조명 서술,candidate-backed
+palette_narrative,STRING,예,장면 연출,팔레트 서술,candidate-backed
+composition_narrative,STRING,예,장면 연출,구도 서술,candidate-backed
+hard_constraints,OBJECT,예,제약 resolver,필수·금지 제약,structured
+soft_preferences,ARRAY,예,제약 resolver,소프트 선호,scored
+avoid_visuals,ARRAY,예,검증기,금지 시각 요소,hard forbidden included
+evidence_map,OBJECT,예,분석,원문 근거,evidence/source separated
+director_confidence,NUMBER,예,장면 연출,장면 신뢰도,0..1
+validation_status,ENUM,예,검증기,검증 상태,allowed code
+validation_errors,ARRAY,예,검증기,검증 오류,max 20
+repair_count,INTEGER,예,검증기,수정 횟수,0..1
+final_prompt,STRING,아니오,프롬프트 컴파일러,최종 이미지 프롬프트,generation time
+prompt_version,STRING,예,프롬프트 컴파일러,프롬프트 버전,versioned

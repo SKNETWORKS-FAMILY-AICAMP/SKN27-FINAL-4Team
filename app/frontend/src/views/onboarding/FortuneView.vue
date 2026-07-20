@@ -9,6 +9,9 @@ import searchBirdImage from "../../assets/characters/search-bird.png";
 import searchCatImage from "../../assets/characters/search-cat.png";
 import searchOtterImage from "../../assets/characters/search-otter.png";
 import searchRedPandaImage from "../../assets/characters/search-red-panda.png";
+import categorySparkleIcon from "../../assets/icons/tarot-category-sparkle.png";
+import selectedCardsIcon from "../../assets/icons/tarot-selected-cards.png";
+import resultOrbIcon from "../../assets/icons/tarot-result-orb.png";
 
 const emit = defineEmits(["navigate"]);
 const route = useRoute();
@@ -42,7 +45,7 @@ const searchCharacterLabels = {
 
 const categories = [
   { id: "relationship", apiId: "relationship", label: "연애", resultLabel: "연애운" },
-  { id: "work", apiId: "work", label: "업무·학업", resultLabel: "업무·학업운" },
+  { id: "work", apiId: "work", label: "업무·진로", resultLabel: "업무·진로" },
   { id: "money", apiId: "money", label: "금전", resultLabel: "금전운" },
   { id: "success", apiId: "general", label: "성공", resultLabel: "성공운" },
   { id: "general", apiId: "general", label: "총운", resultLabel: "총운" },
@@ -402,8 +405,8 @@ function applyShuffledDeckToSlots() {
 }
 
 function getCardStyle(slot) {
-  const row = Math.floor((slot.index - 1) / 10);
-  const column = (slot.index - 1) % 10;
+  const row = Math.floor((slot.index - 1) / 5);
+  const column = (slot.index - 1) % 5;
   const packet = getHinduPacketIndex(slot);
   const packetOffset = packet >= 0 ? slot.index - HINDU_PACKETS[packet].start : 0;
   const direction = packet % 2 === 0 ? 1 : -1;
@@ -671,15 +674,17 @@ function translateCardName(name) {
 <template>
   <section class="view-card tarot-draw-page">
     <div class="tarot-draw-layout">
-      <article class="glass-panel tarot-main-panel">
+      <article class="glass-panel tarot-main-panel tarot-selection-panel">
         <header class="tarot-draw-header">
-          <button class="back-button" type="button" @click="emit('navigate', 'fortune')">‹</button>
-          <div class="text-area">
-            <p>상황별 카드 운세</p>
-            <h2>직감이 이끄는 카드 3장을 선택해 주세요</h2>
-          </div>
+          <p class="fortune-kicker">
+            <img :src="categorySparkleIcon" alt="" aria-hidden="true">
+            <span>상황별 카드 운세</span>
+          </p>
+          <h2>
+            <span>직감이 이끄는 카드</span>
+            <span>3장을 선택해 주세요</span>
+          </h2>
         </header>
-
 
         <section class="category-section">
           <div class="category-chip-row">
@@ -723,65 +728,49 @@ function translateCardName(name) {
           </div>
         </section>
 
-        <section class="selected-card-zone">
-          <aside class="pick-guide">
-            <span>☝</span>
-            <strong>직감이 이끄는 <br>카드를 선택해 보세요</strong>
-            <p>마음이 이끄는 카드가 지금 당신에게 필요한 이야기를 들려줄 거예요.</p>
-          </aside>
-
-          <div class="selected-slots" aria-label="선택 카드 슬롯">
-            <article v-for="position in MAX_SELECTED_CARDS" :key="position" class="selected-slot">
-              <span>{{ position }}</span>
-              <button
-                v-if="selectedSlots[position - 1]"
-                type="button"
-                class="selected-card-preview"
-                @click="removeSelectedCard(selectedSlots[position - 1].id)"
-              >
-                <img
-                  v-if="getTarotCardImage(selectedSlots[position - 1].card.cardNumber)"
-                  :src="getTarotCardImage(selectedSlots[position - 1].card.cardNumber)"
-                  :alt="`${selectedSlots[position - 1].card.koreanName} 카드`"
-                  :class="{ reversed: selectedSlots[position - 1].orientation === 'reversed' }"
-                >
-                <strong v-else>{{ selectedSlots[position - 1].card.koreanName }}</strong>
-              </button>
-              <div v-else class="empty-slot"></div>
-            </article>
-          </div>
-        </section>
+        <div class="selection-note">
+          <span aria-hidden="true">✦</span>
+          <p>마음이 이끄는 카드가 지금 당신에게<br>필요한 이야기를 들려줄 거예요.</p>
+        </div>
       </article>
 
-      <aside class="glass-panel tarot-result-panel side-panel">
-        <header>
-          <span>♠️</span>
-          <h3>오늘의 타로 결과</h3>
+      <article class="glass-panel selected-card-panel">
+        <header class="panel-title-row">
+          <img :src="selectedCardsIcon" alt="" aria-hidden="true">
+          <h3>선택한 카드</h3>
         </header>
 
-        <section class="result-block">
-          <h4>선택한 카테고리</h4>
-          <p class="category-pill">{{ selectedCategoryData.resultLabel }}</p>
-        </section>
+        <p class="selected-panel-copy">
+          카드 {{ selectedCount }}장을 선택했어요.<br>
+          {{ selectedCount === MAX_SELECTED_CARDS ? "분석을 시작해 볼까요?" : "왼쪽에서 마음이 이끄는 카드를 골라보세요." }}
+        </p>
 
-        <section v-if="selectedSlots.length" class="selected-result-cards">
-          <article v-for="slot in selectedSlots" :key="slot.id">
-            <span>{{ slot.position }}</span>
-            <strong>{{ slot.card.koreanName }}</strong>
-            <small>{{ slot.orientation === "reversed" ? "역방향" : "정방향" }}</small>
+        <div class="selected-slots" aria-label="선택 카드 슬롯">
+          <article v-for="position in MAX_SELECTED_CARDS" :key="position" class="selected-slot">
+            <span>{{ position }}</span>
+            <button
+              v-if="selectedSlots[position - 1]"
+              type="button"
+              class="selected-card-preview"
+              @click="removeSelectedCard(selectedSlots[position - 1].id)"
+            >
+              <img
+                v-if="getTarotCardImage(selectedSlots[position - 1].card.cardNumber)"
+                :src="getTarotCardImage(selectedSlots[position - 1].card.cardNumber)"
+                :alt="`${selectedSlots[position - 1].card.koreanName} 카드`"
+                :class="{ reversed: selectedSlots[position - 1].orientation === 'reversed' }"
+              >
+              <strong v-else>{{ selectedSlots[position - 1].card.koreanName }}</strong>
+            </button>
+            <div v-else class="empty-slot"></div>
+            <strong v-if="selectedSlots[position - 1]" class="selected-slot-name">
+              {{ selectedSlots[position - 1].card.koreanName }}
+            </strong>
+            <small v-if="selectedSlots[position - 1]" class="selected-slot-orientation">
+              {{ selectedSlots[position - 1].orientation === "reversed" ? "역방향" : "정방향" }}
+            </small>
           </article>
-        </section>
-
-        <section class="question-box">
-          <label for="tarot-question">궁금한 내용을 입력해 주세요</label>
-          <textarea
-            id="tarot-question"
-            v-model="question"
-            :maxlength="QUESTION_MAX_LENGTH"
-            placeholder="예) 최근 고민, 궁금한 질문, 상황 등을 자유롭게 적어보세요."
-          ></textarea>
-          <small>{{ question.length }} / {{ QUESTION_MAX_LENGTH }}</small>
-        </section>
+        </div>
 
         <button
           class="btn primary full analyze-button"
@@ -789,6 +778,7 @@ function translateCardName(name) {
           :disabled="!canAnalyze"
           @click="requestTarotReading"
         >
+          <span aria-hidden="true">✦</span>
           {{
             isReadingLoading
               ? "선택한 카드 분석 중..."
@@ -798,12 +788,58 @@ function translateCardName(name) {
           }}
         </button>
 
-        <p v-if="selectedCount < MAX_SELECTED_CARDS && !readingResult" class="result-help">카드 3장을 선택해야 분석할 수 있어요.</p>
+        <p class="selected-panel-help">
+          <span aria-hidden="true">♙</span>
+          {{
+            selectedCount === MAX_SELECTED_CARDS
+              ? "분석 버튼을 누르면 오늘의 타로 결과가 생성됩니다."
+              : "카드 3장을 선택하면 분석을 시작할 수 있어요."
+          }}
+        </p>
+      </article>
+
+      <aside class="glass-panel tarot-result-panel side-panel">
+        <header>
+          <img :src="resultOrbIcon" alt="" aria-hidden="true">
+          <h3>오늘의 타로 결과</h3>
+        </header>
+
+        <section class="result-block">
+          <h4>선택한 카테고리</h4>
+          <p class="category-pill">{{ selectedCategoryData.resultLabel }}</p>
+        </section>
+
+        <section v-if="selectedSlots.length" class="selected-result-summary">
+          <h4>선택한 카드 요약</h4>
+          <div class="selected-result-cards">
+            <article v-for="slot in selectedSlots" :key="slot.id">
+              <img
+                v-if="getTarotCardImage(slot.card.cardNumber)"
+                :src="getTarotCardImage(slot.card.cardNumber)"
+                :alt="`${slot.card.koreanName} 카드`"
+                :class="{ reversed: slot.orientation === 'reversed' }"
+              >
+              <div>
+                <strong>{{ slot.card.koreanName }}</strong>
+                <small>{{ slot.orientation === "reversed" ? "역방향" : "정방향" }}</small>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section v-if="!readingResult" class="result-empty-state">
+          <img :src="resultOrbIcon" alt="" aria-hidden="true">
+          <h4>아직 결과가 생성되지 않았어요</h4>
+          <p>선택한 카드를 분석하면<br>오늘의 타로 결과가 여기에 표시됩니다.</p>
+        </section>
+
         <p v-if="readingError" class="reading-error">{{ readingError }}</p>
 
         <section v-if="readingResult" class="reading-result-card">
-          <h4>{{ selectedCategoryData.resultLabel }} 결과</h4>
-          <p class="streaming-text" :class="{ streaming: isResultStreaming && streamingTarget === 'category' }">{{ displayedCategoryResult }}</p>
+          <div class="reading-message-block">
+            <h4>오늘의 메시지</h4>
+            <p class="streaming-text" :class="{ streaming: isResultStreaming && streamingTarget === 'category' }">{{ displayedCategoryResult }}</p>
+          </div>
 
           <div class="card-reading-list">
             <article v-for="(slot, index) in selectedSlots" :key="`reading-${slot.id}`">
@@ -815,9 +851,13 @@ function translateCardName(name) {
 
         <div class="result-actions">
           <button type="button" :disabled="isShuffling" @click="resetCards">
-            {{ isShuffling ? "카드 섞는 중" : "새 카드 섞기" }}
+            <span aria-hidden="true">⤨</span>
+            {{ isShuffling ? "카드 섞는 중" : "새 카드 뽑기" }}
           </button>
-          <button type="button" @click="emit('navigate', 'home')">홈으로 돌아가기</button>
+          <button type="button" @click="emit('navigate', 'home')">
+            <span aria-hidden="true">⌂</span>
+            홈으로 돌아가기
+          </button>
         </div>
       </aside>
     </div>
@@ -1722,6 +1762,473 @@ function translateCardName(name) {
   .reading-loading-character {
     width: min(74vw, 200px);
     height: 200px;
+  }
+}
+
+/* 2026-07 타로 결과 시안 정렬 */
+.tarot-draw-page {
+  padding: 16px 28px 24px;
+}
+
+.tarot-draw-layout {
+  width: min(100%, 1440px);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
+.tarot-main-panel,
+.selected-card-panel,
+.tarot-result-panel {
+  min-width: 0;
+  min-height: 730px;
+  border: 1px solid rgba(255, 116, 180, 0.34);
+  border-radius: 22px;
+  background:
+    linear-gradient(150deg, rgba(48, 21, 67, 0.94), rgba(20, 9, 40, 0.92)),
+    rgba(35, 14, 58, 0.9);
+  box-shadow:
+    0 22px 64px rgba(9, 2, 26, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.tarot-main-panel {
+  align-content: start;
+  gap: 12px;
+  padding: 24px 30px;
+}
+
+.tarot-draw-header {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.fortune-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: #ffd37a;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.fortune-kicker img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  transform: scale(1.55);
+  transform-origin: center;
+}
+
+.tarot-draw-header h2 {
+  font-family: var(--font-ui) !important;
+  font-size: 30px;
+  font-weight: 900 !important;
+  line-height: 1.35;
+}
+
+.tarot-draw-header h2 span {
+  display: block;
+  white-space: nowrap;
+}
+
+.category-chip-row {
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+.category-chip-row button {
+  min-width: 0;
+  min-height: 34px;
+  flex: 1 1 auto;
+  padding: 0 14px;
+  font-size: 13px;
+}
+
+.section-title-row strong {
+  font-size: 13px;
+}
+
+.tarot-spread-panel {
+  --card-width: 64px;
+  --card-height: 94px;
+  min-height: 414px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+
+.tarot-back-card,
+.tarot-spread-panel.shuffle-deal .tarot-back-card {
+  top: calc(4px + (var(--card-row) * 103px));
+  left: calc(10% + (var(--card-col) * 20%));
+}
+
+.tarot-back-card img {
+  border-radius: 5px;
+  box-shadow: 0 8px 16px rgba(7, 2, 20, 0.42);
+}
+
+.tarot-back-card.selected img {
+  outline-width: 2px;
+  border-width: 1px;
+  box-shadow:
+    0 0 0 3px rgba(248, 79, 155, 0.28),
+    0 10px 22px rgba(248, 79, 155, 0.32),
+    0 0 24px rgba(255, 138, 87, 0.22);
+}
+
+.selection-note {
+  min-height: 66px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  margin-top: 4px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.selection-note > span {
+  color: #ffe36f;
+  font-size: 34px;
+  text-align: center;
+  text-shadow: 0 0 18px rgba(255, 211, 122, 0.5);
+}
+
+.selection-note p {
+  margin: 0;
+  color: rgba(255, 245, 230, 0.74);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.selected-card-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+}
+
+.panel-title-row,
+.tarot-result-panel > header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.panel-title-row img,
+.tarot-result-panel > header img {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  object-fit: contain;
+  transform-origin: center;
+}
+
+.panel-title-row img {
+  transform: scale(1.45);
+}
+
+.tarot-result-panel > header img {
+  transform: scale(1.35);
+}
+
+.panel-title-row h3,
+.tarot-result-panel h3 {
+  margin: 0;
+  color: #fff7df;
+  font-family: var(--font-ui) !important;
+  font-size: 24px;
+  font-weight: 900 !important;
+  line-height: 1.2;
+}
+
+.selected-panel-copy {
+  margin: 0;
+  color: rgba(255, 245, 230, 0.72);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.selected-card-panel .selected-slots {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  align-items: start;
+  margin: 34px 0 22px;
+}
+
+.selected-card-panel .selected-slot {
+  height: 245px;
+  box-sizing: border-box;
+  align-content: start;
+  gap: 8px;
+  padding: 12px 8px 16px;
+  border: 1px solid rgba(255, 116, 180, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.selected-card-panel .selected-slot > span {
+  width: 28px;
+  height: 28px;
+  font-size: 15px;
+}
+
+.selected-card-panel .empty-slot,
+.selected-card-panel .selected-card-preview {
+  width: 90px;
+  height: 132px;
+  border-radius: 8px;
+}
+
+.selected-slot-name {
+  width: 100%;
+  color: #fff7df;
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.selected-slot-orientation {
+  color: rgba(255, 245, 230, 0.65);
+  font-size: 12px;
+}
+
+.selected-card-panel .analyze-button {
+  width: calc(100% - 48px);
+  min-height: 58px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: auto auto 0;
+  border-radius: 12px;
+  font-size: 17px;
+}
+
+.selected-card-panel .analyze-button span {
+  font-size: 21px;
+}
+
+.selected-panel-help {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 8px;
+  margin: 18px 0 4px;
+  color: rgba(255, 245, 230, 0.62);
+  font-size: 12.5px;
+  line-height: 1.7;
+  text-align: center;
+}
+
+.tarot-result-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px 20px 18px;
+}
+
+.result-block {
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 14px;
+  border-radius: 12px;
+}
+
+.result-block h4 {
+  white-space: nowrap;
+}
+
+.category-pill {
+  padding: 6px 14px;
+  border: 0;
+  background: rgba(147, 76, 137, 0.38);
+  font-size: 13px;
+}
+
+.selected-result-summary {
+  display: grid;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid rgba(255, 116, 180, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.selected-result-summary h4 {
+  margin: 0;
+  color: rgba(255, 245, 230, 0.82);
+  font-size: 13px;
+}
+
+.selected-result-cards {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.selected-result-cards article {
+  min-width: 0;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 7px;
+  padding: 0;
+  background: transparent;
+}
+
+.selected-result-cards article > img {
+  width: 36px;
+  height: 52px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.selected-result-cards article > img.reversed {
+  transform: rotate(180deg);
+}
+
+.selected-result-cards article > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.selected-result-cards strong {
+  overflow: hidden;
+  color: #fff7df;
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selected-result-cards small {
+  font-size: 11px;
+}
+
+.result-empty-state {
+  min-height: 350px;
+  flex: 1;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 10px;
+  padding: 24px;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.result-empty-state img {
+  width: 116px;
+  height: 116px;
+  object-fit: contain;
+  transform: scale(1.2);
+  transform-origin: center;
+}
+
+.result-empty-state h4 {
+  margin: 4px 0 0;
+  color: #fff7df;
+  font-size: 18px;
+}
+
+.result-empty-state p {
+  margin: 0;
+  color: rgba(255, 245, 230, 0.62);
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.reading-result-card {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.reading-message-block,
+.card-reading-list article {
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid rgba(255, 116, 180, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.reading-message-block h4,
+.card-reading-list strong {
+  margin: 0;
+  color: #ffd37a;
+  font-size: 13px;
+}
+
+.reading-result-card p {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.card-reading-list {
+  gap: 8px;
+  margin-top: 0;
+}
+
+.result-actions {
+  gap: 10px;
+  margin-top: auto;
+}
+
+.result-actions button {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.tarot-bottom-note {
+  width: min(100%, 1440px);
+  min-height: 50px;
+  margin-top: 12px;
+  border-radius: 22px;
+}
+
+@media (max-width: 1180px) {
+  .tarot-draw-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .tarot-main-panel,
+  .selected-card-panel,
+  .tarot-result-panel {
+    min-height: auto;
+  }
+
+  .selected-card-panel .selected-slots {
+    margin-top: 10px;
+  }
+}
+
+@media (max-width: 620px) {
+  .category-chip-row {
+    flex-wrap: wrap;
+  }
+
+  .selected-card-panel .selected-slots,
+  .selected-result-cards {
+    grid-template-columns: 1fr;
   }
 }
 </style>

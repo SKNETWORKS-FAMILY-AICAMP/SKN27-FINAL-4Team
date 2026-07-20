@@ -1,31 +1,8 @@
-@font-face {
-  font-family: "SUIT Variable";
-  src: url("/fonts/SUIT-Variable.ttf") format("truetype");
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Bagel Fat One";
-  src: url("/fonts/BagelFatOne-Regular.ttf") format("truetype");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Gowun Dodum";
-  src: url("/fonts/GowunDodum-Regular.ttf") format("truetype");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
 :root {
-  --font-ui: "SUIT Variable", "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
-  --font-display: "Bagel Fat One", "SUIT Variable", "Pretendard", sans-serif;
-  --font-soft: "Gowun Dodum", "SUIT Variable", "Pretendard", sans-serif;
+  --font-ui: "Gmarket Sans", "Pretendard", "Noto Sans KR", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  --font-display: "Cafe24 Ssurround", "Gmarket Sans", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  --font-soft: "MaruBuri", "Noto Serif KR", "Apple Color Emoji", "Segoe UI Emoji", serif;
+  --font-emotional: "MaruBuri", "Noto Serif KR", "Apple Color Emoji", "Segoe UI Emoji", serif;
   --color-russian-violet: #321849;
   --color-amaranth-purple: #931672;
   --color-paradise-pink: #E73E65;
