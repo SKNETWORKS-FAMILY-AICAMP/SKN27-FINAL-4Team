@@ -122,6 +122,7 @@ etl/data/raw/
 !ai/emotion/exp1_results.json
 !ai/emotion/ft_final_metrics.json
 ai/emotion/artifacts/
+ai/emotion/artifacts_aihub/
 # artifacts_ft는 본체(safetensors)만 제외 — 나머지 소파일은 커밋 허용 (79행 참조)
 !ai/emotion/artifacts_ft/*.json
 !ai/emotion/artifacts_ft/vocab.txt
