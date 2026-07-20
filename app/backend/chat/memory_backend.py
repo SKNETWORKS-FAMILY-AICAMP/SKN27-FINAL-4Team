@@ -20,3 +20,5 @@ recall = backend.recall
 capture_async = backend.capture_async
 is_enabled = backend.is_enabled
 upcoming = getattr(backend, 'upcoming', lambda uid, days=None: '')
+panel_summary = getattr(backend, 'panel_summary',   # v1엔 없음 → 빈 패널 (롤백 안전)
+                        lambda uid: {'upcoming': [], 'prefs': [], 'people': [], 'recent': []})

@@ -203,7 +203,16 @@ def _extract(message):
         "events: {name, date, date_end, place, topic(취업/건강/연애/가족/학업/돈/취미 등 "
         "한 단어), people(배열), cause(이유 텍스트), caused_by(원인인 같은 메시지 내 다른 "
         "사건 이름)}\n"
+        "★place: 발화에 장소가 있으면 반드시 place 필드에 분리해 담아라 — 이름에 뭉치지 "
+        "말 것 ('성수동 카페에서 수아랑 만나기로' → name '수아와 만남', place '성수동 카페' / "
+        "'홍대에서 놀았어' → place '홍대'). 장소 언급이 없으면 생략.★\n"
+        "★date 판별: 약속·계획·기념일·시험처럼 '그 날짜가 챙길 의미가 있는' 사건에만 담아라. "
+        "이미 일어난 일상 서술('점심 못 먹었어', '오늘 힘들었어')에 오늘 날짜를 붙이지 마라 — "
+        "일정이 아닌 것이 다가오는 일로 둔갑한다.★\n"
         "relations: {person, relation(가족/친구/연인/직장/반려동물)}\n"
+        "★relations 판별: 사용자가 '자기 사람'으로 선언·서사한 관계만 담아라 "
+        "('내 친구 수아', '우리 엄마', '회사 동료 지현'). 사건 서술에 역할로 등장만 한 "
+        "인물(팀장님·의사·사장 등)은 relations 금지 — 그 사건 events의 people에만.★\n"
         "preferences: {topic, polarity: 호|오} — ★topic은 좋아하는 대상 그대로"
         "('민트초코','클라이밍'). 카테고리('맛','취미')로 뭉개면 잊어줘가 그 대상을 "
         "못 찾는다★\n"
@@ -298,6 +307,28 @@ def _derive_invalidations_from_closures(data, message):
                 print(f'[graph_memory_v2_base] 만료 대상 발화 파싱: → {target} (최후 방어)')
     if derived:
         data['invalidations'] = derived
+    return data
+
+
+def _derive_forget_from_speech(data, message):
+    """잊어줘 최후 방어 (2026-07-20 실측: '점심 못 먹음 잊어줘' 2연속 무시) —
+    발화에 잊어줘 명시가 있는데 추출이 forget invalidation을 안 냈으면
+    발화에서 대상을 결정적으로 파싱해 합성. 이후 해석기(토큰 AND→LLM)가 실명 매칭."""
+    if not _FORGET_HINT.search(message or ''):
+        return data
+    invs = [i for i in (data.get('invalidations') or []) if isinstance(i, dict)]
+    if any(i.get('forget') for i in invs):
+        return data
+    m = re.search(r'([가-힣A-Za-z0-9 ]{2,24}?)\s*(?:얘기|이야기|것|건|거)?\s*'
+                  r'(?:는|은|도|를|을)?\s*(?:잊어|기억하지\s*마|지워|꺼내지\s*마)', message or '')
+    if m:
+        toks = [t for t in m.group(1).split() if len(t) >= 2
+                and t not in ('근데', '그냥', '이제', '제발', '그거', '아까', '방금')]
+        target = ' '.join(toks[-3:]).strip()
+        if len(target) >= 2:
+            invs.append({'kind': 'event', 'name': target, 'forget': True})
+            data['invalidations'] = invs
+            print(f'[graph_memory_v2_base] 잊어줘 발화 파싱: → {target} (최후 방어)')
     return data
 
 
@@ -680,6 +711,7 @@ def _capture(uid, message, crisis=False):
                                ('events', 'relations', 'preferences', 'invalidations')):
             return
         data = _demote_unhinted_forget(data, message)   # forget 오분류 강등 (결정적 게이트)
+        data = _derive_forget_from_speech(data, message)   # 잊어줘 누락 역합성 (최후 방어)
         data = _derive_invalidations_from_closures(data, message)   # 만료 누락 역합성 (S03 방어)
         data = _resolve_invalidations(drv, uid, data, message)   # 해석 먼저 — 종결 합성이 실명(實名)을 쓰게
         data = _synthesize_closures(data, message)
@@ -926,6 +958,56 @@ def upcoming(user_id, days=None):
         return '\n'.join('- ' + x for x in out)
     except Exception:
         return ''
+
+
+def panel_summary(user_id):
+    """기억 패널 (UI #3, 2026-07-20) — 좌측 패널 '기억하는 것' 카드용 구조화 요약.
+    recall과 달리 LLM 무관·결정적 — 그래프 상태를 그대로 JSON으로 (프롬프트 오염 없음).
+    소비자: views.memory_panel → 프론트 ChatView 좌측 패널."""
+    empty = {'upcoming': [], 'prefs': [], 'people': [], 'recent': []}
+    if not user_id or not is_enabled():
+        return empty
+    try:
+        today = _today()
+        with _get_driver().session() as s:
+            up = s.run(
+                'MATCH (u:User {uid:$uid})-[h:HAS_EVENT]->(e:Event) '
+                'WHERE h.valid_to IS NULL AND e.suppressed IS NULL '
+                '  AND e.occurs_start IS NOT NULL AND e.occurs_start >= $today '
+                'RETURN e.name AS n, e.occurs_start AS d ORDER BY d ASC LIMIT 4',
+                uid=user_id, today=today.isoformat()).data()
+            prefs = s.run(
+                'MATCH (u:User {uid:$uid})-[r:PREFERS]->(t:Topic) '
+                'WHERE r.valid_to IS NULL '
+                'RETURN t.name AS n, r.polarity AS p '
+                'ORDER BY r.created_at DESC LIMIT 3', uid=user_id).data()
+            people = s.run(
+                'MATCH (u:User {uid:$uid})-[r:RELATES_TO]->(p:Person) '
+                'WHERE r.valid_to IS NULL AND p.suppressed IS NULL '
+                'RETURN DISTINCT p.name AS n, r.relation AS rel LIMIT 3',
+                uid=user_id).data()
+            recent = s.run(
+                'MATCH (u:User {uid:$uid})-[h:HAS_EVENT]->(e:Event) '
+                'WHERE h.valid_to IS NULL AND e.suppressed IS NULL '
+                '  AND (e.occurs_start IS NULL OR e.occurs_start < $today) '
+                'RETURN e.name AS n ORDER BY h.created_at DESC LIMIT 3',
+                uid=user_id, today=today.isoformat()).data()
+        out = {'upcoming': [], 'prefs': [], 'people': [], 'recent': []}
+        for r in up:
+            try:
+                dd = (datetime.date.fromisoformat(r['d']) - today).days
+            except Exception:
+                continue
+            out['upcoming'].append({'name': r['n'], 'date': r['d'], 'dday': dd})
+        out['prefs'] = [{'topic': r['n'], 'polarity': r.get('p') or '호'}
+                        for r in prefs if r.get('n')]
+        out['people'] = [{'name': r['n'], 'relation': r.get('rel') or ''}
+                         for r in people if r.get('n')]
+        out['recent'] = [r['n'] for r in recent if r.get('n')]
+        return out
+    except Exception as e:
+        print(f'[graph_memory_v2_base] 패널 요약 실패: {e}')
+        return empty
 
 
 # ── 미해결 추적 (open loop) — 종료일 기준 (C1: 기간 사건은 끝나야 '지남') ──

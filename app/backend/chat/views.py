@@ -309,6 +309,19 @@ def chat_turn(request):
 @api_view(['GET'])
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([AllowAny])
+def memory_panel(request):
+    """기억 패널 (UI #3, 2026-07-20) — 좌측 패널 '기억하는 것' 카드 데이터.
+    비로그인·시크릿·Neo4j 미설정이면 빈 패널 (프론트는 섹션 숨김)."""
+    user = request.user if request.user.is_authenticated else None
+    if user is None:
+        return _ok({'upcoming': [], 'prefs': [], 'people': [], 'recent': []})
+    from chat import memory_backend   # 지연 임포트 (chat_turn과 동일 스타일 — Neo4j 미설정 시 기동 무영향)
+    return _ok(memory_backend.panel_summary(user.id))
+
+
+@api_view(['GET'])
+@authentication_classes([CsrfExemptSessionAuthentication])
+@permission_classes([AllowAny])
 def tts_status(request, task_id):
     """TTS 폴링 — pending/done/failed. done이면 audio_url에서 1회 다운로드."""
     task = tts_service.get_status(task_id)
