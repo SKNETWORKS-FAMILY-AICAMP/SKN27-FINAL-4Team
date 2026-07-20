@@ -28,7 +28,16 @@ docs/김한솔팀장/기억시스템_3계층_설계.md
 docs/김한솔팀장/전체_프로세스_흐름도_그림.md
 docs/김한솔팀장/데이터_정제_명세_김한솔.md
 docs/김한솔팀장/챗봇_컨셉개편_친구모드_기획서.md
+docs/김한솔팀장/백엔드_셋업_체크리스트.md
+docs/김한솔팀장/마음리포트_멀티에이전트_설계안_협의용.md
+docs/김한솔팀장/story.md
+docs/김한솔팀장/기억시스템_설명서_선생님용.md
+docs/김한솔팀장/데모_시연_시나리오_김한솔.md
+docs/백엔드_셋업_체크리스트.md
 docs/김한솔팀장/\[데이터 수집 및 저장\]*
+docs/김한솔팀장/기억시스템_*
+docs/김한솔팀장/운영_배포_체크리스트.md
+docs/김한솔팀장/코드감사_리포트_*.md
 docs/발표_이미지/
 docs/중간발표_이미지/
 docs/빈틈사이_발표대본_김한솔.md
@@ -66,8 +75,9 @@ etl/data/kcelectra_train_clean.jsonl
 etl/data/aug_voice.jsonl
 etl/data/aug_wellness.jsonl
 
-# 파인튜닝 모델 (대용량 · 팀 공유는 Drive로, 재생성: 실험2 노트북 최종 학습 셀)
-ai/emotion/artifacts_ft/
+# 파인튜닝 모델: 토크나이저·설정·성적표는 깃 공유, 본체(safetensors 488MB)만 제외
+# (GitHub 100MB 하드 리밋 — 본체는 Drive 공유, 재생성: 실험2 노트북 최종 학습 셀)
+ai/emotion/artifacts_ft/model.safetensors
 
 # IDE 설정
 .vscode/
@@ -110,6 +120,14 @@ etl/data/raw/
 # 커밋 허용 예외 — 자체 제작(재배포 문제 없음) · 실험 결과 기록
 !etl/data/chat_eval_set.jsonl
 !ai/emotion/exp1_results.json
-ai/emotion/artifacts*/
+!ai/emotion/ft_final_metrics.json
+ai/emotion/artifacts/
+ai/emotion/artifacts_aihub/
+# artifacts_ft는 본체(safetensors)만 제외 — 나머지 소파일은 커밋 허용 (79행 참조)
+!ai/emotion/artifacts_ft/*.json
+!ai/emotion/artifacts_ft/vocab.txt
 
 # 
+# RAGAS 교차 검증 전용 venv (프로젝트 venv와 분리 — 절대 커밋 금지)
+.venv-ragas/
+ragas_results.json

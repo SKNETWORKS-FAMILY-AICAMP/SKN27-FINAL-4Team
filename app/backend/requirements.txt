@@ -22,7 +22,7 @@ langchain-core
 langchain-openai>=0.2.0
 langchain-groq>=0.2.0
 langgraph>=0.3.0
-requests>=2.31.0                # 외부 API (날씨, ElevenLabs TTS — 별도 SDK 불필요)
+requests>=2.31.0                # 외부 API (날씨, TTS: OpenAI/ElevenLabs/Typecast — 별도 SDK 불필요)
 
 # ── 감정분류 추론 (KcELECTRA + XGBoost — ai/emotion) ──
 torch
@@ -35,3 +35,4 @@ pandas>=2.0.0                   # 학습·데이터셋 스크립트 (ai/emotion)
 
 # ── 기억 의미 검색 임베딩 (ko-sroberta — chat/embedder.py, 미설치 시 키워드 폴백) ──
 sentence-transformers>=2.2.0
+cryptography                # DB 채팅 암호화 (Fernet, 팀 안건 2026-07-15)

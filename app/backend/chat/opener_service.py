@@ -2,7 +2,7 @@
 """첫인사(opener) 생성 — 기억·날씨·시간대·닉네임 기반 (강사님 피드백 · 친구 컨셉).
 
 감정을 묻지 않고, 친한 친구가 먼저 말 걸듯 자연스럽게 시작한다.
-우선순위: ① 기억 기반(재방문·user_memory 있으면 지난 얘기를 이어감)
+우선순위: ① 기억 기반(재방문·그래프 기억이 있으면 지난 얘기를 이어감)
          ② 날씨(좌표 있을 때) ③ 시간대 템플릿
 - 시간대: 아침/점심/오후/저녁/밤
 - 닉네임: 로그인 사용자의 nickname, 없으면 '너'
@@ -75,41 +75,38 @@ def _fetch_weather(lat, lon) -> str:
 
 
 def _memory_opener(user_id: int, nickname: str) -> str | None:
-    """재방문 유저 — user_memory 요약으로 지난 얘기를 이어가는 첫인사.
-    요약이 없거나 LLM 실패 시 None (템플릿 폴백)."""
+    """재방문 유저 — 그래프 기억(recall)으로 지난 얘기를 이어가는 첫인사.
+    (2026-07-16 요약 계층 은퇴 — user_memory 대신 그래프 단독.)
+    기억이 없거나 LLM 실패 시 None (템플릿 폴백)."""
     try:
-        from chat.models import UserMemory
-        summary = (
-            UserMemory.objects
-            .filter(user_id=user_id)
-            .values_list('summary_text', flat=True)
-            .first()
-        )
-        if not summary or not summary.strip():
-            summary = '(요약 없음)'
+        from chat import memory_backend
+        try:
+            memory_text = memory_backend.recall(user_id) or ''
+        except Exception:
+            memory_text = ''
 
-        # 다가오는 일정(그래프 기억) — 있으면 첫인사가 먼저 챙긴다 (2026-07-12)
+        # 다가오는 일정 — 있으면 첫인사가 먼저 챙긴다 (2026-07-12)
         up = ''
         try:
-            from chat import graph_memory
-            up = graph_memory.upcoming(user_id)
+            up = memory_backend.upcoming(user_id)
         except Exception:
             up = ''
-        if summary == '(요약 없음)' and not up:
+        if not memory_text.strip() and not up:
             return None
+        summary = memory_text.strip() or '(없음)'
 
         from ai.agents.llm import get_llm
         resp = get_llm(temperature=0.9, max_tokens=100).invoke([
             ('system',
-             "너는 사용자의 진짜 친한 친구다. 아래 [기억 요약]을 보고, "
+             "너는 사용자의 진짜 친한 친구다. 아래 [기억]을 보고, "
              "지난 얘기를 자연스럽게 이어가는 첫인사를 반말 1~2문장으로 만들어라.\n"
-             "- 요약 속 여러 일 중 '매번 다른' 걸 골라 가볍게 안부를 물어. "
+             "- 기억 속 여러 일 중 '매번 다른' 걸 골라 가볍게 안부를 물어. "
              "특히 다가오는 큰 일정(여행·시험·면접 등) '하나'만 계속 반복하지 마 — "
              "소소한 취향·근황·최근 감정도 섞어서 다양하게.\n"
-             "- 요약을 그대로 읊지 말 것. 캐묻거나 잔소리하는 느낌 금지, 그냥 궁금한 친구 느낌.\n"
+             "- 기억을 그대로 읊지 말 것. 캐묻거나 잔소리하는 느낌 금지, 그냥 궁금한 친구 느낌.\n"
              "- 반드시 질문으로 끝맺어. 오직 순수 한국어. 목록/이모지 금지.\n"
              f"- 호칭은 '{nickname}'(없으면 생략 가능)."),
-            ('user', f'[기억 요약]\n{summary}'
+            ('user', f'[기억]\n{summary}'
              + (f'\n\n[다가오는 일 — 있으면 이걸 최우선으로 자연스럽게 챙겨줘]\n{up}' if up else '')),
         ])
         text = resp.content.strip()
@@ -131,8 +128,8 @@ def generate_opener(nickname: str | None, lat=None, lon=None, user_id=None) -> s
     urgent = False
     if user_id:
         try:
-            from chat import graph_memory
-            urgent = any(k in graph_memory.upcoming(user_id, days=1)
+            from chat import memory_backend
+            urgent = any(k in memory_backend.upcoming(user_id, days=1)
                          for k in ('D-DAY', 'D-1'))
         except Exception:
             urgent = False
