@@ -28,6 +28,19 @@ only as environmental traces (for example wet pavement after rain or cooler shad
 light), never as the dominant current state. Treat an inferred time range as soft atmosphere,
 not an exact clock fact. Never allow a decorative style to replace or contradict scene content.
 Do not invent named people, companies, schools, addresses, readable documents, or personal facts.
+
+If analysis.activity_sequence contains two or more entries, this is a multi-moment day. Compose
+the image as a single vertical illustration split into that many chronological panels (2 to 4),
+arranged top to bottom, panel 1 earliest. Add a "panels" array to your JSON output; each panel has
+sequence, place_narrative, action_narrative, and object_narrative (all English, all generic visual
+descriptions translated from the matching activity_sequence entry - no invented or real brand
+names, idol names, logos, or readable text; describe a fan-merchandise stand instead of naming a
+brand, for example). The same original character (identity, outfit, art style) must appear in
+every panel. Keep selected_elements, lighting_narrative, palette_narrative, and
+composition_narrative describing the overall mood shared across all panels, and keep
+scene_summary_en as a one-line overview of the whole sequence. If activity_sequence has fewer than
+two entries, omit "panels" entirely and produce one single coherent scene as usual.
+
 Return valid JSON only.
 """.strip()
 
@@ -671,6 +684,47 @@ def _selected_candidate(candidate_pool, category, candidate_id):
     return next((item for item in candidate_pool.get(category, []) if item["candidate_id"] == candidate_id), None)
 
 
+_GENERIC_PLACE_HINTS = {
+    "팝업스토어": "a lively indoor pop-up retail space with colorful display shelves and fan-merchandise stands, no visible brand names or logos",
+    "공원": "a green public park with a walking path and trees",
+    "카페": "a cozy modest cafe interior",
+}
+
+
+def _deterministic_panel_narrative(place_text, action_text, object_text):
+    place_code = _match_catalog_code("location", place_text) if place_text else None
+    place_entry = _catalog_entry("location", place_code) if place_code else None
+    if place_entry:
+        place_narrative = place_entry.visual_prompt
+    elif place_text and place_text in _GENERIC_PLACE_HINTS:
+        place_narrative = _GENERIC_PLACE_HINTS[place_text]
+    elif place_text:
+        place_narrative = f"a generic, anonymized version of the described setting ({place_text}), with no visible lettering, logos, or brand names"
+    else:
+        place_narrative = "a pleasant everyday setting"
+
+    action_narrative = f"{action_text}, rendered as a safe, generic, non-branded activity" if action_text else "spending a quiet moment"
+    object_narrative = f"a small generic {object_text}, with no visible lettering or logos" if object_text else ""
+    return place_narrative, action_narrative, object_narrative
+
+
+def _deterministic_panels(activity_sequence):
+    panels = []
+    for item in (activity_sequence or [])[:4]:
+        place_narrative, action_narrative, object_narrative = _deterministic_panel_narrative(
+            item.get("place_text"),
+            item.get("action_text") or "",
+            item.get("object_text"),
+        )
+        panels.append({
+            "sequence": item.get("sequence") or len(panels) + 1,
+            "place_narrative": place_narrative,
+            "action_narrative": action_narrative,
+            "object_narrative": object_narrative,
+        })
+    return panels if len(panels) >= 2 else []
+
+
 def deterministic_scene_plan(analysis, candidate_pool, constraints):
     result = analysis.result if hasattr(analysis, "result") else analysis
     selected = {}
@@ -791,6 +845,7 @@ def deterministic_scene_plan(analysis, candidate_pool, constraints):
         "avoid_visuals": list(dict.fromkeys(avoid)),
         "director_confidence": 0.82,
         "director_source": "deterministic-fallback-v2.1-timeline",
+        "panels": _deterministic_panels(result.get("activity_sequence")),
     }
 
 
@@ -819,6 +874,7 @@ def _director_payload(analysis, candidate_pool, constraints, repair_errors=None)
             "explicit_place",
             "explicit_action",
             "explicit_objects",
+            "activity_sequence",
             "negated_elements",
             "evidence_map",
         )
@@ -861,6 +917,10 @@ def _director_payload(analysis, candidate_pool, constraints, repair_errors=None)
             "composition_narrative": "string",
             "avoid_visuals": ["string"],
             "director_confidence": "0..1",
+            "panels": (
+                "OMIT this key entirely unless analysis.activity_sequence has 2+ entries; "
+                "otherwise [{sequence, place_narrative, action_narrative, object_narrative}]"
+            ),
         },
     }
     if repair_errors:
@@ -1032,7 +1092,31 @@ def direct_and_validate_scene(analysis, candidate_pool, constraints):
         model or "deterministic-scene-director-v2.1-timeline"
     )
     plan["director_prompt_version"] = DIRECTOR_PROMPT_VERSION
+    plan["panels"] = _sanitize_panels(plan.get("panels"))
     return plan
+
+
+def _sanitize_panels(raw_panels):
+    if not isinstance(raw_panels, list):
+        return []
+    panels = []
+    for index, item in enumerate(raw_panels[:4], start=1):
+        if not isinstance(item, dict):
+            continue
+        action_narrative = _text_or_empty(item.get("action_narrative"))
+        if not action_narrative:
+            continue
+        panels.append({
+            "sequence": _int(item.get("sequence"), index) or index,
+            "place_narrative": _text_or_empty(item.get("place_narrative")) or "a generic everyday setting",
+            "action_narrative": action_narrative,
+            "object_narrative": _text_or_empty(item.get("object_narrative")),
+        })
+    return panels if len(panels) >= 2 else []
+
+
+def _text_or_empty(value):
+    return " ".join(str(value or "").split())[:300]
 
 
 def selected_candidate_scores(candidate_pool, selected_elements):

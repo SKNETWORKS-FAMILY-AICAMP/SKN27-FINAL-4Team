@@ -170,6 +170,7 @@ def analyze(payload, user):
             else None
         ),
         "memory_focus": sanitize_analysis_text(memory_focus, 200),
+        "activity_sequence": facts.get("activity_sequence") or [],
         "analysis_source": facts.get(
             "analysis_model",
             "deterministic-timeline-v2.1",
