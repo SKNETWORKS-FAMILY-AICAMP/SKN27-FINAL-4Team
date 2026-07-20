@@ -213,6 +213,11 @@ def _extract(message):
         "- 반려동물 이름은 relations에 (예: '강아지 콩이' → {\"person\":\"콩이\","
         "\"relation\":\"반려동물(강아지)\"}).\n"
         "[버릴 것 — 위에 해당 안 될 때만] 일회성 일상 보고(식사·날씨·버스)와 감탄·맞장구.\n"
+        "★가정·공상은 사건이 아니다: '로또 되면 회사 관둘 거야', '~하면 ~할 텐데' 같은 "
+        "조건부 상상·농담·소망은 events 저장 금지 — 실제 일어난 일과 실제로 잡힌 계획만. "
+        "(실측 사고: '로또 되면 세계여행'에서 '세계여행'·'회사 관두기'가 진짜 사건으로 저장됨)★\n"
+        "★같은 활동은 사건 1개: 한 발화의 같은 활동을 표현만 바꿔 두 개로 쪼개지 마라 "
+        "('주말마다 산에 가' → '주말 등산' 하나. '산에 가기'를 또 만들면 중복이다)★\n"
         "[name 규칙] 5~15자, 맥락 있게('혼남' 말고 '상사한테 혼남'). 사용자가 말한 구체적 "
         "이름 그대로 — '포항 여행'을 '여행'으로 뭉개면 다른 기억까지 잘못 만료된다.\n"
         f"[date 규칙] 다가오는 일정·콕 집은 날짜만, 오늘 {_today_s()} 기준 YYYY-MM-DD. "
@@ -672,8 +677,22 @@ def _store(tx, uid, data, msg_probs, message, vectors=None):
         if not tk:
             continue
         pol = (pf.get('polarity') if isinstance(pf, dict) else None) or '호'
+        # 취향 반전 종결 (2026-07-21 실측): '마라탕 좋아함(호)'이 살아있는 채로
+        # '질려서 안 좋아해(오)'가 추가되면 모순 두 개가 공존한다. 새 진술이
+        # 항상 최신 사실 — 반대 극성의 살아있는 기존 간선을 결정적으로 닫는다.
+        tx.run('MATCH (u:User {uid:$uid})-[r:PREFERS]->(t:Topic {name:$tk}) '
+               'WHERE r.valid_to IS NULL AND r.polarity <> $pol '
+               'SET r.valid_to=$today, r.end_reason=\'취향 변화(새 진술로 대체)\'',
+               uid=uid, tk=tk, pol=pol, today=today)
+        # MERGE 부활 함정 (2026-07-21 실측): '싫어함→다시 좋아함' 회차에서 MERGE가
+        # 과거에 닫힌 같은 극성 간선과 매칭돼 새 간선을 안 만들었다(_TSTAMP는 ON CREATE
+        # 전용) → 취향이 통째로 죽음. 살아있는 같은 극성 간선이 없을 때만 CREATE.
         tx.run('MATCH (u:User {uid:$uid}) MERGE (t:Topic {name:$tk}) '
-               'MERGE (u)-[r:PREFERS {polarity:$pol}]->(t) ' + _TSTAMP,
+               'WITH u, t OPTIONAL MATCH (u)-[live:PREFERS {polarity:$pol}]->(t) '
+               'WHERE live.valid_to IS NULL '
+               'WITH u, t, live WHERE live IS NULL '
+               'CREATE (u)-[r:PREFERS {polarity:$pol, valid_from:$now, '
+               'created_at:$now, episode:$eid}]->(t)',
                uid=uid, tk=tk, pol=pol, now=now, eid=eid)
         # Topic 계층 (2026-07-20): 구체 취향 → 카테고리 간선 — 사건의 ABOUT 카테고리와
         # 같은 노드를 공유해 '민트초코 → 음식 ← 맛집 사건'으로 연결된다 (관계 11종째)

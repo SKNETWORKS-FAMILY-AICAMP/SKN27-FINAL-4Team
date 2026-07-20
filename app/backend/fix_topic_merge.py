@@ -27,6 +27,19 @@ with g._get_driver().session() as s:
         print(f'  병합: {syn} → {canon}')
         merged += 1
     print(f'완료 — {merged}건 병합')
+
+    # IN_CATEGORY 코드(2026-07-20) 이전에 생긴 잎 토픽은 카테고리 간선이 없다.
+    # 자동 분류는 LLM 판단 영역이라 여기선 탐지·보고만 — 각자 확인 후 수동 연결:
+    #   MATCH (t:Topic {name:'<잎>'}) MATCH (c:Topic {name:'<카테고리>'}) MERGE (t)-[:IN_CATEGORY]->(c)
+    orphans = s.run(
+        'MATCH (t:Topic) WHERE NOT t.name IN $cats '
+        'AND NOT (t)-[:IN_CATEGORY]->(:Topic) RETURN t.name AS n',
+        cats=list(TOPIC_CATEGORIES)).data()
+    if orphans:
+        print('\n⚠ 카테고리 없는 잎 토픽 (수동 연결 필요):', [r['n'] for r in orphans])
+    else:
+        print('\n잎 토픽 카테고리 연결: 전부 정상')
+
     print('\n정리 후 Topic 목록:')
     for r in s.run('MATCH (t:Topic) OPTIONAL MATCH (e:Event)-[:ABOUT]->(t) '
                    'RETURN t.name AS n, count(e) AS c ORDER BY c DESC').data():
