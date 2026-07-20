@@ -226,7 +226,7 @@ def _extract(message):
         "직접 말한 것만. 추측 금지. 빈 배열 생략 가능. JSON 외 금지."
     )
     try:
-        llm = get_llm(temperature=0, max_tokens=500)
+        llm = get_llm(temperature=0, max_tokens=1500)
         msgs = [('system', sys), ('user', message)]
         try:
             # 구조 강제 (2026-07-18): JSON 형식을 프롬프트 부탁이 아니라 API로 보장

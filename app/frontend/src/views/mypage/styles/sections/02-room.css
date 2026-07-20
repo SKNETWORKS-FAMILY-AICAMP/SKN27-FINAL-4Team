@@ -365,50 +365,5 @@
 .hotspot.wardrobe { left: 86.04%; top: 39.84%; width: 10.60%; height: 31.10%; border-radius: 10px; }
 .hotspot.book { left: 54.50%; top: 4.50%; width: 13.80%; height: 30.50%; border-radius: 4px; }
 .hotspot.memory { left: 66.20%; top: 44.40%; width: 8.10%; height: 11.60%; border-radius: 6px; }
-.hotspot.emotion {
-  left: 33.80%;
-  top: 79.00%;
-  width: 6.15%;
-  height: 5.00%;
-  overflow: visible;
-  border: 0;
-  border-radius: 0;
-}
-
-.hotspot.emotion::after {
-  top: 42%;
-}
-
-.hotspot.emotion:hover,
-.hotspot.emotion:focus-visible {
-  transform: none;
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
-}
-
-.emotion-hotspot-frame {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  pointer-events: none;
-}
-
-.emotion-hotspot-shape {
-  fill: transparent;
-  stroke: transparent;
-  stroke-width: 2;
-  stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
-  transition: fill 160ms ease, stroke 160ms ease;
-}
-
-.hotspot.emotion:hover .emotion-hotspot-shape,
-.hotspot.emotion:focus-visible .emotion-hotspot-shape {
-  fill: transparent;
-  stroke: rgba(229, 155, 95, 0.88);
-}
 .hotspot.taste { left: 34.44%; top: 46.31%; width: 21.41%; height: 49.20%; border-radius: 10px; }
 .hotspot.settings { left: 58.35%; top: 39.70%; width: 26.50%; height: 33.79%; }

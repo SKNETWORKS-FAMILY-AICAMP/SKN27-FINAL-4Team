@@ -54,7 +54,25 @@
   .memory-modal .modal-content { overflow-y: auto; }
   .memory-modal .memory-panel { min-height: 520px; }
   .weather-modal .weather-panel-body,
-  .book-modal .book-panel-body { height: auto; overflow: visible; }
+  .book-modal .modal-content {
+    display: block;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  .book-modal .book-panel-body {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+  .book-modal .book-layout { grid-template-rows: none; }
+  .book-modal .recommendation-card {
+    height: auto;
+    overflow: visible;
+  }
+  .book-modal .book-copy {
+    max-height: none;
+    overflow: visible;
+  }
 }
 
 @media (max-width: 560px) {

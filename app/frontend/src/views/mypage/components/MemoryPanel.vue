@@ -74,10 +74,129 @@
           <small>{{ selectedNode.savedAt }}</small>
         </div>
         <div class="detail-body">
-          <p class="detail-content" style="white-space: pre-line; margin-bottom: 16px;">{{ selectedNode.content }}</p>
-          
-          <!-- 구조화된 관계형 데이터 상세 노출 -->
-          <div v-if="selectedNode.rawDate || (selectedNode.rawPeople && selectedNode.rawPeople.length) || (selectedNode.rawEmotions && selectedNode.rawEmotions.length) || selectedNode.rawRelation || (selectedNode.rawEvents && selectedNode.rawEvents.length)" class="structured-info-box">
+          <section class="memory-introduction">
+            <span>기억 소개</span>
+            <p class="detail-content">{{ selectedNode.content }}</p>
+          </section>
+
+          <section v-if="hasMemoryContext(selectedNode)" class="graph-context-section">
+            <div class="graph-context-heading">
+              <div>
+                <span>기억 속 맥락</span>
+                <h5>함께 기억한 내용</h5>
+              </div>
+              <small>저장 당시 함께 기억한 내용을 사건별로 모아 보여드려요.</small>
+            </div>
+
+            <article
+              v-for="(event, eventIndex) in selectedNode.context.events"
+              :key="event.id || event.key || eventIndex"
+              class="event-context-card"
+            >
+              <div class="event-context-title">
+                <span class="node-type-chip">사건</span>
+                <h6>{{ event.name || "이름 없는 사건" }}</h6>
+              </div>
+
+              <div class="graph-summary-grid">
+                <div v-if="formatEventDate(event)" class="graph-fact">
+                  <span class="graph-fact-label">시간</span>
+                  <strong>{{ formatEventDate(event) }}</strong>
+                </div>
+                <div v-if="event.places && event.places.length" class="graph-fact">
+                  <span class="graph-fact-label">장소</span>
+                  <strong>{{ event.places.join(", ") }}</strong>
+                </div>
+                <div v-if="event.topics && event.topics.length" class="graph-fact">
+                  <span class="graph-fact-label">주제</span>
+                  <div class="tags-container">
+                    <span v-for="topic in event.topics" :key="topic" class="info-tag topic-tag">{{ topic }}</span>
+                  </div>
+                </div>
+                <div v-if="event.people && event.people.length" class="graph-fact">
+                  <span class="graph-fact-label">함께한 사람</span>
+                  <div class="tags-container">
+                    <span v-for="person in event.people" :key="person.name" class="info-tag person-tag">
+                      {{ person.name }}<small v-if="person.relation">{{ person.relation }}</small>
+                    </span>
+                  </div>
+                </div>
+                <div v-if="event.emotions && event.emotions.length" class="graph-fact">
+                  <span class="graph-fact-label">감정</span>
+                  <div class="tags-container">
+                    <span
+                      v-for="emotion in event.emotions"
+                      :key="`${emotion.type}-${emotion.score}`"
+                      class="info-tag emotion-tag"
+                    >
+                      {{ formatEmotion(emotion.type) }}
+                      <small v-if="formatScore(emotion.score)">{{ formatScore(emotion.score) }}</small>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="event.causes && event.causes.length" class="graph-connection">
+                <span>원인 사건</span>
+                <div>
+                  <span v-for="cause in event.causes" :key="cause.id || cause.key || cause.name" class="cause-link">
+                    {{ cause.name }}
+                  </span>
+                </div>
+              </div>
+              <div v-if="event.cause" class="graph-connection">
+                <span>기억된 이유</span>
+                <p>{{ event.cause }}</p>
+              </div>
+            </article>
+
+            <div
+              v-if="selectedNode.context.relations && selectedNode.context.relations.length"
+              class="context-group"
+            >
+              <h6>인물 관계</h6>
+              <div class="context-record-grid">
+                <div
+                  v-for="relation in selectedNode.context.relations"
+                  :key="`${relation.name}-${relation.relation}-${relation.valid_from}`"
+                  class="context-record"
+                >
+                  <strong>{{ relation.name }}</strong>
+                  <span>{{ relation.relation || "지인" }}</span>
+                  <small>{{ formatValidity(relation) }}</small>
+                </div>
+              </div>
+            </div>
+
+            <div
+              v-if="selectedNode.context.preferences && selectedNode.context.preferences.length"
+              class="context-group"
+            >
+              <h6>취향</h6>
+              <div class="context-record-grid">
+                <div
+                  v-for="preference in selectedNode.context.preferences"
+                  :key="`${preference.topic}-${preference.polarity}-${preference.valid_from}`"
+                  class="context-record preference-record"
+                >
+                  <strong>{{ preference.topic }}</strong>
+                  <span>{{ formatPolarity(preference.polarity) }}</span>
+                  <small>{{ formatValidity(preference) }}</small>
+                </div>
+              </div>
+            </div>
+
+            <article v-if="originalText(selectedNode)" class="source-context-card">
+              <div class="source-context-title">
+                <span class="node-type-chip source-type-chip">원문 대화</span>
+                <h6>대화에서 이렇게 남겼어요</h6>
+              </div>
+              <blockquote>{{ originalText(selectedNode) }}</blockquote>
+            </article>
+          </section>
+
+          <!-- 이전 형식 및 미리보기 데이터용 상세 노출 -->
+          <div v-else-if="selectedNode.rawDate || (selectedNode.rawPeople && selectedNode.rawPeople.length) || (selectedNode.rawEmotions && selectedNode.rawEmotions.length) || selectedNode.rawRelation || (selectedNode.rawEvents && selectedNode.rawEvents.length)" class="structured-info-box">
             <h5 class="info-box-title">기억 속의 핵심 요소들</h5>
             
             <div v-if="selectedNode.rawDate" class="info-row">
@@ -209,7 +328,7 @@ export default {
       const id = String(item.id || item.memory_id || item.key || `node-temp-${index}`);
       return {
         id,
-        title: item.title || item.topic || item.label || `기억 노드 ${index + 1}`,
+        title: item.title || item.topic || item.label || `기억 항목 ${index + 1}`,
         content: item.content || item.summary || item.text || item.memory || "",
         savedAt: item.savedAt || this.formatDate(item.saved_at || item.created_at || item.updated_at),
         isPreview: Boolean(item.is_preview || this.isPreview),
@@ -218,7 +337,9 @@ export default {
         rawPeople: item.raw_people || [],
         rawEmotions: item.raw_emotions || [],
         rawRelation: item.raw_relation || "",
-        rawEvents: item.raw_events || []
+        rawEvents: item.raw_events || [],
+        originalText: item.original_text || item.source_text || "",
+        context: item.context || null
       };
     },
     formatDate(value) {
@@ -243,6 +364,74 @@ export default {
         day: "numeric"
       });
     },
+    originalText(item) {
+      return (
+        item?.context?.introduction?.original_text ||
+        item?.context?.source_text ||
+        item?.originalText ||
+        ""
+      );
+    },
+    hasMemoryContext(item) {
+      const context = item?.context;
+      return Boolean(
+        context &&
+        (
+          (context.events && context.events.length) ||
+          (context.relations && context.relations.length) ||
+          (context.preferences && context.preferences.length) ||
+          this.originalText(item)
+        )
+      );
+    },
+    formatEventDate(event) {
+      if (!event) return "";
+      if (event.occurs_start) {
+        const start = this.formatDateOnly(event.occurs_start);
+        if (event.occurs_end && event.occurs_end !== event.occurs_start) {
+          return `${start} ~ ${this.formatDateOnly(event.occurs_end)}`;
+        }
+        return start;
+      }
+      const dates = (event.dates || [])
+        .map(item => this.formatDateOnly(item.date))
+        .filter(Boolean);
+      return [...new Set(dates)].join(", ");
+    },
+    formatEmotion(value) {
+      const labels = {
+        joy: "기쁨",
+        sadness: "슬픔",
+        anger: "화남/분노",
+        normal: "일반",
+        flutter: "설렘",
+        worry: "걱정/불안",
+        anxiety: "불안",
+        hurt: "상처",
+        surprise: "당황"
+      };
+      return labels[String(value || "").toLowerCase()] || value || "감정";
+    },
+    formatScore(value) {
+      if (value === null || value === undefined || value === "") return "";
+      const score = Number(value);
+      if (Number.isNaN(score)) return "";
+      return `${Math.round(score <= 1 ? score * 100 : score)}%`;
+    },
+    formatPolarity(value) {
+      const polarity = String(value || "호").toLowerCase();
+      if (["불호", "싫음", "negative", "dislike", "-1"].includes(polarity)) {
+        return "좋아하지 않음";
+      }
+      if (["중립", "neutral", "0"].includes(polarity)) return "중립";
+      return "좋아함";
+    },
+    formatValidity(item) {
+      if (item?.valid_to) {
+        return `종료 · ${this.formatDateOnly(item.valid_to)}`;
+      }
+      return "현재 유효";
+    },
     requestDelete(item) {
       this.pendingDelete = item;
     },
@@ -264,7 +453,7 @@ export default {
 
 <style scoped>
 .memory-panel {
-  position: relative;
+  position: static;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -554,11 +743,14 @@ export default {
 
 /* Side Panel for Detail */
 .memory-detail-panel {
+  box-sizing: border-box;
   position: absolute;
-  top: 10px;
+  top: 50%;
   right: 10px;
-  bottom: 10px;
-  width: 380px;
+  bottom: auto;
+  width: min(400px, calc(100% - 20px));
+  height: min(520px, calc(100dvh - 96px));
+  transform: translateY(-50%);
   background: rgba(27, 18, 62, 0.95);
   backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -635,6 +827,236 @@ export default {
   border-radius: 2px;
 }
 
+.memory-introduction {
+  padding: 16px 18px;
+  border: 1px solid rgba(229, 155, 95, 0.24);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(229, 155, 95, 0.12), rgba(79, 172, 247, 0.07));
+}
+
+.memory-introduction > span,
+.graph-context-heading > div > span {
+  display: block;
+  margin-bottom: 6px;
+  color: #efc29f;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.detail-content {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  line-height: 1.8;
+  white-space: pre-line;
+}
+
+.graph-context-section {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.graph-context-heading {
+  display: flex;
+  align-items: start;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 2px;
+}
+
+.graph-context-heading h5 {
+  margin: 0;
+  color: #fff;
+  font-size: 15px;
+}
+
+.graph-context-heading small {
+  max-width: 310px;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.event-context-card,
+.source-context-card,
+.context-group {
+  padding: 15px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.event-context-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 13px;
+}
+
+.event-context-title h6,
+.source-context-title h6,
+.context-group h6 {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.94);
+  font-size: 14px;
+}
+
+.node-type-chip {
+  display: inline-flex;
+  padding: 3px 7px;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.13);
+  color: #fde68a;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.source-context-card {
+  border-color: rgba(229, 155, 95, 0.2);
+  background: linear-gradient(135deg, rgba(229, 155, 95, 0.08), rgba(255, 255, 255, 0.025));
+}
+
+.source-context-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 11px;
+}
+
+.source-type-chip {
+  border-color: rgba(229, 155, 95, 0.38);
+  background: rgba(229, 155, 95, 0.13);
+  color: #ffd2ad;
+}
+
+.source-context-card blockquote {
+  margin: 0;
+  padding: 11px 13px;
+  border-left: 2px solid rgba(229, 155, 95, 0.56);
+  border-radius: 0 9px 9px 0;
+  background: rgba(9, 6, 24, 0.28);
+  color: rgba(255, 255, 255, 0.84);
+  font-size: 13px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.graph-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 9px;
+}
+
+.graph-fact {
+  min-width: 0;
+  padding: 10px 11px;
+  border-radius: 9px;
+  background: rgba(9, 6, 24, 0.28);
+}
+
+.graph-fact-label {
+  display: block;
+  margin-bottom: 5px;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.graph-fact strong {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.graph-connection {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px 11px;
+  border-left: 2px solid rgba(159, 192, 255, 0.5);
+  border-radius: 0 8px 8px 0;
+  background: rgba(63, 91, 154, 0.1);
+}
+
+.graph-connection > span {
+  color: #c8daff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.graph-connection p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.cause-link {
+  display: inline-flex;
+  margin: 0 5px 4px 0;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(159, 192, 255, 0.14);
+  color: #d8e5ff;
+  font-size: 11px;
+}
+
+.context-group h6 {
+  margin-bottom: 10px;
+}
+
+.context-record-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.context-record {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 3px 12px;
+  padding: 10px 11px;
+  border-radius: 9px;
+  background: rgba(147, 51, 234, 0.09);
+}
+
+.context-record strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #fff;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-record span {
+  color: #e9d5ff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.context-record small {
+  grid-column: 1 / -1;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 10px;
+}
+
+.preference-record {
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.preference-record span {
+  color: #a7f3d0;
+}
+
 .detail-footer {
   margin-top: 14px;
   display: flex;
@@ -664,7 +1086,24 @@ export default {
 
   .memory-detail-panel {
     left: 10px;
+    right: 10px;
     width: auto;
+    height: min(520px, calc(100dvh - 40px));
+  }
+
+  .graph-context-heading {
+    align-items: start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .graph-context-heading small {
+    text-align: left;
+  }
+
+  .graph-summary-grid,
+  .context-record-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -736,7 +1175,7 @@ export default {
 
 .slide-fade-enter-from,
 .slide-fade-leave-to {
-  transform: translateX(30px);
+  transform: translate(30px, -50%);
   opacity: 0;
 }
 
@@ -821,6 +1260,21 @@ export default {
   background: rgba(236, 72, 153, 0.15);
   border: 1px solid rgba(236, 72, 153, 0.3);
   color: #fbcfe8;
+}
+
+.emotion-tag small,
+.person-tag small {
+  margin-left: 5px;
+  padding-left: 5px;
+  border-left: 1px solid currentColor;
+  font-size: 9px;
+  opacity: 0.72;
+}
+
+.topic-tag {
+  background: rgba(79, 172, 247, 0.13);
+  border: 1px solid rgba(79, 172, 247, 0.26);
+  color: #c8e5ff;
 }
 
 .event-tag {

@@ -58,7 +58,6 @@ INSTALLED_APPS = [
     'wellness',
     'mbti',
     'myprofile',
-    'taste',
     'character',
     'calendar_api',
     'game.tarot_api',

@@ -105,7 +105,6 @@
           :current-character="currentCharacter"
           :focus-target="roomFocusTarget"
           :move-key="roomMoveKey"
-          :room-expression="activeRoomExpression"
           @open-panel="openPanelFromRoom"
           @open-chat="goToChat"
           @open-report="goToReport"
@@ -137,14 +136,6 @@
           :current-character="currentCharacter"
           :characters="characters"
           @choose-character="chooseCharacter"
-        />
-
-        <EmotionPanel
-          v-if="activePanel === 'emotion'"
-          :current-character="currentCharacter"
-          :active-expression="activeRoomExpression"
-          @apply-expression="applyRoomExpression"
-          @cancel="closePanel"
         />
 
         <MbtiPanel
@@ -220,7 +211,6 @@
 import { MEMORY_API_ENABLED, fetchCurrentWeather, fetchMbtiDemoPayload, fetchMyProfile, updateMyProfile, saveOnboardingMbti, fetchBookRecommendation, fetchMemoryVault, deleteMemoryVaultItem, fetchWeatherRegions } from "./mypage.api";
 import { LOCATION_CONSENT_VERSION } from "../../constants/consentVersions";
 import { createMypageState, i18n } from "./state/mypage.state";
-import { DEFAULT_ROOM_EXPRESSION, VALID_ROOM_EXPRESSIONS } from "./config/emotion.constants";
 import {
   DEFAULT_WEATHER_REGION,
   MOVABLE_PANEL_IDS,
@@ -230,7 +220,6 @@ import {
   PANEL_DESCRIPTIONS,
 } from "./config/mypage.constants";
 import CharacterPanel from "./components/CharacterPanel.vue";
-import EmotionPanel from "./components/EmotionPanel.vue";
 import MbtiPanel from "./components/MbtiPanel.vue";
 import MypageModal from "./components/MypageModal.vue";
 import MypageRoom from "./components/MypageRoom.vue";
@@ -243,7 +232,6 @@ export default {
   name: "MypageView",
   components: {
     CharacterPanel,
-    EmotionPanel,
     MbtiPanel,
     MypageModal,
     MypageRoom,
@@ -372,7 +360,6 @@ export default {
       return list.length > 2 ? `${visible} 외 ${list.length - 2}` : visible;
     },
     goToReport() {
-      this.resetRoomExpression();
       this.pendingPanel = null;
       this.pendingChatNavigation = false;
       this.pendingReportNavigation = true;
@@ -380,7 +367,6 @@ export default {
       this.roomMoveKey += 1;
     },
     goToChat() {
-      this.resetRoomExpression();
       this.pendingPanel = null;
       this.pendingReportNavigation = false;
       this.pendingChatNavigation = true;
@@ -430,14 +416,12 @@ export default {
       }
     },
     openPanel(panel) {
-      this.resetRoomExpression();
       this.pendingPanel = null;
       this.pendingChatNavigation = false;
       this.pendingReportNavigation = false;
       this.activatePanel(panel);
     },
     openPanelFromRoom(panel) {
-      if (panel !== "emotion") this.resetRoomExpression();
       this.pendingChatNavigation = false;
       this.pendingReportNavigation = false;
       if (this.shouldMoveBeforeOpen(panel)) {
@@ -452,7 +436,6 @@ export default {
       return MOVABLE_PANEL_IDS.includes(panel);
     },
     activatePanel(panel) {
-      if (panel !== "emotion") this.resetRoomExpression();
       this.pendingPanel = null;
       this.pendingChatNavigation = false;
       this.pendingReportNavigation = false;
@@ -487,14 +470,6 @@ export default {
         this.cancelProfileEdit();
       }
       this.activePanel = null;
-    },
-    applyRoomExpression(expressionId) {
-      if (!VALID_ROOM_EXPRESSIONS.has(expressionId)) return;
-      this.activeRoomExpression = expressionId;
-      this.closePanel();
-    },
-    resetRoomExpression() {
-      this.activeRoomExpression = DEFAULT_ROOM_EXPRESSION;
     },
     async toggleProfileEdit() {
       if (!this.profileEdit) {

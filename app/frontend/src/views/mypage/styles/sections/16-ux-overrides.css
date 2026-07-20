@@ -74,22 +74,23 @@
 }
 
 .modal {
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  width: min(780px, calc(100vw - 48px));
-  max-height: min(760px, calc(100dvh - 48px));
+  width: min(648px, calc(100vw - 48px));
+  max-height: min(612px, calc(100dvh - 48px));
   overflow: hidden;
 }
 
 .modal.profile-modal,
 .modal.settings-modal {
-  width: min(780px, calc(100vw - 48px));
+  width: min(648px, calc(100vw - 48px));
 }
 
 .modal.taste-modal,
 .modal.character-modal {
-  width: min(880px, calc(100vw - 48px));
-  max-height: min(760px, calc(100dvh - 48px));
+  width: min(720px, calc(100vw - 48px));
+  max-height: min(630px, calc(100dvh - 48px));
 }
 
 .modal.weather-modal {
@@ -99,18 +100,21 @@
 }
 
 .modal.book-modal {
+  display: flex;
+  flex-direction: column;
   width: min(980px, calc(100vw - 48px));
   max-height: min(760px, calc(100dvh - 48px));
 }
 
 .modal.mbti-modal {
-  width: min(980px, calc(100vw - 48px));
-  max-height: min(760px, calc(100dvh - 48px));
+  width: min(792px, calc(100vw - 48px));
+  max-height: min(630px, calc(100dvh - 48px));
 }
 
 .modal.memory-modal {
-  width: min(880px, calc(100vw - 48px));
-  max-height: min(760px, calc(100dvh - 48px));
+  position: relative;
+  width: min(738px, calc(100vw - 48px));
+  max-height: min(630px, calc(100dvh - 48px));
 }
 
 .modal-header {
@@ -124,6 +128,7 @@
 }
 
 .modal-content {
+  box-sizing: border-box;
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
@@ -131,6 +136,12 @@
   overflow-x: hidden;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+}
+
+.modal-content > * {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .modal-content > .panel-body,
@@ -147,15 +158,30 @@
 }
 
 .weather-modal .modal-content {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.book-modal .modal-content {
+  display: flex;
+  overflow: hidden;
+}
+
+.book-modal .book-panel-body {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  padding: 12px 14px;
   overflow: hidden;
 }
 
 .weather-modal .weather-panel-body,
 .weather-modal .weather-panel-layout {
-  height: 100%;
+  height: auto;
   min-height: 0;
   max-height: none;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .weather-modal .weather-panel-layout {
@@ -171,22 +197,42 @@
   min-height: 0;
   padding-right: 8px;
   padding-bottom: 16px;
-  overflow-y: auto;
+  overflow-y: visible;
   overflow-x: hidden;
   overscroll-behavior: contain;
-  scrollbar-gutter: stable;
+  scrollbar-gutter: auto;
 }
 
 .memory-modal .modal-content {
   display: flex;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .memory-modal .memory-panel {
   flex: 1 1 auto;
-  height: auto;
+  height: min(460px, calc(100dvh - 132px));
   min-height: 0;
-  padding: 14px 16px 16px;
+  gap: 14px;
+  padding: 18px 20px 20px;
+}
+
+.memory-modal .memory-list-container {
+  min-height: 200px;
+}
+
+.memory-modal .memory-toolbar {
+  gap: 18px;
+}
+
+.memory-modal .memory-table th {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.memory-modal .memory-table td {
+  padding-top: 14px;
+  padding-bottom: 14px;
 }
 
 .character-modal .character-stage {
@@ -213,9 +259,11 @@
 }
 
 .book-modal .recommendation-card {
-  min-height: 300px;
-  padding-top: 18px;
-  padding-bottom: 18px;
+  height: 100%;
+  min-height: 0;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  overflow: hidden;
 }
 
 .modal-title p {
@@ -302,4 +350,3 @@
   font-size: 12px;
   line-height: 1.55;
 }
-

@@ -92,9 +92,10 @@ def collect_ltm_context(
 ) -> str:
     """
     해당 기간 동안 발생한 사건(Event) 노드와 연동된 인물(Person) 및 감정(Emotion) 데이터를
-    Neo4j 그래프DB에서 조회하여 직렬화된 텍스트 컨텍스트로 반환합니다.
+    Neo4j v2 그래프DB에서 조회하여 직렬화된 텍스트 컨텍스트로 반환합니다.
     """
-    from chat.graph_memory import _get_driver
+    from chat.graph_memory_v2_base import _get_driver
+
     drv = _get_driver()
     if drv is None:
         return "조회 가능한 장기 기억(LTM)이 없습니다."
@@ -106,44 +107,97 @@ def collect_ltm_context(
         uid = user.id
 
         query = """
-        MATCH (u:User {uid: $uid})-[:HAS_EVENT]->(e:Event)
-        WHERE e.valid_until IS NULL AND e.date >= $start_date AND e.date <= $end_date
-        OPTIONAL MATCH (e)-[:INVOLVES]->(p:Person)
-        WHERE p.valid_until IS NULL AND (u)-[:KNOWS]->(p)
-        OPTIONAL MATCH (e)-[:FELT]->(em:Emotion)
-        RETURN e.name as name, e.date as date, 
-               collect(distinct {name: p.name, relation: p.relation}) as people,
-               collect(distinct em.type) as emotions
-        ORDER BY e.date ASC
+        MATCH (ep:Episode {uid: $uid})-[:RECORDS]->(e:Event {uid: $uid})
+        MATCH (u:User {uid: $uid})-[event_rel:HAS_EVENT]->(e)
+        WHERE event_rel.valid_to IS NULL
+          AND coalesce(e.suppressed, false) = false
+        WITH DISTINCT u, e
+        OPTIONAL MATCH (e)-[on_rel:ON]->(d:Date)
+        WHERE on_rel.valid_to IS NULL
+        WITH u,
+             e,
+             coalesce(
+                 e.occurs_start,
+                 min(CASE
+                     WHEN on_rel.role IN ['on', 'start'] THEN d.date
+                 END)
+             ) AS event_start,
+             coalesce(
+                 e.occurs_end,
+                 max(CASE WHEN on_rel.role = 'end' THEN d.date END),
+                 e.occurs_start,
+                 max(d.date)
+             ) AS event_end
+        WHERE event_start IS NOT NULL
+          AND event_start <= $end_date
+          AND coalesce(event_end, event_start) >= $start_date
+        OPTIONAL MATCH (e)-[involves:INVOLVES]->(p:Person)
+        WHERE involves.valid_to IS NULL
+        OPTIONAL MATCH (u)-[person_rel:RELATES_TO]->(p)
+        WHERE person_rel.valid_to IS NULL
+        OPTIONAL MATCH (e)-[:EVOKED]->(em:Emotion)
+        WHERE e.top_emotion IS NULL OR em.type = e.top_emotion
+        RETURN e.name AS name,
+               event_start AS date,
+               event_end AS end_date,
+               collect(DISTINCT {
+                   name: p.name,
+                   relation: person_rel.relation
+               }) AS people,
+               collect(DISTINCT em.type) AS emotions
+        ORDER BY event_start ASC, name ASC
         """
 
         EMOTION_MAP_SHORT = {
             'joy': '기쁨',
             'sadness': '슬픔',
             'anger': '화남/분노',
+            'normal': '일반',
             'flutter': '설렘',
             'worry': '걱정/불안',
             'anxiety': '불안',
             'hurt': '상처',
-            'surprise': '당황'
+            'surprise': '당황',
+            '기쁨': '기쁨',
+            '슬픔': '슬픔',
+            '분노': '화남/분노',
+            '일반': '일반',
         }
 
         lines = []
         with drv.session() as session:
-            records = session.run(query, uid=uid, start_date=start_date_str, end_date=end_date_str).data()
+            records = session.run(
+                query,
+                uid=uid,
+                start_date=start_date_str,
+                end_date=end_date_str,
+            ).data()
             if not records:
                 return "조회 가능한 장기 기억(LTM)이 없습니다."
 
             for idx, r in enumerate(records):
                 name = r.get('name')
                 date_val = r.get('date') or ""
+                end_date_val = r.get('end_date') or ""
                 people = r.get('people') or []
-                people_clean = [f"{p.get('name')}({p.get('relation') or '인물'})" for p in people if p.get('name')]
+                people_clean = [
+                    f"{p.get('name')}({p.get('relation') or '인물'})"
+                    for p in people
+                    if p.get('name')
+                ]
 
                 emotions = r.get('emotions') or []
-                emotions_clean = [EMOTION_MAP_SHORT.get(em.lower(), em) for em in emotions if em]
+                emotions_clean = [
+                    EMOTION_MAP_SHORT.get(str(em).lower(), str(em))
+                    for em in emotions
+                    if em
+                ]
 
-                line = f"- 사건 {idx+1}: '{name}' (날짜: {date_val})"
+                date_text = str(date_val)
+                if end_date_val and str(end_date_val) != date_text:
+                    date_text = f"{date_text} ~ {end_date_val}"
+
+                line = f"- 사건 {idx+1}: '{name}' (날짜: {date_text})"
                 if people_clean:
                     line += f", 연관 인물: {', '.join(people_clean)}"
                 if emotions_clean:

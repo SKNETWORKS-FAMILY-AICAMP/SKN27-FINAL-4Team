@@ -72,7 +72,6 @@ export const MOVABLE_PANEL_IDS = Object.freeze([
   "book",
   "memory",
   "character",
-  "emotion",
 ]);
 
 export const PANEL_DESCRIPTIONS = Object.freeze({
@@ -81,7 +80,6 @@ export const PANEL_DESCRIPTIONS = Object.freeze({
   character: "방 안의 동행 캐릭터를 고르고, 적용 전에 말투와 성향 정보를 확인할 수 있어요.",
   weather: "현재 날씨와 오늘의 활동 제안을 확인할 수 있어요.",
   mbti: "대화 중 자연스럽게 나눈 성향 답변을 바탕으로, 내가 요즘 어떤 방식으로 생각하고 소통하는지 MBTI 유형으로 돌아봐요.",
-  emotion: "꽃 쿠션 옆에서 잠시 보여줄 캐릭터 표정을 골라보세요. 선택한 표정은 저장되지 않아요.",
 });
 
 export const NAVIGATION_CONFIRM_OPTIONS = Object.freeze({

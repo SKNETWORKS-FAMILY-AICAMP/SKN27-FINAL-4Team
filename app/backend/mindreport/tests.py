@@ -1,9 +1,10 @@
 from dataclasses import replace
 from datetime import date, datetime, timedelta
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from chat.models import ChatMessage, ChatSession
@@ -12,6 +13,7 @@ from mindreport.services.cause_keywords import (
     determine_label_display_policy,
 )
 from mindreport.services.cause_keyword_agent import MindReportCauseKeywordAgent
+from mindreport.services.collection import collect_ltm_context
 from mindreport.services.criteria_agent import (
     FALLBACK_ROUTE,
     GENERATION_ROUTE,
@@ -65,6 +67,70 @@ from mindreport.services.scoring import (
 from mindreport.services.graph_state import build_initial_mindreport_state
 from mindreport.services.graph_flow import MindReportSupervisorAgent
 from mindreport.models import MindReport
+
+
+class MindReportV2GraphCollectionTests(SimpleTestCase):
+    @patch('chat.graph_memory_v2_base._get_driver')
+    def test_collect_ltm_context_uses_v2_schema_and_formats_context(
+        self,
+        get_driver,
+    ):
+        session = MagicMock()
+        session.run.return_value.data.return_value = [
+            {
+                'name': '가족 여행',
+                'date': '2026-07-07',
+                'end_date': '2026-07-09',
+                'people': [
+                    {'name': '민수', 'relation': '친구'},
+                    {'name': None, 'relation': None},
+                ],
+                'emotions': ['joy'],
+            }
+        ]
+        get_driver.return_value.session.return_value.__enter__.return_value = session
+
+        result = collect_ltm_context(
+            user=SimpleNamespace(id=17),
+            period_type='week',
+            target_date=date(2026, 7, 8),
+        )
+
+        query = session.run.call_args.args[0]
+        self.assertIn('(ep:Episode', query)
+        self.assertIn('[:RECORDS]', query)
+        self.assertIn('[event_rel:HAS_EVENT]', query)
+        self.assertIn('[on_rel:ON]', query)
+        self.assertIn('[person_rel:RELATES_TO]', query)
+        self.assertIn('[:EVOKED]', query)
+        self.assertNotIn('[:KNOWS]', query)
+        self.assertNotIn('[:FELT]', query)
+        self.assertEqual(
+            session.run.call_args.kwargs,
+            {
+                'uid': 17,
+                'start_date': '2026-07-06',
+                'end_date': '2026-07-12',
+            },
+        )
+        self.assertEqual(
+            result,
+            "- 사건 1: '가족 여행' (날짜: 2026-07-07 ~ 2026-07-09), "
+            '연관 인물: 민수(친구), 관련 정서: 기쁨',
+        )
+
+    @patch('chat.graph_memory_v2_base._get_driver', return_value=None)
+    def test_collect_ltm_context_returns_empty_message_without_v2_driver(
+        self,
+        _get_driver,
+    ):
+        result = collect_ltm_context(
+            user=SimpleNamespace(id=17),
+            period_type='week',
+            target_date=date(2026, 7, 8),
+        )
+
+        self.assertEqual(result, '조회 가능한 장기 기억(LTM)이 없습니다.')
 
 
 class FakeEmotionScoreClient:

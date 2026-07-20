@@ -15,7 +15,6 @@ export const ROOM_STOPS = Object.freeze({
   book: { x: 50.0, y: 26.4 },
   mbti: { x: 74.0, y: 20.8 },
   memory: { x: 50.0, y: 53.5 },
-  emotion: { x: 43.0, y: 65.0 },
   wardrobe: { x: 88.0, y: 66.3 },
 });
 

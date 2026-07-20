@@ -732,7 +732,7 @@ button {
   overflow: hidden;
   border: 1px solid rgba(231, 62, 101, 0.24);
   border-radius: 0 8px 8px 0;
-  background: linear-gradient(180deg, rgba(226, 213, 184, 0.97), rgba(211, 193, 158, 0.98));
+  background: linear-gradient(180deg, #fff9ed 0%, #f4e6cf 100%);
   box-shadow: none;
   color: #3b2c3f;
   font-family: var(--font-soft);
