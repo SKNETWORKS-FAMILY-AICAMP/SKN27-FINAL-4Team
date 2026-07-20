@@ -5,6 +5,7 @@
           joy·sadness·anger·normal_agent / resp_prep
 콜드스타트와 TTS·저장(비동기)은 그래프 밖(뷰 레이어)에서 처리한다.
 """
+import os
 import re
 
 from ai.agents.personas import CRISIS_GUIDE, EMOTION_AGENT_GUIDES, COMMON_RULES
@@ -136,12 +137,16 @@ def mbti_save_node(state: ChatState) -> dict:
 
 # ── [감성분석: KcELECTRA + XGBoost + 확신도 게이트] ──────────
 
-CONF_GATE = 0.70   # 모델 확신이 이 미만이면 '찍지 말고' 문맥 아는 LLM으로 재분류
+# 감정 게이트 다이얼 — env 오버라이드 가능 (일원화 2026-07-19, 기본값은 실측 채택치)
+CONF_GATE = float(os.environ.get('EMO_CONF_GATE', '0.70'))
+                   # 모델 확신이 이 미만이면 '찍지 말고' 문맥 아는 LLM으로 재분류
                    # (0.55→0.70 상향, 2026-07-05 — 파인튜닝 모델 확률 보정: 채팅체 150 스윕에서
                    #  채택률 82.7%·채택분 정확도 0.831, calibrate_gate.py 근거)
-SHORT_LEN = 10     # 이 미만의 초단문("응 ㅋㅋ")은 원칙적으로 직전 감정 유지
-SHORT_OVERRIDE = 0.90  # 단, 초단문이어도 모델 확신이 이 이상이면 감정 급변 반영
-                       # ("짜증나!" 4자 → 표정 안 바뀌던 문제 보정, 2026-07-09)
+SHORT_LEN = int(os.environ.get('EMO_SHORT_LEN', '10'))
+                   # 이 미만의 초단문("응 ㅋㅋ")은 원칙적으로 직전 감정 유지
+SHORT_OVERRIDE = float(os.environ.get('EMO_SHORT_OVERRIDE', '0.90'))
+                   # 단, 초단문이어도 모델 확신이 이 이상이면 감정 급변 반영
+                   # ("짜증나!" 4자 → 표정 안 바뀌던 문제 보정, 2026-07-09)
 # (복합 감정은 절 분할 방식으로 감지 — _split_contrast/_clause_emotions 참고.
 #  분포 기반 SECONDARY_MIN 방식은 파인튜닝 모델 과확신(뒤 절 0.96~0.999) 실측으로 폐기, 2026-07-10)
 
@@ -196,7 +201,8 @@ def _split_contrast(message: str):
     return a, b
 
 
-CLAUSE_CONF_MIN = 0.30   # 절 분류 확신도 하한 (실측: "팀장한테 혼나서 열받았는데" 0.38)
+CLAUSE_CONF_MIN = float(os.environ.get('EMO_CLAUSE_CONF_MIN', '0.30'))
+                   # 절 분류 확신도 하한 (실측: "팀장한테 혼나서 열받았는데" 0.38)
 
 
 def _clause_emotions(a: str, b: str):
@@ -372,7 +378,7 @@ def analysis_node(state: ChatState) -> dict:
 # ── [컨텍스트 조회: 라우팅 직후 1회만] ────────────────────────
 
 def load_context_node(state: ChatState) -> dict:
-    """최근 N턴 원문 + 장기 요약(user_memory) 1회 조회. 시크릿 모드는 RAM 캐시.
+    """최근 N턴 원문 + 그래프 기억(recall) 1회 조회. 시크릿 모드는 RAM 캐시.
     (흐름도 CTX — 4개 에이전트가 각각 조회하지 않음)"""
     RECENT_N = 10
     history, summary = [], ''
@@ -381,7 +387,7 @@ def load_context_node(state: ChatState) -> dict:
         from chat.secret_cache import get_history
         history = get_history(state['session_id'])[-RECENT_N:]
     else:
-        from chat.models import ChatMessage, UserMemory
+        from chat.models import ChatMessage
         recent = list(
             ChatMessage.objects
             .filter(session_id=state['session_id'])
@@ -390,19 +396,16 @@ def load_context_node(state: ChatState) -> dict:
         recent.reverse()
         history = [{'role': m.role, 'content': m.content} for m in recent]
         if state.get('user_id'):
-            summary = (
-                UserMemory.objects
-                .filter(user_id=state['user_id'])
-                .values_list('summary_text', flat=True)
-                .first()
-            ) or ''
-            # 그래프(구조화 관계) 기억 병행 회상 — Neo4j 미설정 시 '' 이라 영향 없음
+            # 장기 기억 = 그래프 단독 (2026-07-16 요약 계층 은퇴 — 주입 차단).
+            # user_memory 요약은 더 이상 챗봇에 주입하지 않음. 생성은 유지(마음리포트·opener 사용).
+            # 근거: 27종 평가 96%는 그래프 recall 단독 수치 + 요약 주입발 사고 이력(위기 재인용 등).
+            # Neo4j 미설정/장애 시 '' — 최근 N턴 원문만으로 동작 (무중단).
             try:
-                from chat.graph_memory import recall as graph_recall
+                from chat.memory_backend import recall as graph_recall   # v1/v2 스위치 경유
                 g = graph_recall(state['user_id'],
                                  message=state.get('user_message'))   # 재강화: 언급된 기억만 강화
                 if g:
-                    summary = (summary + '\n\n[관계 기억]\n' + g).strip()
+                    summary = '[관계 기억]\n' + g
             except Exception:
                 pass
 
@@ -506,7 +509,8 @@ def resp_prep_node(state: ChatState) -> dict:
             evidence_parts.append(f"{m['role']}: {m['content']}")
         evidence = '\n'.join(evidence_parts)
         for attempt in (1, 2):   # 재생성도 재검사 — 1차가 또 어기면 2차는 초강수 (2026-07-14)
-            ok, offending = check_grounded(text, evidence, state.get('user_message', ''))
+            ok, offending = check_grounded(text, evidence, state.get('user_message', ''),
+                                           crisis_turn=bool(state.get('crisis')))
             if ok:
                 break
             retry_messages = [('system', '\n\n'.join(system_parts)

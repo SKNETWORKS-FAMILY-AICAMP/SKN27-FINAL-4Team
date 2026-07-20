@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """LLM 공급자 선택 — .env 로 전환.
 
-LLM_PROVIDER=openai (기본)  → OPENAI_API_KEY + OPENAI_MODEL(기본 gpt-5.4-mini)
+LLM_PROVIDER=openai (기본)  → OPENAI_API_KEY + OPENAI_MODEL(기본 gpt-4o-mini — A/B 실측 채택)
 LLM_PROVIDER=groq           → GROQ_API_KEY + GROQ_MODEL(기본 llama-3.3-70b-versatile)
 
 사용처: graph/nodes.py(응답 생성/판별), memory.py(장기 요약)

@@ -4,6 +4,8 @@
 import random
 import os
 
+from ai.agents.llm import OPENAI_DEFAULT_MODEL
+
 class FallbackWebAgent:
     """
     데이터 부족 시 사용자의 인구통계학적 특성(나이, 성별)과 관심사를 바탕으로
@@ -79,7 +81,7 @@ class FallbackWebAgent:
                 )
                 
                 response = client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model=os.environ.get("OPENAI_MODEL", OPENAI_DEFAULT_MODEL),   # llm.py와 동일 규칙 (하드코딩 제거)
                     messages=[
                         {"role": "system", "content": "당신은 실시간 인터넷 트렌드를 긁어와서 사용자에게 새롭고 핫한 힐링/환기 활동을 추천하는 웹 트렌드 분석가입니다. 반드시 JSON으로만 응답하세요."},
                         {"role": "user", "content": prompt}

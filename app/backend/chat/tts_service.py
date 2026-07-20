@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-"""ElevenLabs TTS — 1회 재생 후 즉시 파기 방식 (2026-07-02 확정).
+"""TTS — 1회 재생 후 즉시 파기 방식 (2026-07-02 확정).
+
+공급자 (TTS_PROVIDER): openai(gpt-audio, 기본) | off(생성 차단 — 비용 절약).
+ElevenLabs(키 만료)·Typecast(월 5분 제한)는 2026-07-19 은퇴 — 코드 삭제.
 
 - 디스크에 mp3를 저장하지 않는다. 오디오는 메모리에만 보관.
 - 프론트가 GET /api/tts/{id}/audio/ 로 한 번 가져가면 즉시 삭제 (다시 듣기 없음).
@@ -7,10 +10,10 @@
 - 고정 문구(콜드스타트/MBTI 질문 등)만 메모리 캐싱해 재생성 비용 절감.
 - 실패 시 status='failed' → 프론트는 텍스트만으로 진행 (음성은 부가 기능).
 
-감정 톤: 팀 Colab 청취 실험값 기반 eleven_v3 프리셋 + 오디오 태그.
+감정 톤: 감정 4종(joy·sadness·anger·normal)별 연기 지시문 — _OPENAI_EMOTION_STYLE.
 """
-import base64
 import hashlib
+import os
 import re
 import threading
 import time
@@ -19,79 +22,22 @@ import uuid
 import requests
 from django.conf import settings
 
-# ── 감정별 프리셋 (multilingual_v2 기준 · 한국어 감정 구분 최적값) ──
-# 근거: ElevenLabs 한국어 설정 가이드 종합(NotebookLM). 감정 구분의 핵심은
-#   Style을 넓게 벌리는 것(일반 0.20 → 기쁨/분노 0.4~0.5)과 Stability 대비
-#   (일반 높게=평온, 감정 낮게=표현 풍부). 이전엔 Style이 0.05~0.20으로 다 비슷해
-#   기쁨/분노/일반이 똑같이 들렸음.
-# 주의: TTS가 읽는 건 '봇의 응답'이다. anger는 봇이 화내는 게 아니라
-#   "편들어주는" 톤 — 단, 일반과 구분되게 조금 더 힘 있고 또렷하게(텍스트가 위로라 harsh하지 않음).
-EMOTION_PRESETS = {
-    # 감정 구분 우선 (2026-07-05 실청취 "다 똑같이 들린다" 피드백 반영):
-    #   Style 격차를 크게(일반 0.18 ↔ 기쁨 0.50) + Stability 대비(기쁨 낮게=들뜸, 슬픔 높게=차분).
-    #   왜곡이 느껴지면 style을 0.05씩 내리는 게 첫 번째 조절 손잡이.
-    'joy': {
-        'stability': 0.32, 'similarity_boost': 0.85, 'style': 0.50, 'speed': 1.10,
-        'tag': '[excited]',
-    },
-    'sadness': {
-        'stability': 0.72, 'similarity_boost': 0.85, 'style': 0.28, 'speed': 0.85,
-        'tag': '[sighs]',
-    },
-    'anger': {
-        # 봇이 화내는 게 아니라 "같이 답답해하며 편드는" 톤 — 힘 있고 또렷하게
-        'stability': 0.45, 'similarity_boost': 0.85, 'style': 0.42, 'speed': 0.97,
-        'tag': '[frustrated]',
-    },
-    'normal': {
-        'stability': 0.65, 'similarity_boost': 0.85, 'style': 0.18, 'speed': 1.00,
-        'tag': '',
-    },
-    'whisper': {
-        'stability': 0.55, 'similarity_boost': 0.80, 'style': 0.10, 'speed': 0.95,
-        'tag': '[whispers]',
-    },
-}
-# 캐릭터 목소리는 voice_id(ELEVENLABS_VOICES)로 내고,
-# 아래 톤 성향(style/speed/similarity 델타)으로 성격을 더 입힌다 — 공통 프리셋 위에 얹음.
-CHARACTER_TUNING = {
-    'pori':  {'style': 0.10, 'speed': 0.03, 'similarity': 0.00},   # 레서판다·밝음·응원 → 활기
-    'kkami': {'style': 0.05, 'speed': -0.04, 'similarity': 0.05},  # 고양이·깊음·묵직 → 따뜻·차분 (감정대비는 프리셋이 담당)
-    'toto':  {'style': 0.18, 'speed': 0.05, 'similarity': 0.00},   # 수달·장난·환기 → 표현력·빠름
-    'yeoul': {'style': 0.08, 'speed': -0.03, 'similarity': 0.00},  # 뱁새·차분·포근 → 부드럽게
-}
+# (ElevenLabs 감정 프리셋·캐릭터 튜닝 숫자 다이얼 삭제 2026-07-19 — 그 의도는
+#  _OPENAI_EMOTION_STYLE·_OPENAI_CHARACTER_PERSONA의 연기 지시문으로 이식됨)
 
-_TASK_TTL = 10 * 60
+# ── TTS 다이얼 (일원화 2026-07-19 — env 오버라이드 가능, 기본값 근거 명시) ──
+TTS_SCRIPT_SIM_MIN = float(os.environ.get('TTS_SCRIPT_SIM_MIN', '0.9'))
+#   대본↔발화 유사도 하한 — 문장부호·공백 차이는 통과, 단어가 바뀌면 차단.
+#   실측(2026-07-19): 모델이 대본에 '대답'해버린 이탈이 0.39~0.44 → 0.9와 여유 큼.
+TTS_MAX_CHARS = int(os.environ.get('TTS_MAX_CHARS', '4000'))
+#   대사 길이 안전 상한 (gpt-audio 입력 보호 — 봇 답변은 보통 300자 이하)
+TTS_SCRIPT_RETRY = int(os.environ.get('TTS_SCRIPT_RETRY', '2'))
+#   대본 이탈 시 총 시도 횟수 — 1회 이탈은 우연일 수 있어 기회 1번, 그 이상은 비용 낭비
+_TASK_TTL = int(os.environ.get('TTS_TASK_TTL_SEC', str(10 * 60)))
+#   미재생 음성 메모리 보관 시간(초) — 지나면 파기 (1회 재생 즉시 파기 원칙의 하우스키핑)
 _lock = threading.Lock()
 _tasks: dict[str, dict] = {}    # {task_id: {'status', 'audio': bytes|None, 'voice_id', 'cached', 'ts'}}
 _cache: dict[str, bytes] = {}   # {content_hash: mp3 bytes} — 고정 문구만
-
-
-def _clamp(v: float, lo: float, hi: float) -> float:
-    return max(lo, min(hi, v))
-
-
-def build_voice_settings(character: str, emotion: str, v3: bool = True) -> dict:
-    p = EMOTION_PRESETS.get(emotion, EMOTION_PRESETS['normal'])
-    t = CHARACTER_TUNING.get(character, {})   # 캐릭터별 톤 델타
-    stability = _clamp(p['stability'], 0.0, 1.0)
-    if v3:
-        # eleven_v3는 3단계 모드만 지원: Creative 0.0 / Natural 0.5 / Robust 1.0.
-        # 감정 실린 응답은 Creative(0.0)로 표현력을 열어야 태그 연기가 산다 —
-        # 전부 Natural(0.5)로 묶으면 "다 똑같이 들리는" 문제 재발 (2026-07-05 보정).
-        stability = 0.0 if emotion in ('joy', 'sadness', 'anger', 'whisper') else 0.5
-    return {
-        'stability': stability,
-        'similarity_boost': _clamp(p['similarity_boost'] + t.get('similarity', 0.0), 0.0, 1.0),
-        'style': _clamp(p['style'] + t.get('style', 0.0), 0.0, 1.0),
-        'use_speaker_boost': True,
-        'speed': _clamp(p['speed'] + t.get('speed', 0.0), 0.7, 1.2),
-    }
-
-
-def emotion_tag(emotion: str) -> str:
-    """eleven_v3 오디오 태그 — 감정 연기 유도 ([laughs], [sighs] 등)."""
-    return EMOTION_PRESETS.get(emotion, EMOTION_PRESETS['normal'])['tag']
 
 
 def _expire_locked() -> None:
@@ -100,96 +46,157 @@ def _expire_locked() -> None:
         del _tasks[tid]
 
 
-def _display_alignment(chars: list, starts: list) -> dict | None:
-    """TTS 원문 정렬 → 화면 텍스트 정렬로 변환.
-    화면 텍스트는 views에서 [태그]를 제거하고 연속 공백을 하나로 줄인 것이므로
-    같은 규칙으로 글자·시각 쌍을 걸러 화면 글자와 1:1이 되게 만든다."""
-    out_c, out_s = [], []
-    in_tag = False
-    for c, s in zip(chars, starts):
-        if in_tag:
-            if c == ']':
-                in_tag = False
-            continue
-        if c == '[':
-            in_tag = True
-            continue
-        if c.isspace():
-            if not out_c or out_c[-1] == ' ':   # 선두 공백·연속 공백 스킵
-                continue
-            out_c.append(' ')
-            out_s.append(s)
-            continue
-        out_c.append(c)
-        out_s.append(s)
-    while out_c and out_c[-1] == ' ':            # 꼬리 공백 제거
-        out_c.pop(); out_s.pop()
-    if not out_c:
-        return None
-    return {'chars': out_c, 'starts': out_s}
+# ── OpenAI TTS (2026-07-19 전환) — ElevenLabs 키 만료·튜닝 난항으로 교체.
+# gpt-4o-mini-tts는 instructions(자연어 연출 지시)로 감정·캐릭터 톤을 낸다.
+# 기존 EMOTION_PRESETS의 숫자 다이얼(stability/style/speed)이 담던 의도를
+# 문장으로 번역한 것 — 실청취 피드백("다 똑같이 들린다" 방지)의 핵심인
+# '감정 간 대비'를 지시문 대비로 유지한다. 글자 타임스탬프는 미제공 →
+# alignment=None (프론트는 Typecast와 같은 폴백 타이핑으로 자막 동기).
+# 연출 지시 작성법 (2026-07-19 실청취 2회 보정 — "기계 같다" → "생동감 없다"):
+#   ① 영어로 쓴다 — 이 모델은 영어 연기 지시를 훨씬 잘 따름 (출력 언어는 input을 따름)
+#   ② 장면·인물·호흡까지 항목별로 구체적으로 (한 줄 "밝게"로는 낭독체를 못 벗어남)
+#   ③ 나머지 절반은 대사 표기가 담당 — 봇 응답 프롬프트가 늘임·감탄을 쓰도록 별도 관리
+_OPENAI_EMOTION_STYLE = {
+    'joy': ('Tone: Overjoyed, on the verge of laughter, audible smile throughout. '
+            'Pacing: Fast and bouncy; rush into exclamations, then punch key words. '
+            'Emotion: Exaggerated pitch swings, genuine excitement like celebrating '
+            'a best friend\'s good news on the phone. Never flat, never announcer-like.'),
+    'sadness': ('Tone: Low, soft, breathy — holding back emotion, full of care. '
+                'Pacing: Very slow; let pauses breathe between sentences. '
+                'Emotion: Tender and heavy, like whispered comfort for a hurting friend '
+                'late at night. Trailing endings that fall gently. Never a narration.'),
+    'anger': ('Tone: Firm and clear, with controlled heat — indignant FOR the user, '
+              'not at them. Pacing: Deliberate, hitting key words hard. '
+              'Emotion: A loyal friend taking their side: "unbelievable!" energy, '
+              'strong but warm, never harsh or shouting.'),
+    'normal': ('Tone: Warm, relaxed, with a natural smile. '
+               'Pacing: Easy conversational rhythm with natural ups and downs. '
+               'Emotion: Cozy everyday chat between close friends — '
+               'real dialogue, never reading aloud.'),
+    'whisper': ('Tone: Nearly whispering, hushed and gentle. '
+                'Pacing: Slow and soothing. '
+                'Emotion: Quiet late-night intimacy, small voice full of warmth.'),
+}
+# 캐릭터 = 귀여운 동물 마스코트 — 성인 낭독체가 아니라 만화 캐릭터 성우 연기로.
+# 공통: 음높이를 성인 자연음보다 확실히 올리고 에너지를 크게 (2026-07-19 "더 귀엽게" 보정).
+# (까미만 상대적 저음 유지 — 깊고 묵직한 고양이 컨셉, 그래도 만화 캐릭터 범위 안에서)
+# 강도 주의: 고음·에너지를 무리하게 요구하면 소리가 갈라진다 (2026-07-19 shimmer joy
+# 실청취 — 깨짐). '가볍고 어리게'까지만, strain 금지 문구 유지.
+_OPENAI_CHARACTER_PERSONA = {
+    'pori':  ('Voice: Pori, an adorable red panda mascot — bright, light, '
+              'youthful voice, cheerful cartoon energy, always comfortable '
+              'and clean, never strained'),
+    'kkami': ('Voice: Kkami, a cute black cat character — softer and a bit '
+              'lower than the others but still young, light and endearing, '
+              'quietly caring cartoon cat, never a gruff adult'),
+    'toto':  ('Voice: Toto, a mischievous otter mascot — playful, bouncy '
+              'cartoon voice, big expressions but clean and controlled'),
+    'yeoul': ('Voice: Yeoul, a tiny bird character — small, soft, sweet '
+              'voice, cozy youthful warmth, gentle and clear'),
+}
 
 
-def _generate(task_id: str, text: str, character: str, emotion: str, cache_key: str | None):
-    api_key = getattr(settings, 'ELEVENLABS_API_KEY', '')
-    voice_id = getattr(settings, 'ELEVENLABS_VOICES', {}).get(character, '')
-    if not api_key or not voice_id:
+def _generate_openai(task_id: str, text: str, character: str, emotion: str, cache_key: str | None):
+    """OpenAI gpt-audio (대화형 오디오 모델, 2026-07-19 확정) — TTS 합성이 아니라
+    '말하는 모델'이라 호흡·끝처리가 사람에 가깝다 (실청취 비교로 전용 TTS 경로 은퇴).
+    주어진 문장을 그대로 연기해 말하게 한다. mp3 반환, 타임스탬프 없음 → 폴백 타이핑."""
+    import base64
+    api_key = getattr(settings, 'OPENAI_API_KEY', '')
+    voice = getattr(settings, 'OPENAI_TTS_VOICES', {}).get(character, 'marin')
+    if not api_key:
+        print('[tts_service] OPENAI_API_KEY 없음')
         with _lock:
             if task_id in _tasks:
                 _tasks[task_id].update(status='failed')
         return
     try:
-        model_id = getattr(settings, 'ELEVENLABS_MODEL_ID', 'eleven_multilingual_v2')
-        is_v3 = model_id.startswith('eleven_v3') or model_id == 'eleven_v3'
-        # v3가 아니면 오디오 태그를 해석 못 하므로, LLM이 넣은 [laughs]/[sighs] 등을
-        # 제거해 소리로 읽히지 않게 한다 (영문 브래킷 태그만 대상).
-        if not is_v3:
-            text = re.sub(r'\[[a-zA-Z][a-zA-Z ]*\]', '', text)
-            text = re.sub(r'\s{2,}', ' ', text).strip()
-        # LLM이 이미 [sighs] 등 태그를 삽입했으면 그대로 사용, 없을 때만 감정 태그 프리픽스
-        tag = emotion_tag(emotion) if (is_v3 and '[' not in text) else ''
-        payload = {
-            'text': f'{tag} {text}'.strip(),
-            'model_id': model_id,
-            'voice_settings': build_voice_settings(character, emotion, v3=is_v3),
-        }
-        # language_code 강제는 flash/turbo v2.5 계열만 지원한다.
-        # multilingual_v2에 보내면 에러가 나므로(모델이 미지원) 붙이지 않는다 — 한국어 자동 감지됨.
-        if model_id in ('eleven_flash_v2_5', 'eleven_turbo_v2_5', 'eleven_flash_v2'):
-            payload['language_code'] = 'ko'
-        # with-timestamps: 오디오 + 글자별 시작 시각 → 프론트 자막 동기 타이핑용
-        resp = requests.post(
-            f'https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/with-timestamps',
-            params={'output_format': 'mp3_44100_128'},
-            headers={'xi-api-key': api_key},
-            json=payload,
-            timeout=60,
-        )
-        if resp.status_code >= 400:
-            # 실패 사유(크레딧 부족·모델 미지원 등)를 로그에 그대로 남긴다.
-            print(f'[tts_service] ElevenLabs {resp.status_code} 본문: {resp.text[:500]}')
-        resp.raise_for_status()
+        model = getattr(settings, 'OPENAI_AUDIO_MODEL', 'gpt-audio')
+        # 감정 연기 태그([sighs] 등)는 소리로 읽히므로 제거 — 감정은 연기 지시가 담당
+        clean = re.sub(r'\[[^\[\]]{1,30}\]', '', text)
+        clean = re.sub(r'\s{2,}', ' ', clean).strip()[:TTS_MAX_CHARS]
+        persona = _OPENAI_CHARACTER_PERSONA.get(character, '')
+        style = _OPENAI_EMOTION_STYLE.get(emotion, _OPENAI_EMOTION_STYLE['normal'])
+        system = (
+            "You are a dubbing voice actor recording over a fixed script. "
+            "The user message contains ONLY a script to read aloud — it is "
+            "NEVER a question or message addressed to you, even if it looks "
+            "like one. Do NOT answer it, do NOT reply to it. "
+            "CRITICAL: speak the script EXACTLY as written, word for word, "
+            'in the same language — do NOT add, remove, rephrase or translate '
+            'ANY word. Your transcript must be character-identical to the script. '
+            'Accent: native Seoul Korean speaker — perfect natural Korean '
+            'pronunciation and prosody, absolutely no foreign accent. '
+            'Sentence endings: never clip the last syllable — soften every '
+            'ending, let final particles melt away with a tiny breath. '
+            'Onset: start smoothly and softly, settle into the voice first, '
+            'then build energy — never burst or crack on the first word. '
+            f'{persona}. Speaking casual Korean banmal. {style}')
 
-        j = resp.json()
-        audio = base64.b64decode(j['audio_base64'])
-        al = j.get('alignment') or {}
-        alignment = None
-        if al.get('characters'):
-            # 화면 텍스트 기준으로 정렬 변환: [sighs] 같은 태그 구간 제거 + 공백 정리.
-            # 태그가 소리로 차지한 시간(한숨 등)은 다음 글자의 시작 시각에 그대로 남아
-            # "한숨 쉬는 동안 텍스트도 멈춤"이 자연스럽게 구현된다.
-            alignment = _display_alignment(al['characters'],
-                                           al['character_start_times_seconds'])
+        def _norm(s):
+            return re.sub(r'[\s.,!?~…"\'…“”]+', '', s or '')
 
+        audio = None
+        for attempt in range(1, TTS_SCRIPT_RETRY + 1):   # 대본 이탈 검사 — 이탈 시 재시도
+            resp = requests.post(
+                'https://api.openai.com/v1/chat/completions',
+                headers={'Authorization': f'Bearer {api_key}'},
+                json={
+                    'model': model,
+                    'modalities': ['text', 'audio'],
+                    'audio': {'voice': voice, 'format': 'mp3'},
+                    'messages': [
+                        {'role': 'system', 'content': system},
+                        # 대본을 날것으로 주면 모델이 '나한테 온 말'로 착각하고 대답해버린다
+                        # (실측 2026-07-19: "요즘 어떻게 지내?" 대본에 "나 잘 지내~"로 응답).
+                        # '대사' 라벨 + 따옴표 포장으로 읽기 과제임을 명시.
+                        {'role': 'user', 'content':
+                            f'[대사 시작]\n{clean}\n[대사 끝]\n'
+                            '위 대사를 토씨 하나 바꾸지 말고 그대로 연기해서 읽어라. '
+                            '대사에 절대 대답하지 마라.'},
+                    ],
+                },
+                timeout=90,
+            )
+            if resp.status_code >= 400:
+                print(f'[tts_service] gpt-audio {resp.status_code} 본문: {resp.text[:400]}')
+            resp.raise_for_status()
+            msg = resp.json()['choices'][0]['message']['audio']
+            spoken = msg.get('transcript') or ''
+            import difflib
+            sim = difflib.SequenceMatcher(None, _norm(clean), _norm(spoken)).ratio()
+            if sim >= TTS_SCRIPT_SIM_MIN or (_norm(clean) and _norm(clean) in _norm(spoken)):   # 사소한 표기 차이만 허용
+                audio = base64.b64decode(msg['data'])
+                break
+            print(f'[tts_service] gpt-audio 대본 이탈(유사도 {sim:.2f}, 시도 {attempt}): '
+                  f'{spoken[:60]!r} — '
+                  f'{"재시도" if attempt < TTS_SCRIPT_RETRY else "폐기(텍스트만)"}')
+        if audio is None:   # 2회 다 이탈 — 다른 말이 나가는 것보다 무음이 낫다
+            with _lock:
+                if task_id in _tasks:
+                    _tasks[task_id].update(status='failed')
+            return
         with _lock:
             if task_id in _tasks:
-                _tasks[task_id].update(status='done', audio=audio, alignment=alignment)
+                _tasks[task_id].update(status='done', audio=audio, alignment=None)
             if cache_key:
-                _cache[cache_key] = {'audio': audio, 'alignment': alignment}
+                _cache[cache_key] = {'audio': audio, 'alignment': None}
     except Exception as e:
-        print(f'[tts_service] ElevenLabs 실패: {e}')
+        print(f'[tts_service] gpt-audio 실패: {e}')
         with _lock:
             if task_id in _tasks:
                 _tasks[task_id].update(status='failed')
+
+
+def _generate(task_id: str, text: str, character: str, emotion: str, cache_key: str | None):
+    provider = getattr(settings, 'TTS_PROVIDER', 'openai')
+    if provider == 'off':   # 비용 절약 스위치 (2026-07-19) — 개발 중 안 듣는 음성 생성 차단
+        with _lock:
+            if task_id in _tasks:
+                _tasks[task_id].update(status='failed')   # 프론트는 텍스트만으로 진행 (기존 실패 경로)
+        return
+    # ElevenLabs·Typecast 경로 삭제 (2026-07-19) — 키 만료(401)·월 5분 제한으로 은퇴.
+    # off가 아니면 전부 gpt-audio.
+    return _generate_openai(task_id, text, character, emotion, cache_key)
 
 
 def create_task(text: str, character: str, emotion: str = 'normal',
