@@ -75,8 +75,9 @@ etl/data/kcelectra_train_clean.jsonl
 etl/data/aug_voice.jsonl
 etl/data/aug_wellness.jsonl
 
-# 파인튜닝 모델 (대용량 · 팀 공유는 Drive로, 재생성: 실험2 노트북 최종 학습 셀)
-ai/emotion/artifacts_ft/
+# 파인튜닝 모델: 토크나이저·설정·성적표는 깃 공유, 본체(safetensors 488MB)만 제외
+# (GitHub 100MB 하드 리밋 — 본체는 Drive 공유, 재생성: 실험2 노트북 최종 학습 셀)
+ai/emotion/artifacts_ft/model.safetensors
 
 # IDE 설정
 .vscode/
@@ -119,7 +120,11 @@ etl/data/raw/
 # 커밋 허용 예외 — 자체 제작(재배포 문제 없음) · 실험 결과 기록
 !etl/data/chat_eval_set.jsonl
 !ai/emotion/exp1_results.json
-ai/emotion/artifacts*/
+!ai/emotion/ft_final_metrics.json
+ai/emotion/artifacts/
+# artifacts_ft는 본체(safetensors)만 제외 — 나머지 소파일은 커밋 허용 (79행 참조)
+!ai/emotion/artifacts_ft/*.json
+!ai/emotion/artifacts_ft/vocab.txt
 
 # 
 # RAGAS 교차 검증 전용 venv (프로젝트 venv와 분리 — 절대 커밋 금지)
