@@ -71,7 +71,7 @@
 
       <!-- 펼침: 큰 캐릭터 + 기억 별자리 칩 -->
       <template v-if="!isCollapsed">
-        <div class="room-label">{{ timeGreeting }} · {{ displayCharacter.name }}의 마음방</div>
+        <div class="room-label">{{ isSecret ? '밤하늘 아래 · 비밀 이야기' : timeGreeting }}</div>
         <div class="hero-wrap" @click="pokeCharacter" title="쓰다듬기">
           <div class="hero-react" :style="reactStyle" :key="'r' + animKey">
             <div class="hero-circle">
@@ -147,8 +147,8 @@
                class="speak-hint">
             <span class="eq"><i></i><i></i><i></i></span> 말하는 중
           </div>
-          <!-- 기억 영수증 라벨 — 이 답변 직후 새로 기억된 것 (프로토타입 memLabel) -->
-          <div v-if="msg.memLabel" class="mem-label">✦ '{{ msg.memLabel }}' 기억함</div>
+          <!-- (기억함 라벨 제거 2026-07-20 — 저장은 조용히, 패널 고지·칩 반짝임으로 충분.
+               삭제(잊어줘)만 토스트로 확인해준다) -->
           <!-- 대화 맥락 바로가기 칩 — 사용자가 관련 얘기를 꺼냈을 때만 (2026-07-12) -->
           <button v-if="msg.suggestPage && msg.displayed === msg.content" class="suggest-chip"
                   @click="router.push(msg.suggestPage === 'report' ? '/report' : '/mypage')">
@@ -486,10 +486,9 @@ const userExpanded = ref(false)
 const nearBottom = ref(true)   // 사용자가 위로 올려 읽는 중인지 추적 (바닥 고정 여부)
 function onThreadScroll(e) {
   const el = e.target
-  const st = el.scrollTop
-  nearBottom.value = (el.scrollHeight - st - el.clientHeight) < 80
-  if (!userExpanded.value && st > 40 && !isCollapsed.value) isCollapsed.value = true
-  else if (st < 12 && isCollapsed.value) { isCollapsed.value = false; userExpanded.value = false }
+  nearBottom.value = (el.scrollHeight - el.scrollTop - el.clientHeight) < 80
+  // (접힘 동작 제거 2026-07-20 — 사용자 결정: 캐릭터·기억 별자리는 상시 고정,
+  //  대화만 그 아래에서 스크롤. 낮은 화면은 @media가 캐릭터를 축소해 커버)
 }
 function expandHeader() { isCollapsed.value = false; userExpanded.value = true }
 // 바닥 고정 (2026-07-20 실측 수정): 기억 칩 로드·입력창 확장·헤더 접힘 등으로
@@ -555,13 +554,15 @@ function _diffToast(prev, next) {
   const added = b.find(x => !a.includes(x))
   const removed = a.find(x => !b.includes(x))
   let msg = null
+  // 저장은 조용히 (2026-07-20 결정) — 칩 반짝임만, 토스트·라벨 없음.
+  // 삭제(잊어줘)만 토스트로 확인 (잊힐 권리의 영수증).
   if (added) {
-    msg = `${displayCharacter.value.name}가 '${added}'을(를) 기억했어요`
     glowName.value = added
-    const last = [...messages.value].reverse().find(m => m.role === 'assistant')
-    if (last) last.memLabel = added   // 말풍선 밑 "✦ '○○' 기억함" 라벨 (프로토타입)
+    clearTimeout(_toastT)
+    _toastT = setTimeout(() => { glowName.value = null }, 3400)
+    return
   }
-  else if (removed) { msg = `'${removed}' 이야기를 잊었어요`; glowName.value = null }
+  if (removed) { msg = `'${removed}' 이야기를 잊었어요`; glowName.value = null }
   if (msg) {
     memToast.value = msg
     clearTimeout(_toastT)
@@ -1460,13 +1461,24 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
 
 /* ── 입력바 ── */
 .input-zone {
-  border-top: 1px solid rgba(192,132,252,0.15);
-  padding: 20px 32px 24px;
-  background: rgba(13,5,32,0.4);
-  backdrop-filter: blur(20px);
+  /* 떠 있는 독 (2026-07-20): 전폭 검은 띠 제거 — 배경 노을이 양옆으로 흐르고,
+     입력바 자체가 유리 알약으로 떠 있는다 */
+  border-top: none;
+  padding: 6px 32px 18px;
+  background: transparent;
   flex-shrink: 0;
 }
-.input-bar { display: flex; align-items: flex-end; gap: 14px; }
+.input-bar {
+  display: flex; align-items: flex-end; gap: 12px;
+  /* 비율 정합: 대화 컬럼(880px)과 같은 폭 + 유리 독 스타일 */
+  width: 100%; max-width: 880px; margin: 0 auto;
+  background: rgba(13,5,32,0.5);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(192,132,252,0.2);
+  border-radius: 28px;
+  padding: 9px 12px;
+}
+.img-preview { max-width: 880px; margin: 0 auto 10px; }
 
 .msg-input {
   flex: 1;
@@ -1586,17 +1598,19 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
 }
 .hero-wrap { position: relative; cursor: pointer; animation: breathe 5.5s ease-in-out infinite; }
 .hero-circle {
-  width: 172px; height: 172px;
-  border-radius: 50%;
+  /* 둥근 사각형 (2026-07-20): 원형이 몸통·귀를 잘라먹음 → 전신이 보이게 */
+  width: 188px; height: 180px;
+  border-radius: 44px;
   overflow: hidden;
   position: relative;
   background: radial-gradient(circle at 50% 38%, #fef7ef, #f6e6d6);
-  box-shadow: 0 0 0 7px rgba(255,240,225,0.14), inset 0 -16px 26px rgba(205,150,120,0.4);
+  box-shadow: 0 0 0 6px rgba(255,240,225,0.14), inset 0 -16px 26px rgba(205,150,120,0.35);
 }
 .hero-circle img {
-  position: absolute; left: -9%; top: -4%;
-  width: 118%; height: 118%;
-  object-fit: contain; object-position: 50% 45%;
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: contain; object-position: 50% 100%;
+  padding: 8px 6px 0;
 }
 .hero-circle.sm { width: 48px; height: 48px; flex: 0 0 auto; box-shadow: 0 0 0 3px rgba(255,240,225,0.16); }
 .float-symbol {

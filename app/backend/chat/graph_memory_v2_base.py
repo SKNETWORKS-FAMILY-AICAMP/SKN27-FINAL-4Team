@@ -54,6 +54,16 @@ _NEG_EMO = ('슬픔', '분노')
 # 코드가 재확인한다 — 발화에 이 표현이 없으면 forget 강등)
 _FORGET_HINT = re.compile(r'잊어|기억하지\s*마|지워|꺼내지\s*마|삭제해')
 
+# 챗봇 캐릭터 이름 — 사용자의 인물이 아니다 (2026-07-20 실측: "고마워 까미야" →
+# '까미야'(호격조사 포함)로 저장되는 자기참조 오염). 저장 단계에서 결정적으로 배제.
+_CHARACTER_NAMES = {'포리', '까미', '토토', '여울'}
+
+
+def _is_character(pn):
+    """호격·존칭 어미를 벗기고 캐릭터 이름인지 판정 ('까미야'·'포리님'도 잡는다)."""
+    n = re.sub(r'(야|아|님|씨)$', '', (pn or '').strip())
+    return n in _CHARACTER_NAMES
+
 # 종결 어휘 (v1 자산 — '그만두' 어간 포함: '그만두기 그만둠' 이중 접미 사고 방지)
 _CLOSURE_STEM = re.compile(r'취소|그만두|그만둠|그만뒀|이별|절교|퇴사|무산|파토|종료|깨짐|깨졌|깨져|끝남|끝났|헤어')   # 활용형 포함 (S04-off 실측: '깨졌어'가 '깨짐'에 안 걸림)
 _CLOSURE_TAIL = re.compile(r'(취소|그만둠|그만두기|이별|절교|퇴사|무산|파토|종료|깨짐|끝남)$')   # 끝단 앵커
@@ -213,9 +223,12 @@ def _extract(message):
         "★relations 판별: 사용자가 '자기 사람'으로 선언·서사한 관계만 담아라 "
         "('내 친구 수아', '우리 엄마', '회사 동료 지현'). 사건 서술에 역할로 등장만 한 "
         "인물(팀장님·의사·사장 등)은 relations 금지 — 그 사건 events의 people에만.★\n"
-        "preferences: {topic, polarity: 호|오} — ★topic은 좋아하는 대상 그대로"
+        "★챗봇 캐릭터(포리·까미·토토·여울)는 대화 상대인 나 자신이다 — people·relations 어디에도 "
+        "절대 넣지 마라.★\n"
+        "preferences: {topic, polarity: 호|오, category} — ★topic은 좋아하는 대상 그대로"
         "('민트초코','클라이밍'). 카테고리('맛','취미')로 뭉개면 잊어줘가 그 대상을 "
-        "못 찾는다★\n"
+        "못 찾는다★ category는 그 대상이 속한 분류 한 단어(음식/음료/취미/운동/음악/"
+        "콘텐츠/장소/동물/기타) — 사건의 topic과 같은 어휘를 써라.\n"
         "invalidations(끝난 것): {kind: relation|event|preference, name, reason, forget} — "
         "이별·절교·퇴사·취소·약속 깨짐·파토. name은 끝난 '대상'의 이름('편의점 알바' O, "
         "'편의점 알바 그만두기' X). 이유·배경으로만 언급된 사람을 관계 종결로 확대 해석 "
@@ -606,7 +619,7 @@ def _store(tx, uid, data, msg_probs, message, vectors=None):
                    uid=uid, key=key, v=ev['topic'].strip(), now=now, eid=eid)
         for pn in (ev.get('people') or []):
             pk = _norm(pn)
-            if not pk:
+            if not pk or _is_character(pn):   # 캐릭터 자기참조 배제 (호격 '까미야' 포함)
                 continue
             tx.run('MATCH (e:Event {uid:$uid,key:$key}) '
                    'MERGE (p:Person {uid:$uid,key:$pk}) ON CREATE SET p.name=$pn '
@@ -633,7 +646,7 @@ def _store(tx, uid, data, msg_probs, message, vectors=None):
             continue
         pn = (rl.get('person') or '').strip()
         pk = _norm(pn)
-        if not pk:
+        if not pk or _is_character(pn):   # 캐릭터 자기참조 배제 (호격 '까미야' 포함)
             continue
         rel = (rl.get('relation') or '').strip() or '지인'
         tx.run('MATCH (u:User {uid:$uid}) MERGE (p:Person {uid:$uid,key:$pk}) '
@@ -651,6 +664,12 @@ def _store(tx, uid, data, msg_probs, message, vectors=None):
         tx.run('MATCH (u:User {uid:$uid}) MERGE (t:Topic {name:$tk}) '
                'MERGE (u)-[r:PREFERS {polarity:$pol}]->(t) ' + _TSTAMP,
                uid=uid, tk=tk, pol=pol, now=now, eid=eid)
+        # Topic 계층 (2026-07-20): 구체 취향 → 카테고리 간선 — 사건의 ABOUT 카테고리와
+        # 같은 노드를 공유해 '민트초코 → 음식 ← 맛집 사건'으로 연결된다 (관계 11종째)
+        cat = ((pf.get('category') if isinstance(pf, dict) else None) or '').strip()
+        if cat and cat != tk:
+            tx.run('MATCH (t:Topic {name:$tk}) MERGE (c:Topic {name:$cat}) '
+                   'MERGE (t)-[:IN_CATEGORY]->(c)', tk=tk, cat=cat)
 
     # 무효화 (belief revision) — §8-4-2/4: key↔key + 전체 토큰 AND, 잊어줘 분리
     for inv in (data.get('invalidations') or []):
