@@ -4,18 +4,21 @@ from .models import FeatureCode
 
 
 class AnalysisRequestSerializer(serializers.Serializer):
-    emotion_text = serializers.CharField(max_length=200, required=False, allow_blank=True)
-    event_text = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    raw_text = serializers.CharField(max_length=500, required=False, allow_blank=True)
+    emotion_text = serializers.CharField(max_length=500, required=False, allow_blank=True)
+    event_text = serializers.CharField(max_length=500, required=False, allow_blank=True)
     energy_text = serializers.CharField(max_length=120, required=False, allow_blank=True)
     need_text = serializers.CharField(max_length=120, required=False, allow_blank=True)
-    memory_text = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    memory_text = serializers.CharField(max_length=500, required=False, allow_blank=True)
     explicit_place = serializers.CharField(max_length=80, required=False, allow_blank=True)
     energy_code = serializers.CharField(max_length=80, required=False, allow_blank=True)
     need_code = serializers.CharField(max_length=80, required=False, allow_blank=True)
 
     def validate(self, attrs):
-        if not any(attrs.get(key, '').strip() for key in ('emotion_text', 'event_text', 'memory_text')):
+        if not any(attrs.get(key, '').strip() for key in ('raw_text', 'emotion_text', 'event_text', 'memory_text')):
             raise serializers.ValidationError('오늘의 감정이나 기억을 한 줄 이상 적어주세요.')
+        if attrs.get('raw_text') and not attrs.get('emotion_text'):
+            attrs['emotion_text'] = attrs['raw_text']
         for field, group in (('energy_code', 'ENERGY'), ('need_code', 'NEED')):
             value = attrs.get(field)
             if value and not FeatureCode.objects.filter(group=group, code=value).exists():
