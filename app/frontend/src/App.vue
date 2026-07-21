@@ -4,6 +4,8 @@
     :class="{
       'is-secret-app': secret,
       'auth-screen': isAuthScreen,
+      'home-screen': isHomeScreen,
+      'memory-game-screen': isMemoryGameScreen,
       'bright-background': usesBrightPageBackground,
     }"
   >
@@ -96,6 +98,8 @@ const BRIGHT_BACKGROUND_PATHS = new Set([
 ]);
 
 const isAuthScreen = computed(() => route.path.startsWith("/login"));
+const isHomeScreen = computed(() => route.path === "/home");
+const isMemoryGameScreen = computed(() => route.path === "/memory-game");
 const usesBrightPageBackground = computed(() => BRIGHT_BACKGROUND_PATHS.has(route.path));
 
 const providerLabel = computed(() => {
