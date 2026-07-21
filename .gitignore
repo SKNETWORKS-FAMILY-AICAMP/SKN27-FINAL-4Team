@@ -83,6 +83,9 @@ etl/data/aug_wellness.jsonl
 # (GitHub 100MB 하드 리밋 — 본체는 Drive 공유, 재생성: 실험2 노트북 최종 학습 셀)
 ai/emotion/artifacts_ft/model.safetensors
 
+# 배포 스크립트 (개인 작업용 — dev 공유 제외)
+deploy/
+
 # IDE 설정
 .vscode/
 
