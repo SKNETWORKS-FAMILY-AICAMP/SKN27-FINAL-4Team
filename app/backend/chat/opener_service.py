@@ -80,17 +80,22 @@ def _memory_opener(user_id: int, nickname: str) -> str | None:
     기억이 없거나 LLM 실패 시 None (템플릿 폴백)."""
     try:
         from chat import memory_backend
+        # 2026-07-21: recall/upcoming 실패가 조용히 ''로 흡수돼 왔다. 그러면 94행에서
+        # None 반환 → 날씨·시간대 템플릿으로 폴백하는데, 그 첫인사가 '정상'과 구분이
+        # 안 돼서 "그래프가 죽었다"를 아무도 눈치채지 못했다. 폴백은 유지하되 로그는 남긴다.
         try:
             memory_text = memory_backend.recall(user_id) or ''
-        except Exception:
+        except Exception as e:
             memory_text = ''
+            print(f'[opener] recall 실패(템플릿 첫인사로 폴백): {type(e).__name__}: {e}')
 
         # 다가오는 일정 — 있으면 첫인사가 먼저 챙긴다 (2026-07-12)
         up = ''
         try:
             up = memory_backend.upcoming(user_id)
-        except Exception:
+        except Exception as e:
             up = ''
+            print(f'[opener] upcoming 실패: {type(e).__name__}: {e}')
         if not memory_text.strip() and not up:
             return None
         summary = memory_text.strip() or '(없음)'
@@ -110,8 +115,12 @@ def _memory_opener(user_id: int, nickname: str) -> str | None:
              + (f'\n\n[다가오는 일 — 있으면 이걸 최우선으로 자연스럽게 챙겨줘]\n{up}' if up else '')),
         ])
         text = resp.content.strip()
-        return text if 5 <= len(text) <= 120 else None
-    except Exception:
+        if not (5 <= len(text) <= 120):
+            print(f'[opener] LLM 첫인사 길이 이탈({len(text)}자) → 템플릿 폴백')
+            return None
+        return text
+    except Exception as e:
+        print(f'[opener] 기억 첫인사 생성 실패(템플릿 폴백): {type(e).__name__}: {e}')
         return None
 
 

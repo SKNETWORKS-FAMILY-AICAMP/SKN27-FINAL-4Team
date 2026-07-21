@@ -47,7 +47,7 @@ class Command(BaseCommand):
 
         # ③ Neo4j
         def neo():
-            from chat import graph_memory
+            from chat import graph_memory_v2_base as graph_memory   # v1 철거 (2026-07-21)
             if not graph_memory.is_enabled():
                 raise RuntimeError('연결 실패 — URI/비밀번호 또는 컨테이너')
             return f"({os.environ.get('NEO4J_URI')})"
@@ -56,7 +56,7 @@ class Command(BaseCommand):
 
         # ④ 벡터 인덱스
         def vec_idx():
-            from chat import graph_memory
+            from chat import graph_memory_v2_base as graph_memory   # v1 철거 (2026-07-21)
             drv = graph_memory._get_driver()
             with drv.session() as s:
                 names = [r['name'] for r in s.run('SHOW INDEXES YIELD name').data()]

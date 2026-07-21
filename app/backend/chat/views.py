@@ -19,7 +19,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from ai.agents import mbti as mbti_svc
-from . import graph_memory, secret_cache, tts_service   # memory(요약) 완전 은퇴 2026-07-19 — 소비자 0 확인 후 제거
+from . import secret_cache, tts_service   # memory(요약) 은퇴 2026-07-19 · v1 죽은 임포트 제거 2026-07-21 (그래프는 memory_backend 경유만)
 from .models import ChatMessage, ChatSession
 
 

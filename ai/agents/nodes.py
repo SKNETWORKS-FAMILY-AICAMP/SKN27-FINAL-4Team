@@ -380,7 +380,7 @@ def analysis_node(state: ChatState) -> dict:
 def load_context_node(state: ChatState) -> dict:
     """최근 N턴 원문 + 그래프 기억(recall) 1회 조회. 시크릿 모드는 RAM 캐시.
     (흐름도 CTX — 4개 에이전트가 각각 조회하지 않음)"""
-    RECENT_N = 10
+    RECENT_N = 10   # 다이얼 장부: chat/memory_config.py 51행에 위치 기록됨
     history, summary = [], ''
 
     if state.get('session_mode') == 'secret':
@@ -406,8 +406,12 @@ def load_context_node(state: ChatState) -> dict:
                                  message=state.get('user_message'))   # 재강화: 언급된 기억만 강화
                 if g:
                     summary = '[관계 기억]\n' + g
-            except Exception:
-                pass
+            except Exception as e:
+                # 2026-07-21: 여기가 조용히 pass였다. 그래프 recall이 깨져도 예외가 삼켜져
+                # '기억 못 하는 정상 대화'로 보였고, 로그도 안 남아 발견이 불가능했다.
+                # 제품의 핵심 기능이 무증상으로 죽는 상태 → 대화는 계속하되 반드시 남긴다.
+                print(f'[load_context] 그래프 recall 실패(기억 없이 진행): '
+                      f'{type(e).__name__}: {e}')
 
     return {'recent_history': history, 'memory_summary': summary}
 

@@ -139,4 +139,4 @@ class Command(BaseCommand):
                 w(f'  {acc:.0%}  마진 {m:.3f}  thr {thr}  {name}')
             best = results[0]
             w(f'\n채택 후보: {best[2]}')
-            w(f'적용: .env에  EMBED_MODEL={best[2]}  /  graph_memory.VEC_RECALL_MIN={best[3]}')
+            w(f'적용: .env에  EMBED_MODEL={best[2]}  /  MEM_VEC_RECALL_MIN={best[3]}  (다이얼: memory_config)')

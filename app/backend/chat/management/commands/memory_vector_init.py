@@ -12,7 +12,8 @@
 """
 from django.core.management.base import BaseCommand
 
-from chat import embedder, graph_memory
+from chat import embedder
+from chat import graph_memory_v2_base as graph_memory   # v1 철거 (2026-07-21)
 
 
 class Command(BaseCommand):
