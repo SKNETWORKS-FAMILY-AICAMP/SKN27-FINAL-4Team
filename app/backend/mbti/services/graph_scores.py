@@ -3,17 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Protocol
 
-from mbti.services.monthly_questions import MBTI_AXES
+from mbti.constants import AXIS_LETTER_DIRECTIONS, MBTI_AXES, TIE_EPSILON
 from mbti.services.opening_rules import SecondaryOpeningResult
-
-
-AXIS_LETTER_DIRECTIONS = {
-    'IE': {'positive': 'E', 'negative': 'I'},
-    'SN': {'positive': 'S', 'negative': 'N'},
-    'TF': {'positive': 'T', 'negative': 'F'},
-    'JP': {'positive': 'J', 'negative': 'P'},
-}
-TIE_EPSILON = 1e-12
 
 
 class ResponseScoreLike(Protocol):

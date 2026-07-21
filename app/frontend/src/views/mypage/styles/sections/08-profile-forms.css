@@ -1,0 +1,175 @@
+.form-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.form-grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.profile-extra-grid {
+  margin-top: 10px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+}
+
+.field label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 9px;
+  background: #171044;
+  color: var(--text);
+}
+
+.pretty-select {
+  appearance: none;
+  padding-right: 34px;
+  background:
+    linear-gradient(45deg, transparent 50%, #d7b7ff 50%) calc(100% - 17px) 50% / 7px 7px no-repeat,
+    linear-gradient(135deg, #21165a, #171044);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.pretty-select:enabled:hover,
+.pretty-select:enabled:focus {
+  border-color: rgba(215, 183, 255, 0.82);
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(156, 91, 255, 0.2);
+}
+
+.field input[readonly],
+.field textarea[readonly],
+.field select:disabled {
+  background: #21165a;
+  color: var(--text);
+  opacity: 1;
+}
+
+.field textarea {
+  min-height: 56px;
+  resize: vertical;
+}
+
+.interest-keyword-field {
+  gap: 8px;
+}
+
+.interest-keyword-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.interest-keyword-head strong {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.interest-keyword-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.interest-chip {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #171044;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.interest-chip.active {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+
+.interest-chip:disabled {
+  cursor: default;
+}
+
+.interest-chip:not(:disabled):hover {
+  border-color: rgba(215, 183, 255, 0.82);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.primary-button,
+.secondary-button,
+.ghost-button {
+  min-height: 34px;
+  border-radius: 8px;
+  padding: 0 12px;
+  font-weight: 800;
+}
+
+.primary-button {
+  border: 1px solid var(--primary);
+  background: linear-gradient(135deg, var(--pur), var(--blue));
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(156, 91, 255, 0.3);
+}
+
+.secondary-button {
+  border: 1px solid var(--line);
+  background: #202969;
+  color: var(--text);
+}
+
+.secondary-button:hover,
+.secondary-button:focus-visible {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: #2a1a62;
+}
+
+.ghost-button {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--primary);
+}
+
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #2a1a62;
+  color: #d7b7ff;
+  font-size: 13px;
+  font-weight: 800;
+}
+

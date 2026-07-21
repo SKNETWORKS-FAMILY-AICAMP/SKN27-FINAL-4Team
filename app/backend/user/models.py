@@ -101,6 +101,36 @@ class UserProfile(models.Model):
         return f'{self.user_id} profile'
 
 
+class UserAgreementRecord(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='agreement_records',
+    )
+    terms_version = models.CharField(max_length=20)
+    privacy_version = models.CharField(max_length=20)
+    overseas_transfer_version = models.CharField(max_length=20)
+    details = models.JSONField(default=dict, blank=True)
+    agreed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'user_agreement_records'
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    'user',
+                    'terms_version',
+                    'privacy_version',
+                    'overseas_transfer_version',
+                ],
+                name='uniq_user_agreement_versions',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['user', '-agreed_at'], name='user_agreement_date_idx'),
+        ]
+
+
 class UserPreferenceKeyword(models.Model):
     KEYWORD_TYPE_CHOICES = [
         ('hobby', '취미'),

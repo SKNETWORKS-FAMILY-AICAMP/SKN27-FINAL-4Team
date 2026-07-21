@@ -3,10 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 
-
-DEFAULT_OPENAI_SCORING_MODEL = 'gpt-5.4-mini'
-DEFAULT_SCORING_TEMPERATURE = 0.0
-DEFAULT_SCORING_MAX_OUTPUT_TOKENS = 1200
+from mbti.constants import (
+    DEFAULT_OPENAI_SCORING_MODEL,
+    DEFAULT_SCORING_MAX_OUTPUT_TOKENS,
+    DEFAULT_SCORING_TEMPERATURE,
+)
 
 
 @dataclass(frozen=True)

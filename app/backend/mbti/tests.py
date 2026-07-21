@@ -229,15 +229,15 @@ class SecondaryOpeningTests(TestCase):
 
 
 class DashboardPayloadTests(TestCase):
-    def test_preparing_payload_keeps_monthly_analysis_screen_available(self):
+    def test_preparing_payload_does_not_fabricate_monthly_results(self):
         payload = build_frontend_preparing_payload(user_id=7, period_key='2026-06')
 
         self.assertEqual(payload['status'], 'preparing')
         self.assertFalse(payload['has_monthly_analysis'])
         self.assertEqual(payload['mbti_view_mode'], 'onboardingNext')
         self.assertEqual(payload['mbti_data']['current']['type'], '----')
-        self.assertEqual(len(payload['mbti_data']['current']['axes']), 4)
-        self.assertIn('분석 준비 중', payload['mbti_data']['report'][0])
+        self.assertEqual(payload['mbti_data']['current']['axes'], [])
+        self.assertEqual(payload['mbti_data']['report'], [])
 
 
 class ResponseScoringTests(TestCase):

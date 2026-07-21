@@ -1,0 +1,1 @@
+export const LOCATION_CONSENT_VERSION = "2026-07-15";

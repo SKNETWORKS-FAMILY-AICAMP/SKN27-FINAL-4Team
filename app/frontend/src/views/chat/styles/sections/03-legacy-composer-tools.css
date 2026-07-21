@@ -1,0 +1,231 @@
+/* ── 입력바 ── */
+.input-zone {
+  border-top: 1px solid rgba(192,132,252,0.15);
+  padding: 20px 32px 24px;
+  background: rgba(13,5,32,0.4);
+  backdrop-filter: blur(20px);
+  flex-shrink: 0;
+}
+.input-bar { display: flex; align-items: flex-end; gap: 14px; }
+
+.msg-input {
+  flex: 1;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 16px;
+  padding: 15px 19px;
+  font-size: 17px;
+  font-family: inherit;
+  color: #fff;
+  resize: none;
+  line-height: 1.5;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.msg-input::placeholder { color: rgba(255,255,255,0.3); }
+.msg-input:focus { outline: none; border-color: rgba(94,234,212,0.5); }
+
+.char-count {
+  font-size: 10.5px;
+  color: rgba(255,255,255,0.3);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.send-btn {
+  background: linear-gradient(135deg, #FF8A65, #FFB347);
+  color: #1a0a00;
+  border-radius: 16px;
+  padding: 15px 28px;
+  font-size: 16.5px;
+  font-weight: 700;
+  flex-shrink: 0;
+  transition: opacity 0.2s, transform 0.1s;
+}
+.send-btn:not(:disabled):hover { opacity: 0.88; transform: translateY(-1px); }
+.send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* 📷 사진 첨부 (MVP) */
+.file-hidden { display: none; }
+
+.attach-btn {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 16px;
+  padding: 13px 15px;
+  font-size: 18px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+.attach-btn:not(:disabled):hover { background: rgba(255,255,255,0.14); }
+.attach-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.img-preview { position: relative; display: inline-block; margin-bottom: 10px; }
+.img-preview img {
+  max-width: 140px;
+  max-height: 140px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.2);
+  display: block;
+}
+.img-preview-remove {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.75);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 드래그&드롭 오버레이 */
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(20, 10, 30, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;   /* 드롭 이벤트가 루트로 전달되도록 */
+}
+.drop-overlay-inner {
+  border: 2px dashed rgba(255,255,255,0.75);
+  border-radius: 20px;
+  padding: 40px 60px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(0,0,0,0.35);
+}
+
+/* 말풍선 안 첨부 이미지 */
+.bubble-img {
+  display: block;
+  max-width: 240px;
+  max-height: 240px;
+  border-radius: 12px;
+  margin-bottom: 6px;
+}
+.bubble-text { white-space: pre-wrap; }
+
+/* 🍵 수락/권유형 추천 카드 스타일 */
+.recommend-consent-bar {
+  margin-top: 12px;
+  width: 100%;
+  border-top: 1px dashed rgba(255, 255, 255, 0.1);
+  padding-top: 10px;
+}
+.consent-question {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13.5px;
+  color: rgba(255, 255, 255, 0.7);
+}
+.consent-btns {
+  display: flex;
+  gap: 10px;
+}
+.consent-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+.consent-btn--yes {
+  background: rgba(252, 211, 77, 0.18);
+  color: #FCD34D;
+  border-color: rgba(252, 211, 77, 0.4);
+}
+.consent-btn--no {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.recommend-cards-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+  animation: fadeIn 0.3s ease-out;
+}
+.recommend-tea-card, .recommend-bgm-card {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 14px 16px;
+  color: rgba(255, 255, 255, 0.9);
+}
+.rec-title { font-size: 14.5px; margin-bottom: 6px; }
+.rec-title strong { color: #FCD34D; }
+.rec-reason { font-size: 12.5px; color: rgba(255, 255, 255, 0.6); margin-bottom: 6px; line-height: 1.5; }
+.rec-effect { font-size: 11px; color: rgba(255, 255, 255, 0.4); font-style: italic; }
+
+.recommend-bgm-card .rec-title strong { color: #38BDF8; }
+.rec-artist { display: block; font-size: 12px; color: rgba(255, 255, 255, 0.5); margin-bottom: 8px; }
+.bgm-play-link {
+  display: inline-block;
+  font-size: 12.5px;
+  color: #38BDF8;
+  text-decoration: none;
+  font-weight: 600;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(56, 189, 248, 0.1);
+  transition: background 0.2s;
+}
+.bgm-play-link:hover {
+  background: rgba(56, 189, 248, 0.22);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+
+
+/* 🎤 음성 입력 (STT) */
+.stt-btn.stt-recording {
+  background: rgba(248, 113, 113, 0.25);
+  border-color: rgba(248, 113, 113, 0.8);
+  animation: sttPulse 1.2s ease-in-out infinite;
+}
+@keyframes sttPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.45); }
+  50%      { box-shadow: 0 0 0 7px rgba(248, 113, 113, 0); }
+}
+
+
+/* 🔊 TTS 음소거 토글 */
+.tts-toggle.tts-off {
+  opacity: 0.55;
+  filter: grayscale(0.6);
+}
+
+
+/* 대화 맥락 바로가기 칩 */
+.suggest-chip {
+  margin: 6px 4px 0;
+  padding: 7px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(251, 191, 119, 0.55);
+  background: rgba(251, 191, 119, 0.14);
+  color: #FBBF77;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.suggest-chip:hover { background: rgba(251, 191, 119, 0.28); }
+

@@ -1,0 +1,70 @@
+/* Mypage typography: stable UI hierarchy with a restrained soft-text accent. */
+.app-shell .identity-chips span,
+.app-shell .dashboard-primary,
+.app-shell .quick-actions-count,
+.app-shell .quick-actions .menu-copy strong,
+.app-shell .character-heading span,
+.app-shell .weather-region-label,
+.app-shell .weather-refresh-button,
+.app-shell .weather-section-label,
+.app-shell .weather-guide-head span,
+.app-shell .weather-rhythm-time,
+.app-shell .weather-close-button,
+.app-shell .wardrobe-label,
+.app-shell .wardrobe-refresh-button,
+.app-shell .wardrobe-close-button,
+.app-shell .mbti-option-button,
+.app-shell .mbti-kicker,
+.app-shell .graph-axis-label small,
+.app-shell .navigation-confirm-actions button,
+.app-shell .toast {
+  font-weight: 700;
+}
+
+.app-shell .character-heading p,
+.app-shell .character-choice,
+.app-shell .character-stat,
+.app-shell .weather-region-trigger,
+.app-shell .weather-visual span,
+.app-shell .weather-detail-list dd,
+.app-shell .weather-error,
+.app-shell .weather-loading,
+.app-shell .weather-recommend-card span,
+.app-shell .wardrobe-profile-strip span,
+.app-shell .wardrobe-context span,
+.app-shell .wardrobe-item-chips span,
+.app-shell .wardrobe-outfit-card div span,
+.app-shell .wardrobe-outfit-card small,
+.app-shell .wardrobe-footer p,
+.app-shell .mbti-type-panel > span,
+.app-shell .mbti-type-panel > small,
+.app-shell .mbti-combined-head p {
+  font-weight: 600;
+}
+
+.app-shell .weather-main-metrics span,
+.app-shell .weather-detail-list dt,
+.app-shell .weather-rhythm-detail p {
+  font-weight: 800;
+}
+
+.app-shell .mbti-type {
+  font-weight: 900;
+}
+
+.app-shell .identity-copy p,
+.app-shell .room-section-heading p,
+.app-shell .character-detail blockquote,
+.app-shell .weather-section-heading p,
+.app-shell .weather-insight-section p,
+.app-shell .weather-daily-tip,
+.app-shell .weather-guide-card p,
+.app-shell .weather-recommend-card p,
+.app-shell .wardrobe-copy p,
+.app-shell .mbti-type-description p,
+.app-shell .report-lines,
+.app-shell .navigation-confirm p {
+  font-family: var(--font-soft);
+  font-weight: 400;
+}
+

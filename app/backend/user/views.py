@@ -6,7 +6,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
 
-from .models import OAuthAccount, User, UserPreferenceKeyword, UserProfile
+from .models import OAuthAccount, User, UserAgreementRecord, UserPreferenceKeyword, UserProfile
 from .oauth import (
     SocialOAuthError,
     build_authorization_url,
@@ -345,7 +345,12 @@ def profile(request):
     profile_data = dict(serializer.validated_data)
     agreements = profile_data.pop('agreements', None)
 
-    if not isinstance(agreements, dict) or agreements.get('termsOfService') is not True or agreements.get('privacyCollection') is not True:
+    if (
+        not isinstance(agreements, dict)
+        or agreements.get('termsOfService') is not True
+        or agreements.get('privacyCollection') is not True
+        or agreements.get('overseasTransfer') is not True
+    ):
         return Response({'error': '필수 약관 동의가 필요합니다.'}, status=status.HTTP_400_BAD_REQUEST)
 
     existing_profile = UserProfile.objects.filter(user=profile_user).first()
@@ -360,6 +365,23 @@ def profile(request):
         user=profile_user,
         defaults=profile_data,
     )
+    agreement_versions = {
+        'terms_version': str(agreements.get('termsVersion') or '')[:20],
+        'privacy_version': str(agreements.get('privacyVersion') or '')[:20],
+        'overseas_transfer_version': str(agreements.get('overseasTransferVersion') or '')[:20],
+    }
+    if all(agreement_versions.values()):
+        UserAgreementRecord.objects.get_or_create(
+            user=profile_user,
+            **agreement_versions,
+            defaults={
+                'details': {
+                    'terms_of_service': True,
+                    'privacy_collection': True,
+                    'overseas_transfer': True,
+                }
+            },
+        )
     _sync_preference_keywords(profile_user, 'hobby', profile_data.get('hobbies', []))
     _sync_preference_keywords(profile_user, 'interest', profile_data.get('interests', []))
 

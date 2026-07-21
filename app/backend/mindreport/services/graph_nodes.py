@@ -150,6 +150,7 @@ def build_report_payload_from_state(
         {
             'day': f'{score.source_date.day:02d}일',
             'icon': _emotion_icon(score.emotion_state),
+            'emotion_state': score.emotion_state,
         }
         for score in scoring_result.emotion_scores
     ]
