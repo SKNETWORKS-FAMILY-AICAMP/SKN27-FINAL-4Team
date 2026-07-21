@@ -46,7 +46,7 @@ class Command(BaseCommand):
         for m in targets:
             w(f'  {m.__name__:<28} {m.objects.count():>6}건')
 
-        from chat import graph_memory
+        from chat import graph_memory_v2_base as graph_memory   # v1 철거 (2026-07-21)
         neo_count = 0
         if graph_memory.is_enabled():
             drv = graph_memory._get_driver()

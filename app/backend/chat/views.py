@@ -19,7 +19,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from ai.agents import mbti as mbti_svc
-from . import graph_memory, secret_cache, tts_service   # memory(요약) 완전 은퇴 2026-07-19 — 소비자 0 확인 후 제거
+from . import secret_cache, tts_service   # memory(요약) 은퇴 2026-07-19 · v1 죽은 임포트 제거 2026-07-21 (그래프는 memory_backend 경유만)
 from .models import ChatMessage, ChatSession
 
 
@@ -304,6 +304,19 @@ def chat_turn(request):
             'suggest_label': suggest_label,
         },
     })
+
+
+@api_view(['GET'])
+@authentication_classes([CsrfExemptSessionAuthentication])
+@permission_classes([AllowAny])
+def memory_panel(request):
+    """기억 패널 (UI #3, 2026-07-20) — 좌측 패널 '기억하는 것' 카드 데이터.
+    비로그인·시크릿·Neo4j 미설정이면 빈 패널 (프론트는 섹션 숨김)."""
+    user = request.user if request.user.is_authenticated else None
+    if user is None:
+        return _ok({'upcoming': [], 'prefs': [], 'people': [], 'recent': []})
+    from chat import memory_backend   # 지연 임포트 (chat_turn과 동일 스타일 — Neo4j 미설정 시 기동 무영향)
+    return _ok(memory_backend.panel_summary(user.id))
 
 
 @api_view(['GET'])
