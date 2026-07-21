@@ -590,9 +590,8 @@ def _fallback_label(labels: Sequence[str]) -> str | None:
 
 
 class MindReportScoringService:
-    def __init__(self, score_client: EmotionScoreClient | None = None):
-        self.score_client = score_client
-
+    def __init__(self, *args, **kwargs):
+        pass
     def run(
         self,
         *,
@@ -637,60 +636,64 @@ class MindReportScoringService:
                 eligibility=eligibility,
                 source_messages=source_messages,
                 emotion_scores=(),
-                message='리포트 생성 기준을 충족하지 않아 LLM 점수 분석을 시작하지 않습니다.',
+                message='리포트 생성 기준을 충족하지 않아 ML 점수 분석을 시작하지 않습니다.',
                 scoring_route='criteria_not_met',
             )
 
-        client = self.score_client
-        if client is None and os.getenv('OPENAI_API_KEY'):
-            client = LangChainEmotionScoreClient()
+        # KcELECTRA 기반 스코어링 로직 연동
+        from mindreport.services.electra_scorer import ElectraEmotionScorer, EMO4_CLASSES
+        import numpy as np
+        
+        scorer = ElectraEmotionScorer()
+        grouped = _group_messages_by_date(source_messages)
+        scores = []
+        
+        for d, day_messages in sorted(grouped.items()):
+            texts = [m.content for m in day_messages]
+            message_ids = [m.message_id for m in day_messages]
+            
+            if not texts:
+                continue
+                
+            probs = scorer.predict_probs(texts)
+            # 일일 평균 확률
+            avg_probs = np.mean(probs, axis=0)
+            
+            # EMO4_CLASSES = ["기쁨", "슬픔", "분노", "일반"]
+            # 점수 = 기쁨*100 + 일반*50 + 슬픔*25 + 분노*0
+            emotion_score = (avg_probs[0] * 100) + (avg_probs[3] * 50) + (avg_probs[1] * 25) + (avg_probs[2] * 0)
+            
+            top_idx = int(np.argmax(avg_probs))
+            top_emotion = EMO4_CLASSES[top_idx]
+            
+            # emotion_flow.py가 기대하는 emotion_state 매핑
+            if top_emotion == "기쁨":
+                emotion_state = "positive"
+            elif top_emotion in ["슬픔", "분노"]:
+                emotion_state = "negative"
+            else:
+                emotion_state = "neutral"
+                
+            scores.append(EmotionScore(
+                source_date=day_messages[0].source_date,
+                emotion_label=top_emotion,
+                emotion_state=emotion_state,
+                emotion_score=round(float(emotion_score), 2),
+                confidence=round(float(np.max(avg_probs)), 2), # 가장 높은 확률을 confidence로 사용
+                emotional_evidence_count=len(texts),
+                total_message_count=len(texts),
+                evidence_message_ids=tuple(message_ids),
+                rationale=f"KcELECTRA 분석 결과, '{top_emotion}' 확률이 가장 높습니다.",
+                scoring_method="kcelectra-finetuned-v1"
+            ))
 
-        if client is None:
-            return MindReportScoringResult(
-                status='scoring_client_unavailable',
-                period_type=period_type,
-                eligibility=eligibility,
-                source_messages=source_messages,
-                emotion_scores=(),
-                message='리포트 생성 기준은 충족했지만 LLM 점수 분석 클라이언트가 설정되지 않았습니다.',
-                scoring_route='scoring_client_unavailable',
-            )
 
-        use_persisted_emotion_labels = has_complete_persisted_emotion_labels(
-            source_messages
-        )
-        scoring_route = (
-            SCORING_ROUTE_LABEL_GROUNDED
-            if use_persisted_emotion_labels
-            else SCORING_ROUTE_LLM_FALLBACK
-        )
-        affect_scoring_method = (
-            LABEL_GROUNDED_AFFECT_SCORING_METHOD
-            if use_persisted_emotion_labels
-            else AFFECT_SCORING_METHOD
-        )
-        scoring_payload = build_emotion_scoring_payload(
-            period_type=period_type,
-            messages=source_messages,
-            use_persisted_emotion_labels=use_persisted_emotion_labels,
-        )
-        if revision_instructions:
-            scoring_payload['revision_instructions'] = list(revision_instructions)
-        scores = parse_emotion_scores(
-            payload=client.score_messages(payload=scoring_payload),
-            source_messages=source_messages,
-            affect_scoring_method=affect_scoring_method,
-        )
         return MindReportScoringResult(
             status='scored',
             period_type=period_type,
             eligibility=eligibility,
             source_messages=source_messages,
             emotion_scores=scores,
-            message=(
-                '저장된 채팅 감정 라벨을 1차 근거로 사용해 LLM 일 단위 감정 점수 분석을 완료했습니다.'
-                if use_persisted_emotion_labels
-                else '저장된 채팅 감정 라벨을 완전하게 가져오지 못해 기존 원문 기반 LLM 감정 점수 분석을 완료했습니다.'
-            ),
-            scoring_route=scoring_route,
+            message=f"총 {len(source_messages)}개({eligibility['missing_count']}개 여유)의 사용자 메시지를 기반으로 성공적으로 ML 점수 분석(KcELECTRA)을 마쳤습니다.",
+            scoring_route='kcelectra_scoring',
         )

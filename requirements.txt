@@ -34,4 +34,6 @@ numpy>=1.24.0
 pandas>=2.0.0                   # 학습·데이터셋 스크립트 (ai/emotion)
 matplotlib>=3.7.0               # 시각화 (평가지표 노트북)
 seaborn>=0.12.0                 # 시각화 (평가지표 노트북)
+# ── 기억 의미 검색 임베딩 (ko-sroberta — chat/embedder.py, 미설치 시 키워드 폴백) ──
+sentence-transformers>=2.2.0
 cryptography                # DB 채팅 암호화 (Fernet, 팀 안건 2026-07-15)
