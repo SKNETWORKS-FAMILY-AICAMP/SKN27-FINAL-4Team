@@ -32,6 +32,6 @@ xgboost>=2.0.0
 joblib>=1.3.0
 numpy>=1.24.0
 pandas>=2.0.0                   # 학습·데이터셋 스크립트 (ai/emotion)
-
-# (sentence-transformers 제거 2026-07-21 — 임베딩 완전 철거. 의미 연결은 LLM 폴백)
+matplotlib>=3.7.0               # 시각화 (평가지표 노트북)
+seaborn>=0.12.0                 # 시각화 (평가지표 노트북)
 cryptography                # DB 채팅 암호화 (Fernet, 팀 안건 2026-07-15)
