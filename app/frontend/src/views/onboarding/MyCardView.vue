@@ -220,11 +220,11 @@ onBeforeUnmount(()=>{if(timer) clearTimeout(timer)})
         <img v-if="hasGeneratedImage" :src="cardImageSource" :alt="thumbAlt" @error="imagePreviewError = true" />
         <div v-else class="card-preview-empty">
           <img :src="cardThumb" alt="마음카드 미리보기 안내" />
-          <p v-if="stage === 'GENERATING'">· 오늘의 장면을 그리고 있어요</p>
+          <p v-if="stage === 'GENERATING'">· </p>
           <p v-else>오늘의 마음을 적고<br />카드를 만들어보세요.</p>
         </div>
       </div>
-      <p class="preview-summary">{{ hasGeneratedImage ? summary : '생성된 이미지는 이 자리에서 바로 확인할 수 있어요.' }}</p>
+      <p class="preview-summary">{{ hasGeneratedImage ? summary : '생성된 이미지는 이 곳에서 확인할 수 있어요.' }}</p>
       <button class="preview-download" type="button" :disabled="!hasGeneratedImage" @click="downloadCard">↓ 이미지 다운로드</button>
       <p v-if="imagePreviewError" class="preview-error">이미지를 불러오지 못했어요. 새로고침 후 다시 확인해주세요.</p>
     </aside>

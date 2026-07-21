@@ -230,7 +230,7 @@ onMounted(async () => {
           </div>
 
           <div class="daily-major-copy">
-            <h2>오늘 당신의 하루는<br>빛나는 날이에요.✨</h2>
+            <h2>당신의 하루를<br>언제나 응원할게요.✨</h2>
             <p>오늘의 메이저 카드 한 장을 뽑고, <br>하루의 운세 메시지를 확인해보세요.</p>
             <button class="tarot-glow-button" type="button" :disabled="isDailyMajorLoading || isDailyMajorSaving || !authChecked" @click="handleDailyCardClick">
               {{ dailyPillLabel }}

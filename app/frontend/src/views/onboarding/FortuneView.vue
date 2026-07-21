@@ -167,7 +167,7 @@ function createTransparentCharacterImage(src) {
             Math.abs(green - blue),
           );
 
-          return brightness >= 235 && maxDifference <= 22;
+          return brightness >= 205 && maxDifference <= 22;
         };
 
         const enqueue = (x, y) => {
