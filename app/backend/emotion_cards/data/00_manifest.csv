@@ -1,6 +1,6 @@
 ﻿file_name,row_count,column_count,purpose,encoding,list_separator,runtime_role
 00_manifest.csv,29,7,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,manifest
-01_analysis_schema.csv,39,8,emotion card v2.1 timeline candidate/constraint/runtime data,UTF-8-SIG,|,extraction schema
+01_analysis_schema.csv,40,8,emotion card v2.1 timeline candidate/constraint/runtime data,UTF-8-SIG,|,extraction schema
 02_feature_codes.csv,95,9,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,core code registry
 03_event_types.csv,61,15,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,candidate catalog
 04_weather_catalog.csv,11,18,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,candidate catalog and required cues
@@ -22,7 +22,7 @@
 20_fallback_rules.csv,10,14,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,deterministic fallback
 21_conflict_priority_rules.csv,18,5,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,hard constraint priority
 22_prompt_templates.csv,11,6,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,director and prompt compiler
-23_output_scene_schema.csv,67,6,emotion card v2.1 timeline candidate/constraint/runtime data,UTF-8-SIG,|,scene validation schema
+23_output_scene_schema.csv,68,6,emotion card v2.1 timeline candidate/constraint/runtime data,UTF-8-SIG,|,scene validation schema
 24_llm_extraction_examples.csv,50,29,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,few-shot extraction examples
 25_scene_mapping_test_cases.csv,45,25,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,regression test
 26_validation_report.csv,12,4,emotion card v2 candidate/constraint/runtime data,UTF-8-SIG,|,generated validation report

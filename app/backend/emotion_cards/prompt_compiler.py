@@ -45,12 +45,75 @@ def _legacy_scene_summary(spec):
     return f"One original character in {location or 'an anonymous setting'}, {action or 'remaining still'}, while {weather or 'the selected weather'} is visible."
 
 
+def _panel_prompt(spec, style, character):
+    panels = spec.get("panels") or []
+    summary = _text(spec.get("scene_summary_en"), 500)
+    avoid = list(dict.fromkeys([
+        *[_text(item, 200) for item in spec.get("avoid_visuals") or [] if _text(item, 200)],
+        *style["negative_prompt"],
+    ]))
+    lighting = _text(spec.get("lighting_narrative") or (spec.get("lighting") or {}).get("visual_prompt"), 400)
+    palette = _text(spec.get("palette_narrative"), 300)
+
+    parts = [
+        f"Create one single coherent vertical illustration divided into {len(panels)} clearly separated "
+        "panels, like a comic-strip or photo-diary layout with thin panel dividers.",
+        "CONTENT FIDELITY IS MORE IMPORTANT THAN DECORATIVE STYLE.",
+        "Arrange the panels from top to bottom in chronological order: panel 1 is the earliest moment "
+        "and the last panel is the most recent moment of the same day.",
+        f"Day overview: {summary}" if summary else "",
+        f"The exact same character (identity, outfit, hairstyle, and art style) must appear in every "
+        f"panel: {character}. This is an original illustrated character - not a photo, not any specific "
+        "real or famous person, fully clothed and non-sexualized, friendly and safe for all ages.",
+    ]
+    for panel in panels:
+        sequence = panel.get("sequence")
+        place_narrative = _text(panel.get("place_narrative"), 400)
+        action_narrative = _text(panel.get("action_narrative"), 400)
+        object_narrative = _text(panel.get("object_narrative"), 200)
+        panel_line = f"Panel {sequence}: the character in {place_narrative or 'a pleasant everyday setting'}, {action_narrative or 'spending a quiet moment'}."
+        if object_narrative:
+            panel_line += f" Include {object_narrative}."
+        parts.append(panel_line)
+    parts.extend([
+        f"Shared lighting and mood across all panels: {lighting or 'soft, scene-consistent light'}.",
+        f"Shared palette across all panels: {palette or 'a consistent, restrained palette'}.",
+        f"Rendering style (applies identically to every panel): {style['rendering_prompt']}.",
+    ])
+    if style["line_style"]:
+        parts.append(f"Linework: {style['line_style']}.")
+    if style["texture"]:
+        parts.append(f"Texture: {style['texture']}.")
+    if style["shading_method"]:
+        parts.append(f"Shading: {style['shading_method']}.")
+    parts.extend([
+        (
+            "Apply the selected style only to linework, texture, shading, material treatment, and rendering "
+            "technique. Do not alter panel content, panel order, the character's identity, or the overall "
+            "emotional tone."
+        ),
+        "Avoid: " + (", ".join(avoid) if avoid else "content that contradicts the described panels"),
+        (
+            "No readable text, captions, letters, logos, watermarks, identifiable real people, specific "
+            "addresses, real brand or idol names, company or school branding, readable documents, weapons, "
+            "graphic violence, self-harm imagery, gore, extra limbs, or anatomical errors. Other people must "
+            "be fully illustrated in the selected art style with generic non-identifying facial features; do "
+            "not render stark black silhouettes except for a distant softly blurred background crowd."
+        ),
+    ])
+    prompt = "\n\n".join(part for part in parts if part.strip())
+    return prompt[:PROMPT_MAX_CHARS]
+
+
 def build_image_prompt(spec, style_id):
     style = _style(style_id)
     character = HUMAN_CHARACTERS.get(
         spec.get("character"),
         "one original young adult character with generic non-identifying features and natural anatomy",
     )
+    panels = spec.get("panels") or []
+    if len(panels) >= 2:
+        return _panel_prompt(spec, style, character)
     summary = _text(spec.get("scene_summary_en") or _legacy_scene_summary(spec), 1100)
     subject = _text(spec.get("subject_description") or character, 700)
     body_language = _text(spec.get("body_language") or (spec.get("pose") or {}).get("visual_prompt"), 600)

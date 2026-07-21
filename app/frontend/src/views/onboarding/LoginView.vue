@@ -156,13 +156,6 @@ function getSafeRedirect() {
                 aria-hidden="true"
               >
               <span>{{ provider.label }}</span>
-
-              <span
-                v-if="loadingProvider === provider.id"
-                class="provider-loading"
-              >
-                연결 중...
-              </span>
             </button>
 
             <p v-if="errorMessage" class="auth-error" role="alert">
@@ -573,17 +566,6 @@ function getSafeRedirect() {
   width: 28px;
   height: 28px;
   flex-basis: 28px;
-}
-
-.provider-loading {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  background: rgba(255, 255, 255, 0.78);
-  color: #321849;
-  font-size: 16px;
-  font-weight: 950;
 }
 
 .auth-error {

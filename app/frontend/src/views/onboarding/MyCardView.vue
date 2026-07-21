@@ -62,7 +62,7 @@ const hasGeneratedImage = computed(() => Boolean(cardImageSource.value) && !imag
 const resultSummary = computed(() => card.value?.analysis_summary || card.value?.scene?.memory_focus || card.value?.summary || '')
 const resultTags = computed(() => (card.value?.analysis_tags || []).filter(Boolean).slice(0, 4))
 const summary = computed(() => (card.value ? card.value.summary : '오늘 하루를 적고 그림체를 골라주세요'))
-const generationLabel = computed(() => ({ PENDING: '대기 중', QUEUED: '순서 기다리는 중', GENERATING: '그리는 중', MODERATING: '검토 중', COMPOSITING: '카드로 다듬는 중', COMPLETED: '완료' })[generation.status] || '카드를 준비하는 중')
+const generationLabel = computed(() => ({ PENDING: '생성 중', QUEUED: '순서 기다리는 중', GENERATING: '그리는 중', MODERATING: '검토 중', COMPOSITING: '카드로 다듬는 중', COMPLETED: '완료' })[generation.status] || '카드를 준비하는 중')
 
 function errorOf(error) { return error?.response?.data?.error?.message || error?.response?.data?.detail || error?.message || '잠시 문제가 생겼어요. 다시 시도해줘.' }
 function goHome() { if (!['INPUT', 'RESULT'].includes(stage.value)) { showExitModal.value = true; return }; router.push('/home') }
@@ -110,7 +110,10 @@ async function createCard() {
     // 한 문장 입력을 LLM이 감정·사건·장면 단서까지 함께 해석한다.
     const text = form.memory_text.trim()
     const a = await emotionCardsApi.analyze({ raw_text: text, emotion_text: text }); analysis.value = a
-    if (a.safety_status && a.safety_status !== 'SAFE') { errorMessage.value = '지금은 카드를 만들기보다 마음을 먼저 안전하게 살펴보는 게 좋아요.'; stage.value = 'INPUT'; return }
+    // 백엔드는 SAFE/REFRAMED는 정상 생성 대상으로 취급한다(REFRAMED는 안전하게 순화된 장면으로 생성).
+    // REVIEW/BLOCKED일 때만 생성을 막아야 하는데, 기존 코드는 REFRAMED까지 막아 "상처받았어" 같은
+    // 흔한 표현에도 카드 생성이 거절되는 오탐이 있었다.
+    if (a.safety_status && !['SAFE', 'REFRAMED'].includes(a.safety_status)) { errorMessage.value = '지금은 카드를 만들기보다 마음을 먼저 안전하게 살펴보는 게 좋아요.'; stage.value = 'INPUT'; return }
     const s = await emotionCardsApi.createScene(a.analysis_id); scene.value = s
     const options = s.available_styles || []
     const styleId = options.some((x) => x.style_id === selectedStyle.value) ? selectedStyle.value : (options[0]?.style_id || selectedStyle.value)
@@ -217,11 +220,11 @@ onBeforeUnmount(()=>{if(timer) clearTimeout(timer)})
         <img v-if="hasGeneratedImage" :src="cardImageSource" :alt="thumbAlt" @error="imagePreviewError = true" />
         <div v-else class="card-preview-empty">
           <img :src="cardThumb" alt="마음카드 미리보기 안내" />
-          <p v-if="stage === 'GENERATING'">· 오늘의 장면을 그리고 있어요</p>
+          <p v-if="stage === 'GENERATING'">· </p>
           <p v-else>오늘의 마음을 적고<br />카드를 만들어보세요.</p>
         </div>
       </div>
-      <p class="preview-summary">{{ hasGeneratedImage ? summary : '생성된 이미지는 이 자리에서 바로 확인할 수 있어요.' }}</p>
+      <p class="preview-summary">{{ hasGeneratedImage ? summary : '생성된 이미지는 이 곳에서 확인할 수 있어요.' }}</p>
       <button class="preview-download" type="button" :disabled="!hasGeneratedImage" @click="downloadCard">↓ 이미지 다운로드</button>
       <p v-if="imagePreviewError" class="preview-error">이미지를 불러오지 못했어요. 새로고침 후 다시 확인해주세요.</p>
     </aside>

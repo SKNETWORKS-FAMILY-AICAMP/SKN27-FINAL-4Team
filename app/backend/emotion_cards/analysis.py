@@ -146,6 +146,12 @@ ANALYSIS_OUTPUT_SCHEMA = {
     "explicit_place": "string|null",
     "explicit_action": "string|null",
     "explicit_objects": ["string"],
+    "activity_sequence": [{
+        "sequence": "positive integer",
+        "place_text": "verbatim place phrase from raw_text|null",
+        "action_text": "verbatim action phrase from raw_text",
+        "object_text": "verbatim object phrase from raw_text|null",
+    }],
     "negated_elements": ["string"],
     "evidence_map": {"field": "verbatim evidence from raw_text"},
     "field_sources": {"field": "|".join(sorted(FIELD_SOURCES))},
@@ -173,8 +179,17 @@ ordering hint and must not become an explicit_time or other hard scene fact.
 A scene-driving inferred scalar field may be HIGH_CONFIDENCE_INFERRED only when confidence is at
 least 0.75; otherwise return null and NOT_PROVIDED. Include verbatim evidence, field source, and
 confidence for every extracted fact. Use only the supplied enum codes. Remove names, addresses,
-schools, companies, accounts, and other identifying details from summaries. Return one valid
-JSON object only.
+schools, companies, accounts, and other identifying details from summaries.
+
+When the user describes two or more visually distinct places or activities in one chronological
+account (for example: went to a popup store, then a cafe, then a park), extract them in
+chronological order as activity_sequence, one entry per distinct place/activity, each with a
+verbatim place_text, action_text, and (if present) object_text drawn only from what the user
+wrote. Do not invent or pad entries, do not add an activity the user did not mention, and cap
+activity_sequence at 4 entries. Leave activity_sequence empty for an ordinary single-scene
+record; a single continuous moment is not a sequence.
+
+Return one valid JSON object only.
 """.strip()
 
 
@@ -432,6 +447,46 @@ def _split_timeline_clauses(text):
 
 def _mention_in_span(mentions, start, end):
     return [item for item in mentions if start <= item["start"] < end]
+
+
+_PLACE_MARKER = re.compile(
+    r"([가-힣A-Za-z0-9·]{1,20}?)에\s*가서|([가-힣A-Za-z0-9·]{1,20}?)에서"
+)
+_ACTIVITY_TRAILING_CONNECTOR = re.compile(r"(?:하고|했고|고)\s*,?\s*$")
+_ACTIVITY_OBJECT_PATTERN = re.compile(r"([가-힣A-Za-z0-9·]{1,20}(?:도|을|를))\s")
+
+
+def _split_activity_sequence(text, max_entries=4):
+    """여러 장소·활동이 시간순으로 나열된 문장에서 (place, action) 쌍을 추출한다.
+    '~에 가서'/'~에서' 같은 장소 표지가 2개 이상 있을 때만 결과를 반환한다.
+    (한 장면짜리 평범한 문장까지 분할 구도로 오판하지 않기 위한 안전장치.)
+    """
+    markers = list(_PLACE_MARKER.finditer(text))
+    if len(markers) < 2:
+        return []
+
+    segments = []
+    for index, match in enumerate(markers):
+        place = (match.group(1) or match.group(2) or "").strip()
+        if not place:
+            continue
+        segment_start = match.end()
+        segment_end = markers[index + 1].start() if index + 1 < len(markers) else len(text)
+        clause = text[segment_start:segment_end].strip(" ,.")
+        clause = _ACTIVITY_TRAILING_CONNECTOR.sub("", clause).strip(" ,.")
+        if not clause:
+            continue
+        object_match = _ACTIVITY_OBJECT_PATTERN.search(clause)
+        object_text = object_match.group(1)[:-1] if object_match else None
+        segments.append({
+            "sequence": len(segments) + 1,
+            "place_text": place[:40],
+            "action_text": clause[:120],
+            "object_text": object_text[:40] if object_text else None,
+        })
+        if len(segments) >= max_entries:
+            break
+    return segments if len(segments) >= 2 else []
 
 
 def _weather_transition(initial, final):
@@ -729,6 +784,7 @@ def _keyword_extract(normalized):
     place, place_evidence = _place_fact(text, normalized.get("explicit_place"))
     action, action_evidence = _action_fact(text)
     objects, object_evidence = _object_facts(text)
+    activity_sequence = _split_activity_sequence(text)
     social, social_evidence = _social_fact(text)
     cause_type = _cause_type(text, weather)
     energy, need, energy_evidence, need_evidence = _explicit_energy_need(normalized)
@@ -846,6 +902,7 @@ def _keyword_extract(normalized):
         "explicit_place": place,
         "explicit_action": action,
         "explicit_objects": objects,
+        "activity_sequence": activity_sequence,
         "negated_elements": negated,
         "evidence_map": evidence_map,
         "field_sources": field_sources,
@@ -1078,6 +1135,27 @@ def _validate_timeline(value, raw_text):
     return timeline
 
 
+def _validate_activity_sequence(value, raw_text):
+    if not isinstance(value, list):
+        return []
+    sequence = []
+    for raw_item in value[:4]:
+        if not isinstance(raw_item, dict):
+            continue
+        action_text = _verbatim_or_none(raw_item.get("action_text"), raw_text, 160)
+        if not action_text:
+            continue
+        place_text = _verbatim_or_none(raw_item.get("place_text"), raw_text, 60)
+        object_text = _verbatim_or_none(raw_item.get("object_text"), raw_text, 60)
+        sequence.append({
+            "sequence": len(sequence) + 1,
+            "place_text": place_text,
+            "action_text": action_text,
+            "object_text": object_text,
+        })
+    return sequence if len(sequence) >= 2 else []
+
+
 def _apply_timeline_summary(result):
     timeline = result.get("timeline") or []
     if not timeline:
@@ -1141,6 +1219,7 @@ def _validate_analysis_output(data, raw_text):
     out["explicit_action"] = _bounded_string(data.get("explicit_action"), 80)
     objects = data.get("explicit_objects") if isinstance(data.get("explicit_objects"), list) else []
     out["explicit_objects"] = [_clean_text(item, 40) for item in objects if _clean_text(item, 40)][:3]
+    out["activity_sequence"] = _validate_activity_sequence(data.get("activity_sequence"), raw_text)
     negated = data.get("negated_elements") if isinstance(data.get("negated_elements"), list) else []
     out["negated_elements"] = [_clean_text(item, 40).upper() for item in negated if _clean_text(item, 40)][:8]
 
@@ -1240,6 +1319,14 @@ def _merge_explicit_facts(llm, fallback):
         fallback_timeline
         if timeline_evidence_score(fallback_timeline) > timeline_evidence_score(llm_timeline)
         else llm_timeline
+    )
+
+    # 여러 장소/활동이 시간순으로 나열된 경우에만 채워지는 필드. LLM과 결정론적 추출 중
+    # 더 많은 구간(최소 2개 이상)을 찾아낸 쪽을 사용한다. 둘 다 2개 미만이면 단일 장면으로 취급한다.
+    llm_activities = llm.get("activity_sequence") or []
+    fallback_activities = fallback.get("activity_sequence") or []
+    merged["activity_sequence"] = (
+        llm_activities if len(llm_activities) >= len(fallback_activities) else fallback_activities
     )
     if not merged["timeline"] and fallback.get("primary_emotion") and not merged.get("primary_emotion"):
         merged["primary_emotion"] = fallback["primary_emotion"]

@@ -13,7 +13,7 @@ from .models import (
     EmotionCardJob,
     EmotionCardUsageReset,
 )
-from .prompt_compiler import build_image_prompt
+from .prompt_compiler import PROMPT_MAX_CHARS, build_image_prompt
 from .scene_pipeline import (
     build_candidate_pool,
     deterministic_scene_plan,
@@ -520,6 +520,48 @@ class EmotionCardPipelineTests(TestCase):
     def test_csv_integrity_validation_passes(self):
         report = validate_data_files()
         self.assertEqual(report["errors"], [])
+
+    def test_multiple_chronological_activities_extracted_as_a_sequence(self):
+        result = self.make_analysis(
+            "오늘 친구랑 팝업스토어에 가서 최애 아이돌 굿즈도 사고, "
+            "카페에가서 커피랑 케이크도 먹고, 공원에서 산책도 했어. "
+            "너무 기분이 좋았어"
+        ).result
+        sequence = result["activity_sequence"]
+        self.assertEqual(len(sequence), 3)
+        self.assertEqual(
+            [item["place_text"] for item in sequence],
+            ["팝업스토어", "카페", "공원"],
+        )
+        self.assertEqual(result["primary_emotion"]["code"], "JOY")
+
+    def test_single_scene_record_has_no_activity_sequence(self):
+        result = self.make_analysis("오늘 비와서 우울했어").result
+        self.assertEqual(result["activity_sequence"], [])
+
+    def test_multi_activity_scene_compiles_a_split_panel_prompt(self):
+        analysis = self.make_analysis(
+            "오늘 친구랑 팝업스토어에 가서 최애 아이돌 굿즈도 사고, "
+            "카페에가서 커피랑 케이크도 먹고, 공원에서 산책도 했어. "
+            "너무 기분이 좋았어"
+        )
+        scene = build_scene(analysis)
+        self.assertEqual(len(scene.scene_spec.get("panels") or []), 3)
+
+        prompt = build_image_prompt(scene.scene_spec, "STYLE_WATERCOLOR")
+        self.assertIn("divided into 3 clearly separated", prompt)
+        self.assertIn("chronological order", prompt)
+        self.assertIn("Panel 1", prompt)
+        self.assertIn("Panel 2", prompt)
+        self.assertIn("Panel 3", prompt)
+        self.assertLessEqual(len(prompt), PROMPT_MAX_CHARS)
+
+    def test_single_scene_prompt_has_no_panel_markers(self):
+        scene = build_scene(self.make_analysis("오늘 비와서 우울했어"))
+        self.assertEqual(scene.scene_spec.get("panels"), [])
+        prompt = build_image_prompt(scene.scene_spec, "STYLE_WATERCOLOR")
+        self.assertNotIn("Panel 1", prompt)
+        self.assertNotIn("divided into", prompt)
 
 
 @override_settings(

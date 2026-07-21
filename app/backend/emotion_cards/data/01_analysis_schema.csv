@@ -38,3 +38,4 @@ weather_transition,ENUM,아니오,RAIN_TO_CLEAR|RAIN_TO_CLOUDY|CLOUDY_TO_CLEAR|S
 scene_weather,ENUM,아니오,RAIN|SNOW|CLEAR|CLOUDY|FOG|WIND|AFTER_RAIN|UNKNOWN,날씨 변화 합성,97,,마지막 날씨를 중심으로 이전 날씨 흔적을 포함하는 장면 날씨
 scene_time,OBJECT,아니오,,마지막 시간 앵커,75,,anchor·range·source·confidence를 분리하며 추론 범위는 하드 사실이 아님
 timeline,ARRAY,아니오,,원문 시간순 절,100,[],절별 시간 앵커·범위·감정·날씨와 실제 원문 근거
+activity_sequence,ARRAY,아니오,,여러 장소·활동이 나열된 원문,70,[],"시간순으로 나열된 서로 다른 장소·활동에서만 채워지는 (place_text·action_text·object_text) 목록, 2개 미만이면 빈 배열(단일 장면)"
