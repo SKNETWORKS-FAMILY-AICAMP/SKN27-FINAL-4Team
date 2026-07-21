@@ -268,7 +268,7 @@ class MindReportFlowService:
     ) -> MindReportFlowStep:
         if scoring_result.status == 'scored':
             status = 'completed'
-            message = 'LLM을 통한 감정 점수화가 완료되었습니다.'
+            message = 'KcELECTRA 기반 감정 점수화가 완료되었습니다.'
         elif scoring_result.status == 'insufficient_data':
             status = 'blocked'
             message = '리포트 생성 조건 미충족으로 감정 점수화를 시작하지 않습니다.'

@@ -5,6 +5,15 @@ import json
 import os
 from typing import Any, Mapping, Protocol, Sequence
 
+from mindreport.constants import (
+    FLOW_SCORE_DOWNWARD,
+    FLOW_SCORE_MAINTENANCE,
+    FLOW_SCORE_UPWARD,
+    FLOW_SCORE_VOLATILE,
+    MINDREPORT_CAUSE_KEYWORD_MODEL,
+    MINDREPORT_CAUSE_MAX_TOKENS,
+    MINDREPORT_LLM_TEMPERATURE,
+)
 from mindreport.services.keyword_candidates import KeywordCandidate
 from mindreport.services.emotion_flow import EmotionFlowResult
 from mindreport.services.scoring import EmotionScore, ReportSourceMessage, _extract_json_object
@@ -12,11 +21,6 @@ from mindreport.services.scoring import EmotionScore, ReportSourceMessage, _extr
 
 CAUSE_STRESS = 'stress'
 CAUSE_RELIEF = 'relief'
-FLOW_SCORE_UPWARD = 'score_upward'
-FLOW_SCORE_MAINTENANCE = 'score_maintenance'
-FLOW_SCORE_VOLATILE = 'score_volatile'
-FLOW_SCORE_DOWNWARD = 'score_downward'
-
 LABEL_SIZE_DEFAULT = 'default'
 LABEL_SIZE_COMPACT = 'compact'
 
@@ -73,6 +77,21 @@ def build_cause_keyword_payload(
     source_by_id = {message.message_id: message for message in source_messages}
     return {
         'task': 'mind_report_cause_keyword_classification',
+        'scoring_context': {
+            'role': 'supporting affect direction only; source text remains primary',
+            'flow_type': emotion_flow.flow_type,
+            'daily_results': [
+                {
+                    'source_date': score.source_date.isoformat(),
+                    'emotion_label': score.emotion_label,
+                    'emotion_state': score.emotion_state,
+                    'confidence': score.confidence,
+                    'scoring_method': score.scoring_method,
+                    'evidence_message_ids': list(score.evidence_message_ids),
+                }
+                for score in emotion_scores
+            ],
+        },
         'candidates': [
             {
                 'keyword': candidate.keyword,
@@ -99,6 +118,7 @@ def build_cause_keyword_payload(
             '진단, 위험도, 성격 판정을 하지 않는다.',
             '후보별 근거 메시지를 직접 다시 읽고 후보 추출 결과에 동조하지 말고 독립적으로 판단한다.',
             '일별 감정 점수나 같은 날짜에 등장했다는 사실을 원인 판정 근거로 사용하지 않는다.',
+            'KcELECTRA 감정 결과는 근거 메시지를 해석하는 보조 정보일 뿐이며, stress/relief 판정은 원문에 드러난 방향과 인과 표현으로 결정한다.',
             'stress는 소재가 부담, 긴장, 불편 또는 소진과 연결된 경우에만 사용한다.',
             'relief는 소재가 편안함, 즐거움, 안정 또는 회복과 연결된 경우에만 사용한다.',
             '단순 언급, 혼합된 방향, 불명확한 인과관계는 unresolved로 분류하고 publishable을 false로 반환한다.',
@@ -142,9 +162,9 @@ class LangChainCauseKeywordClient:
             ]
         )
         llm = ChatOpenAI(
-            model=os.getenv('MINDREPORT_CAUSE_KEYWORD_MODEL', 'gpt-5.4-mini'),
-            temperature=0,
-            max_tokens=1000,
+            model=MINDREPORT_CAUSE_KEYWORD_MODEL,
+            temperature=MINDREPORT_LLM_TEMPERATURE,
+            max_tokens=MINDREPORT_CAUSE_MAX_TOKENS,
         )
         message = (prompt | llm).invoke(
             {'cause_keyword_payload': json.dumps(payload, ensure_ascii=False)}

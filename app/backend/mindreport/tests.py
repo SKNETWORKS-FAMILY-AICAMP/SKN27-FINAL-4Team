@@ -1,15 +1,20 @@
 from dataclasses import replace
 from datetime import date, datetime, timedelta
+import importlib
+import os
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
+from django.apps import apps as django_apps
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from chat.models import ChatMessage, ChatSession
+from mindreport.services.alternatives import build_alternative_plan
 from mindreport.services.cause_keywords import (
     FLOW_SCORE_UPWARD,
+    build_cause_keyword_payload,
     determine_label_display_policy,
 )
 from mindreport.services.cause_keyword_agent import MindReportCauseKeywordAgent
@@ -39,6 +44,7 @@ from mindreport.services.flow import (
     STEP_TIME_SERIES_FLOW,
     MindReportFlowService,
 )
+from mindreport.services.fallback_service import FallbackReportService
 from mindreport.services.emotion_flow import (
     FLOW_SCORE_DOWNWARD,
     FLOW_SCORE_UPWARD as FLOW_SCORE_UPWARD_FROM_FLOW,
@@ -46,6 +52,10 @@ from mindreport.services.emotion_flow import (
     analyze_emotion_flow,
 )
 from mindreport.services.emotion_analysis_agent import MindReportEmotionAnalysisAgent
+from mindreport.services.keyword_candidates import (
+    KeywordCandidate,
+    build_keyword_candidate_payload,
+)
 from mindreport.services.narrative_action_agent import MindReportNarrativeActionAgent
 from mindreport.services.validation_agent import (
     VALIDATION_ROUTE_CAUSE,
@@ -59,6 +69,7 @@ from mindreport.services.validation_agent import (
 from mindreport.services.scoring import (
     AFFECT_SCORING_METHOD,
     LABEL_GROUNDED_AFFECT_SCORING_METHOD,
+    KCELECTRA_SCORING_METHOD,
     SCORING_ROUTE_LABEL_GROUNDED,
     SCORING_ROUTE_LLM_FALLBACK,
     EmotionScore,
@@ -71,6 +82,102 @@ from mindreport.services.scoring import (
 from mindreport.services.graph_state import build_initial_mindreport_state
 from mindreport.services.graph_flow import MindReportSupervisorAgent
 from mindreport.models import MindReport
+from ai.agents.web_agent import FallbackWebAgent
+
+
+class MindReportFallbackSafetyTests(SimpleTestCase):
+    @patch.dict(
+        os.environ,
+        {'OPENAI_API_KEY': '', 'TAVILY_API_KEY': ''},
+    )
+    def test_web_fallback_does_not_return_static_dummy_recommendations(self):
+        recommendations = FallbackWebAgent.get_trendy_contents(
+            age=20,
+            gender='여성',
+            hobbies=['독서'],
+            interests=['전시'],
+        )
+
+        self.assertEqual(recommendations, [])
+
+    @patch(
+        'mindreport.services.fallback_service.FallbackWebAgent.get_trendy_contents',
+        return_value=[],
+    )
+    def test_waiting_report_keeps_status_but_has_no_fake_analysis_data(
+        self,
+        _get_trendy_contents,
+    ):
+        report = FallbackReportService.generate_fallback_report(
+            SimpleNamespace(id=7),
+            report_type='주간',
+            range_text='2026.07.20 ~ 2026.07.26',
+        )
+
+        self.assertEqual(report['stressCauses'], [])
+        self.assertEqual(report['reliefCauses'], [])
+        self.assertEqual(report['emotions'], [])
+        self.assertEqual(report['recommendations'], [])
+        self.assertIn('분석 대기 중', report['title'])
+        self.assertTrue(any('계속 수집' in line for line in report['analysis']))
+
+    @patch(
+        'mindreport.services.fallback_service.FallbackWebAgent.get_trendy_contents',
+        return_value=[{
+            'activity': '검색 근거 활동',
+            'reason': 'Tavily 결과에 소개된 활동입니다.',
+            'how_to': '공식 안내를 먼저 확인해보세요.',
+        }],
+    )
+    def test_web_suggestion_is_explicitly_not_conversation_analysis(
+        self,
+        _get_trendy_contents,
+    ):
+        report = FallbackReportService.generate_fallback_report(
+            SimpleNamespace(id=8),
+            report_type='주간',
+        )
+
+        self.assertEqual(report['recommendations'], ['검색 근거 활동'])
+        self.assertTrue(
+            any('대화에서 분석한 결과가 아니라' in line for line in report['analysis'])
+        )
+
+
+class LegacyFallbackSanitizationTests(TestCase):
+    def test_migration_clears_unverifiable_fallback_data_but_keeps_status(self):
+        user = get_user_model().objects.create_user(
+            email='legacy-fallback@example.com',
+            password='password',
+            nickname='기존 폴백 사용자',
+        )
+        report = MindReport.objects.create(
+            user=user,
+            report_type='주간 (데이터 부족)',
+            range_text='2026.07.13 ~ 2026.07.19',
+            title='마음 리포트 분석 대기 중',
+            summary='근거가 확인되지 않는 추천 요약',
+            stress_causes=['기록 수집 중...'],
+            relief_causes=['기록 수집 중...'],
+            emotions=[{'day': '14일', 'icon': '😐'}],
+            analysis=['근거가 확인되지 않는 활동 추천'],
+            recommendations=['근거가 확인되지 않는 활동'],
+            is_fallback=True,
+        )
+        migration = importlib.import_module(
+            'mindreport.migrations.0003_sanitize_legacy_fallback_reports'
+        )
+
+        migration.sanitize_legacy_fallback_reports(django_apps, None)
+
+        report.refresh_from_db()
+        self.assertEqual(report.title, '마음 리포트 분석 대기 중')
+        self.assertEqual(report.range_text, '2026.07.13 ~ 2026.07.19')
+        self.assertEqual(report.stress_causes, [])
+        self.assertEqual(report.relief_causes, [])
+        self.assertEqual(report.emotions, [])
+        self.assertEqual(report.recommendations, [])
+        self.assertTrue(any('과거 폴백 추천' in line for line in report.analysis))
 
 
 class MindReportV2GraphCollectionTests(SimpleTestCase):
@@ -792,6 +899,28 @@ class MindReportScoringServiceTests(TestCase):
             VALIDATION_ROUTE_EMOTION,
         )
 
+        first_score = complete_state['scoring_result'].emotion_scores[0]
+        invalid_scoring = replace(
+            complete_state['scoring_result'],
+            emotion_scores=(
+                replace(first_score, emotion_score=80.0, emotion_state='neutral'),
+                *complete_state['scoring_result'].emotion_scores[1:],
+            ),
+        )
+        score_state_result = MindReportValidationAgent().run({
+            **complete_state,
+            'scoring_result': invalid_scoring,
+        })
+        score_state_codes = {
+            issue['code']
+            for issue in score_state_result['validation_result']['issues']
+        }
+        self.assertIn('emotion_state_score_mismatch', score_state_codes)
+        self.assertEqual(
+            score_state_result['revision_target'],
+            VALIDATION_ROUTE_EMOTION,
+        )
+
         first_keyword = complete_state['cause_result'].cause_keywords[0]
         invalid_keyword = replace(
             first_keyword,
@@ -824,6 +953,22 @@ class MindReportScoringServiceTests(TestCase):
         self.assertEqual(len(result.emotion_scores), 1)
         self.assertEqual(result.emotion_scores[0].emotion_score, 50.0)
         self.assertEqual(result.emotion_scores[0].total_message_count, 5)
+
+    @patch('mindreport.services.electra_scorer.ElectraEmotionScorer')
+    def test_default_scoring_blocks_when_kcelectra_model_is_unavailable(
+        self,
+        scorer_class,
+    ):
+        self._create_user_messages(5)
+        scorer_class.return_value.model = None
+
+        result = MindReportScoringService().run(
+            user=self.user,
+            period_type='week',
+        )
+
+        self.assertEqual(result.status, 'scoring_model_unavailable')
+        self.assertEqual(result.emotion_scores, ())
 
     def test_source_message_uses_only_immediately_following_assistant_label(self):
         first_user = ChatMessage.objects.create(
@@ -1124,6 +1269,7 @@ class MindReportScoringServiceTests(TestCase):
                 emotion_label='joy',
             ),
             keyword_client=FakeKeywordCandidateClient(),
+            cause_client=FakeCauseKeywordClient(),
             narrative_client=FakeNarrativeClient(),
         ).run(user=self.user, period_type='week')
 
@@ -1144,6 +1290,7 @@ class MindReportScoringServiceTests(TestCase):
                 emotion_label='sadness',
             ),
             keyword_client=FakeKeywordCandidateClient(),
+            cause_client=FakeCauseKeywordClient(),
             narrative_client=FakeNarrativeClient(),
         ).run(user=self.user, period_type='week')
 
@@ -1187,6 +1334,89 @@ class MindReportScoringServiceTests(TestCase):
         self.assertEqual(downward.flow_type, FLOW_SCORE_DOWNWARD)
         self.assertEqual(volatile.flow_type, FLOW_SCORE_VOLATILE)
         self.assertEqual(upward.detected_by, 'rule_time_series')
+
+    def test_kcelectra_flow_recomputes_state_from_weighted_score(self):
+        flow = analyze_emotion_flow((
+            replace(
+                self._emotion_score(14, 57.36, 'negative'),
+                emotion_label='슬픔',
+                scoring_method=KCELECTRA_SCORING_METHOD,
+            ),
+        ))
+
+        self.assertEqual(flow.daily_summaries[0].emotion_state, 'positive')
+
+    def test_same_direction_kcelectra_jumps_are_upward_not_volatile(self):
+        flow = analyze_emotion_flow((
+            self._emotion_score(13, 24.64, 'negative'),
+            self._emotion_score(14, 22.92, 'negative'),
+            self._emotion_score(15, 57.36, 'positive'),
+            self._emotion_score(16, 99.94, 'positive'),
+            self._emotion_score(17, 99.40, 'positive'),
+        ))
+
+        self.assertEqual(flow.metrics['large_positive_jump_count'], 2)
+        self.assertEqual(flow.metrics['large_negative_jump_count'], 0)
+        self.assertEqual(flow.metrics['direction_change_count'], 0)
+        self.assertEqual(flow.flow_type, FLOW_SCORE_UPWARD_FROM_FLOW)
+
+    def test_kcelectra_context_reaches_keyword_and_cause_payloads(self):
+        scores = (
+            replace(
+                self._emotion_score(14, 75.0, 'positive'),
+                emotion_label='기쁨',
+                scoring_method=KCELECTRA_SCORING_METHOD,
+            ),
+        )
+        messages = (
+            ReportSourceMessage(
+                message_id=14,
+                source_date=date(2026, 7, 14),
+                content='합격 소식 덕분에 기뻤어.',
+                emotion_label=None,
+            ),
+        )
+        flow = analyze_emotion_flow(scores)
+        alternative_plan = build_alternative_plan(flow)
+        keyword_payload = build_keyword_candidate_payload(
+            source_messages=messages,
+            emotion_scores=scores,
+            emotion_flow=flow,
+            alternative_plan=alternative_plan,
+        )
+
+        self.assertEqual(
+            keyword_payload['messages'][0]['model_emotion']['label'],
+            '기쁨',
+        )
+        self.assertEqual(
+            keyword_payload['scoring_context']['daily_results'][0][
+                'scoring_method'
+            ],
+            KCELECTRA_SCORING_METHOD,
+        )
+
+        candidate = KeywordCandidate(
+            keyword='합격 소식',
+            confidence=0.9,
+            evidence_message_ids=(14,),
+            evidence_dates=('2026-07-14',),
+            rationale='기쁨의 이유로 명시됐습니다.',
+            evidence_type='explicit_causal',
+            relationship='합격 소식 때문에 기뻤다고 표현했습니다.',
+        )
+        cause_payload = build_cause_keyword_payload(
+            candidates=(candidate,),
+            emotion_scores=scores,
+            emotion_flow=flow,
+            source_messages=messages,
+        )
+        self.assertEqual(
+            cause_payload['scoring_context']['daily_results'][0][
+                'emotion_label'
+            ],
+            '기쁨',
+        )
 
     def test_keyword_candidate_extraction_runs_after_score_maintenance(self):
         self._create_user_messages(5)
@@ -1364,6 +1594,14 @@ class MindReportGraphAPIViewTests(TestCase):
             password='password',
             nickname='리포트 API 테스트',
         )
+        self.client.force_login(self.user)
+
+    def test_authentication_is_required(self):
+        self.client.logout()
+
+        response = self.client.get('/api/report/generate/')
+
+        self.assertIn(response.status_code, (401, 403))
 
     @patch(
         'mindreport.views.MindReportGenerateAPIView._is_last_week_of_month',
@@ -1421,6 +1659,27 @@ class MindReportGraphAPIViewTests(TestCase):
         self.assertTrue(report['is_safety_response'])
         self.assertFalse(report['is_fallback'])
         self.assertTrue(report['id'].startswith('safety-weekly-'))
+
+    @patch(
+        'mindreport.views.MindReportGenerateAPIView._is_last_week_of_month',
+        return_value=False,
+    )
+    @patch('mindreport.views.MindReportSupervisorAgent')
+    def test_invalid_graph_payload_is_not_persisted(
+        self,
+        supervisor_class,
+        _is_last_week,
+    ):
+        supervisor_class.return_value.run.return_value = {
+            'status': 'completed',
+            'report_payload': {'type': '주간'},
+        }
+
+        response = self.client.post('/api/report/generate/')
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json()['code'], 'MINDREPORT_INVALID_PAYLOAD')
+        self.assertFalse(MindReport.objects.filter(user=self.user).exists())
 
     @patch('mindreport.views.MindReportSupervisorAgent')
     def test_get_returns_stored_reports_without_running_graph(self, supervisor_class):

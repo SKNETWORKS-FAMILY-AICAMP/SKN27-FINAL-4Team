@@ -5,6 +5,11 @@ import json
 import os
 from typing import Any, Mapping, Protocol, Sequence
 
+from mindreport.constants import (
+    MINDREPORT_LLM_TEMPERATURE,
+    MINDREPORT_NARRATIVE_MAX_TOKENS,
+    MINDREPORT_NARRATIVE_MODEL,
+)
 from mindreport.services.alternatives import AlternativePlanResult
 from mindreport.services.cause_keywords import CauseKeywordResult, LabelDisplayResult
 from mindreport.services.emotion_flow import EmotionFlowResult
@@ -147,9 +152,9 @@ class LangChainNarrativeClient:
             ]
         )
         llm = ChatOpenAI(
-            model=os.getenv('MINDREPORT_NARRATIVE_MODEL', 'gpt-5.4-mini'),
-            temperature=0,
-            max_tokens=1200,
+            model=MINDREPORT_NARRATIVE_MODEL,
+            temperature=MINDREPORT_LLM_TEMPERATURE,
+            max_tokens=MINDREPORT_NARRATIVE_MAX_TOKENS,
         )
         message = (prompt | llm).invoke(
             {'narrative_payload': json.dumps(payload, ensure_ascii=False)}

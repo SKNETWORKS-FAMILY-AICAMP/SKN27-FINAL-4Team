@@ -10,18 +10,24 @@
 
 ```text
 app/backend/mindreport/
-├── views.py                  # API 요청 진입점 및 스냅샷 응답 처리 (GET/POST)
+├── constants.py              # 기간/점수/시계열/모델 설정의 단일 기준점
+├── checks.py                 # 모델 파일 및 배포 설정 Django system check
+├── views.py                  # 인증과 HTTP 응답만 담당하는 얇은 API 계층
 ├── models.py                 # DB 모델 (MindReport) - 주간/월간 생성된 리포트 최종 저장
 ├── urls.py                   # 엔드포인트 URL 라우팅 설정
 ├── services/                 # 하위 도메인 및 다중 에이전트 핵심 코드
 │   ├── graph_flow.py         # LangGraph 기반의 다중 에이전트 상태 전이 정의 (Supervisor)
 │   ├── graph_state.py        # 에이전트 전역 공유 상태 스키마 정의 (TypedDict)
 │   ├── graph_nodes.py        # LangGraph 각 상태 노드들의 실행 래퍼 함수군
+│   ├── report_service.py     # 생성 파이프라인과 저장을 조정하는 애플리케이션 서비스
+│   ├── persistence.py        # 현재 기간 upsert 및 조회 전용 저장 계층
+│   ├── payloads.py           # 그래프 결과 → 프론트엔드 JSON 계약 변환/검증
+│   ├── periods.py            # 주간/월간 기간 범위와 표시 문구의 단일 구현
 │   ├── collection.py         # 대화 히스토리 및 Neo4j 그래프DB 기반 장기 기억(LTM) 통합 수집 레이어
 │   ├── criteria_service.py   # 리포트 생성 기준(주간 5개, 월간 20개 대화) 물리적 검사
 │   ├── criteria_agent.py     # 생성 대상 판별 및 초기 분기 에이전트
 │   ├── emotion_analysis_agent.py # 대화별 정서 분류 및 시계열 변화 흐름 판별 총괄 에이전트
-│   ├── scoring.py            # LLM 기반 긍정/부정/각성 수치 독립 산출 및 서버 결정론적 점수 변환
+│   ├── scoring.py            # KcELECTRA 4감정 확률의 일별 집계 및 서버 결정론적 점수 변환
 │   ├── emotion_flow.py       # 감정 점수 시계열 통계 분류기 (상향, 하향, 변동성, 유지형 분류)
 │   ├── cause_keyword_agent.py# 원인 분석 총괄 에이전트
 │   ├── keyword_candidates.py # 대화 텍스트 기반 감정 원인 후보 키워드 추출 에이전트
@@ -42,10 +48,11 @@ app/backend/mindreport/
 2. **수집 및 기획 제약 조건 레이어 (`services/collection.py`, `criteria_service.py`)**:
    - `MindReportDataCollector`: 기간 대화와 함께 **Neo4j 그래프 데이터베이스**에서 사용자가 최근 일주일간 겪었던 주요 '사건(Event)', '연관 인물(Person)', '관심사/감정(Emotion)' 관계 노드를 탐색(Neo4j Cypher 쿼리 활용)하여 GraphRAG용 맥락 자료(LTM Context)를 확보합니다.
    - `ReportCriteriaService`: 무의미한 결과물 남발을 억제하기 위해 주간 대화 5건 이상, 월간 대화 20건 이상의 최소 조건 검사를 수행합니다.
+   - 기준 미달 폴백은 원인·감정 값을 생성하지 않습니다. Tavily 검색 근거와 유효한 생성 결과가 모두 있을 때만 별도의 웹 활동 제안을 표시하며, 검색 실패 시에는 대화 수집·분석 대기 상태만 반환합니다. 정적 활동 목록이나 무작위 더미 추천은 사용하지 않습니다.
 3. **세부 기능적 다중 에이전트 레이어 (Functional Multi-Agents)**:
    - 각 에이전트(Criteria, Emotion, Cause, Narrative, Validation)는 단일 역할만 전문적으로 처리(Separation of Concerns)하도록 정의되었으며, 내부적으로 프롬프트 설정과 파싱 로직을 격리하여 독립성을 보장합니다.
 4. **결정론적 점수/분류 레이어 (`services/scoring.py`, `emotion_flow.py`)**:
-   - LLM이 직접 기분 점수(Score)를 0~100 사이로 매기면 할루시네이션 및 일관성 결여가 발생하므로, LLM은 긍정/부정/각성 강도만을 정수 형태로 평가하게 하고 점수 계산과 기하 통계 시계열 패턴 분류는 서버 내의 룰 기반 수학 코드로 통제하도록 구조화했습니다.
+   - KcELECTRA는 사용자 발화를 기쁨/슬픔/분노/일반 확률로만 분류하고, 0~100 점수 계산과 시계열 패턴 분류는 서버의 고정 수학 코드가 담당하도록 구조화했습니다.
 5. **검증 및 안전 통제 레이어 (`services/validation_agent.py`)**:
    - `MindReportValidationAgent`: 최종 배포 전 생성물을 자동 검사하여 극단적 선택/자해 등 고위험군 표현 포착 시 안전 페이지 전환(`safety_response`), 오진 유발 방지, 점수 노출 차단, 대화 직접 인용 차단 등을 감시하고 미충족 시 이전 상태로 회귀(Revision Loop)하도록 통제합니다.
 
@@ -107,14 +114,15 @@ graph TD
 
 #### 2단계: 다차원 감정 수치화 및 시계열 추세 분류
 - **감정 지표 수치화 (`scoring.py`)**:
-  - LLM 분류기가 각 일별 대화 내용의 긍정 정서(Positive Affect), 부정 정서(Negative Affect), 각성도(Activation)를 PANAS(Positive and Negative Affect Schedule) 및 Valence-Arousal 차원 감정 모델을 재구성한 기준(0~4 범위 정수)으로 독립 평가합니다.
-  - 서버는 획득한 차원 점수로 다음 공식을 적용하여 기분 점수(0~100)를 산출합니다.
-    $$\text{Emotion Score} = 50.0 + 12.5 \times (\text{Positive} - \text{Negative}) \quad (\text{Clamped } 0 \sim 100)$$
+  - 파인튜닝된 KcELECTRA가 각 사용자 발화를 `기쁨/슬픔/분노/일반` 확률로 분류하고, 같은 날짜의 확률을 평균합니다.
+  - 서버는 일별 평균 확률에 다음 가중식을 적용해 비진단적 내부 점수(0~100)를 산출합니다.
+    $$\text{Emotion Score} = 100P(기쁨) + 50P(일반) + 25P(슬픔) + 0P(분노)$$
+  - 대표 감정은 최고 확률 라벨로 보존하되, 시계열용 상태는 점수에서 일관되게 파생합니다(55 초과 positive, 45 미만 negative, 그 외 neutral).
 - **통계적 시계열 흐름 분류 (`emotion_flow.py`)**:
   - 룰 기반 통계 연산으로 기간 내 점수의 기하적 방향을 판별합니다.
   - **점수 상향 (`score_upward`)**: 기간 내 후반 평균 상승폭이 기준 이상일 때. (Tone Color: `green`)
   - **점수 하향 (`score_downward`)**: 기간 내 후반 평균 하락폭이 기준 이하일 때. (Tone Color: `red`)
-  - **감정 변동성 (`score_volatile`)**: 점수 표준편차가 16 이상이고, 상승/하락 반전이 빈번하거나 18점 이상의 큰 폭 등락이 2회 이상 발생할 때. (Tone Color: `gray`)
+  - **감정 변동성 (`score_volatile`)**: 점수 표준편차가 16 이상이고, 유의한 상승/하락 반전이 있거나 18점 이상 상승과 하락이 모두 발생할 때. 같은 방향의 큰 변화만 반복되면 상승 또는 하락으로 분류합니다. (Tone Color: `gray`)
   - **유지형 (`score_maintenance`)**: 뚜렷한 변화 추세 없이 긍정이 지배적이면 `초록 유지`, 부정이 지배적이면 `빨강 유지`, 중립이 지배적이면 `회색 유지`로 지정합니다.
 
 #### 3단계: 원인 분석 및 시각적 강조 정책

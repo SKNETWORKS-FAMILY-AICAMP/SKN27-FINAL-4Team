@@ -6,3 +6,6 @@ from django.apps import AppConfig
 class MindreportConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'mindreport'
+
+    def ready(self):
+        from . import checks  # noqa: F401
