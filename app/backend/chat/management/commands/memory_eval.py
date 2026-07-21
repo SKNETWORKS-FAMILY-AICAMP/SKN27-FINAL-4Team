@@ -16,7 +16,7 @@ import json
 
 from django.core.management.base import BaseCommand
 
-from chat import graph_memory
+from chat import graph_memory_v2_base as graph_memory   # v1 철거 (2026-07-21) — 평가는 운영 스키마로
 from chat.memory_eval_scenarios import EXTRA_SCENARIOS, NOISE_POOL, SCENARIOS
 
 EVAL_UID_BASE = 987000
@@ -149,7 +149,7 @@ class Command(BaseCommand):
                                   + json.dumps(data, ensure_ascii=False)[:250])
                 return data
             graph_memory._extract = _debug_extract
-        today = graph_memory._today_iso()
+        today = graph_memory._today_s()   # v2 함수명 (_today_iso는 v1 유물)
         scenarios = SCENARIOS
         if opts['only']:
             wanted = {x.strip() for x in opts['only'].split(',') if x.strip()}

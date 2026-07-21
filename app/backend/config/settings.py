@@ -185,6 +185,7 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'   # collectstatic 산출 (운영: nginx가 서빙)
 
 # ── TTS mp3 등 미디어 파일 (API 명세서 v6.0 §3-2) ──
 MEDIA_URL = '/media/'

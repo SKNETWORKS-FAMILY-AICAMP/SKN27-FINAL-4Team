@@ -44,6 +44,11 @@ export const chatApi = {
     }))
   },
 
+  /** 기억 패널 (UI #3) — 좌측 '기억하는 것' 카드 데이터 (다가오는 일·취향·인물·최근) */
+  async memoryPanel() {
+    return unwrap(await http.get('/memory/panel/'))
+  },
+
   /** 대화 턴 (텍스트 즉시 + tts_task_id로 오디오 폴링)
    *  image: data URL(선택) — 사진 첨부 시 멀티모달로 전달, 저장은 안 함
    *  tts=false면 음소거 사용자용으로 서버가 TTS 생성 자체를 건너뜀 */
