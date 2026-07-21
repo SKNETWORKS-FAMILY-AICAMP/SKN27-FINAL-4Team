@@ -49,7 +49,7 @@ docker run --rm -p 8080:80 --env-file app/backend/.env \
 
 1. https://neo4j.com/cloud/aura 에서 Free 인스턴스 생성 (AWS 서울 리전 선택 가능)
 2. 접속 URI(`neo4j+s://xxxx.databases.neo4j.io`)와 비밀번호 기록
-3. 벡터 인덱스는 앱이 기동 시 자동 생성 — 별도 작업 없음
+3. 별도 초기화 작업 없음 (제약조건은 앱이 기동 시 자동 생성)
 - 대안: EC2 t3.small에 `docker run neo4j:5` (Free 한도 초과 시)
 
 ## 5. SSM Parameter Store — 시크릿

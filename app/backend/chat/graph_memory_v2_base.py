@@ -44,9 +44,10 @@ _lock = threading.Lock()
 # (CLOSURE_WINDOW=14 삭제 — 종결 단언 노출은 사건 자신의 occurs 날짜에서 유도:
 #  날짜 있는 종결은 그 날짜가 지날 때까지, 날짜 없는 종결은 최신순 LIMIT 3이 양을 제한)
 from .memory_config import (RECALL_LIMIT, OPENLOOP_MAX_AGE, RELCHANGE_WINDOW,
-                            ABSENCE_MIN, VEC_INDEX, VEC_RECALL_MIN,
-                            VEC_DEDUP_MIN, EXPIRE_VEC_MIN,
-                            TOPIC_CATEGORIES, TOPIC_SYNONYMS)
+                            ABSENCE_MIN, TOPIC_CATEGORIES, TOPIC_SYNONYMS)
+# 임베딩 완전 철거 (2026-07-21): 'v2 = 임베딩 미사용' 결정(_resolve_invalidations 참고)이
+# 이미 있었는데 벡터 경로가 모순되게 남아 있었다. 실측: 운영 그래프 전 노드 embedding 없음
+# → 벡터 채널 전부 무동작이었고, 의미 연결은 LLM 폴백이 실제 담당. 죽은 경로 제거.
 
 _CATS_STR = '/'.join(TOPIC_CATEGORIES)   # 프롬프트 주입용 (정의는 memory_config 한 곳)
 
@@ -176,15 +177,7 @@ def _setup(drv):
                 s.run(q)
             except Exception as e:
                 print(f'[graph_memory_v2_base] 스키마 경고: {e}')
-    try:
-        from chat import embedder
-        with drv.session() as s:
-            s.run(f'CREATE VECTOR INDEX {VEC_INDEX} IF NOT EXISTS '
-                  'FOR (e:Event) ON (e.embedding) '
-                  'OPTIONS {indexConfig: {`vector.dimensions`: $dim, '
-                  '`vector.similarity_function`: "cosine"}}', dim=embedder.EMBED_DIM)
-    except Exception as e:
-        print(f'[graph_memory_v2_base] 벡터 인덱스 생성 실패(결정 매칭 폴백): {e}')
+    # (벡터 인덱스 생성 제거 — 임베딩 철거 2026-07-21)
 
 
 # ── 감정: 학습 모델(KcELECTRA) 4확률 — 감정 소스는 모델 하나 ──
@@ -424,32 +417,6 @@ def _synthesize_closures(data, message):
     return data
 
 
-def _vector_expire_match(drv, uid, name):
-    """만료 벡터 폴백 (0.60) — 글자가 안 겹치는 만료 대상('운동 레슨'≈'PT 첫 수업' 0.70).
-    v1 실측 경로 복원 (memory_expire_bench: 무관 최고 0.42 < 임계 0.60)."""
-    try:
-        from chat import embedder
-        if not embedder.is_available():
-            return None
-        with drv.session() as s:
-            row = s.run(
-                f'CALL db.index.vector.queryNodes("{VEC_INDEX}", 4, $vec) '
-                'YIELD node, score '
-                'WHERE node.uid=$uid AND score>=$min '
-                '  AND coalesce(node.suppressed,false)=false '
-                'MATCH (u:User {uid:$uid})-[h:HAS_EVENT]->(node) '
-                'WHERE h.valid_to IS NULL '
-                'RETURN node.name AS n, score ORDER BY score DESC LIMIT 1',
-                vec=embedder.embed(name), uid=uid, min=EXPIRE_VEC_MIN).single()
-        if row:
-            print(f"[graph_memory_v2_base] 만료 벡터 매칭: '{name}' ≈ '{row['n']}' "
-                  f"({row['score']:.2f}) → 대상 확정")
-            return row['n']
-    except Exception:
-        pass
-    return None
-
-
 def _resolve_invalidations(drv, uid, data, message=''):
     """만료 대상 해석 (2026-07-16) — 결정 매칭(토큰 AND) 실패 시 LLM 1회 판정 폴백.
     v1 임베딩 폴백(0.60)의 자리 대체 — 임베딩 미사용 결정 하의 표현 변주 대응.
@@ -507,11 +474,7 @@ def _resolve_invalidations(drv, uid, data, message=''):
             continue
         if any(all(t in _norm(c) for t in toks) for c in pool):
             continue    # 1차: 결정 매칭 (비용 0 경로)
-        if kind not in ('relation', 'preference'):
-            hit = _vector_expire_match(drv, uid, name)   # 2차: 벡터 폴백 0.60 (v1 경로 복원)
-            if hit:
-                inv['name'] = hit
-                continue
+        # (2차 벡터 폴백 제거 — 임베딩 철거 2026-07-21. 표현 변주는 아래 LLM 판정이 담당)
         try:
             from ai.agents.llm import get_llm
             # v4 (2026-07-18): 열린 선택은 소형 모델이 겁먹고 '없음'으로 도망친다(S05 3연속
@@ -551,7 +514,7 @@ _TSTAMP = ('ON CREATE SET r.valid_from=$now, r.valid_to=null, '
            'r.created_at=$now, r.episode=$eid ')
 
 
-def _store(tx, uid, data, msg_probs, message, vectors=None):
+def _store(tx, uid, data, msg_probs, message):
     now = _now()
     today = _today_s()
     eid = 'ep_' + uuid.uuid4().hex[:12]
@@ -567,26 +530,8 @@ def _store(tx, uid, data, msg_probs, message, vectors=None):
         key = _norm(name)
         if not key:
             continue
-        vec = (vectors or {}).get(name)
-        # dedup 2차 (0.93): 표기가 달라도 의미가 같으면 기존 노드에 병합.
-        # 종결 기록('~취소')은 유사해도 원본에 병합 금지 — 병합되면 keep 보호가
-        # 만료 도장을 막는 v1 S04 회귀.
-        if vec is not None and not _CLOSURE_TAIL.search(name):
-            try:
-                row = tx.run(
-                    f'CALL db.index.vector.queryNodes("{VEC_INDEX}", 3, $vec) '
-                    'YIELD node, score '
-                    'WHERE node.uid=$uid AND score>=$min AND node.key<>$key '
-                    '  AND coalesce(node.suppressed,false)=false '
-                    'RETURN node.key AS k, node.name AS n, score '
-                    'ORDER BY score DESC LIMIT 1',
-                    vec=vec, uid=uid, min=VEC_DEDUP_MIN, key=key).single()
-                if row and not _CLOSURE_TAIL.search((row['n'] or '').strip()):
-                    print(f"[graph_memory_v2_base] dedup2: '{name}' ≈ '{row['n']}' "
-                          f"({row['score']:.2f}) → 병합")
-                    name, key = row['n'], row['k']
-            except Exception:
-                pass
+        # (벡터 dedup 2차 제거 — 임베딩 철거 2026-07-21. 표기 변주 중복은
+        #  key 정확일치(1차)와 추출 프롬프트의 '같은 활동 1사건' 가드가 담당)
         keep_keys.add(key)
         # 복합감정(§9-1): 사건 2개 이상이면 사건별 판정, 아니면 메시지 단위
         probs = ev.get('_probs') if ev.get('_probs') is not None else msg_probs
@@ -602,13 +547,12 @@ def _store(tx, uid, data, msg_probs, message, vectors=None):
             'SET e.cause=coalesce($cause,e.cause), e.top_emotion=coalesce($top,e.top_emotion), '
             '    e.salience=CASE WHEN coalesce(e.salience,0)<$sal THEN $sal ELSE e.salience END, '
             '    e.occurs_start=coalesce($ds,e.occurs_start), '
-            '    e.occurs_end=coalesce($de,e.occurs_end), '
-            '    e.embedding=coalesce(e.embedding,$vec) '   # 의미 검색 재료 (없으면 유지)
+            '    e.occurs_end=coalesce($de,e.occurs_end) '
             'MERGE (ep)-[:RECORDS]->(e) '
             'MERGE (u)-[r:HAS_EVENT]->(e) ' + _TSTAMP,
             uid=uid, eid=eid, key=key, evid='ev_' + uuid.uuid4().hex[:10],
             name=name, now=now, cause=(ev.get('cause') or '').strip() or None,
-            top=top_emo, sal=salience, ds=d_start, de=d_end, vec=vec)
+            top=top_emo, sal=salience, ds=d_start, de=d_end)
         # 부활 (§8-4-3): 같은 key + 미래 날짜 재등록 → 무효화 해제
         if d_start and d_start >= today:
             tx.run('MATCH (u:User {uid:$uid})-[r:HAS_EVENT]->(e:Event {uid:$uid,key:$key}) '
@@ -770,19 +714,8 @@ def _capture(uid, message, crisis=False):
             for ev in events:
                 seg = ((ev.get('name') or '') + ' ' + (ev.get('cause') or '')).strip()
                 ev['_probs'] = _emotion_probs(seg) or msg_probs
-        vectors = {}
-        try:
-            from chat import embedder
-            if embedder.is_available():
-                for ev in events:
-                    nm = (ev.get('name') or '').strip()
-                    if nm:
-                        vectors[nm] = embedder.embed(nm)
-        except Exception:
-            vectors = {}
         with drv.session() as s:
-            s.execute_write(lambda tx: _store(tx, uid, data, msg_probs, message,
-                                              vectors=vectors))
+            s.execute_write(lambda tx: _store(tx, uid, data, msg_probs, message))
     except Exception as e:
         print(f'[graph_memory_v2_base] 캡처 실패: {e}')
 
@@ -866,35 +799,8 @@ def recall(user_id, message=None, limit=None):
                     lines.append('- ' + ' '.join(p))
             n_before_search = len(lines)   # ③ 채널들이 빈손인지 판정용 (③-1 게이트)
             matched_names = []             # 질문이 가리킨 사건들 — ⑤ 인과 사슬의 출발점
-            # ③-0 질문 벡터 직접 검색 (0.33) — 표현이 달라도 의미로 찾음 (임베딩 복원 7/18)
-            if (message or '').strip():
-                try:
-                    from chat import embedder
-                    if embedder.is_available():
-                        for r in s.run(
-                            f'CALL db.index.vector.queryNodes("{VEC_INDEX}", 8, $vec) '
-                            'YIELD node, score '
-                            'WHERE node.uid=$uid AND score>=$min '
-                            '  AND coalesce(node.suppressed,false)=false '
-                            'MATCH (u:User {uid:$uid})-[h:HAS_EVENT]->(node) '
-                            'WHERE h.valid_to IS NULL '
-                            'RETURN node.key AS k, node.name AS n, '
-                            '       node.top_emotion AS emo, score '
-                            'ORDER BY score DESC LIMIT 4',
-                            vec=embedder.embed(message), uid=user_id,
-                                min=VEC_RECALL_MIN).data():
-                            line = (f"- (연상) {r['n']}"
-                                    + (f" · 감정:{r['emo']}" if r.get('emo') else ''))
-                            if line not in lines:
-                                lines.append(line)
-                            matched_names.append(r['n'])
-                            s.run('MATCH (u:User {uid:$uid})-[:HAS_EVENT]->'
-                                  '(e:Event {uid:$uid, key:$k}) '
-                                  'SET e.recall_count=coalesce(e.recall_count,0)+1',
-                                  uid=user_id, k=r['k'])
-                except Exception:
-                    pass
-            # ③ 언급 기반 직접 검색 (결정 매칭 — 벡터와 상보)
+            # (③-0 벡터 검색 채널 제거 — 임베딩 철거 2026-07-21. 의미 연결은 ③-1 담당)
+            # ③ 언급 기반 직접 검색 (결정 매칭)
             if (message or '').strip():
                 mnorm = _norm(message)
                 asked = s.run(
@@ -914,38 +820,32 @@ def recall(user_id, message=None, limit=None):
                           '(e:Event {uid:$uid, key:$k}) '
                           'SET e.recall_count=coalesce(e.recall_count,0)+1',
                           uid=user_id, k=r['k'])
-            # ③-1 LLM 연상 폴백 (임베딩 미사용 구성 전용, 2026-07-18) — 결정 매칭이
-            # 빈손일 때만 1회. '복권'↔'로또'처럼 단어가 안 겹치는 질문의 의미 연결을
-            # 프롬프트로 대체 (P01-off 실측: 흐름 상위 6위 밖 기억은 도달 경로 전무).
+            # ③-1 LLM 연상 폴백 (2026-07-18, 임베딩 철거 후 의미 연결의 정본 경로) —
+            # 결정 매칭이 빈손일 때만 1회. '복권'↔'로또'처럼 단어가 안 겹치는 질문의
+            # 의미 연결 담당 (P01-off 실측: 흐름 상위 6위 밖 기억은 도달 경로 전무).
             if (message or '').strip() and len(lines) == n_before_search:
                 try:
-                    from chat import embedder as _emb
-                    emb_on = _emb.is_available()
+                    names = [r['n'] for r in s.run(
+                        'MATCH (u:User {uid:$uid})-[h:HAS_EVENT]->(e:Event) '
+                        'WHERE h.valid_to IS NULL AND e.suppressed IS NULL '
+                        'RETURN e.name AS n LIMIT 20', uid=user_id).data() if r['n']]
+                    if names:
+                        from ai.agents.llm import get_llm
+                        resp = get_llm(temperature=0, max_tokens=40).invoke([
+                            ('system',
+                             '질문이 가리키는 기억이 목록에 있는지 판정하라. 표현이 '
+                             "달라도 같은 일을 가리킬 수 있다('복권 맞음'과 '로또 당첨'). "
+                             "있으면 그 이름만 목록 표기 그대로, 없으면 '없음'. 다른 말 금지."),
+                            ('user', f'질문: {message}\n목록: '
+                                     + json.dumps(names, ensure_ascii=False)),
+                        ])
+                        pick = (resp.content or '').strip().strip('"\'')
+                        if pick and pick != '없음' and pick in names:
+                            lines.append(f'- (연상) {pick}')
+                            matched_names.append(pick)
+                            print(f'[graph_memory_v2_base] LLM 연상: → {pick}')
                 except Exception:
-                    emb_on = False
-                if not emb_on:
-                    try:
-                        names = [r['n'] for r in s.run(
-                            'MATCH (u:User {uid:$uid})-[h:HAS_EVENT]->(e:Event) '
-                            'WHERE h.valid_to IS NULL AND e.suppressed IS NULL '
-                            'RETURN e.name AS n LIMIT 20', uid=user_id).data() if r['n']]
-                        if names:
-                            from ai.agents.llm import get_llm
-                            resp = get_llm(temperature=0, max_tokens=40).invoke([
-                                ('system',
-                                 '질문이 가리키는 기억이 목록에 있는지 판정하라. 표현이 '
-                                 "달라도 같은 일을 가리킬 수 있다('복권 맞음'과 '로또 당첨'). "
-                                 "있으면 그 이름만 목록 표기 그대로, 없으면 '없음'. 다른 말 금지."),
-                                ('user', f'질문: {message}\n목록: '
-                                         + json.dumps(names, ensure_ascii=False)),
-                            ])
-                            pick = (resp.content or '').strip().strip('"\'')
-                            if pick and pick != '없음' and pick in names:
-                                lines.append(f'- (연상) {pick}')
-                                matched_names.append(pick)
-                                print(f'[graph_memory_v2_base] LLM 연상: → {pick}')
-                    except Exception:
-                        pass
+                    pass
             # ⑤ 인과 사슬 (2026-07-19 배선 — 게이트 통과 후 옵션 이행) — '왜/때문/이유'
             # 질문일 때만, 질문이 가리킨 사건의 원인 사슬(BECAUSE_OF *1..5)을 주입.
             # 엣지는 사용자가 명시한 인과("~때문에")로만 생성되므로 사슬 자체가 접지돼 있다.

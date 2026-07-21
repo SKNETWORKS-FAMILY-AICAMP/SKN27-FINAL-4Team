@@ -17,11 +17,10 @@ OPENLOOP_MAX_AGE = int(os.environ.get('MEM_OPENLOOP_AGE_DAYS', '30'))  # 열린 
 RELCHANGE_WINDOW = int(os.environ.get('MEM_RELCHANGE_DAYS', '30'))     # 관계 변화 회고 창
 ABSENCE_MIN = int(os.environ.get('MEM_ABSENCE_DAYS', '7'))             # 공백 인사 최소 일수
 
-# ── 임베딩 임계값 — v1 실측 잠정치, v2 스키마에서 벤치 재측정 대상 ──
-VEC_INDEX = 'memory_vec'   # v1과 공유 (Event.embedding, 768, cosine)
-VEC_RECALL_MIN = float(os.environ.get('MEM_VEC_RECALL_MIN', '0.33'))   # 의미 회상 채널 최소 유사도
-VEC_DEDUP_MIN = float(os.environ.get('MEM_VEC_DEDUP_MIN', '0.93'))     # 중복 병합 최소 유사도
-EXPIRE_VEC_MIN = float(os.environ.get('MEM_EXPIRE_VEC_MIN', '0.60'))   # 만료 대상 벡터 매칭 최소 유사도
+# ── 임베딩: 사용 안 함 (v2 결정 — 2026-07-21 코드까지 완전 철거) ──
+# 실측: 운영 그래프 전 노드에 embedding 없음(벡터 채널 전부 무동작이었음).
+# 의미 연결(표현 변주)은 LLM 폴백이 정본 경로: 회상 ③-1 연상 · 만료 대상 해석.
+# VEC_* 다이얼 3종과 memory_vec 인덱스, embedder.py, 벤치 커맨드 2종 모두 삭제됨.
 
 # ── Topic 카테고리 어휘 (스키마 — 2026-07-20 확정) ──────────────
 # 사건 topic과 취향 category가 공유하는 단일 분류 체계. 실측 근거: 어휘를 LLM 재량에

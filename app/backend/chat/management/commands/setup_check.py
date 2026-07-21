@@ -54,26 +54,8 @@ class Command(BaseCommand):
         check('Neo4j 연결 (기억 시스템)', neo,
               'docker compose up -d neo4j + .env NEO4J_URI=bolt://localhost:7687 확인')
 
-        # ④ 벡터 인덱스
-        def vec_idx():
-            from chat import graph_memory_v2_base as graph_memory   # v1 철거 (2026-07-21)
-            drv = graph_memory._get_driver()
-            with drv.session() as s:
-                names = [r['name'] for r in s.run('SHOW INDEXES YIELD name').data()]
-            if graph_memory.VEC_INDEX not in names:
-                raise RuntimeError('memory_vec 없음')
-            return '(memory_vec)'
-        check('벡터 인덱스', vec_idx,
-              '서버 첫 기동 시 자동 생성됨 — Neo4j 연결부터 해결하면 따라옴')
-
-        # ⑤ 임베딩 모델
-        def emb():
-            from chat import embedder
-            if not embedder.is_available():
-                raise RuntimeError('로드 실패')
-            return f'({embedder.MODEL_NAME})'
-        check('임베딩 모델 (의미 검색)', emb,
-              'uv pip install -r requirements.txt  (sentence-transformers, 최초 모델 440MB 다운로드)')
+        # (④ 벡터 인덱스·⑤ 임베딩 검사 제거 — 임베딩 완전 철거 2026-07-21.
+        #  의미 연결은 LLM 폴백 경로라 별도 인프라 검사가 필요 없음)
 
         # ⑥ sklearn (리플렉션)
         def skl():
