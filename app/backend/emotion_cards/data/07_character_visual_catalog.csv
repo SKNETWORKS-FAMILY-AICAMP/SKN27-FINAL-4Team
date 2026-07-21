@@ -1,21 +1,24 @@
-﻿visual_id,visual_type,display_name,visual_prompt,safety_note
-EXP_DEFAULT,EXPRESSION,기본 표정,gentle neutral pleasant expression,추가 팔다리·과도한 고통·공격 포즈 금지
-EXP_BRIGHT,EXPRESSION,밝은 미소,bright happy smile,추가 팔다리·과도한 고통·공격 포즈 금지
-EXP_PROUD,EXPRESSION,뿌듯한 미소,small proud smile,추가 팔다리·과도한 고통·공격 포즈 금지
-EXP_RELIEVED,EXPRESSION,안도한 표정,relieved soft smile,추가 팔다리·과도한 고통·공격 포즈 금지
-EXP_SAD,EXPRESSION,잔잔한 슬픔,"soft sad eyes, no extreme crying",추가 팔다리·과도한 고통·공격 포즈 금지
-EXP_TEARFUL,EXPRESSION,울먹이는 표정,slightly tearful but safe,추가 팔다리·과도한 고통·공격 포즈 금지
-EXP_ANGER,EXPRESSION,참고 있는 화남,"controlled frustrated expression, no aggression",추가 팔다리·과도한 고통·공격 포즈 금지
-EXP_IRRITATED,EXPRESSION,살짝 짜증,mild irritated frown,추가 팔다리·과도한 고통·공격 포즈 금지
-EXP_TENSE,EXPRESSION,긴장한 표정,gentle worried expression,추가 팔다리·과도한 고통·공격 포즈 금지
-EXP_CONFUSED,EXPRESSION,혼란스러운 표정,thoughtful confused expression,추가 팔다리·과도한 고통·공격 포즈 금지
-EXP_CALM,EXPRESSION,평온한 표정,calm relaxed expression,추가 팔다리·과도한 고통·공격 포즈 금지
-EXP_HOPE,EXPRESSION,희망적인 표정,soft hopeful eyes,추가 팔다리·과도한 고통·공격 포즈 금지
-POSE_OPEN,POSE,열린 자세,open upright pose,추가 팔다리·과도한 고통·공격 포즈 금지
-POSE_RUN,POSE,달리는 자세,joyful running pose,추가 팔다리·과도한 고통·공격 포즈 금지
-POSE_NATURAL,POSE,자연스럽게 서기,natural standing pose,추가 팔다리·과도한 고통·공격 포즈 금지
-POSE_WALK,POSE,걷는 자세,gentle walking pose,추가 팔다리·과도한 고통·공격 포즈 금지
-POSE_LOW,POSE,어깨가 내려간 자세,safe tired posture,추가 팔다리·과도한 고통·공격 포즈 금지
-POSE_RECLINE,POSE,편하게 기대기,cozy reclining pose,추가 팔다리·과도한 고통·공격 포즈 금지
-POSE_BUSY,POSE,분주하게 움직이기,"busy but readable pose, no extra limbs",추가 팔다리·과도한 고통·공격 포즈 금지
-POSE_ARRIVE,POSE,도착해 숨 고르기,arrived and breathing gently,추가 팔다리·과도한 고통·공격 포즈 금지
+﻿visual_id,visual_type,display_name,visual_prompt,safety_note,body_language,gaze_direction,shoulder_position,hand_position,motion_level,compatible_emotions,compatible_intensity,incompatible_actions,candidate_weight
+EXP_DEFAULT,EXPRESSION,기본 표정,gentle neutral pleasant expression,추가 팔다리·과도한 고통·공격 포즈 금지,gentle neutral pleasant expression,natural scene-consistent gaze,natural,anatomically natural,LOW,JOY|SADNESS|ANGER|ANXIETY,LOW|MEDIUM|HIGH,,30
+EXP_BRIGHT,EXPRESSION,밝은 미소,bright happy smile,추가 팔다리·과도한 고통·공격 포즈 금지,bright happy smile,natural scene-consistent gaze,natural,anatomically natural,LOW,JOY|SADNESS|ANGER|ANXIETY,LOW|MEDIUM|HIGH,,30
+EXP_PROUD,EXPRESSION,뿌듯한 미소,small proud smile,추가 팔다리·과도한 고통·공격 포즈 금지,small proud smile,natural scene-consistent gaze,natural,anatomically natural,LOW,JOY|SADNESS|ANGER|ANXIETY,LOW|MEDIUM|HIGH,,30
+EXP_RELIEVED,EXPRESSION,안도한 표정,relieved soft smile,추가 팔다리·과도한 고통·공격 포즈 금지,relieved soft smile,natural scene-consistent gaze,natural,anatomically natural,LOW,JOY|SADNESS|ANGER|ANXIETY,LOW|MEDIUM|HIGH,,30
+EXP_SAD,EXPRESSION,잔잔한 슬픔,"subdued contemplative expression with a distant or downward gaze, no extreme crying",추가 팔다리·과도한 고통·공격 포즈 금지,"soft sad eyes, no extreme crying",distant or downward,natural,anatomically natural,LOW,SADNESS,LOW|MEDIUM|HIGH,,30
+EXP_TEARFUL,EXPRESSION,울먹이는 표정,slightly tearful but safe,추가 팔다리·과도한 고통·공격 포즈 금지,slightly tearful but safe,natural scene-consistent gaze,natural,anatomically natural,LOW,JOY|SADNESS|ANGER|ANXIETY,LOW|MEDIUM|HIGH,,30
+EXP_ANGER,EXPRESSION,참고 있는 화남,"controlled frustrated expression, no aggression",추가 팔다리·과도한 고통·공격 포즈 금지,"controlled frustrated expression, no aggression",natural scene-consistent gaze,natural,anatomically natural,LOW,JOY|SADNESS|ANGER|ANXIETY,LOW|MEDIUM|HIGH,,30
+EXP_IRRITATED,EXPRESSION,살짝 짜증,mild irritated frown,추가 팔다리·과도한 고통·공격 포즈 금지,mild irritated frown,natural scene-consistent gaze,natural,anatomically natural,LOW,JOY|SADNESS|ANGER|ANXIETY,LOW|MEDIUM|HIGH,,30
+EXP_TENSE,EXPRESSION,긴장한 표정,gentle worried expression,추가 팔다리·과도한 고통·공격 포즈 금지,gentle worried expression,natural scene-consistent gaze,natural,anatomically natural,LOW,JOY|SADNESS|ANGER|ANXIETY,LOW|MEDIUM|HIGH,,30
+EXP_CONFUSED,EXPRESSION,혼란스러운 표정,thoughtful confused expression,추가 팔다리·과도한 고통·공격 포즈 금지,thoughtful confused expression,natural scene-consistent gaze,natural,anatomically natural,LOW,JOY|SADNESS|ANGER|ANXIETY,LOW|MEDIUM|HIGH,,30
+EXP_CALM,EXPRESSION,평온한 표정,calm relaxed expression,추가 팔다리·과도한 고통·공격 포즈 금지,calm relaxed expression,natural scene-consistent gaze,natural,anatomically natural,LOW,JOY|SADNESS|ANGER|ANXIETY,LOW|MEDIUM|HIGH,,30
+EXP_HOPE,EXPRESSION,희망적인 표정,soft hopeful eyes,추가 팔다리·과도한 고통·공격 포즈 금지,soft hopeful eyes,natural scene-consistent gaze,natural,anatomically natural,LOW,JOY|SADNESS|ANGER|ANXIETY,LOW|MEDIUM|HIGH,,30
+POSE_OPEN,POSE,열린 자세,open upright pose,추가 팔다리·과도한 고통·공격 포즈 금지,open upright pose,natural scene-consistent gaze,natural,anatomically natural,LOW,JOY|SADNESS|ANGER|ANXIETY,LOW|MEDIUM|HIGH,,30
+POSE_RUN,POSE,달리는 자세,joyful running pose,추가 팔다리·과도한 고통·공격 포즈 금지,joyful running pose,natural scene-consistent gaze,natural,anatomically natural,LOW,JOY|SADNESS|ANGER|ANXIETY,LOW|MEDIUM|HIGH,,30
+POSE_NATURAL,POSE,자연스럽게 서기,natural standing pose,추가 팔다리·과도한 고통·공격 포즈 금지,natural standing pose,natural scene-consistent gaze,natural,anatomically natural,LOW,JOY|SADNESS|ANGER|ANXIETY,LOW|MEDIUM|HIGH,,30
+POSE_WALK,POSE,걷는 자세,gentle walking pose,추가 팔다리·과도한 고통·공격 포즈 금지,gentle walking pose,natural scene-consistent gaze,natural,anatomically natural,LOW,JOY|SADNESS|ANGER|ANXIETY,LOW|MEDIUM|HIGH,,30
+POSE_LOW,POSE,어깨가 내려간 자세,safe tired posture,추가 팔다리·과도한 고통·공격 포즈 금지,safe tired posture,natural scene-consistent gaze,natural,anatomically natural,LOW,JOY|SADNESS|ANGER|ANXIETY,LOW|MEDIUM|HIGH,,30
+POSE_RECLINE,POSE,편하게 기대기,cozy reclining pose,추가 팔다리·과도한 고통·공격 포즈 금지,cozy reclining pose,natural scene-consistent gaze,natural,anatomically natural,LOW,JOY|SADNESS|ANGER|ANXIETY,LOW|MEDIUM|HIGH,,30
+POSE_BUSY,POSE,분주하게 움직이기,"busy but readable pose, no extra limbs",추가 팔다리·과도한 고통·공격 포즈 금지,"busy but readable pose, no extra limbs",natural scene-consistent gaze,natural,anatomically natural,LOW,JOY|SADNESS|ANGER|ANXIETY,LOW|MEDIUM|HIGH,,30
+POSE_ARRIVE,POSE,도착해 숨 고르기,arrived and breathing gently,추가 팔다리·과도한 고통·공격 포즈 금지,arrived and breathing gently,natural scene-consistent gaze,natural,anatomically natural,LOW,JOY|SADNESS|ANGER|ANXIETY,LOW|MEDIUM|HIGH,,30
+EXP_QUIET,EXPRESSION,조용한 표정,"a quiet, restrained contemplative expression","no extreme despair, tears, or distortion",still and inward,softly lowered,natural,relaxed,LOW,SADNESS|ANXIETY,LOW|MEDIUM,,45
+POSE_SAD_SEATED,POSE,조용히 앉은 슬픈 자세,"seated with slightly hunched shoulders, hands resting quietly near the knees","no extreme despair, tears, or distortion","seated, still, slightly hunched",downward or toward the scene cause,slightly lowered,resting quietly near the knees,LOW,SADNESS,LOW|MEDIUM|HIGH,,70
+POSE_QUIET_WINDOW,POSE,창가의 조용한 자세,"seated close to a window with a still, inward posture",natural anatomy and quiet safe posture,still and inward,toward the window,slightly lowered,resting naturally,LOW,SADNESS|ANXIETY|JOY,LOW|MEDIUM,,65

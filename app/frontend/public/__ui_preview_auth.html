@@ -1,0 +1,36 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>UI preview auth</title>
+<button id="prepare" type="button">Prepare preview session</button>
+<p id="status"></p>
+<script>
+  document.querySelector("#prepare").addEventListener("click", async () => {
+    const status = document.querySelector("#status");
+    const headers = {
+      "Content-Type": "application/json",
+      "X-Binteumsai-Client-Id": "codex-ui-preview-20260716",
+    };
+    status.textContent = "Preparing...";
+    await fetch("/api/user/social-login/", {
+      method: "POST",
+      credentials: "include",
+      headers,
+      body: JSON.stringify({ provider: "kakao" }),
+    });
+    await fetch("/api/user/profile/", {
+      method: "PUT",
+      credentials: "include",
+      headers,
+      body: JSON.stringify({
+        nickname: "레이션",
+        birth_date: "1998-12-23",
+        gender: "남",
+        job: "UI/UX 디자이너",
+        hobbies: ["베이킹", "사진촬영", "요리", "독서"],
+        interests: ["외국어 공부", "라이프스타일"],
+        agreements: { termsOfService: true, privacyCollection: true },
+      }),
+    });
+    location.href = "/home";
+  });
+</script>

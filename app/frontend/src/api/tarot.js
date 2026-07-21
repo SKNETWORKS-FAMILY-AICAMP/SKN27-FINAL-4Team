@@ -24,6 +24,11 @@ export const tarotApi = {
     return data
   },
 
+  async revealDailyMajor(date = getLocalDateString()) {
+    const { data } = await http.post('/tarot/daily-major/', { date })
+    return data
+  },
+
   async createReading(payload) {
     const { data } = await http.post('/tarot/readings/', {
       date: getLocalDateString(),

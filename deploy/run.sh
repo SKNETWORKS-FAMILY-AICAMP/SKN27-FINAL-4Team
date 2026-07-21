@@ -17,9 +17,12 @@ python manage.py load_tarot_data
 python manage.py collectstatic --no-input
 
 # gunicorn은 내부 8000, 외부는 nginx 80이 받아 프록시
+# ★워커 1 고정 이유: 시크릿챗 대화가 프로세스 RAM 캐시에 산다 — 워커 2개면
+# 턴마다 다른 프로세스로 가서 맥락 증발. 늘리려면 캐시를 Redis로 옮긴 뒤에.
 gunicorn config.wsgi:application \
     --bind 127.0.0.1:8000 \
-    --workers "${GUNICORN_WORKERS:-2}" \
+    --workers "${GUNICORN_WORKERS:-1}" \
+    --threads "${GUNICORN_THREADS:-4}" \
     --timeout 180 &
 
 nginx -g 'daemon off;'

@@ -201,10 +201,14 @@ EMOTION_CARD_MAX_DAILY_GENERATIONS = int(os.environ.get('EMOTION_CARD_MAX_DAILY_
 # 텍스트 구조화 분석: 공유 LLM 공급자(ai/agents/llm). 키 없으면 자동 키워드 폴백. 테스트는 자동 오프라인.
 EMOTION_CARD_ENABLE_LLM_ANALYSIS = os.environ.get('EMOTION_CARD_ENABLE_LLM_ANALYSIS', 'True').lower() == 'true'
 # 학습된 감정 분류기(ai/emotion) 확신도 게이트. 이하이면 LLM/키워드로 폴백.
-EMOTION_CARD_EMOTION_CONF_GATE = float(os.environ.get('EMOTION_CARD_EMOTION_CONF_GATE', '0.55'))
+EMOTION_CARD_EMOTION_CONF_GATE = float(os.environ.get('EMOTION_CARD_EMOTION_CONF_GATE', '0.80'))
 EMOTION_CARD_LLM_MODEL = os.environ.get('EMOTION_CARD_LLM_MODEL', '')
+EMOTION_CARD_ANALYSIS_MODEL = os.environ.get('EMOTION_CARD_ANALYSIS_MODEL', EMOTION_CARD_LLM_MODEL)
+EMOTION_CARD_SCENE_DIRECTOR_MODEL = os.environ.get('EMOTION_CARD_SCENE_DIRECTOR_MODEL', EMOTION_CARD_ANALYSIS_MODEL)
+EMOTION_CARD_SCENE_DIRECTOR_ENABLED = os.environ.get('EMOTION_CARD_SCENE_DIRECTOR_ENABLED', 'True').lower() == 'true'
+EMOTION_CARD_SCENE_REPAIR_ENABLED = os.environ.get('EMOTION_CARD_SCENE_REPAIR_ENABLED', 'True').lower() == 'true'
 # 이미지 생성: 실사용 전 계정에서 호출 가능한 정확한 모델 ID로 교체(초안값 자동치환 금지).
-EMOTION_CARD_IMAGE_MODEL = os.environ.get('EMOTION_CARD_IMAGE_MODEL', '')
+EMOTION_CARD_IMAGE_MODEL = os.environ.get('EMOTION_CARD_IMAGE_MODEL', 'gpt-image-2')
 EMOTION_CARD_IMAGE_SIZE = os.environ.get('EMOTION_CARD_IMAGE_SIZE', '1024x1536')
 # 이미지 품질: low | medium(기본) | high. .env로 변경.
 EMOTION_CARD_IMAGE_QUALITY = os.environ.get('EMOTION_CARD_IMAGE_QUALITY', 'medium')
