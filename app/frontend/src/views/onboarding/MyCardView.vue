@@ -174,7 +174,7 @@ onBeforeUnmount(()=>{if(timer) clearTimeout(timer)})
 
       <section v-if="stage==='INPUT'" class="form-card input-grid simple-input-card">
         <label class="wide memory-input">오늘 카드에 남기고 싶은 것은?
-          <small>오늘 있었던 일과 마음을 편하게 적어주세요. LLM이 감정과 장면을 분석해 카드로 만들어요.</small>
+          <small>오늘 있었던 일과 마음을 편하게 적어주세요. 감정과 장면을 분석해 카드로 만들어요.</small>
           <textarea ref="memoryTextarea" v-model="form.memory_text" maxlength="500" placeholder="오늘의 장면을 짧게 적어보세요." />
         </label>
         <div class="wide style-block"><span class="block-title">어떤 그림체로 그릴까요?</span><div class="style-grid"><button v-for="item in styles" :key="item[0]" :class="{chosen:selectedStyle===item[0]}" type="button" @click="selectedStyle=item[0]"><span class="style-thumb-wrap"><img :src="item[2]" :alt="`${item[1]} 예시`" class="style-thumb" /></span>{{ item[1] }}</button></div></div>
