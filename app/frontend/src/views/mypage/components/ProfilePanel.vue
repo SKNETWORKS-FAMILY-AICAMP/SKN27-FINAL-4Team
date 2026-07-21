@@ -18,9 +18,14 @@
               <span>취향 {{ totalTasteCount }}개</span>
             </div>
           </div>
-          <button class="profile-edit-button" type="button" @click="handleEditToggle">
-            {{ profileEdit ? '완료' : '수정' }}
-          </button>
+          <div class="profile-edit-actions">
+            <button v-if="profileEdit" class="profile-cancel-button" type="button" @click="$emit('cancel-profile-edit')">
+              취소
+            </button>
+            <button class="profile-edit-button" type="button" @click="handleEditToggle">
+              {{ profileEdit ? '저장' : '수정' }}
+            </button>
+          </div>
         </header>
 
         <section class="profile-section">
@@ -38,16 +43,17 @@
           </div>
           <div class="field">
             <label for="profile-birthdate">생년월일</label>
-            <input id="profile-birthdate" v-model="profile.birthDate" placeholder="YYYY.MM.DD" :readonly="!profileEdit" @input="normalizeBirthDateInput" />
+            <input id="profile-birthdate" v-model="profile.birthDate" :placeholder="profileEdit ? 'YYYY.MM.DD' : '미등록'" :readonly="!profileEdit" @input="normalizeBirthDateInput" />
           </div>
           <div class="field">
             <label>성별</label>
             <div class="gender-toggle" role="group" aria-label="성별 선택">
               <button
-                v-for="gender in ['남', '여', '선택 안 함']"
+                v-for="gender in genderOptions"
                 :key="gender"
                 type="button"
                 :class="{ active: profile.gender === gender }"
+                :aria-pressed="profile.gender === gender"
                 @click="profileEdit && (profile.gender = gender)"
                 :disabled="!profileEdit"
               >
@@ -61,7 +67,7 @@
 
         <section class="profile-section taste-section">
           <div class="profile-section-title">
-            <span>취향 조각</span>
+            <span>관심사와 취미</span>
             <strong>{{ totalTasteCount }}개 선택</strong>
           </div>
           <div class="form-grid profile-extra-grid">
@@ -84,14 +90,14 @@
                 class="add-button" 
                 @click="togglePicker('interest')"
               >
-                + 수정
+                관심분야 수정
               </button>
             </div>
             <!-- 관심분야 드롭다운 패널 -->
             <div v-if="activePicker === 'interest'" class="inline-dropdown">
               <div class="dropdown-header">
-                <strong>관심분야 선택 (최대 3개)</strong>
-                <button type="button" @click="activePicker = null">×</button>
+                <strong>관심분야 선택 (취미와 합쳐 최소 {{ minimumPreferenceCount }}개)</strong>
+                <button type="button" aria-label="관심분야 선택 닫기" @click="activePicker = null">×</button>
               </div>
               <div class="dropdown-body">
                 <div v-for="(items, category) in interestGroups" :key="category" class="category-group">
@@ -100,6 +106,7 @@
                      <button v-for="item in items" :key="item.label" 
                              class="interest-chip"
                              :class="{ active: profile.interests.includes(item.label) }"
+                             :aria-pressed="profile.interests.includes(item.label)"
                              @click.prevent="toggleKeyword('interest', item.label)">
                        {{ getKeywordIcon(item.label, 'interest') }} {{ item.label }}
                      </button>
@@ -128,14 +135,14 @@
                 class="add-button" 
                 @click="togglePicker('hobby')"
               >
-                + 수정
+                취미 수정
               </button>
             </div>
             <!-- 취미 드롭다운 패널 -->
             <div v-if="activePicker === 'hobby'" class="inline-dropdown">
               <div class="dropdown-header">
-                <strong>취미 선택 (최대 3개)</strong>
-                <button type="button" @click="activePicker = null">×</button>
+                <strong>취미 선택 (관심분야와 합쳐 최소 {{ minimumPreferenceCount }}개)</strong>
+                <button type="button" aria-label="취미 선택 닫기" @click="activePicker = null">×</button>
               </div>
               <div class="dropdown-body">
                 <div v-for="(items, category) in hobbyGroups" :key="category" class="category-group">
@@ -144,6 +151,7 @@
                      <button v-for="item in items" :key="item.label" 
                              class="interest-chip hobby-chip"
                              :class="{ active: profile.hobbies.includes(item.label) }"
+                             :aria-pressed="profile.hobbies.includes(item.label)"
                              @click.prevent="toggleKeyword('hobby', item.label)">
                        {{ getKeywordIcon(item.label, 'hobby') }} {{ item.label }}
                      </button>
@@ -156,6 +164,7 @@
         </section>
         <p v-if="profileSavedAt" class="notice">마지막 저장 시각: {{ profileSavedAt }}</p>
       </section>
+
     </div>
 
     <!-- Character picker popup removed as it is now inline -->
@@ -163,89 +172,37 @@
 </template>
 
 <script>
-import hobbyCsv from "../../../assets/preference_hobbies.csv?raw";
-import interestCsv from "../../../assets/preference_interests.csv?raw";
-
-function parseCsvLine(line) {
-  const result = [];
-  let current = "";
-  let inQuotes = false;
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index];
-    const next = line[index + 1];
-    if (char === '"' && next === '"') {
-      current += '"';
-      index += 1;
-      continue;
-    }
-    if (char === '"') {
-      inQuotes = !inQuotes;
-      continue;
-    }
-    if (char === "," && !inQuotes) {
-      result.push(current);
-      current = "";
-      continue;
-    }
-    current += char;
-  }
-  result.push(current);
-  return result.map((value) => value.trim());
-}
-
-function parseKeywordCsv(csvText, type) {
-  const lines = csvText.replace(/^\uFEFF/, "").split(/\r?\n/).filter(Boolean);
-  const headers = parseCsvLine(lines.shift() || "");
-  
-  return lines.map((line) => {
-    const values = parseCsvLine(line);
-    const raw = Object.fromEntries(headers.map((header, index) => [header, values[index] || ""]));
-    const label = type === "hobby"
-      ? raw.display_label || raw.label || raw.keyword
-      : raw.label || raw.displayLabel || raw.displayText || raw.keyword;
-      
-    return {
-      label,
-      category: raw.category || "기타",
-    };
-  }).filter((item) => item.label);
-}
-
-function groupByCategory(items) {
-  const map = {};
-  items.forEach(item => {
-    if (!map[item.category]) map[item.category] = [];
-    if (!map[item.category].some(i => i.label === item.label)) {
-      map[item.category].push(item);
-    }
-  });
-  return map;
-}
+import hobbyCsv from "../../../assets/data/preference_hobbies.csv?raw";
+import interestCsv from "../../../assets/data/preference_interests.csv?raw";
+import { getKeywordIcon } from "../../../constants/keywordIcons";
+import { createPreferenceGroups } from "../utils/profile.preferences";
+import {
+  MIN_PROFILE_PREFERENCE_COUNT,
+  PROFILE_GENDER_OPTIONS,
+  countProfilePreferences,
+} from "../config/profile.constants";
 
 export default {
   name: "ProfilePanel",
   props: {
     profile: { type: Object, required: true },
-    profileOptions: { type: Object, required: true },
     profileEdit: { type: Boolean, required: true },
     profileSavedAt: { type: String, default: "" },
-    selectedCharacter: { type: String, default: "" },
     currentCharacter: { type: Object, default: null },
-    characters: { type: Array, default: () => [] },
-    showCharacterPicker: { type: Boolean, default: false }
   },
   emits: [
-    "open-character-picker",
-    "close-character-picker",
     "toggle-profile-edit",
-    "choose-character",
-    "update-profile-keywords"
+    "update-profile-keywords",
+    "cancel-profile-edit"
   ],
   data() {
     return {
       activePicker: null,
-      hobbyGroups: groupByCategory(parseKeywordCsv(hobbyCsv, "hobby")),
-      interestGroups: groupByCategory(parseKeywordCsv(interestCsv, "interest"))
+      hobbyGroups: createPreferenceGroups(hobbyCsv, "hobby"),
+      interestGroups: createPreferenceGroups(interestCsv, "interest"),
+      genderOptions: PROFILE_GENDER_OPTIONS,
+      minimumPreferenceCount: MIN_PROFILE_PREFERENCE_COUNT,
+      getKeywordIcon
     };
   },
   computed: {
@@ -260,7 +217,7 @@ export default {
       return job;
     },
     totalTasteCount() {
-      return (this.profile?.interests?.length || 0) + (this.profile?.hobbies?.length || 0);
+      return countProfilePreferences(this.profile);
     }
   },
   methods: {
@@ -279,27 +236,9 @@ export default {
       if (index > -1) {
         nextValues = currentValues.filter((item) => item !== label);
       } else {
-        if (currentValues.length >= 3) {
-          alert("최대 3개까지 선택할 수 있어요.");
-          return;
-        }
         nextValues = [...currentValues, label];
       }
       this.$emit("update-profile-keywords", { type, values: nextValues });
-    },
-    getKeywordIcon(label, type) {
-      const text = String(label || "");
-      if (/음악|K-POP|발라드|재즈|콘서트|악기|연주/.test(text)) return "🎧";
-      if (/산책|러닝|운동|헬스|요가|등산|스포츠/.test(text)) return "🚶";
-      if (/카페|커피|차|맛집|요리|베이킹/.test(text)) return "☕";
-      if (/영화|드라마|웹툰|예능|애니|콘텐츠|유튜브/.test(text)) return "🎬";
-      if (/게임|디지털|트렌드/.test(text)) return "🎮";
-      if (/독서|글쓰기|자기계발|학습|심리/.test(text)) return "📚";
-      if (/사진|전시|문화|공연|창작|드로잉|표현/.test(text)) return "🖼️";
-      if (/반려|동물|식물|가드닝|자연/.test(text)) return "🐾";
-      if (/여행|외출|공간|팝업|캠핑/.test(text)) return "🧭";
-      if (/패션|뷰티|인테리어|쇼핑/.test(text)) return "✨";
-      return type === "hobby" ? "💫" : "🔖";
     },
     normalizeNicknameInput() {
       if (!this.profileEdit) return;
@@ -325,20 +264,20 @@ export default {
       const name = String(this.profile.name || "").trim();
       const birth = String(this.profile.birthDate || "").trim();
       
-      if (!name || !birth) {
-        alert("이름 또는 닉네임, 생년월일을 꼭 입력해 주세요.");
+      if (!name) {
+        alert("이름 또는 닉네임을 입력해 주세요.");
         return;
       }
       
-      const match = birth.match(/^(\d{4})\.(\d{2})\.(\d{2})$/);
-      if (!match) {
+      const match = birth && birth.match(/^(\d{4})\.(\d{2})\.(\d{2})$/);
+      if (birth && !match) {
         alert("생년월일은 YYYY.MM.DD 형식으로 입력해 주세요.");
         return;
       }
       
-      const totalChips = (this.profile.hobbies?.length || 0) + (this.profile.interests?.length || 0);
-      if (totalChips < 3) {
-        alert("취향 조각(관심분야, 취미)을 합쳐서 3개 이상 선택해 주세요.");
+      const totalChips = countProfilePreferences(this.profile);
+      if (totalChips < MIN_PROFILE_PREFERENCE_COUNT) {
+        alert(`취향 조각(관심분야, 취미)을 합쳐서 ${MIN_PROFILE_PREFERENCE_COUNT}개 이상 선택해 주세요.`);
         return;
       }
       
@@ -368,6 +307,21 @@ export default {
   font-size: 13px;
   cursor: pointer;
   margin-top: 4px;
+}
+.profile-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.profile-cancel-button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 245, 230, 0.24);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 245, 230, 0.86);
+  font-size: 13px;
+  font-weight: 700;
 }
 .inline-dropdown {
   position: absolute;
@@ -496,7 +450,7 @@ export default {
   background: rgba(255, 255, 255, 0.055);
   color: rgba(255, 245, 230, 0.78);
   font-size: 15px;
-  font-weight: 950;
+  font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -535,7 +489,7 @@ export default {
   font-size: 20px !important;
   color: #fff7df !important;
   margin: 0 !important;
-  font-weight: 850 !important;
+  font-weight: 800 !important;
   letter-spacing: -0.02em;
 }
 
@@ -573,7 +527,7 @@ export default {
     linear-gradient(145deg, rgba(156, 91, 255, 0.72), rgba(32, 41, 105, 0.76));
   color: #fff7df;
   font-size: 34px;
-  font-weight: 950;
+  font-weight: 900;
   box-shadow: 0 12px 24px rgba(5, 2, 18, 0.24);
   overflow: hidden;
 }
@@ -593,7 +547,7 @@ export default {
   display: block;
   color: #d7b7ff;
   font-size: 11px;
-  font-weight: 950;
+  font-weight: 700;
 }
 
 .profile-title h3 {
@@ -761,7 +715,7 @@ export default {
   padding: 4px 12px;
   border-radius: 999px;
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
 }
 .interest-chip {
   padding: 8px 16px !important;
@@ -790,6 +744,11 @@ export default {
 }
 
 @media (max-width: 640px) {
+  .form-grid.two,
+  .profile-extra-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
   .profile-card-head {
     grid-template-columns: 76px minmax(0, 1fr);
     min-height: 0;
@@ -803,9 +762,13 @@ export default {
     font-size: 24px;
   }
 
-  .profile-edit-button {
+  .profile-edit-actions {
     grid-column: 1 / -1;
     width: 100%;
+  }
+
+  .profile-edit-actions button {
+    flex: 1 1 0;
   }
 }
 </style>

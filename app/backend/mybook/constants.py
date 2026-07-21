@@ -1,0 +1,231 @@
+"""Configuration and stable domain constants for book recommendations."""
+
+import os
+
+
+NLK_BOOK_API_URL = os.environ.get(
+    "NLK_BOOK_API_URL",
+    "https://apis.data.go.kr/1371029/BookInformationService_v2/getbookList_v2",
+)
+NLK_BOOK_TIMEOUT_SECONDS = float(os.environ.get("NLK_BOOK_TIMEOUT_SECONDS", "5"))
+NLK_BOOK_RETRY_COUNT = max(0, int(os.environ.get("NLK_BOOK_RETRY_COUNT", "1")))
+NLK_BOOK_PAGE_SIZE = min(20, max(1, int(os.environ.get("NLK_BOOK_PAGE_SIZE", "20"))))
+NLK_BOOK_QUERY_LIMIT = min(6, max(2, int(os.environ.get("NLK_BOOK_QUERY_LIMIT", "4"))))
+NLK_BOOK_MAX_PROBE_PAGES = min(
+    2,
+    max(0, int(os.environ.get("NLK_BOOK_MAX_PROBE_PAGES", "1"))),
+)
+
+KAKAO_BOOK_API_URL = os.environ.get(
+    "KAKAO_BOOK_API_URL",
+    "https://dapi.kakao.com/v3/search/book",
+)
+KAKAO_BOOK_TIMEOUT_SECONDS = float(os.environ.get("KAKAO_BOOK_TIMEOUT_SECONDS", "5"))
+KAKAO_BOOK_RETRY_COUNT = max(0, int(os.environ.get("KAKAO_BOOK_RETRY_COUNT", "1")))
+KAKAO_BOOK_PAGE_SIZE = min(
+    50,
+    max(10, int(os.environ.get("KAKAO_BOOK_PAGE_SIZE", "20"))),
+)
+KAKAO_BOOK_QUERY_LIMIT = min(
+    5,
+    max(2, int(os.environ.get("KAKAO_BOOK_QUERY_LIMIT", "4"))),
+)
+KAKAO_API_KEY_ENV_VARS = ("KAKAO_REST_API_KEY", "KAKAO_CLIENT_ID")
+NLK_API_KEY_ENV_VARS = ("NLK_BIBLIO_SERVICE_KEY", "DATA_GO_KR_SERVICE_KEY")
+
+RECOMMENDATION_ENGINE_VERSION = "kakao_books_v1"
+BOOK_COVER_TIMEOUT_SECONDS = float(os.environ.get("BOOK_COVER_TIMEOUT_SECONDS", "3"))
+BOOK_COVER_CACHE_SECONDS = max(
+    3600,
+    int(os.environ.get("BOOK_COVER_CACHE_SECONDS", str(60 * 60 * 24 * 7))),
+)
+MAX_BOOK_AGE_YEARS = 10
+RETRYABLE_HTTP_STATUSES = frozenset((429, 500, 502, 503, 504))
+NLK_NO_DATA_CODES = frozenset(("03", "3"))
+NLK_SUCCESS_CODES = frozenset(("00", "0", "NORMAL_SERVICE"))
+NLK_PROBE_PAGE_RATIOS = (0.8, 1.0, 0.6, 0.4, 0.2)
+
+SUPPORTED_THEME_IDS = ("emotion", "interests", "hobbies")
+PROFILE_TOPIC_THEME_IDS = frozenset(("interests", "hobbies"))
+PROFILE_BASIS_TO_THEME = {
+    "today_emotion": "emotion",
+    "interests": "interests",
+    "hobbies": "hobbies",
+}
+LEGACY_BOOK_METADATA_SOURCE = "국립중앙도서관 국가서지 LOD"
+
+BASIS_TOKEN_ALIASES = {
+    "사진": ("카메라", "촬영", "사진술", "포토"),
+    "찍기": ("카메라", "촬영"),
+    "산책": ("걷기", "보행", "트레킹"),
+    "음악": ("작곡", "연주", "음향", "뮤지션", "음악사"),
+    "심리": ("인지", "정서", "심리학"),
+    "요리": ("레시피", "조리", "식재료"),
+    "운동": ("체력", "트레이닝", "피트니스"),
+    "독서": ("읽기", "문학", "서평"),
+    "영화": ("시네마", "영화사", "감독"),
+    "드라마": ("극본", "연출", "텔레비전"),
+    "그림": ("드로잉", "회화", "미술"),
+    "필사": ("쓰기", "문장", "손글씨"),
+    "요가": ("명상", "호흡", "스트레칭"),
+    "패션": ("스타일", "복식", "의류", "디자인"),
+    "팝업스토어": ("팝업", "브랜드", "전시", "공간"),
+    "맛집": ("미식", "식문화", "음식", "외식"),
+    "탐방": ("여행", "답사", "기행"),
+}
+
+NLK_PROVIDER_INFO = {
+    "id": "nlk_national_bibliography_lod",
+    "label": LEGACY_BOOK_METADATA_SOURCE,
+    "short_label": "국가서지 LOD",
+    "portal_url": "https://www.data.go.kr/data/15154402/openapi.do",
+    "detail_url": "https://www.nl.go.kr/NL/contents/N11000000000.do",
+    "license": "공공누리 제1유형 · CC0 1.0",
+    "attribution": "출처: 문화체육관광부 국립중앙도서관 국가서지 LOD",
+}
+KAKAO_BOOK_PROVIDER_INFO = {
+    "id": "kakao_daum_book_search",
+    "label": "Kakao Daum 책 검색",
+    "short_label": "Kakao 도서정보",
+    "detail_url": "https://developers.kakao.com/docs/latest/ko/daum-search/dev-guide#search-book",
+    "attribution": "책 상세·표지: Kakao Daum 책 검색",
+}
+OPEN_LIBRARY_COVER_PROVIDER_INFO = {
+    "id": "open_library_covers",
+    "label": "Open Library Covers",
+    "short_label": "Open Library 표지",
+    "detail_url": "https://openlibrary.org/dev/docs/api/covers",
+    "attribution": "표지: Open Library Covers",
+}
+
+FALLBACK_KEYWORDS = {
+    "emotion": ("마음 위로 소설", "오늘 감정이 좋다면 유지하고, 무겁다면 덜어내는 독서 방향입니다."),
+    "interests": ("교양 입문", "프로필 관심사 자체를 더 깊이 읽을 수 있는 방향입니다."),
+    "hobbies": ("취미 실용", "프로필 취미를 실제로 즐기고 넓히는 방향입니다."),
+}
+
+THEME_DEFINITIONS = (
+    {
+        "id": "emotion",
+        "name": "오늘의 감정 추천",
+        "basis_key": "today_emotion",
+        "basis_label": "오늘의 주된 감정",
+    },
+    {
+        "id": "interests",
+        "name": "관심사 기반 추천",
+        "basis_key": "interests",
+        "basis_label": "프로필 관심사",
+    },
+    {
+        "id": "hobbies",
+        "name": "취미 기반 추천",
+        "basis_key": "hobbies",
+        "basis_label": "프로필 취미",
+    },
+)
+
+THEME_SEARCH_GUIDES = {
+    "emotion": (
+        "오늘의 주된 감정이 기쁨, 평온 등 좋은 감정이면 그 긍정적인 마음 상태를 그대로 유지하고 더욱 깊이 음미하게 돕는 도서, "
+        "슬픔, 분노 등 나쁜 감정이면 그 무겁고 어두운 감정을 가볍고 자연스럽게 해소하여 기분을 환기할 수 있는 도서 검색어를 만드세요. "
+        "마음리포트처럼 원인 분석, 감정 진단, 하루 요약을 하는 방향과 겹치면 안 됩니다."
+    ),
+    "interests": (
+        "프로필 관심사 분야를 더욱 자세하고 깊이 있게 파고들어 깊은 교양과 지식을 제공하는 도서 검색어를 만드세요. "
+        "가벼운 힐링 서적이 아닌, 해당 분야의 정교한 입문서, 교양서, 전문 평론서 등을 타겟팅해야 합니다."
+    ),
+    "hobbies": (
+        "프로필 취미를 실제로 즐기는 사람이 취미 활동을 더욱 전문화하고 실력을 한 단계 발전시킬 수 있는 도서 검색어를 만드세요. "
+        "일반적인 에세이를 배제하고, 구체적인 고급 기술, 장비 루틴, 훈련 가이드, 역사적 감상 등 실질적으로 전문성을 향상시키는 실용 도서 중심이어야 합니다."
+    ),
+}
+FALLBACK_CONTENT_TERMS = {
+    "emotion": ("마음 회복", "감정 치유", "휴식"),
+    "interests": ("교양", "역사", "비평"),
+    "hobbies": ("방법", "기술", "활용"),
+}
+
+VISIBLE_DATA_BLOCKED_PATTERNS = ("나이", "성별", "남성", "여성")
+GENERIC_SEARCH_TERMS = frozenset(("추천", "도서", "책", "입문", "실용", "교양"))
+CATALOG_ACTION_TOKENS = frozenset(
+    ("하기", "보기", "듣기", "읽기", "찍기", "만들기", "다니기", "감상", "탐방", "투어", "활동", "생활")
+)
+REJECTED_KAKAO_TITLE_MARKERS = ("체험판", "미리보기", "요약본")
+ALLOWED_COVER_HOSTS = frozenset(("covers.openlibrary.org",))
+ALLOWED_COVER_HOST_SUFFIXES = (".kakaocdn.net", ".daumcdn.net")
+THESIS_TITLE_MARKERS = ("학위논문", "학위 청구", "석사학위", "박사학위")
+NON_READING_TITLE_MARKERS = (
+    "교과서",
+    "지도서",
+    "문제집",
+    "수험서",
+    "정답과 해설",
+    "연구보고서",
+    "연구 보고서",
+    "교육과정 개발",
+    "에 관한 연구",
+)
+PERSONALIZATION_STOPWORDS = frozenset(
+    ("추천", "도서", "책", "입문", "실용", "교양", "오늘", "기반", "관련", "위한", "좋은", "읽기", "소설", "에세이")
+)
+GENRE_RULES = (
+    ("만화", ("만화", "그래픽노블", "웹툰")),
+    ("소설", ("소설", "장편", "단편", "문학")),
+    ("시", ("시집", "시 ")),
+    ("심리", ("심리", "마음", "감정")),
+    ("인문", ("인문", "철학", "역사", "사회")),
+    ("실용서", ("실용", "레시피", "요리", "가이드", "매뉴얼", "입문")),
+    ("예술서", ("예술", "사진", "미술", "영화", "음악")),
+    ("자기계발", ("자기계발", "커리어", "습관", "성장")),
+    ("에세이", ("에세이", "산문")),
+)
+HOBBY_POSITIVE_MARKERS = (
+    "방법",
+    "기술",
+    "가이드",
+    "레시피",
+    "배우",
+    "연습",
+    "활용",
+    "촬영",
+    "스타일링",
+    "사진책",
+    "입문",
+    "기초",
+    "교본",
+    "안내서",
+    "렌즈",
+)
+HOBBY_NEGATIVE_MARKERS = ("측량", "탐측", "창립", "기념", "교육과정", "교재")
+EMOTION_POSITIVE_MARKERS = ("위로", "회복", "행복", "감정", "휴식", "치유")
+
+HEALTHY_SERVICE_STATUS = {"state": "healthy", "retryable": False}
+DEGRADED_SERVICE_MESSAGE = "책 추천 생성에 실패해 이전 추천을 표시합니다."
+UNEXPECTED_ERROR_CODE = "BOOK_RECOMMENDATION_UNEXPECTED_ERROR"
+UNEXPECTED_ERROR_MESSAGE = "책 추천을 생성하는 중 일시적인 오류가 발생했습니다."
+LEGACY_DUMMY_REVIEW_MARKERS = (
+    "지금 펼쳐 들었을 때 부담 없이 호흡을 맞추기 좋은 책입니다.",
+    "선명한 메시지를 앞세우기보다 읽는 사람이 자기 속도대로 문장을 따라가게 하는 점이 매력입니다.",
+)
+
+PROCESSING_NOTICE = {
+    "kakao_book": {
+        "data": ["개인화 정보에서 생성한 도서 검색어"],
+        "purpose": "Kakao Daum 책 검색에서 후보·책 소개·저자·출판사·출간일·ISBN·가격·판매상태·표지 조회",
+        "personal_profile_sent": False,
+        "service_cache": "해당 추천 날짜 동안",
+        "country": "대한민국",
+    },
+    "openai": {
+        "data": [
+            "오늘의 감정",
+            "선택한 관심사",
+            "선택한 취미",
+            "Kakao 도서 후보의 책 소개·저자·번역자·출판사·출간일·ISBN·가격·판매상태",
+        ],
+        "purpose": "검색어 설계, 후보 비교·선택, 장르 판단과 맞춤 추천문 생성",
+        "service_cache": "해당 추천 날짜 동안",
+        "vendor_retention": "OpenAI API 정책에 따라 일반적으로 최대 30일의 부정사용 모니터링 로그",
+    },
+}

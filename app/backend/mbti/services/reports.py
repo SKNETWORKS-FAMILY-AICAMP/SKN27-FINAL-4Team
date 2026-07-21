@@ -2,12 +2,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import logging
 from typing import Iterable, Mapping, Protocol
 
-from mbti.services.graph_scores import AXIS_LETTER_DIRECTIONS
+from mbti.constants import (
+    AXIS_LETTER_DIRECTIONS,
+    AXIS_TYPE_INDEX,
+    DEFAULT_REPORT_TEMPERATURE,
+    MBTI_AXES,
+)
 from mbti.services.llm_config import build_scoring_llm_config
-from mbti.services.monthly_questions import MBTI_AXES, MbtiMonthlyQuestionBatch
+from mbti.services.monthly_questions import MbtiMonthlyQuestionBatch
 from mbti.services.monthly_results import FinalAxisPreference, MonthlyMbtiResult
+
+
+logger = logging.getLogger(__name__)
 
 
 class ResponseScoreLike(Protocol):
@@ -76,93 +85,10 @@ def _extract_json_object(text: str) -> Mapping[str, object]:
     return parsed
 
 
-class LangChainMonthlyReportNarrativeClient:
-    def generate_sections(
-        self,
-        *,
-        monthly_result: MonthlyMbtiResult,
-        axis_results: Mapping[str, FinalAxisPreference],
-        evidence_items: tuple[EvidenceItem, ...],
-    ) -> tuple[ReportSection, ...]:
-        from langchain_core.messages import SystemMessage
-        from langchain_core.prompts import ChatPromptTemplate, HumanMessagePromptTemplate
-        from langchain_openai import ChatOpenAI
-
-        config = build_scoring_llm_config(temperature=0.2)
-        prompt = ChatPromptTemplate(
-            messages=[
-                SystemMessage(
-                    content=(
-                        '너는 월간 MBTI 리포트를 짧게 작성하는 분석가이다. '
-                        '제공된 계산 결과와 근거만 사용하고 사용자 사실을 지어내지 않는다. '
-                        '반드시 유효한 JSON 객체만 반환한다. '
-                        '마크다운, 설명 문장, trailing comma를 포함하지 않는다.'
-                        '친근한 말투로 설명한다.'
-                    )
-                ),
-                HumanMessagePromptTemplate.from_template(
-                    template=(
-                        '아래 context로 정확히 3개의 짧은 한국어 리포트 섹션을 작성하라.\n'
-                        '1번 섹션은 changed_axis_display_changes만 사용해 실제 선호 경향이 바뀐 축만 짧게 요약한다. '
-                        '바뀌지 않은 축, 기준값 사용 축, 전체 유지 축은 1번 섹션에서 언급하지 않는다. '
-                        '점수 변화는 원점수 평균이 아니라 표시점수 퍼센트 변화만 사용한다.\n'
-                        '2번 섹션은 evidence_items 중 role이 score_change_driver인 답변을 우선 사용하여, '
-                        '실제로 이전 선호 경향과 이번 달 선호 경향이 바뀐 축에서 어떤 응답이 '
-                        '점수 변화와 경향 선택에 가장 영향을 주었는지 설명한다. '
-                        'score_change_driver가 없다면 선호 경향 전환을 만든 대표 응답은 없다고 말하고, '
-                        'current_direction_evidence는 이번 달 경향을 뒷받침하는 참고 근거로만 다룬다. '
-                        '이때 대표 응답의 answer_text 원문을 반드시 포함한다.\n'
-                        '3번 섹션은 최종 월간 MBTI 성격 유형 자체의 일반적 성향만 짧게 설명한다. '
-                        '3번 섹션에서는 변화, 점수차, 근거 답변을 언급하지 않는다.\n'
-                        '반환 형식은 반드시 다음 JSON shape만 사용한다: '
-                        '{{"sections":[{{"title":"...","content":"..."}},'
-                        '{{"title":"...","content":"..."}},'
-                        '{{"title":"...","content":"..."}}]}}\n'
-                        '{report_context}'
-                    )
-                ),
-            ]
-        )
-        llm = ChatOpenAI(
-            model=config.model,
-            temperature=config.temperature,
-            max_tokens=config.max_output_tokens,
-        )
-        try:
-            message = (prompt | llm).invoke(
-                {
-                    'report_context': json.dumps(
-                        _build_report_context(
-                            monthly_result=monthly_result,
-                            axis_results=axis_results,
-                            evidence_items=evidence_items,
-                        ),
-                        ensure_ascii=False,
-                    ),
-                }
-            )
-            content = message.content
-            if isinstance(content, list):
-                content = ''.join(
-                    str(item.get('text', item)) if isinstance(item, dict) else str(item)
-                    for item in content
-                )
-            return _parse_report_sections(_extract_json_object(str(content)))
-        except Exception as exc:
-            print(f"LLM 리포트 생성 실패, 기본 리포트로 대체합니다. 예외: {exc}")
-            return _build_fallback_report_sections(
-                monthly_result=monthly_result,
-                axis_results=axis_results,
-                evidence_items=evidence_items,
-                reason=f'LLM API 호출 또는 파싱 에러: {exc}',
-            )
-
-
 def _axis_letter_from_type(mbti_type: str | None, axis: str) -> str | None:
     if not mbti_type or len(mbti_type) != 4:
         return None
-    index_by_axis = {'IE': 0, 'SN': 1, 'TF': 2, 'JP': 3}
-    return mbti_type.upper()[index_by_axis[axis]]
+    return mbti_type.upper()[AXIS_TYPE_INDEX[axis]]
 
 
 def _axis_delta(axis_result: FinalAxisPreference) -> float | None:
@@ -348,63 +274,6 @@ def _parse_report_sections(payload: Mapping[str, object]) -> tuple[ReportSection
     return tuple(parsed_sections)
 
 
-def _build_fallback_report_sections(
-    *,
-    monthly_result: MonthlyMbtiResult,
-    axis_results: Mapping[str, FinalAxisPreference],
-    evidence_items: tuple[EvidenceItem, ...],
-    reason: str,
-) -> tuple[ReportSection, ...]:
-    estimated_type = monthly_result.estimated_mbti_type or '산출 불가'
-    changed_display_rows = _build_changed_axis_display_rows(
-        monthly_result=monthly_result,
-        axis_results=axis_results,
-    )
-    if changed_display_rows:
-        change_text = ', '.join(
-            (
-                f'{row["axis"]} {row["previous_letter"]}->{row["selected_letter"]}'
-                f'({row["previous_display_score"]}%->{row["current_display_score"]}%, '
-                f'{row["display_score_delta"]:+d}%p)'
-            )
-            if row['display_score_delta'] is not None
-            else f'{row["axis"]} {row["previous_letter"]}->{row["selected_letter"]}'
-            for row in changed_display_rows
-        )
-    else:
-        change_text = '이번 달 실제 선호 경향이 바뀐 축은 없습니다.'
-    top_evidence = evidence_items[0] if evidence_items else None
-    top_evidence_text = (
-        (
-            f'{top_evidence.axis} 응답 {top_evidence.question_response_id}: '
-            f'"{top_evidence.answer_text}"'
-        )
-        if top_evidence
-        else '없음'
-    )
-
-    return (
-        ReportSection(
-            title='이번 달 축 변화 요약',
-            content=(
-                f'{monthly_result.period_key} 월간 MBTI는 {estimated_type}입니다. '
-                f'{change_text}'
-            ),
-        ),
-        ReportSection(
-            title='점수 변화에 영향을 준 대표 응답',
-            content=f'대표 근거는 {top_evidence_text}입니다. LLM 리포트 오류로 기본 문장으로 대체되었습니다.',
-        ),
-        ReportSection(
-            title='월간 MBTI 유형 설명',
-            content=(
-                f'{estimated_type} 유형 설명은 리포트 LLM 응답 형식 오류로 기본 문장으로 대체되었습니다. '
-                f'대체 사유: {reason}'
-            ),
-        ),
-    )
-
-
 def _score_matches_selected_letter(
     *,
     axis: str,
@@ -537,7 +406,6 @@ def _build_fallback_report_sections(
     monthly_result: MonthlyMbtiResult,
     axis_results: Mapping[str, FinalAxisPreference],
     evidence_items: tuple[EvidenceItem, ...],
-    reason: str,
 ) -> tuple[ReportSection, ...]:
     estimated_type = monthly_result.estimated_mbti_type or '산출 대기'
     changed_display_rows = _build_changed_axis_display_rows(
@@ -613,7 +481,7 @@ class LangChainMonthlyReportNarrativeClient:
         from langchain_core.prompts import ChatPromptTemplate, HumanMessagePromptTemplate
         from langchain_openai import ChatOpenAI
 
-        config = build_scoring_llm_config(temperature=0.2)
+        config = build_scoring_llm_config(temperature=DEFAULT_REPORT_TEMPERATURE)
         prompt = ChatPromptTemplate(
             messages=[
                 SystemMessage(
@@ -682,13 +550,15 @@ class LangChainMonthlyReportNarrativeClient:
                     for item in content
                 )
             return _parse_report_sections(_extract_json_object(str(content)))
-        except Exception as exc:
-            print(f"LLM 리포트 생성 실패, 기본 리포트로 대체합니다. 예외: {exc}")
+        except Exception:
+            logger.warning(
+                "LLM monthly report generation failed; using deterministic sections.",
+                exc_info=True,
+            )
             return _build_fallback_report_sections(
                 monthly_result=monthly_result,
                 axis_results=axis_results,
                 evidence_items=evidence_items,
-                reason=f'LLM API 호출 또는 파싱 에러: {exc}',
             )
 
 

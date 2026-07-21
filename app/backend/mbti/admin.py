@@ -1,3 +1,1 @@
-from django.contrib import admin
-
-# Register your models here.
+"""MBTI admin registrations belong here when the app needs them."""

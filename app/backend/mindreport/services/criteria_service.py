@@ -4,7 +4,6 @@
 from datetime import datetime, timedelta
 from django.utils import timezone
 from chat.models import ChatMessage
-from checkin.models import DailyCheckin
 
 class ReportCriteriaService:
     """
@@ -32,11 +31,6 @@ class ReportCriteriaService:
             created_at__gte=start_datetime,
             created_at__lte=end_datetime
         ).count()
-        count += DailyCheckin.objects.filter(
-            user=user,
-            completed_at__gte=start_datetime,
-            completed_at__lte=end_datetime,
-        ).count()
         
         return count
 
@@ -53,11 +47,6 @@ class ReportCriteriaService:
             role='user',
             created_at__year=year,
             created_at__month=month
-        ).count()
-        count += DailyCheckin.objects.filter(
-            user=user,
-            completed_at__year=year,
-            completed_at__month=month,
         ).count()
         
         return count

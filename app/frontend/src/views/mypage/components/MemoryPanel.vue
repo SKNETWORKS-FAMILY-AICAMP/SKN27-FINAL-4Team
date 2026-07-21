@@ -1,13 +1,13 @@
 <template>
   <section class="memory-panel">
     <header class="memory-toolbar">
-      <div>
-        <span class="memory-kicker">MEMORY ARCHIVE</span>
-        <h3>기억 보관함</h3>
+      <div class="memory-summary">
+        <strong>{{ filteredMemories.length }}개의 기억</strong>
+        <span>대화에서 저장된 내용을 확인하고 직접 관리할 수 있습니다.</span>
       </div>
       <div class="memory-actions">
         <label class="memory-search">
-          <input v-model="keyword" type="search" placeholder="데이터 검색..." />
+          <input v-model="keyword" type="search" aria-label="기억 검색" placeholder="기억 검색" />
         </label>
         <button class="memory-ghost-button" type="button" :disabled="loading" @click="$emit('refresh')">
           새로고침
@@ -15,18 +15,20 @@
       </div>
     </header>
 
+    <div class="memory-privacy-note" role="note">
+      저장된 기억은 대화를 개인화하는 데 사용됩니다. 상세 화면에서 내용을 확인한 뒤 언제든 삭제할 수 있어요.
+    </div>
     <div v-if="notice" class="memory-notice" role="status">{{ notice }}</div>
     <div v-if="error" class="memory-error" role="alert">{{ error }}</div>
 
     <div class="memory-list-container">
       <div v-if="loading" class="memory-empty">기억을 불러오는 중입니다...</div>
-      <div v-else-if="!filteredMemories.length" class="memory-empty">아직 보관된 기억이 없습니다.</div>
+      <div v-else-if="!filteredMemories.length" class="memory-empty">아직 저장된 기억이 없습니다.</div>
       
       <table v-else class="memory-table">
         <thead>
           <tr>
-            <th class="col-title">기억 조각</th>
-            <th class="col-content">내용</th>
+            <th class="col-memory">기억</th>
             <th class="col-date">기록된 날</th>
             <th class="col-action">관리</th>
           </tr>
@@ -36,66 +38,250 @@
             v-for="item in filteredMemories" 
             :key="item.id" 
             @click="selectNode(item)" 
+            @keydown.enter="selectNode(item)"
+            @keydown.space.prevent="selectNode(item)"
+            tabindex="0"
+            :aria-label="`${item.title} 상세 보기`"
             :class="{ 'active-row': selectedNode?.id === item.id }"
           >
-            <td class="col-title"><strong>{{ item.title }}</strong></td>
-            <td class="col-content"><p class="truncate">{{ item.content }}</p></td>
-            <td class="col-date"><small>{{ item.savedAt }}</small></td>
+            <td class="col-memory">
+              <strong>{{ item.title }}</strong>
+              <p class="truncate">{{ item.content }}</p>
+            </td>
+            <td class="col-date"><small>{{ item.savedAt || "기록 시각 없음" }}</small></td>
             <td class="col-action">
-              <button class="action-btn delete-btn" @click.stop="deleteMemory(item.id)">삭제</button>
+              <button class="action-btn" type="button" @click.stop="selectNode(item)">상세 보기</button>
             </td>
           </tr>
         </tbody>
       </table>
-      
-      <!-- 상세정보 팝업 패널 -->
-      <transition name="slide-fade">
-        <aside v-if="selectedNode" class="memory-detail-panel">
-          <button class="close-btn" @click="selectedNode = null">✕</button>
-          <div class="detail-header">
-            <h4>{{ selectedNode.title }}</h4>
-            <small>{{ selectedNode.savedAt }}</small>
-          </div>
-          <div class="detail-body">
-            <p>{{ selectedNode.content }}</p>
-          </div>
-          <div class="detail-footer">
-            <button class="memory-danger-button" @click="deleteMemory(selectedNode.id)">
-              기억 지우기
-            </button>
-          </div>
-        </aside>
-      </transition>
     </div>
+
+    <!-- 상세정보 팝업 패널 (리스트 컨테이너 외부 배치로 잘림 현상 방지) -->
+    <transition name="slide-fade">
+      <aside v-if="selectedNode" class="memory-detail-panel" :aria-label="`${selectedNode.title} 기억 상세`">
+        <button class="close-btn" type="button" aria-label="기억 상세 닫기" @click="selectedNode = null">✕</button>
+        <div class="detail-header">
+          <h4>{{ selectedNode.title }}</h4>
+          <small>{{ selectedNode.savedAt || "기록 시각 없음" }}</small>
+        </div>
+        <div class="detail-body">
+          <section class="memory-introduction">
+            <span>기억 소개</span>
+            <p class="detail-content">{{ selectedNode.content }}</p>
+          </section>
+
+          <section v-if="hasMemoryContext(selectedNode)" class="graph-context-section">
+            <div class="graph-context-heading">
+              <div>
+                <span>기억 속 맥락</span>
+                <h5>함께 기억한 내용</h5>
+              </div>
+              <small>저장 당시 함께 기억한 내용을 사건별로 모아 보여드려요.</small>
+            </div>
+
+            <article
+              v-for="(event, eventIndex) in selectedNode.context.events"
+              :key="event.id || event.key || eventIndex"
+              class="event-context-card"
+            >
+              <div class="event-context-title">
+                <span class="node-type-chip">사건</span>
+                <h6>{{ event.name || "이름 없는 사건" }}</h6>
+              </div>
+
+              <div class="graph-summary-grid">
+                <div v-if="formatEventDate(event)" class="graph-fact">
+                  <span class="graph-fact-label">시간</span>
+                  <strong>{{ formatEventDate(event) }}</strong>
+                </div>
+                <div v-if="event.places && event.places.length" class="graph-fact">
+                  <span class="graph-fact-label">장소</span>
+                  <strong>{{ event.places.join(", ") }}</strong>
+                </div>
+                <div v-if="event.topics && event.topics.length" class="graph-fact">
+                  <span class="graph-fact-label">주제</span>
+                  <div class="tags-container">
+                    <span v-for="topic in event.topics" :key="topic" class="info-tag topic-tag">{{ topic }}</span>
+                  </div>
+                </div>
+                <div v-if="event.people && event.people.length" class="graph-fact">
+                  <span class="graph-fact-label">함께한 사람</span>
+                  <div class="tags-container">
+                    <span v-for="person in event.people" :key="person.name" class="info-tag person-tag">
+                      {{ person.name }}<small v-if="person.relation">{{ person.relation }}</small>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="event.causes && event.causes.length" class="graph-connection">
+                <span>원인 사건</span>
+                <div>
+                  <span v-for="cause in event.causes" :key="cause.id || cause.key || cause.name" class="cause-link">
+                    {{ cause.name }}
+                  </span>
+                </div>
+              </div>
+              <div v-if="event.cause" class="graph-connection">
+                <span>기억된 이유</span>
+                <p>{{ event.cause }}</p>
+              </div>
+            </article>
+
+            <div
+              v-if="selectedNode.context.relations && selectedNode.context.relations.length"
+              class="context-group"
+            >
+              <h6>인물 관계</h6>
+              <div class="context-record-grid">
+                <div
+                  v-for="relation in selectedNode.context.relations"
+                  :key="`${relation.name}-${relation.relation}-${relation.valid_from}`"
+                  class="context-record"
+                >
+                  <strong>{{ relation.name }}</strong>
+                  <span>{{ relation.relation || "지인" }}</span>
+                  <small>{{ formatValidity(relation) }}</small>
+                </div>
+              </div>
+            </div>
+
+            <div
+              v-if="selectedNode.context.preferences && selectedNode.context.preferences.length"
+              class="context-group"
+            >
+              <h6>취향</h6>
+              <div class="context-record-grid">
+                <div
+                  v-for="preference in selectedNode.context.preferences"
+                  :key="`${preference.topic}-${preference.polarity}-${preference.valid_from}`"
+                  class="context-record preference-record"
+                >
+                  <strong>{{ preference.topic }}</strong>
+                  <span>{{ formatPolarity(preference.polarity) }}</span>
+                  <small>{{ formatValidity(preference) }}</small>
+                </div>
+              </div>
+            </div>
+
+            <article v-if="originalText(selectedNode)" class="source-context-card">
+              <div class="source-context-title">
+                <span class="node-type-chip source-type-chip">원문 대화</span>
+                <h6>대화에서 이렇게 남겼어요</h6>
+              </div>
+              <blockquote>{{ originalText(selectedNode) }}</blockquote>
+            </article>
+          </section>
+
+          <!-- 이전 형식 응답을 위한 상세 노출 -->
+          <div v-else-if="hasLegacyMemoryContext(selectedNode)" class="structured-info-box">
+            <h5 class="info-box-title">기억 속의 핵심 요소들</h5>
+            
+            <div v-if="selectedNode.rawDate" class="info-row">
+              <span class="info-label">📅 일정 날짜</span>
+              <span class="info-value">{{ formatDateOnly(selectedNode.rawDate) }}</span>
+            </div>
+            
+            <div v-if="selectedNode.rawRelation" class="info-row">
+              <span class="info-label">🤝 관계 유형</span>
+              <span class="info-value"><span class="info-tag relation-tag">{{ selectedNode.rawRelation }}</span></span>
+            </div>
+            
+            <div v-if="selectedNode.rawPeople && selectedNode.rawPeople.length" class="info-row">
+              <span class="info-label">👥 연관 인물</span>
+              <div class="info-value tags-container">
+                <span v-for="p in selectedNode.rawPeople" :key="p.name" class="info-tag person-tag">
+                  {{ p.name }}<small v-if="p.relation">({{ p.relation }})</small>
+                </span>
+              </div>
+            </div>
+            
+            <div v-if="selectedNode.rawEvents && selectedNode.rawEvents.length" class="info-row">
+              <span class="info-label">📌 관련 사건</span>
+              <div class="info-value tags-container">
+                <span v-for="evt in selectedNode.rawEvents" :key="evt" class="info-tag event-tag">
+                  {{ evt }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="detail-footer">
+          <button class="memory-danger-button" @click="requestDelete(selectedNode)">
+            기억 지우기
+          </button>
+        </div>
+      </aside>
+    </transition>
+
+    <section
+      v-if="pendingDelete"
+      class="memory-confirm-backdrop"
+      role="presentation"
+      @click.self="cancelDelete"
+    >
+      <article class="memory-confirm-dialog" role="dialog" aria-modal="true" aria-label="기억 삭제 확인">
+        <span class="memory-confirm-kicker">삭제 확인</span>
+        <h4>이 기억을 삭제할까요?</h4>
+        <p>
+          <strong>{{ pendingDelete.title }}</strong>
+          삭제한 기억은 복구할 수 없습니다.
+        </p>
+        <div>
+          <button class="memory-ghost-button" type="button" @click="cancelDelete">취소</button>
+          <button class="memory-danger-button" type="button" @click="confirmDelete">
+            삭제하기
+          </button>
+        </div>
+      </article>
+    </section>
   </section>
 </template>
 
 <script>
+import {
+  filterMemories,
+  formatMemoryDateOnly,
+  formatMemoryEventDate,
+  formatMemoryPolarity,
+  formatMemoryValidity,
+  getMemoryOriginalText,
+  hasLegacyMemoryContext,
+  hasMemoryContext,
+  normalizeMemory,
+} from "../utils/memory.formatters";
+
 export default {
   name: "MemoryPanel",
   props: {
     payload: {
       type: [Object, Array],
-      default: null
+      default: null,
     },
     loading: {
       type: Boolean,
-      default: false
+      default: false,
     },
     error: {
       type: String,
-      default: ""
+      default: "",
     },
     notice: {
       type: String,
-      default: ""
-    }
+      default: "",
+    },
+    initialSelectedId: {
+      type: String,
+      default: "",
+    },
   },
-  emits: ["refresh", "delete-memory", "delete-selected"],
+  emits: ["refresh", "delete-memory"],
   data() {
     return {
       keyword: "",
-      selectedNode: null
+      selectedNode: null,
+      pendingDelete: null,
     };
   },
   computed: {
@@ -103,375 +289,59 @@ export default {
       const source = Array.isArray(this.payload)
         ? this.payload
         : this.payload?.memories || this.payload?.items || [];
-      const parsed = source.map((item, index) => this.normalizeMemory(item, index));
-      
-      const demoData = [
-        { id: "node-2034", title: "첫 만남", content: "MindRoom에서 AI와 처음 대화를 나누었던 날. 어색했지만 따뜻한 환영이 기억에 남는다.", savedAt: "2026-07-01" },
-        { id: "node-2051", title: "비오는 오후", content: "우울한 기분이었지만 큰 위로를 받았다. 비 내리는 창밖 풍경을 상상하며 마음이 차분해졌다.", savedAt: "2026-07-05" },
-        { id: "node-2088", title: "밤하늘의 별", content: "오늘 하루 수고한 나에게 주는 작은 위로. 늦은 밤 별자리 이야기를 나누며 하루를 마무리했다.", savedAt: "2026-07-10" },
-        { id: "node-2102", title: "새로운 목표", content: "오랜만에 의욕이 생겨 새로운 계획을 세웠다. 매일 조금씩 실천해 나가기로 다짐했다.", savedAt: "2026-07-12" },
-        { id: "node-2115", title: "잊고 있던 꿈", content: "어릴 적 꾸었던 꿈에 대해 이야기하다 보니 잊고 있던 열정이 다시 피어나는 느낌이 들었다.", savedAt: "2026-07-13" },
-        { id: "node-2120", title: "기분 좋은 산책", content: "맑은 공기를 마시며 걷는 상상을 했다. 가상의 산책이었지만 머리가 맑아지는 기분이었다.", savedAt: "2026-07-14" },
-        { id: "node-2124", title: "깊은 고민", content: "쉽게 풀리지 않는 문제에 대해 밤새 이야기했다. 정답은 없지만 마음이 한결 가벼워졌다.", savedAt: "2026-07-14" }
-      ];
-
-      // API가 미리보기 데이터(3개)만 던져주는 경우에도 데모 데이터를 섞어 보여줍니다.
-      if (parsed.length < 5) {
-        return [...parsed, ...demoData].slice(0, 8);
-      }
-      
-      return parsed;
+      return source.map((item, index) => normalizeMemory(item, index));
     },
     filteredMemories() {
-      const needle = this.keyword.trim().toLowerCase();
-      if (!needle) return this.memories;
-      return this.memories.filter(item => 
-        [item.title, item.content, item.id].join(" ").toLowerCase().includes(needle)
-      );
-    }
+      return filterMemories(this.memories, this.keyword);
+    },
   },
   watch: {
-    filteredMemories(newVal) {
-      if (this.selectedNode && !newVal.find(n => n.id === this.selectedNode.id)) {
+    initialSelectedId: {
+      immediate: true,
+      handler() {
+        this.selectInitialMemory();
+      },
+    },
+    memories() {
+      this.selectInitialMemory();
+    },
+    filteredMemories(newValue) {
+      const selectedId = this.selectedNode?.id;
+      if (selectedId && !newValue.some((memory) => memory.id === selectedId)) {
         this.selectedNode = null;
       }
-    }
+    },
   },
   methods: {
-    normalizeMemory(item, index) {
-      const id = String(item.id || item.memory_id || item.key || `node-temp-${index}`);
-      return {
-        id,
-        title: item.title || item.topic || item.label || `기억 노드 ${index + 1}`,
-        content: item.content || item.summary || item.text || item.memory || "",
-        savedAt: this.formatDate(item.saved_at || item.created_at || item.updated_at)
-      };
+    formatDateOnly: formatMemoryDateOnly,
+    originalText: getMemoryOriginalText,
+    hasMemoryContext,
+    hasLegacyMemoryContext,
+    formatEventDate: formatMemoryEventDate,
+    formatPolarity: formatMemoryPolarity,
+    formatValidity: formatMemoryValidity,
+    selectInitialMemory() {
+      if (!this.initialSelectedId) return;
+      const target = this.memories.find(memory => memory.id === this.initialSelectedId);
+      if (target) this.selectedNode = target;
     },
-    formatDate(value) {
-      if (!value) return "";
-      const date = new Date(value);
-      if (Number.isNaN(date.getTime())) return String(value);
-      return date.toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit" });
+    requestDelete(item) {
+      this.pendingDelete = item;
     },
-    deleteMemory(id) {
-      this.$emit("delete-memory", id);
+    cancelDelete() {
+      this.pendingDelete = null;
+    },
+    confirmDelete() {
+      if (!this.pendingDelete) return;
+      this.$emit("delete-memory", this.pendingDelete.id);
+      this.pendingDelete = null;
       this.selectedNode = null;
     },
     selectNode(item) {
       this.selectedNode = item;
-    }
-  }
+    },
+  },
 };
 </script>
 
-<style scoped>
-.memory-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  color: #fff;
-  height: 100%;
-}
-
-.memory-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 16px;
-  flex-shrink: 0;
-}
-
-.memory-kicker {
-  color: #4facf7;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
-
-.memory-toolbar h3 {
-  margin: 4px 0 0;
-  font-size: 24px;
-}
-
-.memory-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.memory-search input {
-  height: 38px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.4);
-  color: #fff;
-  padding: 0 16px;
-  font-size: 13px;
-  width: 200px;
-  transition: all 0.3s ease;
-}
-
-.memory-search input:focus {
-  outline: none;
-  border-color: #4facf7;
-  background: rgba(0, 0, 0, 0.6);
-}
-
-.memory-ghost-button,
-.memory-danger-button {
-  border: 0;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 700;
-  font-size: 13px;
-}
-
-.memory-ghost-button {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
-  padding: 10px 16px;
-  height: 38px;
-  transition: background 0.2s;
-}
-.memory-ghost-button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.memory-danger-button {
-  background: #ff7a8a;
-  color: #211425;
-  padding: 10px 14px;
-}
-
-.memory-danger-button:disabled,
-.memory-ghost-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.memory-notice,
-.memory-error,
-.memory-empty {
-  border-radius: 8px;
-  padding: 12px 14px;
-}
-
-.memory-notice {
-  background: rgba(246, 200, 121, 0.15);
-  color: #ffe0a0;
-}
-
-.memory-error {
-  background: rgba(255, 122, 138, 0.16);
-  color: #ffd1d7;
-}
-
-.memory-empty {
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.6);
-  padding: 40px;
-  text-align: center;
-  border: 1px dashed rgba(255, 255, 255, 0.15);
-  border-radius: 12px;
-}
-
-/* List / Table Container */
-.memory-list-container {
-  flex: 1;
-  position: relative;
-  background: rgba(18, 14, 38, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-.memory-list-container::-webkit-scrollbar {
-  width: 6px;
-}
-.memory-list-container::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 3px;
-}
-
-.memory-table {
-  width: 100%;
-  border-collapse: collapse;
-  text-align: left;
-}
-
-.memory-table thead {
-  background: rgba(10, 8, 24, 0.85);
-  backdrop-filter: blur(12px);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-
-.memory-table th {
-  padding: 16px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.4);
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.memory-table tbody tr {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-  transition: background 0.2s, border-left 0.2s;
-  cursor: pointer;
-  border-left: 3px solid transparent;
-}
-
-.memory-table tbody tr:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.memory-table tbody tr.active-row {
-  background: rgba(79, 172, 247, 0.08);
-  border-left: 3px solid #4facf7;
-}
-
-.memory-table td {
-  padding: 18px 16px;
-  vertical-align: top;
-}
-
-/* Column Widths */
-.col-title { width: 30%; }
-.col-content { width: 45%; }
-.col-date { width: 15%; color: rgba(255,255,255,0.5); }
-.col-action { width: 10%; text-align: right; }
-
-.col-title strong {
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.9);
-  font-weight: 600;
-}
-
-.truncate {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin: 0;
-  color: rgba(255, 255, 255, 0.65);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.action-btn {
-  background: none;
-  border: 1px solid rgba(255, 122, 138, 0.4);
-  color: #ff7a8a;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.action-btn:hover {
-  background: rgba(255, 122, 138, 0.15);
-}
-
-/* Side Panel for Detail */
-.memory-detail-panel {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  bottom: 16px;
-  width: 300px;
-  background: rgba(27, 18, 62, 0.95);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 16px;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  z-index: 20;
-  box-shadow: -8px 0 32px rgba(0,0,0,0.5);
-}
-
-.close-btn {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  background: none;
-  border: none;
-  color: #fff;
-  font-size: 18px;
-  cursor: pointer;
-  opacity: 0.5;
-  transition: opacity 0.2s;
-}
-
-.close-btn:hover {
-  opacity: 1;
-}
-
-.detail-header {
-  margin-bottom: 24px;
-  padding-right: 20px;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-  padding-bottom: 16px;
-}
-
-.detail-header h4 {
-  margin: 0 0 8px;
-  font-size: 20px;
-  color: #fff;
-  line-height: 1.4;
-}
-
-.detail-header small {
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.detail-body {
-  flex: 1;
-  overflow-y: auto;
-  line-height: 1.7;
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 14px;
-  padding-right: 8px;
-}
-
-.detail-body::-webkit-scrollbar {
-  width: 4px;
-}
-
-.detail-body::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 2px;
-}
-
-.detail-footer {
-  margin-top: 20px;
-  display: flex;
-  justify-content: stretch;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  padding-top: 16px;
-}
-
-.detail-footer .memory-danger-button {
-  width: 100%;
-}
-
-/* Transitions */
-.slide-fade-enter-active {
-  transition: all 0.3s ease-out;
-}
-
-.slide-fade-leave-active {
-  transition: all 0.2s cubic-bezier(1, 0.5, 0.8, 1);
-}
-
-.slide-fade-enter-from,
-.slide-fade-leave-to {
-  transform: translateX(30px);
-  opacity: 0;
-}
-</style>
+<style scoped src="../styles/sections/18-memory.css"></style>

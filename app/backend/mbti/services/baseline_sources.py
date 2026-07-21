@@ -3,8 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping, Protocol
 
-from mbti.services.monthly_results import AXIS_ALLOWED_LETTERS, AXIS_TYPE_INDEX
-from mbti.services.monthly_questions import MBTI_AXES
+from mbti.constants import (
+    AXIS_ALLOWED_LETTERS,
+    AXIS_TYPE_INDEX,
+    MBTI_AXES,
+    ONBOARDING_MBTI_KEYS,
+)
 
 
 class MonthlyResultLike(Protocol):
@@ -31,14 +35,6 @@ class AxisResultLike(Protocol):
 class OnboardingSnapshot:
     user_id: int
     mbti_type: str | None
-
-
-ONBOARDING_MBTI_KEYS = (
-    'mbti_type',
-    'onboarding_mbti_type',
-    'onboarding_mbti',
-    'mbti',
-)
 
 
 @dataclass(frozen=True)

@@ -12,9 +12,11 @@
             type="button"
             class="character-choice"
             :class="{ active: character.id === draftCharacterId }"
+            :aria-label="character.name"
+            :aria-pressed="character.id === draftCharacterId"
             @click="draftCharacterId = character.id"
           >
-            <img :src="characterImage(character)" :alt="character.name" />
+            <img :src="characterImage(character)" alt="" aria-hidden="true" />
             <span>{{ character.name }}</span>
           </button>
         </div>
@@ -42,7 +44,7 @@
           </div>
         </dl>
 
-        <div class="character-stats" aria-label="캐릭터 성향">
+        <div class="character-stats" aria-label="캐릭터 설정 성향">
           <div
             v-for="stat in statItems"
             :key="stat.key"
@@ -54,15 +56,16 @@
             <strong>{{ draftCharacter.stats[stat.key] }}</strong>
           </div>
         </div>
+        <p class="character-stat-note">표시된 수치는 캐릭터 제작자가 설정한 성향 정보입니다.</p>
 
         <div class="character-actions">
           <button
             class="primary-button"
             type="button"
-            :disabled="draftCharacterId === selectedCharacter"
+            :disabled="isCurrentSelection"
             @click="$emit('choose-character', draftCharacterId)"
           >
-            {{ draftCharacterId === selectedCharacter ? "현재 적용 중" : "이 캐릭터로 변경" }}
+            {{ isCurrentSelection ? "현재 적용 중" : "이 캐릭터로 변경" }}
           </button>
         </div>
       </aside>
@@ -81,7 +84,9 @@ export default {
   emits: ["choose-character"],
   data() {
     return {
-      draftCharacterId: this.selectedCharacter,
+      draftCharacterId: this.characters.some((character) => character.id === this.selectedCharacter)
+        ? this.selectedCharacter
+        : this.currentCharacter.id,
       statItems: [
         { key: "empathy", label: "공감" },
         { key: "calm", label: "차분함" },
@@ -93,11 +98,16 @@ export default {
   computed: {
     draftCharacter() {
       return this.characters.find((character) => character.id === this.draftCharacterId) || this.currentCharacter;
+    },
+    isCurrentSelection() {
+      return this.draftCharacter.id === this.currentCharacter.id;
     }
   },
   watch: {
     selectedCharacter(value) {
-      this.draftCharacterId = value;
+      this.draftCharacterId = this.characters.some((character) => character.id === value)
+        ? value
+        : this.currentCharacter.id;
     }
   },
   methods: {

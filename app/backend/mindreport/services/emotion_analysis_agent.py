@@ -62,6 +62,7 @@ class MindReportEmotionAnalysisAgent:
             message=scoring_result.message,
             payload={
                 'scoring_status': scoring_result.status,
+                'scoring_route': scoring_result.scoring_route,
                 'daily_score_count': len(scoring_result.emotion_scores),
                 'time_series': {
                     'metrics': flow_payload.get('metrics', {}),
