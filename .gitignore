@@ -127,17 +127,13 @@ etl/data/raw/
 # 커밋 허용 예외 — 자체 제작(재배포 문제 없음) · 실험 결과 기록
 !etl/data/chat_eval_set.jsonl
 !ai/emotion/exp1_results.json
-<<<<<<< Updated upstream
 !ai/emotion/ft_final_metrics.json
+!test_paper_implementation/*.json
 ai/emotion/artifacts/
 ai/emotion/artifacts_aihub/
 # artifacts_ft는 본체(safetensors)만 제외 — 나머지 소파일은 커밋 허용 (79행 참조)
 !ai/emotion/artifacts_ft/*.json
 !ai/emotion/artifacts_ft/vocab.txt
-=======
-!test_paper_implementation/*.json
-ai/emotion/artifacts*/
->>>>>>> Stashed changes
 
 # 
 # RAGAS 교차 검증 전용 venv (프로젝트 venv와 분리 — 절대 커밋 금지)
