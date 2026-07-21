@@ -630,7 +630,7 @@ function formatBirthDateForDisplay(value) {
                 <p>좋아하거나 관심 있는 활동을 자유롭게 골라주세요.</p>
               </div>
               <div class="preference-heading-actions">
-                <span>선택한 태그 {{ selectedPreferenceLabels.length }}개</span>
+                <span>선택한 태그 <br>{{ selectedPreferenceLabels.length }}개</span>
                 <button class="preference-reset-button" type="button" @click="resetPreferences">초기화</button>
               </div>
             </header>
