@@ -59,17 +59,16 @@
       </aside>
 
       <!-- ────── 보드 ────── -->
-      <section class="board">
+      <section class="board" :class="{ 'is-loading': isLoading }" :aria-busy="isLoading">
         <!-- 상태 -->
-        <div v-if="isLoading || fetchError || !currentReport" class="board-state">
+        <div v-if="!isLoading && (fetchError || !currentReport)" class="board-state">
           <img :src="bubbleHeart" class="state-icon" alt="" aria-hidden="true" />
-          <template v-if="isLoading"><h1>리포트를 확인하고 있어요</h1><p>저장된 마음 리포트를 불러오는 중입니다.</p></template>
-          <template v-else-if="fetchError"><h1>마음 리포트를 불러오지 못했어요.</h1><p>{{ fetchError }}</p></template>
+          <template v-if="fetchError"><h1>마음 리포트를 불러오지 못했어요.</h1><p>{{ fetchError }}</p></template>
           <template v-else><h1>아직 기록이 조금 부족해요</h1><p>대화를 나눈 뒤 새로고침하면 최신 주간·월간 마음 리포트를 확인할 수 있어요.</p></template>
         </div>
 
         <!-- 안전 -->
-        <div v-else-if="currentReport.is_safety_response" class="board-state">
+        <div v-else-if="!isLoading && currentReport?.is_safety_response" class="board-state">
           <img :src="bubbleHeart" class="state-icon" alt="" aria-hidden="true" />
           <h1>{{ currentReport.title }}</h1>
           <p class="safety-line">지금은 안전을 먼저 확인할 시간이에요. 도움을 받을 수 있는 방법을 안내합니다.</p>
@@ -77,7 +76,7 @@
         </div>
 
         <!-- 본문 -->
-        <template v-else>
+        <template v-else-if="!isLoading && currentReport">
           <header class="board-header">
             <img class="bh-icon" :src="bubbleHeart" alt="" aria-hidden="true" />
             <div class="bh-text">
@@ -86,6 +85,7 @@
             </div>
             <span class="bh-date">{{ headerDate }}</span>
           </header>
+
 
           <div class="board-grid">
             <!-- 한 줄 기록 -->
@@ -183,6 +183,13 @@
             <p v-else class="card-empty">추천 활동이 준비되면 이곳에 담겨요.</p>
           </section>
         </template>
+
+        <footer v-if="!isLoading" class="report-actions">
+          <p>☆ 작은 기록이 모여, 당신의 내일을 더 단단하게 만듭니다. <span>♥</span></p>
+          <button type="button" class="secondary-button">이미지 저장</button>
+          <button type="button" class="primary-button" disabled aria-disabled="true">공유</button>
+        </footer>
+
       </section>
     </section>
 
@@ -214,9 +221,10 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { reportApi } from '../../api/report.js'
 import reportBg from '../../assets/report-bg.png'
+
 import bubbleHeart from '../../assets/report/bubble-heart.png'
 import feather from '../../assets/report/feather.png'
 import heartIcon from '../../assets/report/heart.png'
@@ -228,25 +236,33 @@ import flowRedpanda from '../../assets/report/flow-redpanda.png'
 import flowCat from '../../assets/report/flow-cat.png'
 import catIcon from '../../assets/report/flow-cat.png'
 
+import { attachMindReportImageSaver } from './reportImageSaver.js'
+
 const mascots = [flowRedpanda, flowOtter, flowBird, flowCat]
 const mascotFor = (index) => mascots[index % mascots.length]
 
 const reports = ref([])
+const isLoading = ref(true)
+const isRefreshing = ref(false)
+const fetchError = ref('')
+const isMonthFilterOpen = ref(false)
+const selectedMonth = ref('')
+const selectedReportId = ref(null)
+
 const todayCheckin = ref(null)
 const actionFeedbackValue = ref(null)
 const actionFeedbackMessage = ref('')
 const isFeedbackSaving = ref(false)
+
 const feedbackOptions = [
-  { value: 1, label: '별로 도움 안 됨' },
-  { value: 2, label: '조금 아쉬움' },
-  { value: 3, label: '보통' },
-  { value: 4, label: '도움 됨' },
-  { value: 5, label: '완전 도움 됨' },
+  { value: 1, label: '전혀 아니에요' },
+  { value: 2, label: '조금 아쉬워요' },
+  { value: 3, label: '보통이에요' },
+  { value: 4, label: '도움이 됐어요' },
+  { value: 5, label: '큰 도움이 됐어요' },
 ]
 
-const isLoading = ref(true)
-const isRefreshing = ref(false)
-const fetchError = ref('')
+let detachReportImageSaver = null
 
 const normalizeReport = (report) => ({
   ...report,
@@ -260,46 +276,101 @@ const normalizeReport = (report) => ({
 })
 
 const getReportStartDate = (report) => {
-  if (!report || !report.range) return new Date()
-  const dateStr = report.range.split(' ~ ')[0].replace(' 생성', '').replaceAll('.', '-')
-  return new Date(dateStr)
+  if (!report?.range) return new Date(0)
+
+  const dateText = report.range
+    .split(' ~ ')[0]
+    .replace(' 생성', '')
+    .trim()
+    .replaceAll('.', '-')
+
+  const date = new Date(dateText)
+  return Number.isNaN(date.getTime()) ? new Date(0) : date
 }
-const getReportMonth = (report) => (report && report.range ? report.range.slice(0, 7) : '')
+
+const getReportMonth = (report) => {
+  if (!report?.range) return ''
+  return report.range.replace(' 생성', '').trim().slice(0, 7)
+}
+
 const formatMonthLabel = (month) => {
+  if (!month) return ''
   const [year, value] = month.split('.')
   return `${year}년 ${Number(value)}월`
 }
-const periodDateLabel = (report) => (report && report.range ? report.range.split(' ~ ')[0].replace(' 생성', '') : '')
+
+const periodDateLabel = (report) => (
+  report?.range
+    ? report.range.split(' ~ ')[0].replace(' 생성', '').trim()
+    : ''
+)
+
 const weekdayKo = ['일', '월', '화', '수', '목', '금', '토']
 
 const hasReports = computed(() => reports.value.length > 0)
-const reportsByNewest = computed(() => [...reports.value].sort((a, b) => getReportStartDate(b) - getReportStartDate(a)))
+
+const reportsByNewest = computed(() => (
+  [...reports.value].sort(
+    (a, b) => getReportStartDate(b).getTime() - getReportStartDate(a).getTime(),
+  )
+))
+
 const latestMonth = computed(() => getReportMonth(reportsByNewest.value[0]))
-const isMonthFilterOpen = ref(false)
-const selectedMonth = ref(latestMonth.value)
-const selectedReportId = ref(reportsByNewest.value[0]?.id)
 
 const monthOptions = computed(() => {
-  const months = [...new Set(reportsByNewest.value.map(getReportMonth))]
-  return months.map((month) => ({ value: month, label: formatMonthLabel(month) }))
+  const months = [...new Set(reportsByNewest.value.map(getReportMonth).filter(Boolean))]
+  return months.map((month) => ({
+    value: month,
+    label: formatMonthLabel(month),
+  }))
 })
-const filteredReports = computed(() => reportsByNewest.value.filter((r) => getReportMonth(r) === selectedMonth.value))
-const currentReport = computed(() => filteredReports.value.find((r) => r.id === selectedReportId.value) ?? filteredReports.value[0])
+
+const filteredReports = computed(() => {
+  if (!selectedMonth.value) return reportsByNewest.value
+  return reportsByNewest.value.filter(
+    (report) => getReportMonth(report) === selectedMonth.value,
+  )
+})
+
+const currentReport = computed(() => (
+  filteredReports.value.find(
+    (report) => report.id === selectedReportId.value,
+  ) ?? filteredReports.value[0] ?? null
+))
+
 const todayAction = computed(() => todayCheckin.value?.selected_action ?? null)
+
 const headerDate = computed(() => {
-  const r = currentReport.value?.range || ''
-  if (r.includes('~')) return r
-  const d = getReportStartDate(currentReport.value)
-  if (d instanceof Date && !Number.isNaN(d.getTime())) {
-    return `${r.replace(' 생성', '').trim()} ${weekdayKo[d.getDay()]}요일`
+  const report = currentReport.value
+  if (!report?.range) return ''
+
+  const range = report.range.replace(' 생성', '').trim()
+  if (range.includes('~')) return range
+
+  const date = getReportStartDate(report)
+  if (Number.isNaN(date.getTime())) return range
+
+  return `${range} ${weekdayKo[date.getDay()]}요일`
+})
+
+watch(selectedMonth, () => {
+  selectedReportId.value = filteredReports.value[0]?.id ?? null
+})
+
+watch(latestMonth, (newMonth) => {
+  if (newMonth && !selectedMonth.value) {
+    selectedMonth.value = newMonth
   }
-  return r
 })
 
 const mindTags = computed(() => {
   const report = currentReport.value
   if (!report) return []
-  const clean = (list) => list.map((t) => String(t).trim()).filter((t) => t && t !== '기록 수집 중...')
+
+  const clean = (list) => list
+    .map((text) => String(text).trim())
+    .filter((text) => text && text !== '기록 수집 중...')
+
   return [
     ...clean(report.stressCauses).map((text) => ({ text, type: 'stress' })),
     ...clean(report.reliefCauses).map((text) => ({ text, type: 'relief' })),
@@ -308,41 +379,76 @@ const mindTags = computed(() => {
 
 const parsedAnalysis = computed(() => {
   const analysis = currentReport.value?.analysis ?? []
-  const recs = currentReport.value?.recommendations ?? []
+  const recommendations = currentReport.value?.recommendations ?? []
   const reflections = []
   const cards = []
-  const hasMarker = analysis.some((line) => String(line).trim().startsWith('✅'))
+
+  const hasMarker = analysis.some(
+    (line) => String(line).trim().startsWith('✅'),
+  )
+
   if (hasMarker) {
-    let cur = null
+    let currentCard = null
+
     for (const raw of analysis) {
       const line = String(raw).trim()
+
       if (line.startsWith('✅')) {
-        cur = { title: line.replace(/^✅\s*/, ''), reason: '', how: '' }
-        cards.push(cur)
+        currentCard = {
+          title: line.replace(/^✅\s*/, ''),
+          reason: '',
+          how: '',
+        }
+        cards.push(currentCard)
       } else if (line.includes('왜 추천하나요?')) {
-        if (cur) cur.reason = line.split('왜 추천하나요?')[1].replace(/^[\s:?-]*/, '').trim()
+        if (currentCard) {
+          currentCard.reason = line
+            .split('왜 추천하나요?')[1]
+            .replace(/^[\s:?-]*/, '')
+            .trim()
+        }
       } else if (line.includes('어떻게 시작할까요?')) {
-        if (cur) cur.how = line.split('어떻게 시작할까요?')[1].replace(/^[\s:?-]*/, '').trim()
-      } else if (!cur && line) {
+        if (currentCard) {
+          currentCard.how = line
+            .split('어떻게 시작할까요?')[1]
+            .replace(/^[\s:?-]*/, '')
+            .trim()
+        }
+      } else if (!currentCard && line) {
         reflections.push(line)
       }
     }
   } else {
-    const recSet = new Set(recs.map((r) => String(r).trim()))
+    const recommendationSet = new Set(
+      recommendations.map((item) => String(item).trim()),
+    )
+
     for (const raw of analysis) {
-      const line = String(raw || '').trim()
-      if (!line || recSet.has(line)) continue
+      const line = String(raw ?? '').trim()
+      if (!line || recommendationSet.has(line)) continue
       reflections.push(line)
     }
-    for (const r of recs) cards.push({ title: '', reason: String(r).trim(), how: '' })
+
+    for (const recommendation of recommendations) {
+      cards.push({
+        title: '',
+        reason: String(recommendation).trim(),
+        how: '',
+      })
+    }
   }
+
   return { reflections, cards }
 })
 
 const hardMoments = computed(() => {
   const report = currentReport.value
   if (!report) return []
-  const causes = report.stressCauses.map((t) => String(t).trim()).filter((t) => t && t !== '기록 수집 중...')
+
+  const causes = report.stressCauses
+    .map((text) => String(text).trim())
+    .filter((text) => text && text !== '기록 수집 중...')
+
   if (causes.length) return causes.slice(0, 4)
   return parsedAnalysis.value.reflections.slice(0, 3)
 })
@@ -356,72 +462,102 @@ const comfortPool = [
   '오늘의 나에게,\n작은 쉼표 하나를 선물해요.',
   '충분히 잘하고 있어요.\n조금 더 다정해도 좋아요, 나에게.',
 ]
+
 const comfortMessage = computed(() => {
-  const id = currentReport.value?.id ?? ''
+  const id = String(currentReport.value?.id ?? '')
   let hash = 0
-  for (let i = 0; i < id.length; i += 1) hash = (hash + id.charCodeAt(i)) % comfortPool.length
+
+  for (let index = 0; index < id.length; index += 1) {
+    hash = (hash + id.charCodeAt(index)) % comfortPool.length
+  }
+
   return comfortPool[hash]
 })
 
-/* 감정 흐름 라인차트 */
 const FLOW_W = 640
 const FLOW_H = 150
+
 const moodLevel = (icon) => {
   if (['😊', '😄', '🙂', '😌', '🥲'].includes(icon)) return 0.82
   if (['😢', '😣', '😔', '😞', '😥'].includes(icon)) return 0.2
   if (['😮‍💨', '😳', '😰', '😨'].includes(icon)) return 0.36
   return 0.5
 }
+
 const moodTone = (icon) => {
   const level = moodLevel(icon)
   if (level >= 0.7) return 'pos'
   if (level <= 0.4) return 'neg'
   return 'neu'
 }
+
 const buildPath = (points) => {
   if (points.length === 0) return ''
   if (points.length === 1) return `M ${points[0].x} ${points[0].y}`
-  let d = `M ${points[0].x} ${points[0].y}`
-  for (let i = 0; i < points.length - 1; i += 1) {
-    const p0 = points[i]
-    const p1 = points[i + 1]
-    const mx = (p0.x + p1.x) / 2
-    d += ` C ${mx} ${p0.y}, ${mx} ${p1.y}, ${p1.x} ${p1.y}`
+
+  let path = `M ${points[0].x} ${points[0].y}`
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const current = points[index]
+    const next = points[index + 1]
+    const middleX = (current.x + next.x) / 2
+
+    path += ` C ${middleX} ${current.y}, ${middleX} ${next.y}, ${next.x} ${next.y}`
   }
-  return d
+
+  return path
 }
+
 const emotionPoints = computed(() => {
   const list = currentReport.value?.emotions ?? []
   if (!list.length) return []
-  const n = list.length
-  const padX = 40
-  const usable = FLOW_W - padX * 2
+
+  const count = list.length
+  const paddingX = 40
+  const usableWidth = FLOW_W - paddingX * 2
   const top = 26
   const bottom = 120
-  return list.map((d, i) => {
-    const level = moodLevel(d.icon)
-    const x = n === 1 ? FLOW_W / 2 : padX + (usable * i) / (n - 1)
+
+  return list.map((day, index) => {
+    const level = moodLevel(day.icon)
+    const x = count === 1
+      ? FLOW_W / 2
+      : paddingX + (usableWidth * index) / (count - 1)
     const y = bottom - level * (bottom - top)
-    return { x, y, icon: d.icon, day: d.day, tone: moodTone(d.icon) }
+
+    return {
+      x,
+      y,
+      icon: day.icon,
+      day: day.day,
+      tone: moodTone(day.icon),
+    }
   })
 })
+
 const emotionPath = computed(() => buildPath(emotionPoints.value))
 
-watch(selectedMonth, () => { selectedReportId.value = filteredReports.value[0]?.id })
-watch(latestMonth, (newMonth) => { if (newMonth) selectedMonth.value = newMonth })
-
 const applyReports = (data) => {
-  reports.value = Array.isArray(data?.reports) ? data.reports.map(normalizeReport) : []
+  reports.value = Array.isArray(data?.reports)
+    ? data.reports.map(normalizeReport)
+    : []
+
   const firstReport = reportsByNewest.value[0]
+
   if (firstReport) {
     selectedMonth.value = getReportMonth(firstReport)
     selectedReportId.value = firstReport.id
+  } else {
+    selectedMonth.value = ''
+    selectedReportId.value = null
   }
 }
+
 const loadReports = async () => {
   try {
     fetchError.value = ''
-    applyReports(await reportApi.getReports())
+    const data = await reportApi.getReports()
+    applyReports(data)
   } catch (error) {
     fetchError.value = error?.message ?? '마음 리포트를 불러오지 못했습니다.'
     console.error('Failed to fetch stored reports:', error)
@@ -429,11 +565,13 @@ const loadReports = async () => {
     isLoading.value = false
   }
 }
+
 const refreshReports = async () => {
   try {
     isRefreshing.value = true
     fetchError.value = ''
-    applyReports(await reportApi.refreshReports())
+    const data = await reportApi.refreshReports()
+    applyReports(data)
   } catch (error) {
     fetchError.value = error?.message ?? '마음 리포트를 새로고침하지 못했습니다.'
     console.error('Failed to refresh reports:', error)
@@ -441,6 +579,7 @@ const refreshReports = async () => {
     isRefreshing.value = false
   }
 }
+
 const loadTodayCheckin = async () => {
   try {
     const data = await reportApi.getTodayCheckin()
@@ -450,49 +589,113 @@ const loadTodayCheckin = async () => {
     console.warn('Failed to fetch today check-in:', error)
   }
 }
-onMounted(() => { loadReports(); loadTodayCheckin() })
 
-async function saveActionFeedback() {
-  if (!todayCheckin.value?.id || !todayAction.value?.id || !actionFeedbackValue.value || isFeedbackSaving.value) return
+const saveActionFeedback = async () => {
+  if (
+    !todayCheckin.value?.id
+    || !todayAction.value?.id
+    || !actionFeedbackValue.value
+    || isFeedbackSaving.value
+  ) {
+    return
+  }
+
   isFeedbackSaving.value = true
   actionFeedbackMessage.value = ''
+
   try {
-    await reportApi.saveActionFeedback(todayCheckin.value.id, todayAction.value.id, actionFeedbackValue.value)
+    await reportApi.saveActionFeedback(
+      todayCheckin.value.id,
+      todayAction.value.id,
+      actionFeedbackValue.value,
+    )
     actionFeedbackMessage.value = '평가를 저장했어요. 다음 행동 추천에 참고할게요.'
   } catch (error) {
-    actionFeedbackMessage.value = error?.response?.data?.error?.message ?? '평가를 저장하지 못했어요. 잠시 후 다시 시도해주세요.'
+    actionFeedbackMessage.value = (
+      error?.response?.data?.error?.message
+      ?? '평가를 저장하지 못했어요. 잠시 후 다시 시도해주세요.'
+    )
   } finally {
     isFeedbackSaving.value = false
   }
 }
+
+onMounted(() => {
+  detachReportImageSaver = attachMindReportImageSaver()
+  loadReports()
+  loadTodayCheckin()
+})
+
+onBeforeUnmount(() => {
+  detachReportImageSaver?.()
+})
 </script>
 
 <style scoped>
-button { font: inherit; cursor: pointer; }
+button {
+  font: inherit;
+  cursor: pointer;
+}
 
 .diary-page {
   min-height: calc(100vh - 54px);
   padding: 30px 26px 84px;
   overflow: hidden auto;
-  background-image: var(--report-bg);
+  background-image:
+    linear-gradient(
+      180deg,
+      rgba(13, 5, 32, 0.18) 0%,
+      rgba(20, 8, 48, 0.3) 45%,
+      rgba(13, 5, 32, 0.46) 100%
+    ),
+    var(--report-bg);
   background-position: center;
   background-size: cover;
   background-attachment: fixed;
   font-family: var(--font-ui);
 }
 
-.diary-toolbar { display: flex; justify-content: flex-end; width: min(1400px, 100%); margin: 0 auto 12px; }
-.refresh-button {
-  display: inline-flex; align-items: center; gap: 7px; min-height: 38px; padding: 8px 15px;
-  border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 999px;
-  background: rgba(38, 22, 66, 0.6); color: #fff8ff; box-shadow: 0 8px 24px rgba(8, 3, 20, 0.2);
+.diary-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  width: min(1400px, 100%);
+  margin: 0 auto 12px;
 }
-.refresh-button:disabled { cursor: wait; opacity: 0.58; }
-.refresh-icon.spinning { animation: refresh-spin 0.8s linear infinite; }
-@keyframes refresh-spin { to { transform: rotate(360deg); } }
-.refresh-button:hover:not(:disabled) { border-color: rgba(244, 175, 170, 0.8); transform: translateY(-1px); }
 
-/* ── 셸 ── */
+.refresh-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 8px 15px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(38, 22, 66, 0.6);
+  color: #fff8ff;
+  box-shadow: 0 8px 24px rgba(8, 3, 20, 0.2);
+  transition: transform 0.16s ease, border-color 0.16s ease;
+}
+
+.refresh-button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.refresh-button:hover:not(:disabled) {
+  border-color: rgba(244, 175, 170, 0.8);
+  transform: translateY(-1px);
+}
+
+.refresh-icon.spinning {
+  animation: refresh-spin 0.8s linear infinite;
+}
+
+@keyframes refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .diary-shell {
   display: grid;
   grid-template-columns: 288px minmax(0, 1fr);
@@ -502,166 +705,548 @@ button { font: inherit; cursor: pointer; }
   align-items: stretch;
 }
 
-/* ── 사이드바 ── */
 .side {
-  display: flex; flex-direction: column;
+  display: flex;
+  flex-direction: column;
   padding: 22px 18px 20px;
   border: 1px solid rgba(150, 110, 190, 0.4);
   border-radius: 26px;
   background: linear-gradient(180deg, #2c1a50 0%, #38215f 60%, #2a1850 100%);
-  box-shadow: 0 22px 54px rgba(8, 3, 24, 0.5), inset 0 0 0 1px rgba(210, 180, 255, 0.08);
+  box-shadow:
+    0 22px 54px rgba(8, 3, 24, 0.5),
+    inset 0 0 0 1px rgba(210, 180, 255, 0.08);
   color: #f6eefc;
 }
-.side-head { display: flex; align-items: center; gap: 9px; margin-bottom: 16px; }
-.side-quill { width: 24px; height: 24px; object-fit: contain; }
-.side-brand { flex: 1; font-family: var(--font-soft); font-size: 19px; font-weight: 800; letter-spacing: -0.3px; }
+
+.side-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 16px;
+}
+
+.side-quill {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.side-brand {
+  flex: 1;
+  font-family: var(--font-soft);
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+}
+
 .filter-toggle {
-  padding: 5px 12px; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 999px;
-  background: transparent; color: #e9dcf4; font-size: 12px;
+  padding: 5px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  background: transparent;
+  color: #e9dcf4;
+  font-size: 12px;
 }
-.filter-toggle:hover, .filter-toggle.active { border-color: #f2aaa8; color: #ffd6d3; }
 
-.side-body { flex: 1; min-height: 150px; overflow-y: auto; }
-.month-filter { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.filter-toggle:hover,
+.filter-toggle.active {
+  border-color: #f2aaa8;
+  color: #ffd6d3;
+}
+
+.side-body {
+  flex: 1;
+  min-height: 150px;
+  overflow-y: auto;
+}
+
+.month-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
 .month-chip {
-  padding: 6px 10px; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06); color: #e6daf0; font-size: 12px;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #e6daf0;
+  font-size: 12px;
 }
-.month-chip.active { border-color: rgba(242, 170, 168, 0.8); background: rgba(242, 170, 168, 0.16); color: #fff; }
-.side-empty { color: #c9b7dc; font-size: 13px; line-height: 1.6; }
 
-.report-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-.report-item {
-  position: relative; display: grid; gap: 3px; width: 100%;
-  padding: 12px 40px 12px 14px;
-  border: 1px solid rgba(180, 150, 220, 0.28); border-radius: 14px;
-  background: rgba(255, 255, 255, 0.05); color: #f2e9f8; text-align: left;
-  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+.month-chip:hover,
+.month-chip.active {
+  border-color: rgba(242, 170, 168, 0.8);
+  background: rgba(242, 170, 168, 0.16);
+  color: #fff;
 }
-.report-item:hover { transform: translateY(-1px); border-color: rgba(210, 180, 255, 0.5); }
+
+.side-empty {
+  color: #c9b7dc;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.report-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.report-item {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 12px 40px 12px 14px;
+  border: 1px solid rgba(180, 150, 220, 0.28);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #f2e9f8;
+  text-align: left;
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    background 0.16s ease;
+}
+
+.report-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(210, 180, 255, 0.5);
+}
+
 .report-item.active {
   border-color: rgba(244, 176, 180, 0.7);
-  background: linear-gradient(135deg, rgba(244, 176, 180, 0.26), rgba(150, 120, 210, 0.22));
+  background: linear-gradient(
+    135deg,
+    rgba(244, 176, 180, 0.26),
+    rgba(150, 120, 210, 0.22)
+  );
   box-shadow: 0 8px 20px rgba(120, 60, 120, 0.3);
 }
-.ri-date { font-size: 12px; color: #cdbde2; }
-.ri-title { font-size: 14px; font-weight: 700; color: #fffaff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ri-lock { position: absolute; top: 12px; right: 13px; font-size: 12px; opacity: 0.6; }
-.ri-heart { position: absolute; top: 9px; right: 10px; width: 20px; height: 20px; object-fit: contain; }
 
-/* ── 보드 ── */
+.ri-date {
+  color: #cdbde2;
+  font-size: 12px;
+}
+
+.ri-title {
+  overflow: hidden;
+  color: #fffaff;
+  font-size: 14px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ri-lock {
+  position: absolute;
+  top: 12px;
+  right: 13px;
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.ri-heart {
+  position: absolute;
+  top: 9px;
+  right: 10px;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
 .board {
-  position: relative; min-width: 0;
-  padding: 26px 28px 26px;
+  position: relative;
+  min-width: 0;
+  padding: 26px 28px;
   border: 1px solid rgba(230, 175, 175, 0.4);
   border-radius: 28px;
   background: linear-gradient(158deg, #fae4d6 0%, #f7d2ce 50%, #f2c6d0 100%);
-  box-shadow: 0 26px 64px rgba(30, 10, 40, 0.4), inset 0 0 0 1px rgba(255, 245, 240, 0.55);
+  box-shadow:
+    0 26px 64px rgba(30, 10, 40, 0.4),
+    inset 0 0 0 1px rgba(255, 245, 240, 0.55);
   color: #5a4460;
   font-family: var(--font-soft);
 }
 
+.board.is-loading {
+  min-height: 532px;
+}
+
 .board-state {
-  display: grid; justify-items: center; align-content: center; gap: 10px;
-  min-height: 480px; text-align: center;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 10px;
+  min-height: 480px;
+  text-align: center;
 }
-.state-icon { width: 74px; height: 74px; object-fit: contain; }
-.board-state h1 { margin: 4px 0 0; font-size: 24px; color: #6a4270; }
-.board-state p { margin: 0; max-width: 480px; color: #7d6787; font-size: 15px; line-height: 1.7; }
-.safety-line { color: #a24d6c !important; font-weight: 700; }
-.safety-body { margin-top: 12px; max-height: 300px; overflow-y: auto; }
-.safety-body p { margin: 0 0 10px; color: #5c4a62; font-size: 14px; line-height: 1.8; }
 
-.board-header { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; margin-bottom: 20px; }
-.bh-icon { width: 54px; height: 54px; object-fit: contain; }
-.bh-text h1 { margin: 0; font-family: var(--font-soft); font-size: clamp(24px, 2.4vw, 32px); font-weight: 800; color: #5a3570; letter-spacing: -0.4px; }
-.title-spark { width: 20px; height: 20px; object-fit: contain; vertical-align: 6px; margin-left: 8px; opacity: 0.85; }
-.bh-sub { margin: 5px 0 0; color: #9a7ba6; font-size: 14px; }
+.state-icon {
+  width: 74px;
+  height: 74px;
+  object-fit: contain;
+}
+
+.board-state h1 {
+  margin: 4px 0 0;
+  color: #6a4270;
+  font-size: 24px;
+}
+
+.board-state p {
+  max-width: 480px;
+  margin: 0;
+  color: #7d6787;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.safety-line {
+  color: #a24d6c !important;
+  font-weight: 700;
+}
+
+.safety-body {
+  max-height: 300px;
+  margin-top: 12px;
+  overflow-y: auto;
+}
+
+.safety-body p {
+  margin: 0 0 10px;
+  color: #5c4a62;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.board-header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.bh-icon {
+  width: 54px;
+  height: 54px;
+  object-fit: contain;
+}
+
+.bh-text h1 {
+  margin: 0;
+  color: #5a3570;
+  font-family: var(--font-soft);
+  font-size: clamp(24px, 2.4vw, 32px);
+  font-weight: 800;
+  letter-spacing: -0.4px;
+}
+
+.title-spark {
+  width: 20px;
+  height: 20px;
+  margin-left: 8px;
+  object-fit: contain;
+  vertical-align: 6px;
+  opacity: 0.85;
+}
+
+.bh-sub {
+  margin: 5px 0 0;
+  color: #9a7ba6;
+  font-size: 14px;
+}
+
 .bh-date {
-  align-self: start; padding: 7px 14px; border-radius: 999px;
-  background: rgba(255, 255, 255, 0.55); color: #8a5c86;
-  font-family: var(--font-ui); font-size: 13px; font-weight: 700; white-space: nowrap;
+  align-self: start;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+  color: #8a5c86;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
-/* ── 카드 그리드 ── */
 .board-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
   grid-template-areas:
     'oneline tags'
-    'flow    hard'
-    'flow    comfort';
+    'flow hard'
+    'flow comfort';
   gap: 16px;
   margin-bottom: 18px;
 }
-.card-oneline { grid-area: oneline; }
-.card-tags { grid-area: tags; }
-.card-flow { grid-area: flow; }
-.card-hard { grid-area: hard; }
-.card-comfort { grid-area: comfort; }
 
 .card {
+  min-width: 0;
   padding: 16px 18px;
-  border: 1px solid rgba(255, 250, 248, 0.7);
+  border: 1px solid rgba(255, 250, 248, 0.72);
   border-radius: 20px;
-  background: rgba(255, 250, 247, 0.5);
-  box-shadow: 0 8px 22px rgba(150, 90, 120, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  background: rgba(255, 250, 247, 0.46);
+  box-shadow:
+    0 8px 22px rgba(150, 90, 120, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.64);
 }
-.card-hard { background: rgba(233, 224, 245, 0.62); }
-.card-comfort { background: rgba(247, 214, 220, 0.6); position: relative; overflow: hidden; }
-.card-oneline { background: rgba(255, 251, 246, 0.6); }
+
+.card-oneline {
+  grid-area: oneline;
+  background: rgba(255, 251, 246, 0.6);
+}
+
+.card-tags {
+  grid-area: tags;
+}
+
+.card-flow {
+  grid-area: flow;
+}
+
+.card-hard {
+  grid-area: hard;
+  background: rgba(233, 224, 245, 0.62);
+}
+
+.card-comfort {
+  position: relative;
+  grid-area: comfort;
+  overflow: hidden;
+  background: rgba(247, 214, 220, 0.6);
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  color: #6a4270;
+  font-family: var(--font-soft);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.card-title img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.card-title em {
+  color: #a382ab;
+  font-size: 12.5px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.card-empty {
+  margin: 0;
+  color: #9a7fa0;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
 .card-oneline .oneline {
-  padding: 12px 14px; border: 1.5px dashed rgba(190, 140, 160, 0.5); border-radius: 14px;
+  padding: 12px 14px;
+  border: 1.5px dashed rgba(190, 140, 160, 0.5);
+  border-radius: 14px;
   background: rgba(255, 252, 249, 0.5);
 }
-.card-title {
-  display: flex; align-items: center; gap: 8px; margin: 0 0 12px;
-  font-family: var(--font-soft); font-size: 17px; font-weight: 800; color: #6a4270;
+
+.oneline {
+  margin: 0;
+  color: #5c4660;
+  font-size: 16px;
+  line-height: 1.7;
 }
-.card-title img { width: 24px; height: 24px; object-fit: contain; }
-.card-title em { font-style: normal; font-size: 12.5px; font-weight: 600; color: #a382ab; }
-.card-empty { margin: 0; color: #9a7fa0; font-size: 13.5px; line-height: 1.6; }
 
-/* 한 줄 기록 */
-.oneline { margin: 0; color: #5c4660; font-size: 16px; line-height: 1.7; }
-.oneline-heart { width: 22px; height: 22px; vertical-align: middle; margin-left: 4px; }
+.oneline-heart {
+  width: 22px;
+  height: 22px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
 
-/* 태그 */
-.tag-cloud { display: flex; flex-wrap: wrap; gap: 8px; }
-.mind-tag { padding: 8px 14px; border-radius: 999px; font-family: var(--font-ui); font-size: 13.5px; font-weight: 600; }
-.mind-tag.is-stress { background: rgba(232, 160, 185, 0.4); color: #9c4d6a; }
-.mind-tag.is-relief { background: rgba(170, 160, 225, 0.42); color: #574f9c; }
-.mind-tag.is-muted { background: rgba(200, 185, 205, 0.5); color: #7d6787; }
+.tag-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 
-/* 감정 흐름 */
-.flow-sub { margin: -4px 0 10px; color: #8a728f; font-size: 13px; }
-.flow-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 10px; }
-.lg { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-ui); font-size: 12.5px; color: #6f5f79; }
-.lg i { width: 11px; height: 11px; border-radius: 50%; }
-.lg.tone-neg i { background: #8f7bd6; }
-.lg.tone-neu i { background: #d29ecf; }
-.lg.tone-pos i { background: #f4a35f; }
-.flow-stage { position: relative; width: 100%; height: 150px; }
-.flow-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.flow-line { fill: none; stroke: url(#flowStroke); stroke-width: 4; stroke-linecap: round; }
-.flow-dots { position: absolute; inset: 0; }
-.flow-dot { position: absolute; transform: translate(-50%, -50%); width: 15px; height: 15px; border-radius: 50%; background: #fff; box-shadow: 0 3px 8px rgba(120, 70, 120, 0.28); }
-.flow-dot.tone-pos { background: #f4a35f; }
-.flow-dot.tone-neu { background: #d29ecf; }
-.flow-dot.tone-neg { background: #8f7bd6; }
-.flow-dot small { position: absolute; left: 50%; top: 20px; transform: translateX(-50%); font-family: var(--font-ui); font-size: 11px; color: #7c6a86; white-space: nowrap; }
+.mind-tag {
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-family: var(--font-ui);
+  font-size: 13.5px;
+  font-weight: 600;
+}
 
-/* 힘든 순간 */
-.hard-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
-.hard-list li { position: relative; padding-left: 18px; color: #5f4a68; font-size: 14.5px; line-height: 1.55; }
-.hard-list li::before { content: '♪'; position: absolute; left: 0; color: #9a7bc0; }
-.hard-empty::before { content: '·' !important; }
+.mind-tag.is-stress {
+  background: rgba(232, 160, 185, 0.4);
+  color: #9c4d6a;
+}
 
-/* 다독임 */
-.comfort-quote { margin: 0; padding-right: 76px; color: #8a4c84; font-size: 16px; line-height: 1.7; font-weight: 600; white-space: pre-line; }
-.comfort-mascot { position: absolute; right: 12px; bottom: 10px; width: 62px; height: 62px; object-fit: contain; }
+.mind-tag.is-relief {
+  background: rgba(170, 160, 225, 0.42);
+  color: #574f9c;
+}
 
-/* ── 작은 제안 ── */
+.mind-tag.is-muted {
+  background: rgba(200, 185, 205, 0.5);
+  color: #7d6787;
+}
+
+.flow-sub {
+  margin: -4px 0 10px;
+  color: #8a728f;
+  font-size: 13px;
+}
+
+.flow-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.lg {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #6f5f79;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+}
+
+.lg i {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+
+.lg.tone-neg i {
+  background: #8f7bd6;
+}
+
+.lg.tone-neu i {
+  background: #d29ecf;
+}
+
+.lg.tone-pos i {
+  background: #f4a35f;
+}
+
+.flow-stage {
+  position: relative;
+  width: 100%;
+  height: 150px;
+}
+
+.flow-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.flow-line {
+  fill: none;
+  stroke: url(#flowStroke);
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+
+.flow-dots {
+  position: absolute;
+  inset: 0;
+}
+
+.flow-dot {
+  position: absolute;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 3px 8px rgba(120, 70, 120, 0.28);
+  transform: translate(-50%, -50%);
+}
+
+.flow-dot.tone-pos {
+  background: #f4a35f;
+}
+
+.flow-dot.tone-neu {
+  background: #d29ecf;
+}
+
+.flow-dot.tone-neg {
+  background: #8f7bd6;
+}
+
+.flow-dot small {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  color: #7c6a86;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.hard-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hard-list li {
+  position: relative;
+  padding-left: 18px;
+  color: #5f4a68;
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+.hard-list li::before {
+  content: '♪';
+  position: absolute;
+  left: 0;
+  color: #9a7bc0;
+}
+
+.hard-empty::before {
+  content: '·' !important;
+}
+
+.comfort-quote {
+  margin: 0;
+  padding-right: 76px;
+  color: #8a4c84;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.7;
+  white-space: pre-line;
+}
+
+.comfort-mascot {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  width: 62px;
+  height: 62px;
+  object-fit: contain;
+}
+
 .suggest-block {
   padding: 18px 18px 16px;
   border: 1px solid rgba(255, 250, 248, 0.7);
@@ -669,77 +1254,338 @@ button { font: inherit; cursor: pointer; }
   background: rgba(255, 250, 247, 0.42);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
+
 .suggest-head {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 14px;
-  font-family: var(--font-soft); font-size: 17px; font-weight: 800; color: #6a4270;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+  color: #6a4270;
+  font-family: var(--font-soft);
+  font-size: 17px;
+  font-weight: 800;
 }
-.suggest-head img { width: 24px; height: 24px; object-fit: contain; }
-.suggest-head em { font-style: normal; font-size: 12.5px; font-weight: 500; color: #9a86a6; }
-.suggest-grid { display: grid; gap: 14px; }
+
+.suggest-head img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.suggest-head em {
+  color: #9a86a6;
+  font-size: 12.5px;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.suggest-grid {
+  display: grid;
+  gap: 14px;
+}
+
 .suggest-card {
-  display: flex; flex-direction: column;
+  display: flex;
+  flex-direction: column;
   padding: 14px 15px;
   border: 1px solid rgba(255, 250, 248, 0.8);
   border-radius: 16px;
-  background: linear-gradient(180deg, rgba(255, 252, 250, 0.82), rgba(250, 240, 246, 0.72));
+  background: linear-gradient(
+    180deg,
+    rgba(255, 252, 250, 0.82),
+    rgba(250, 240, 246, 0.72)
+  );
   box-shadow: 0 6px 16px rgba(150, 90, 120, 0.1);
 }
-.sc-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-.sc-mascot { width: 40px; height: 40px; object-fit: contain; flex: 0 0 auto; }
-.sc-head strong { color: #6a4270; font-size: 14.5px; font-weight: 800; line-height: 1.3; }
-.sc-reason { margin: 0; color: #6f5f79; font-size: 13px; line-height: 1.6; }
-.sc-start { margin-top: 12px; padding-top: 12px; border-top: 1px dashed rgba(160, 120, 170, 0.35); }
-.sc-start-label { display: block; margin-bottom: 6px; color: #a06bb0; font-family: var(--font-ui); font-size: 12.5px; font-weight: 700; }
-.sc-start p { margin: 0; display: flex; align-items: flex-start; gap: 6px; color: #5a4665; font-size: 13px; font-weight: 600; line-height: 1.55; }
-.sc-heart { width: 16px; height: 16px; object-fit: contain; margin-top: 2px; flex: 0 0 auto; }
 
-/* ── 피드백 패널 ── */
-.feedback-panel {
-  width: min(1400px, 100%); margin: 16px auto 0; padding: 20px 22px;
-  border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 20px;
-  background: linear-gradient(135deg, rgba(52, 30, 78, 0.82), rgba(70, 40, 96, 0.8));
-  box-shadow: 0 18px 44px rgba(6, 3, 18, 0.35); color: #fbf5ff; font-family: var(--font-ui);
+.sc-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
 }
-.feedback-panel h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-family: var(--font-soft); font-size: 18px; }
-.feedback-panel h2 img { width: 22px; height: 22px; object-fit: contain; }
-.feedback-desc { margin: 0 0 12px; color: rgba(255, 245, 250, 0.78); font-size: 13.5px; line-height: 1.6; }
-.feedback-desc strong { color: #ffc7dc; }
-.feedback-score-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
-.feedback-score {
-  display: grid; justify-items: center; gap: 5px; min-height: 60px; padding: 9px 6px;
-  border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 12px;
-  background: rgba(255, 255, 255, 0.06); color: rgba(255, 240, 248, 0.8); transition: 0.16s ease;
+
+.sc-mascot {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
 }
-.feedback-score strong { font-size: 17px; color: #fff2f8; }
-.feedback-score span { font-size: 10px; text-align: center; white-space: nowrap; }
-.feedback-score:hover, .feedback-score.active {
-  border-color: rgba(231, 62, 101, 0.7);
-  background: linear-gradient(135deg, rgba(231, 62, 101, 0.7), rgba(231, 126, 110, 0.6));
-  color: #fff; transform: translateY(-1px);
+
+.sc-head strong {
+  color: #6a4270;
+  font-size: 14.5px;
+  font-weight: 800;
+  line-height: 1.3;
 }
-.feedback-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; }
-.feedback-message { color: #bff8ef; font-size: 12px; font-weight: 700; }
+
+.sc-reason {
+  margin: 0;
+  color: #6f5f79;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.sc-start {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(160, 120, 170, 0.35);
+}
+
+.sc-start-label {
+  display: block;
+  margin-bottom: 6px;
+  color: #a06bb0;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.sc-start p {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  color: #5a4665;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.sc-heart {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  object-fit: contain;
+}
+
+.report-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px dashed rgba(125, 80, 130, 0.28);
+}
+
+.report-actions p {
+  flex: 1 1 360px;
+  margin: 0;
+  color: #7b6482;
+  font-size: 13px;
+}
+
+.report-actions p span {
+  color: #d46f91;
+}
+
+.primary-button,
+.secondary-button {
+  min-height: 40px;
+  padding: 9px 18px;
+  border-radius: 999px;
+  font-family: var(--font-ui);
+  transition: transform 0.16s ease, opacity 0.16s ease;
+}
+
 .primary-button {
-  min-height: 40px; padding: 9px 18px; border: 1px solid #e73e65; border-radius: 999px;
-  background: linear-gradient(135deg, #e73e65, #ee5d5f); color: #fffaff; font-family: var(--font-ui);
+  border: 1px solid #e73e65;
+  background: linear-gradient(135deg, #e73e65, #ee5d5f);
+  color: #fffaff;
 }
-.primary-button:hover:not(:disabled) { transform: translateY(-1px); }
-.primary-button:disabled { cursor: not-allowed; opacity: 0.55; }
 
-/* ── 반응형 ── */
-@media (max-width: 1040px) {
-  .diary-shell { grid-template-columns: 1fr; }
-  .side { flex-direction: column; }
-  .side-body { max-height: 260px; }
-  .board-grid { grid-template-columns: 1fr; grid-template-areas: 'oneline' 'tags' 'flow' 'hard' 'comfort'; }
-  .suggest-grid { grid-template-columns: repeat(2, 1fr) !important; }
+.secondary-button {
+  border: 1px solid rgba(113, 72, 124, 0.34);
+  background: rgba(255, 255, 255, 0.48);
+  color: #6a4270;
 }
+
+.primary-button:hover:not(:disabled),
+.secondary-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.primary-button:disabled,
+.secondary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.feedback-panel {
+  width: min(1400px, 100%);
+  margin: 16px auto 0;
+  padding: 20px 22px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 20px;
+  background: linear-gradient(
+    135deg,
+    rgba(52, 30, 78, 0.82),
+    rgba(70, 40, 96, 0.8)
+  );
+  box-shadow: 0 18px 44px rgba(6, 3, 18, 0.35);
+  color: #fbf5ff;
+  font-family: var(--font-ui);
+}
+
+.feedback-panel h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-family: var(--font-soft);
+  font-size: 18px;
+}
+
+.feedback-panel h2 img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+.feedback-desc {
+  margin: 0 0 12px;
+  color: rgba(255, 245, 250, 0.78);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.feedback-desc strong {
+  color: #ffc7dc;
+}
+
+.feedback-score-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.feedback-score {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  min-height: 60px;
+  padding: 9px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 240, 248, 0.8);
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    background 0.16s ease;
+}
+
+.feedback-score strong {
+  color: #fff2f8;
+  font-size: 17px;
+}
+
+.feedback-score span {
+  font-size: 10px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.feedback-score:hover,
+.feedback-score.active {
+  border-color: rgba(231, 62, 101, 0.7);
+  background: linear-gradient(
+    135deg,
+    rgba(231, 62, 101, 0.7),
+    rgba(231, 126, 110, 0.6)
+  );
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.feedback-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.feedback-message {
+  color: #bff8ef;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@media (max-width: 1040px) {
+  .diary-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .side-body {
+    max-height: 260px;
+  }
+
+  .board-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'oneline'
+      'tags'
+      'flow'
+      'hard'
+      'comfort';
+  }
+
+  .suggest-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
 @media (max-width: 620px) {
-  .diary-page { padding: 66px 12px 40px; background-attachment: scroll; }
-  .board { padding: 20px 16px; border-radius: 22px; }
-  .board-header { grid-template-columns: auto 1fr; }
-  .bh-date { grid-column: 2; justify-self: start; }
-  .suggest-grid { grid-template-columns: 1fr !important; }
-  .feedback-score span { font-size: 9px; }
+  .diary-page {
+    padding: 66px 12px 40px;
+    background-attachment: scroll;
+  }
+
+  .board {
+    padding: 20px 16px;
+    border-radius: 22px;
+  }
+
+  .board-header {
+    grid-template-columns: auto 1fr;
+  }
+
+  .bh-date {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .suggest-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .feedback-score-row {
+    grid-template-columns: repeat(5, minmax(50px, 1fr));
+    overflow-x: auto;
+  }
+
+  .feedback-score span {
+    font-size: 9px;
+  }
+
+  .feedback-footer,
+  .report-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .report-actions p {
+    flex-basis: auto;
+  }
+
+  .primary-button,
+  .secondary-button {
+    width: 100%;
+  }
 }
 </style>

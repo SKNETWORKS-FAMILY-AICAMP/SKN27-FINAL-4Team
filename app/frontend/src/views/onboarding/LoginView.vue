@@ -6,7 +6,7 @@ import googleLogo from "../../assets/auth/google-logo.png";
 import kakaoLogo from "../../assets/auth/kakao-logo.png";
 import naverLogo from "../../assets/auth/naver-logo.png";
 import pageBackground from "../../assets/bg-main.png";
-import brandLogo from "../../assets/brand-logo.png";
+import brandLogo from "../../assets/brand-logo-header.png";
 import iconMindChat from "../../assets/icons/feature-mind-chat.png";
 import iconEmotionRecord from "../../assets/icons/feature-emotion-record.png";
 import iconTarotCard from "../../assets/icons/feature-tarot-card.png";

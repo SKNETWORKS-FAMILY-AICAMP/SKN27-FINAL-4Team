@@ -86,6 +86,14 @@ const preferenceGridItems = computed(() => {
   return slots;
 });
 const agreementsSatisfied = computed(() => termsOfServiceAgreed.value && privacyCollectionAgreed.value && overseasTransferAgreed.value);
+const allAgreementsAgreed = computed({
+  get: () => agreementsSatisfied.value,
+  set: (agreed) => {
+    termsOfServiceAgreed.value = agreed;
+    privacyCollectionAgreed.value = agreed;
+    overseasTransferAgreed.value = agreed;
+  },
+});
 const activeAgreementTitle = computed(() => ({
   privacy: "개인정보 수집 및 이용 안내",
   overseas: "개인정보 국외 처리 및 이전 안내",
@@ -622,7 +630,7 @@ function formatBirthDateForDisplay(value) {
                 <p>좋아하거나 관심 있는 활동을 자유롭게 골라주세요.</p>
               </div>
               <div class="preference-heading-actions">
-                <span>선택한 태그 {{ selectedPreferenceLabels.length }}개</span>
+                <span>선택한 태그 <br>{{ selectedPreferenceLabels.length }}개</span>
                 <button class="preference-reset-button" type="button" @click="resetPreferences">초기화</button>
               </div>
             </header>
@@ -759,6 +767,15 @@ function formatBirthDateForDisplay(value) {
 
           <p v-if="!agreementsSatisfied" class="agreement-help">필수 약관을 확인하고 동의해 주세요.</p>
         </section>
+
+        <label class="all-agreements-check" for="all-agreements-agreement">
+          <input
+            id="all-agreements-agreement"
+            v-model="allAgreementsAgreed"
+            type="checkbox"
+          >
+          <strong>모든 이용약관 동의하기</strong>
+        </label>
 
         <footer class="setup-submit-row">
           <p v-if="saveError" class="save-error">{{ saveError }}</p>
@@ -2155,6 +2172,33 @@ function formatBirthDateForDisplay(value) {
 .agreement-row {
   min-height: 56px;
   padding: 10px 14px;
+}
+
+.all-agreements-check {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 10px;
+  margin-left: 35px;
+  padding: 4px 2px;
+  color: #fff7df;
+  cursor: pointer;
+  user-select: none;
+}
+
+.all-agreements-check input {
+  width: 21px;
+  height: 21px;
+  flex: 0 0 auto;
+  margin: 0;
+  accent-color: #f84f9b;
+  cursor: pointer;
+}
+
+.all-agreements-check strong {
+  font-size: 15px;
+  line-height: 1.4;
 }
 
 .setup-submit-row {
