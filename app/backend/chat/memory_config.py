@@ -57,4 +57,5 @@ TOPIC_SYNONYMS = {
 # 감정 게이트 4종 (EMO_*)   : ai/agents/nodes.py 상단 — env 오버라이드 가능
 # TTS 4종 (TTS_*)           : chat/tts_service.py 상단 — env 오버라이드 가능
 # LLM 호출별 max_tokens/temperature : 호출부 설계값 (이주 안 함 — 목적별로 다른 게 정상)
-# MBTI 질문 주기(3턴 후 4턴마다)·최근 6개 조회 : chat/views.py (UX 설계 확정 후 재논의)
+# MBTI 질문 주기(3턴 후 4턴마다) : chat/views.py 237행 / 질문 생성 참고 대화 6줄 :
+#   ai/agents/mbti.py 125행 [-6:] — UX 설계값 (env 아님. 위치 정정 2026-07-21)
