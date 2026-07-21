@@ -301,13 +301,155 @@ body:has(#app.home-screen) > #app,
     min-height: 382px !important;
   }
 
-  #app .tarot-back-card,
+  #app .tarot-spread-panel.shuffle-idle .tarot-back-card,
   #app .tarot-spread-panel.shuffle-deal .tarot-back-card {
     top: calc(4px + (var(--card-row) * 95px)) !important;
   }
 
+  #app .tarot-spread-panel.shuffle-gather .tarot-back-card {
+    top: 50% !important;
+    left: 50% !important;
+  }
+
   #app .tarot-bottom-note {
     width: min(100%, 1320px) !important;
+  }
+
+  /* Character setup: a slightly calmer density at 100% browser zoom. */
+  #app .character-page {
+    padding: 18px 24px 28px !important;
+  }
+
+  #app .character-layout {
+    width: min(100%, 1320px) !important;
+    grid-template-columns: minmax(0, 1fr) 386px !important;
+    gap: 20px !important;
+  }
+
+  #app .character-main-panel {
+    gap: 18px !important;
+    padding: 38px !important;
+  }
+
+  #app .character-preview-panel {
+    gap: 16px !important;
+    padding: 30px !important;
+  }
+
+  #app .setup-stepper {
+    width: min(100%, 520px) !important;
+    gap: 14px !important;
+  }
+
+  #app .setup-stepper span {
+    gap: 7px !important;
+    font-size: 13px !important;
+  }
+
+  #app .setup-stepper b {
+    width: 39px !important;
+    height: 39px !important;
+  }
+
+  #app .screen-heading h2 {
+    font-size: 42px !important;
+  }
+
+  #app .screen-heading p {
+    margin-top: 8px !important;
+    font-size: 14px !important;
+  }
+
+  #app .character-grid {
+    gap: 12px !important;
+  }
+
+  #app .character-card {
+    min-height: 240px !important;
+    grid-template-rows: 118px minmax(0, 1fr) !important;
+    gap: 10px !important;
+    padding: 12px 14px !important;
+  }
+
+  #app .character-card-image {
+    height: 118px !important;
+  }
+
+  #app .character-card-image img {
+    max-height: 108px !important;
+  }
+
+  #app .character-card-copy {
+    gap: 6px !important;
+  }
+
+  #app .character-card-copy strong {
+    font-size: 20px !important;
+  }
+
+  #app .character-card-copy small {
+    font-size: 14px !important;
+  }
+
+  #app .tag-row i {
+    padding: 6px 9px !important;
+    font-size: 11px !important;
+  }
+
+  #app .section-title-row h3 {
+    font-size: 24px !important;
+  }
+
+  #app .face-options {
+    gap: 10px !important;
+  }
+
+  #app .expression-card {
+    min-height: 112px !important;
+    grid-template-rows: 58px minmax(0, 1fr) !important;
+    gap: 6px !important;
+    padding: 10px !important;
+  }
+
+  #app .expression-image {
+    height: 58px !important;
+  }
+
+  #app .expression-image img {
+    max-width: 58px !important;
+    max-height: 58px !important;
+  }
+
+  #app .preview-image {
+    height: 200px !important;
+  }
+
+  #app .preview-image img {
+    max-height: 200px !important;
+  }
+
+  #app .preview-copy h3 {
+    font-size: 31px !important;
+  }
+
+  #app .preview-copy > span {
+    margin: 7px 0 10px !important;
+    padding: 6px 11px !important;
+  }
+
+  #app .preview-copy p {
+    margin-bottom: 12px !important;
+    font-size: 14px !important;
+  }
+
+  #app .preview-copy blockquote {
+    padding: 14px 16px !important;
+    font-size: 14px !important;
+  }
+
+  #app .save-character-button {
+    min-height: 55px !important;
+    font-size: 16px !important;
   }
 
   /* Standalone memory game: 8 columns x 3 rows at 100% browser zoom. */

@@ -18,18 +18,9 @@ const route = useRoute();
 
 const MAX_SELECTED_CARDS = 3;
 const QUESTION_MAX_LENGTH = 200;
-const GATHER_DURATION = 1040;
-const HINDU_PACKET_DURATION = 520;
-const HINDU_PACKET_GAP = 28;
-const DEAL_DURATION = 1480;
+const GATHER_DURATION = 900;
+const DEAL_DURATION = 1100;
 const MIN_READING_LOADING_DURATION = 1900;
-const HINDU_PACKETS = [
-  { start: 1, end: 4 },
-  { start: 5, end: 7 },
-  { start: 8, end: 11 },
-  { start: 12, end: 15 },
-  { start: 16, end: 20 },
-];
 const searchCharacterImages = {
   bird: searchBirdImage,
   cat: searchCatImage,
@@ -67,8 +58,6 @@ const streamingTarget = ref(null);
 const streamRunId = ref(0);
 const isShuffling = ref(false);
 const shufflePhase = ref("idle");
-const activeHinduPacket = ref(-1);
-const droppedHinduPackets = ref([]);
 const pickedSlotId = ref("");
 const shuffleRunId = ref(0);
 
@@ -280,24 +269,10 @@ async function shuffleCards() {
   shuffleRunId.value += 1;
   const runId = shuffleRunId.value;
   isShuffling.value = true;
-  activeHinduPacket.value = -1;
-  droppedHinduPackets.value = [];
 
   shufflePhase.value = "gather";
   await wait(GATHER_DURATION);
   if (runId !== shuffleRunId.value) return;
-
-  shufflePhase.value = "hindu";
-  for (let packetIndex = 0; packetIndex < HINDU_PACKETS.length; packetIndex += 1) {
-    activeHinduPacket.value = packetIndex;
-    await wait(HINDU_PACKET_DURATION);
-    if (runId !== shuffleRunId.value) return;
-
-    droppedHinduPackets.value = [...droppedHinduPackets.value, packetIndex];
-    activeHinduPacket.value = -1;
-    await wait(HINDU_PACKET_GAP);
-    if (runId !== shuffleRunId.value) return;
-  }
 
   applyShuffledDeckToSlots();
   shufflePhase.value = "deal";
@@ -305,8 +280,6 @@ async function shuffleCards() {
   if (runId !== shuffleRunId.value) return;
 
   shufflePhase.value = "idle";
-  activeHinduPacket.value = -1;
-  droppedHinduPackets.value = [];
   isShuffling.value = false;
 }
 
@@ -407,69 +380,16 @@ function applyShuffledDeckToSlots() {
 function getCardStyle(slot) {
   const row = Math.floor((slot.index - 1) / 5);
   const column = (slot.index - 1) % 5;
-  const packet = getHinduPacketIndex(slot);
-  const packetOffset = packet >= 0 ? slot.index - HINDU_PACKETS[packet].start : 0;
-  const direction = packet % 2 === 0 ? 1 : -1;
   const idleRotate = (column - 4.5) * 0.8 + row * 0.7;
   const stackRotate = ((slot.index % 7) - 3) * 0.9;
-  const liftX = direction * (18 + packet * 4) + packetOffset * 2.4;
-  const dropX = direction * -10 + packetOffset * 1.2;
-  const shuffleX = direction * (12 + packet * 2.2) + packetOffset * 1.8;
-  const shuffleY = -8 - (packetOffset % 3) * 3;
-  const shuffleBackX = direction * (-7 - packetOffset * 0.8);
-  const shuffleBackY = 9 + packet * 1.8;
-  const shuffleRotate = direction * (2.2 + packetOffset * 0.55);
-  const shuffleBackRotate = direction * (-1.5 - packetOffset * 0.35);
 
   return {
     "--card-col": column,
     "--card-row": row,
     "--idle-rotate": `${idleRotate}deg`,
     "--stack-rotate": `${stackRotate}deg`,
-    "--gather-delay": `${(20 - slot.index) * 12}ms`,
-    "--deal-delay": `${(slot.index - 1) * 22}ms`,
-    "--hindu-x": `${liftX}px`,
-    "--hindu-y": `${-22 - packetOffset * 2}px`,
-    "--hindu-rotate": `${direction * (3.2 + packetOffset * 0.7)}deg`,
-    "--drop-x": `${dropX}px`,
-    "--drop-y": `${16 + packet * 2.5}px`,
-    "--drop-rotate": `${direction * -1.5}deg`,
-    "--shuffle-delay": `${slot.index * -42}ms`,
-    "--shuffle-x": `${shuffleX}px`,
-    "--shuffle-y": `${shuffleY}px`,
-    "--shuffle-rotate": `${shuffleRotate}deg`,
-    "--shuffle-back-x": `${shuffleBackX}px`,
-    "--shuffle-back-y": `${shuffleBackY}px`,
-    "--shuffle-back-rotate": `${shuffleBackRotate}deg`,
-    "--card-z": getCardZ(slot),
+    "--card-z": 20 + slot.index,
   };
-}
-
-function getHinduPacketIndex(slot) {
-  return HINDU_PACKETS.findIndex((packet) => slot.index >= packet.start && slot.index <= packet.end);
-}
-
-function isActiveHinduPacket(slot) {
-  return shufflePhase.value === "hindu" && getHinduPacketIndex(slot) === activeHinduPacket.value;
-}
-
-function isDroppedHinduPacket(slot) {
-  const packetIndex = getHinduPacketIndex(slot);
-  return shufflePhase.value === "hindu" && packetIndex >= 0 && droppedHinduPackets.value.includes(packetIndex);
-}
-
-function getCardZ(slot) {
-  const packetIndex = getHinduPacketIndex(slot);
-
-  if (shufflePhase.value === "hindu") {
-    if (packetIndex === activeHinduPacket.value) return 90 + slot.index;
-    if (packetIndex >= 0 && droppedHinduPackets.value.includes(packetIndex)) return 10 - packetIndex;
-    return 48 - slot.index;
-  }
-
-  if (shufflePhase.value === "gather") return 20 + slot.index;
-  if (shufflePhase.value === "deal") return 20 + slot.index;
-  return 20 + slot.index;
 }
 
 async function requestTarotReading() {
@@ -714,8 +634,6 @@ function translateCardName(name) {
               :class="{
                 selected: isSlotSelected(slot.id),
                 disabled: selectedCount >= MAX_SELECTED_CARDS && !isSlotSelected(slot.id),
-                'packet-active': isActiveHinduPacket(slot),
-                'packet-dropped': isDroppedHinduPacket(slot),
                 'just-picked': pickedSlotId === slot.id,
               }"
               :style="getCardStyle(slot)"
@@ -1113,37 +1031,22 @@ function translateCardName(name) {
   animation: tarot-card-pick-pop 0.38s cubic-bezier(0.22, 0.86, 0.24, 1);
 }
 
-.tarot-spread-panel.shuffle-gather .tarot-back-card,
-.tarot-spread-panel.shuffle-hindu .tarot-back-card {
+.tarot-spread-panel.shuffle-gather .tarot-back-card {
   top: 50%;
   left: 50%;
-  --move-delay: var(--gather-delay);
+  --move-delay: 0ms;
   transform: translate(-50%, -50%) rotate(var(--stack-rotate)) scale(0.94);
+  transition-duration: 0.82s;
+  transition-timing-function: cubic-bezier(0.22, 0.78, 0.24, 1);
   pointer-events: none;
 }
 
-.tarot-spread-panel.shuffle-hindu .tarot-back-card {
-  --move-delay: 0ms;
-  transition-duration: 0.54s;
-  transition-timing-function: cubic-bezier(0.25, 0.82, 0.25, 1);
-  animation: tarot-card-soft-shuffle 1.22s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  animation-delay: var(--shuffle-delay);
-}
-
-.tarot-spread-panel.shuffle-hindu .tarot-back-card.packet-active {
-  filter: brightness(1.12) saturate(1.06);
-}
-
-.tarot-spread-panel.shuffle-hindu .tarot-back-card.packet-dropped {
-  filter: brightness(0.98);
-}
-
 .tarot-spread-panel.shuffle-deal .tarot-back-card {
-  --move-delay: var(--deal-delay);
+  --move-delay: 0ms;
   top: calc(24px + (var(--card-row) * 122px));
   left: calc(7% + (var(--card-col) * 9.55%));
   transform: translate(-50%, 0) rotate(var(--idle-rotate));
-  transition-duration: 0.94s;
+  transition-duration: 1s;
   transition-timing-function: cubic-bezier(0.2, 0.78, 0.24, 1);
   pointer-events: none;
 }
@@ -1164,27 +1067,6 @@ function translateCardName(name) {
   box-sizing: border-box;
   border-radius: 8px;
   box-shadow: 0 12px 20px rgba(7, 2, 20, 0.34);
-}
-
-@keyframes tarot-card-soft-shuffle {
-  0%,
-  100% {
-    transform: translate(-50%, -50%) rotate(var(--stack-rotate)) scale(0.955);
-  }
-
-  32% {
-    transform:
-      translate(calc(-50% + var(--shuffle-x)), calc(-50% + var(--shuffle-y)))
-      rotate(var(--shuffle-rotate))
-      scale(0.985);
-  }
-
-  64% {
-    transform:
-      translate(calc(-50% + var(--shuffle-back-x)), calc(-50% + var(--shuffle-back-y)))
-      rotate(var(--shuffle-back-rotate))
-      scale(0.948);
-  }
 }
 
 @keyframes tarot-card-pick-pop {
