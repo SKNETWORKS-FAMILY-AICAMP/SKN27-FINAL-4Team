@@ -58,10 +58,14 @@ from mindreport.services.validation_agent import (
 )
 from mindreport.services.scoring import (
     AFFECT_SCORING_METHOD,
+    LABEL_GROUNDED_AFFECT_SCORING_METHOD,
+    SCORING_ROUTE_LABEL_GROUNDED,
+    SCORING_ROUTE_LLM_FALLBACK,
     EmotionScore,
     MindReportScoringService,
     ReportSourceMessage,
     build_emotion_scoring_payload,
+    load_source_messages,
     parse_emotion_scores,
 )
 from mindreport.services.graph_state import build_initial_mindreport_state
@@ -138,8 +142,10 @@ class FakeEmotionScoreClient:
         self.emotion_score = emotion_score
         self.emotion_state = emotion_state
         self.emotion_label = emotion_label
+        self.last_payload = None
 
     def score_messages(self, *, payload):
+        self.last_payload = payload
         score = self.emotion_score
         if score <= -1.0:
             score = 0.0
@@ -161,6 +167,32 @@ class FakeEmotionScoreClient:
                         message['message_id'] for message in group['messages']
                     ],
                     'rationale': '테스트용 감정 점수',
+                }
+                for group in payload['daily_groups']
+            ]
+        }
+
+
+class FakeAffectEmotionScoreClient:
+    def __init__(self):
+        self.last_payload = None
+
+    def score_messages(self, *, payload):
+        self.last_payload = payload
+        return {
+            'daily_scores': [
+                {
+                    'source_date': group['source_date'],
+                    'emotion_label': 'joy',
+                    'positive_affect': 3,
+                    'negative_affect': 1,
+                    'activation': 2,
+                    'confidence': 0.75,
+                    'emotional_evidence_count': len(group['messages']),
+                    'evidence_message_ids': [
+                        message['message_id'] for message in group['messages']
+                    ],
+                    'rationale': '테스트용 감정 차원 분석',
                 }
                 for group in payload['daily_groups']
             ]
@@ -333,6 +365,20 @@ class MindReportScoringServiceTests(TestCase):
                 role='user',
                 content=f'오늘의 감정 기록 {index}',
                 emotion_label='normal',
+            )
+
+    def _create_labeled_turns(self, count, label='joy'):
+        for index in range(count):
+            ChatMessage.objects.create(
+                session=self.session,
+                role='user',
+                content=f'오늘의 감정 기록 {index}',
+            )
+            ChatMessage.objects.create(
+                session=self.session,
+                role='assistant',
+                content=f'감정 기록 응답 {index}',
+                emotion_label=label,
             )
 
     def _create_weekly_user_messages(self, count):
@@ -778,6 +824,96 @@ class MindReportScoringServiceTests(TestCase):
         self.assertEqual(len(result.emotion_scores), 1)
         self.assertEqual(result.emotion_scores[0].emotion_score, 50.0)
         self.assertEqual(result.emotion_scores[0].total_message_count, 5)
+
+    def test_source_message_uses_only_immediately_following_assistant_label(self):
+        first_user = ChatMessage.objects.create(
+            session=self.session,
+            role='user',
+            content='첫 번째 사용자 응답',
+        )
+        second_user = ChatMessage.objects.create(
+            session=self.session,
+            role='user',
+            content='두 번째 사용자 응답',
+        )
+        ChatMessage.objects.create(
+            session=self.session,
+            role='assistant',
+            content='두 번째 응답에 대한 답변',
+            emotion_label='sadness',
+        )
+
+        messages = load_source_messages(user=self.user, period_type='week')
+        messages_by_id = {message.message_id: message for message in messages}
+
+        self.assertIsNone(
+            messages_by_id[first_user.id].persisted_emotion_label
+        )
+        self.assertEqual(
+            messages_by_id[second_user.id].persisted_emotion_label,
+            'sadness',
+        )
+
+    def test_scoring_uses_complete_persisted_labels_as_primary_route(self):
+        self._create_labeled_turns(5, label='joy')
+        client = FakeAffectEmotionScoreClient()
+
+        result = MindReportScoringService(score_client=client).run(
+            user=self.user,
+            period_type='week',
+        )
+
+        self.assertEqual(result.status, 'scored')
+        self.assertEqual(result.scoring_route, SCORING_ROUTE_LABEL_GROUNDED)
+        self.assertEqual(
+            client.last_payload['scoring_route'],
+            SCORING_ROUTE_LABEL_GROUNDED,
+        )
+        payload_messages = client.last_payload['daily_groups'][0]['messages']
+        self.assertEqual(
+            {message['persisted_emotion_label'] for message in payload_messages},
+            {'joy'},
+        )
+        self.assertEqual(result.emotion_scores[0].emotion_score, 75.0)
+        self.assertEqual(
+            result.emotion_scores[0].scoring_method,
+            LABEL_GROUNDED_AFFECT_SCORING_METHOD,
+        )
+
+    def test_scoring_falls_back_to_raw_text_when_one_label_is_missing(self):
+        self._create_labeled_turns(4, label='joy')
+        ChatMessage.objects.create(
+            session=self.session,
+            role='user',
+            content='라벨이 저장되지 않은 사용자 응답',
+        )
+        client = FakeAffectEmotionScoreClient()
+
+        result = MindReportScoringService(score_client=client).run(
+            user=self.user,
+            period_type='week',
+        )
+
+        self.assertEqual(result.status, 'scored')
+        self.assertEqual(result.scoring_route, SCORING_ROUTE_LLM_FALLBACK)
+        self.assertEqual(
+            client.last_payload['scoring_route'],
+            SCORING_ROUTE_LLM_FALLBACK,
+        )
+        payload_messages = client.last_payload['daily_groups'][0]['messages']
+        self.assertTrue(all(
+            'persisted_emotion_label' not in message
+            for message in payload_messages
+        ))
+        self.assertTrue(all(
+            'current_emotion_label' in message
+            for message in payload_messages
+        ))
+        self.assertEqual(result.emotion_scores[0].emotion_score, 75.0)
+        self.assertEqual(
+            result.emotion_scores[0].scoring_method,
+            AFFECT_SCORING_METHOD,
+        )
 
     def test_affect_dimensions_are_converted_to_score_by_server(self):
         source_messages = (

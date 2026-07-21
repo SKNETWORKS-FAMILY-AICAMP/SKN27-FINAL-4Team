@@ -2,7 +2,6 @@ const DEFAULT_TARGET_SELECTOR = '.report-card'
 const DEFAULT_BUTTON_SELECTOR = '.report-actions .secondary-button'
 const DEFAULT_EXCLUDED_SELECTORS = [
   '.report-actions',
-  '.report-action-feedback',
 ]
 
 const INVALID_FILENAME_CHARACTERS = /[\\/:*?"<>|\u0000-\u001f]/g

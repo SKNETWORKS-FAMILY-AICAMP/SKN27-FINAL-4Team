@@ -177,34 +177,6 @@
           <button type="button" class="secondary-button">이미지 저장</button>
           <button type="button" class="primary-button" disabled aria-disabled="true">공유</button>
         </footer>
-
-        <section v-if="todayAction" class="report-action-feedback" aria-labelledby="action-feedback-title">
-          <div>
-            <span class="eyebrow">오늘의 나 돌아보기</span>
-            <h2 id="action-feedback-title">추천 행동은 어땠나요?</h2>
-            <p><strong>{{ todayAction.title }}</strong>을(를) 해본 뒤, 감정 완화에 도움이 된 정도를 남겨주세요.</p>
-          </div>
-          <div class="report-action-score-row">
-            <button
-              v-for="option in feedbackOptions"
-              :key="option.value"
-              type="button"
-              class="report-action-score"
-              :class="{ active: actionFeedbackValue === option.value }"
-              :aria-pressed="actionFeedbackValue === option.value"
-              @click="actionFeedbackValue = option.value"
-            >
-              <strong>{{ option.value }}</strong>
-              <span>{{ option.label }}</span>
-            </button>
-          </div>
-          <div class="report-action-feedback-footer">
-            <span v-if="actionFeedbackMessage" class="report-action-feedback-message">{{ actionFeedbackMessage }}</span>
-            <button type="button" class="primary-button" :disabled="isFeedbackSaving || !actionFeedbackValue" @click="saveActionFeedback">
-              {{ isFeedbackSaving ? '저장 중…' : '평가 저장' }}
-            </button>
-          </div>
-        </section>
       </section>
     </section>
   </main>
@@ -217,17 +189,6 @@ import reportBg from '../../assets/report-bg.png'
 import { attachMindReportImageSaver } from './reportImageSaver.js'
 
 const reports = ref([])
-const todayCheckin = ref(null)
-const actionFeedbackValue = ref(null)
-const actionFeedbackMessage = ref('')
-const isFeedbackSaving = ref(false)
-const feedbackOptions = [
-  { value: 1, label: '별로 도움 안 됨' },
-  { value: 2, label: '조금 아쉬움' },
-  { value: 3, label: '보통' },
-  { value: 4, label: '도움 됨' },
-  { value: 5, label: '완전 도움 됨' },
-]
 
 const isLoading = ref(true)
 const isRefreshing = ref(false)
@@ -281,7 +242,6 @@ const filteredReports = computed(() => (
 const currentReport = computed(
   () => filteredReports.value.find((report) => report.id === selectedReportId.value) ?? filteredReports.value[0],
 )
-const todayAction = computed(() => todayCheckin.value?.selected_action ?? null)
 
 watch(selectedMonth, () => {
   selectedReportId.value = filteredReports.value[0]?.id
@@ -327,46 +287,22 @@ const refreshReports = async () => {
   }
 }
 
-const loadTodayCheckin = async () => {
-  try {
-    const data = await reportApi.getTodayCheckin()
-    todayCheckin.value = data?.checkin ?? null
-    actionFeedbackValue.value = data?.action_feedback?.helpfulness ?? null
-  } catch (error) {
-    // 리포트 본문은 오늘의 나 기록이 없어도 계속 표시합니다.
-    console.warn('Failed to fetch today check-in:', error)
-  }
-}
-
 onMounted(() => {
   detachReportImageSaver = attachMindReportImageSaver()
   loadReports()
-  loadTodayCheckin()
 })
 
 onBeforeUnmount(() => {
   detachReportImageSaver?.()
 })
 
-async function saveActionFeedback() {
-  if (!todayCheckin.value?.id || !todayAction.value?.id || !actionFeedbackValue.value || isFeedbackSaving.value) return
-  isFeedbackSaving.value = true
-  actionFeedbackMessage.value = ''
-  try {
-    await reportApi.saveActionFeedback(todayCheckin.value.id, todayAction.value.id, actionFeedbackValue.value)
-    actionFeedbackMessage.value = '평가를 저장했어요. 다음 행동 추천에 참고할게요.'
-  } catch (error) {
-    actionFeedbackMessage.value = error?.response?.data?.error?.message ?? '평가를 저장하지 못했어요. 잠시 후 다시 시도해주세요.'
-  } finally {
-    isFeedbackSaving.value = false
-  }
-}
-
 const emotionToneClass = (day) => {
-  if (['😣', '😔'].includes(day.icon)) return 'emotion-day--very-low'
-  if (['😮‍💨', '😳'].includes(day.icon)) return 'emotion-day--low'
-  if (['😄', '😊'].includes(day.icon)) return 'emotion-day--very-good'
-  if (['🙂', '😌', '🥲'].includes(day.icon)) return 'emotion-day--good'
+  if (day.emotion_state === 'positive') return 'emotion-day--positive'
+  if (day.emotion_state === 'negative') return 'emotion-day--negative'
+
+  // 기존에 저장된 리포트에는 emotion_state가 없으므로 아이콘으로 호환한다.
+  if (['😄', '😊', '🙂', '😌', '🥲'].includes(day.icon)) return 'emotion-day--positive'
+  if (['😢', '😣', '😔', '😮‍💨', '😳'].includes(day.icon)) return 'emotion-day--negative'
   return 'emotion-day--neutral'
 }
 </script>
@@ -704,16 +640,10 @@ button {
   background: rgba(77, 82, 96, 0.42);
 }
 
-.emotion-day--very-low {
+.emotion-day--negative {
   border-color: rgba(0, 0, 0, 0.78);
   background: linear-gradient(180deg, rgba(255, 73, 105, 0.78), rgba(122, 20, 45, 0.74));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 8px 16px rgba(255, 58, 90, 0.2);
-}
-
-.emotion-day--low {
-  border-color: rgba(0, 0, 0, 0.78);
-  background: linear-gradient(180deg, rgba(255, 114, 134, 0.48), rgba(112, 44, 62, 0.5));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .emotion-day--neutral {
@@ -722,13 +652,7 @@ button {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
-.emotion-day--good {
-  border-color: rgba(0, 0, 0, 0.78);
-  background: linear-gradient(180deg, rgba(76, 221, 155, 0.46), rgba(26, 108, 83, 0.48));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
-}
-
-.emotion-day--very-good {
+.emotion-day--positive {
   border-color: rgba(0, 0, 0, 0.78);
   background: linear-gradient(180deg, rgba(76, 255, 168, 0.76), rgba(12, 132, 91, 0.72));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 8px 16px rgba(52, 211, 153, 0.18);
@@ -1029,90 +953,6 @@ button {
   color: #425f58;
 }
 
-.report-action-feedback {
-  display: grid;
-  gap: 16px;
-  margin-top: 26px;
-  padding: 20px;
-  border: 1px solid rgba(255, 180, 140, 0.28);
-  border-radius: 14px;
-  background: linear-gradient(135deg, rgba(255, 164, 116, 0.1), rgba(94, 234, 212, 0.06));
-}
-
-.report-action-feedback h2 {
-  margin: 4px 0 6px;
-  color: #fff7ee;
-  font-size: 18px;
-}
-
-.report-action-feedback p {
-  margin: 0;
-  color: rgba(255, 245, 238, 0.72);
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.report-action-feedback p strong {
-  color: #ffd39d;
-}
-
-.report-action-score-row {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.report-action-score {
-  display: grid;
-  justify-items: center;
-  gap: 5px;
-  min-height: 62px;
-  padding: 9px 6px;
-  border: 1px solid rgba(255, 190, 151, 0.32);
-  border-radius: 12px;
-  color: rgba(255, 236, 224, 0.75);
-  background: rgba(255, 255, 255, 0.06);
-  cursor: pointer;
-  transition: 0.18s ease;
-}
-
-.report-action-score strong {
-  color: #fff2dc;
-  font-size: 18px;
-}
-
-.report-action-score span {
-  font-size: 10px;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.report-action-score:hover,
-.report-action-score.active {
-  border-color: rgba(255, 211, 157, 0.8);
-  background: linear-gradient(135deg, rgba(231, 62, 101, 0.72), rgba(231, 126, 110, 0.64));
-  color: #fff;
-  transform: translateY(-1px);
-}
-
-.report-action-feedback-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.report-action-feedback-message {
-  color: #bff8ef;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.report-action-feedback button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
 .primary-button:hover,
 .secondary-button:hover {
   transform: translateY(-1px);
@@ -1238,17 +1078,5 @@ button {
     min-width: 0;
   }
 
-  .report-action-score-row {
-    gap: 5px;
-  }
-
-  .report-action-score span {
-    font-size: 9px;
-  }
-
-  .report-action-feedback-footer {
-    align-items: stretch;
-    flex-direction: column;
-  }
 }
 </style>

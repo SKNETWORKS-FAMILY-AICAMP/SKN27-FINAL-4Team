@@ -1,6 +1,6 @@
 from django.utils import timezone
 
-from user.constants import EMOTION_LABELS_KO
+from myprofile.emotion_service import build_today_emotion_summary
 from user.models import UserProfile
 
 
@@ -26,29 +26,8 @@ def build_user_profile(user):
 def get_today_dominant_emotion(user):
     """Return the recency-weighted dominant assistant emotion for today."""
     try:
-        from chat.models import ChatMessage
-
-        messages = (
-            ChatMessage.objects.filter(
-                session__user=user,
-                role="assistant",
-                emotion_label__isnull=False,
-                created_at__date=timezone.localdate(),
-            )
-            .exclude(emotion_label="")
-            .order_by("created_at")
-        )
-        if not messages.exists():
-            return None
-
-        scores = {}
-        total = messages.count()
-        for index, message in enumerate(messages):
-            label = message.emotion_label
-            scores[label] = scores.get(label, 0.0) + ((index + 1) / total)
-
-        raw_emotion = max(scores, key=scores.get)
-        return EMOTION_LABELS_KO.get(raw_emotion, raw_emotion)
+        representative = build_today_emotion_summary(user)['representative']
+        return representative['label'] if representative else None
     except Exception as exc:
         # Emotion is optional personalization data. Its failure must not stop books.
         print(f"[BookAgent] Failed to fetch today's emotion: {exc}")

@@ -5,6 +5,7 @@ from rest_framework.test import APITestCase
 
 from user.models import User, UserProfile
 from mybook.views import _build_user_profile
+from chat.models import ChatMessage, ChatSession
 
 
 class MyProfileApiTests(APITestCase):
@@ -46,6 +47,36 @@ class MyProfileApiTests(APITestCase):
         self.assertEqual(profile['selectedCharacter'], 'pori')
         self.assertEqual(profile['account']['email'], 'mypage@example.com')
         self.assertEqual(profile['account']['provider'], 'Email')
+
+    def test_today_emotion_returns_recency_weighted_assistant_emotion(self):
+        self.client.force_authenticate(self.user)
+        session = ChatSession.objects.create(user=self.user, character='pori')
+        ChatMessage.objects.create(
+            session=session,
+            role='user',
+            content='사용자 행의 라벨은 대표 감정에서 제외되어야 한다.',
+            emotion_label='anger',
+        )
+        for label in ('joy', 'joy', 'joy', 'sadness', 'sadness'):
+            ChatMessage.objects.create(
+                session=session,
+                role='assistant',
+                content=f'{label} 응답',
+                emotion_label=label,
+            )
+
+        response = self.client.get('/api/myprofile/today-emotion/')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['total_count'], 5)
+        self.assertEqual(response.data['representative']['key'], 'sadness')
+        self.assertEqual(response.data['representative']['label'], '슬픔')
+        self.assertEqual(response.data['dominant'][0]['key'], 'joy')
+        self.assertEqual(_build_user_profile(self.user)['today_emotion'], '슬픔')
+        self.assertNotIn(
+            'anger',
+            {item['key'] for item in response.data['distribution']},
+        )
 
     def test_authenticated_user_without_onboarding_profile_gets_404(self):
         user = User.objects.create_user(

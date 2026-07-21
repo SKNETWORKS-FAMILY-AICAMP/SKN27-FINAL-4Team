@@ -3,23 +3,22 @@
     <section class="mypage-home" aria-label="마이페이지 홈">
       <aside class="home-left-panel" aria-label="마이홈 대시보드">
         <article class="identity-card">
-          <div class="identity-avatar">
-            <img :src="`/characters/${currentCharacter.id}/default.png`" :alt="currentCharacter.name" />
+          <div class="identity-avatar-block">
+            <div class="identity-avatar">
+              <img :src="`/characters/${currentCharacter.id}/default.png`" :alt="currentCharacter.name" />
+            </div>
+            <small class="identity-character-name">{{ currentCharacter.name }}</small>
           </div>
           <div class="identity-copy">
             <span class="dashboard-kicker">나의 오늘</span>
             <h1>{{ displayName }}님의 공간</h1>
-            <p>{{ homeStatusMessage }}</p>
-            <div class="identity-chips">
-              <span>{{ todayEmotionLabel }}</span>
-              <span>{{ currentCharacter.name }}</span>
-              <span>{{ profileMbtiLabel }}</span>
+            <div class="identity-chips" aria-label="나의 관심사와 취미">
+              <span class="identity-chip-mbti">{{ profileMbtiLabel }}</span>
+              <span v-for="chip in tasteSummaryChips" :key="chip.type" :class="`identity-chip-${chip.type}`">
+                <b>{{ chip.caption }}</b>{{ chip.label }}
+              </span>
             </div>
           </div>
-          <button class="dashboard-primary" type="button" @click="openPanel('profile')">
-            프로필 관리
-            <span aria-hidden="true">↗</span>
-          </button>
         </article>
 
         <nav class="quick-actions" aria-label="마이룸 기능 메뉴">
@@ -62,32 +61,50 @@
           </button>
         </nav>
 
-        <aside class="home-sidebar" aria-label="오늘의 상태판">
-          <div class="panel-caption">
-            <span class="dashboard-kicker">오늘의 요약</span>
-            <strong>내 상태 한눈에 보기</strong>
-          </div>
-          <section class="summary-grid" aria-label="내 상태 요약">
-            <button class="summary-card" type="button" @click="goToReport">
-              <span>오늘 기분</span>
-              <strong>{{ todayEmotionLabel }}</strong>
-              <small>마음 리포트에서 확인</small>
-            </button>
-            <button class="summary-card" type="button" @click="openPanel('mbti')">
-              <span>MBTI</span>
-              <strong>{{ profileMbtiLabel }}</strong>
-              <small>{{ mbtiSummaryText }}</small>
-            </button>
-            <button class="summary-card" type="button" @click="openPanel('profile')">
-              <span>관심사</span>
-              <strong>{{ interestPreview }}</strong>
-              <small>프로필 기준</small>
-            </button>
-            <button class="summary-card" type="button" @click="openPanel('profile')">
-              <span>취미</span>
-              <strong>{{ hobbyPreview }}</strong>
-              <small>프로필 기준</small>
-            </button>
+        <aside class="home-sidebar" aria-labelledby="home-summary-title">
+          <header class="panel-caption memory-dashboard-caption">
+            <div>
+              <h2 id="home-summary-title">오늘의 기억 요약</h2>
+              <small v-if="memoryDashboard.count">많이 언급된 항목 TOP 3</small>
+            </div>
+            <button type="button" @click="openMemoryPanel()">보관함 열기 <span aria-hidden="true">→</span></button>
+          </header>
+          <section class="memory-dashboard" aria-label="기억을 구조화한 오늘의 요약">
+            <div v-if="memoryLoading && !memoryDashboard.count" class="memory-dashboard-state">기억을 차분히 정리하고 있어요...</div>
+            <template v-else>
+              <div
+                v-if="memoryDashboard.events.length || memoryDashboard.people.length || memoryDashboard.preferences.length"
+                class="memory-dashboard-facts"
+              >
+                <div v-if="memoryDashboard.events.length">
+                  <span>사건</span>
+                  <div class="memory-dashboard-tags">
+                    <strong v-for="event in memoryDashboard.events" :key="event">{{ event }}</strong>
+                  </div>
+                </div>
+                <div v-if="memoryDashboard.people.length">
+                  <span>인물</span>
+                  <div class="memory-dashboard-tags">
+                    <strong v-for="person in memoryDashboard.people" :key="person">{{ person }}</strong>
+                  </div>
+                </div>
+                <div v-if="memoryDashboard.preferences.length">
+                  <span>취향</span>
+                  <div class="memory-dashboard-tags">
+                    <strong v-for="preference in memoryDashboard.preferences" :key="preference">{{ preference }}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <button v-if="memoryDashboard.latest" class="memory-dashboard-latest" type="button" @click="openMemoryPanel(memoryDashboard.latest.id)">
+                <span>가장 최근 기억</span>
+                <strong>{{ memoryDashboard.latest.title }}</strong>
+                <small>{{ memoryDashboard.latest.savedAt || '대화에서 저장됨' }}</small>
+              </button>
+              <button v-else class="memory-dashboard-empty-action" type="button" @click="goToChat">
+                오늘 기억된 내용이 없어요 · 대화하러 가기 <span aria-hidden="true">→</span>
+              </button>
+            </template>
           </section>
         </aside>
       </aside>
@@ -98,7 +115,10 @@
             <span class="dashboard-kicker">나의 공간</span>
             <h2>{{ displayName }}님의 미니룸</h2>
           </div>
-          <p>표시된 방 안 오브젝트를 선택하면 연결된 기능을 열 수 있어요.</p>
+          <button class="dashboard-primary room-profile-button" type="button" @click="openPanel('profile')">
+            프로필 관리
+            <span aria-hidden="true">↗</span>
+          </button>
         </header>
         <MypageRoom
           :labels="t"
@@ -109,6 +129,7 @@
           @open-chat="goToChat"
           @open-report="goToReport"
           @arrived="activatePanelAfterRoomMove"
+          @movement-interrupted="cancelPendingRoomAction"
         />
       </section>
     </section>
@@ -176,6 +197,7 @@
           :loading="memoryLoading"
           :error="memoryError"
           :notice="memoryNotice"
+          :initial-selected-id="memorySelectedId"
           @refresh="loadMemoryData(true)"
           @delete-memory="deleteMemoryItems([$event])"
           @delete-selected="deleteMemoryItems"
@@ -208,7 +230,7 @@
 </template>
 
 <script>
-import { MEMORY_API_ENABLED, fetchCurrentWeather, fetchMbtiDemoPayload, fetchMyProfile, updateMyProfile, saveOnboardingMbti, fetchBookRecommendation, fetchMemoryVault, deleteMemoryVaultItem, fetchWeatherRegions } from "./mypage.api";
+import { fetchCurrentWeather, fetchMbtiDemoPayload, fetchMyProfile, fetchTodayEmotion, updateMyProfile, saveOnboardingMbti, fetchBookRecommendation, fetchMemoryVault, deleteMemoryVaultItem, fetchWeatherRegions } from "./mypage.api";
 import { LOCATION_CONSENT_VERSION } from "../../constants/consentVersions";
 import { createMypageState, i18n } from "./state/mypage.state";
 import {
@@ -227,6 +249,7 @@ import ProfilePanel from "./components/ProfilePanel.vue";
 import WeatherPanel from "./components/WeatherPanel.vue";
 import BookPanel from "./components/BookPanel.vue";
 import MemoryPanel from "./components/MemoryPanel.vue";
+import { buildMemoryDashboard } from "./utils/memory.dashboard";
 
 export default {
   name: "MypageView",
@@ -264,9 +287,7 @@ export default {
     },
     currentPanelDescription() {
       if (this.activePanel === "memory") {
-        return MEMORY_API_ENABLED
-          ? "대화에서 저장된 기억을 확인하고 직접 관리할 수 있어요."
-          : "예시 화면에서 기억 검색·상세 보기·숨기기 흐름을 미리 체험할 수 있어요.";
+        return "대화에서 저장된 기억을 확인하고 직접 관리할 수 있어요.";
       }
       return PANEL_DESCRIPTIONS[this.activePanel] || "";
     },
@@ -276,13 +297,6 @@ export default {
     },
     displayName() {
       return this.profile?.name || this.profile?.nickname || "사용자";
-    },
-    homeStatusMessage() {
-      const emotion = this.todayEmotionLabel;
-      if (emotion && emotion !== "아직 기록 없음") {
-        return `${emotion}의 결을 담아 오늘의 추천과 프로필 취향을 정리했어요.`;
-      }
-      return "대화와 프로필을 바탕으로 오늘의 기분과 추천을 정리하는 개인 홈입니다.";
     },
     profileMbtiLabel() {
       const current = this.mbtiData?.current?.type;
@@ -301,7 +315,26 @@ export default {
         : "온보딩 기준";
     },
     todayEmotionLabel() {
-      return this.bookPayload?.profile_basis?.today_emotion || "아직 기록 없음";
+      if (this.todayEmotionLoading) return "확인 중";
+      if (this.todayEmotionError) return "확인 불가";
+      return this.todayEmotionPayload?.representative?.label || "아직 기록 없음";
+    },
+    tasteSummaryChips() {
+      return [
+        {
+          type: "interest",
+          caption: "관심 · ",
+          label: this.previewList(this.profile?.interests, "미등록"),
+        },
+        {
+          type: "hobby",
+          caption: "취미 · ",
+          label: this.previewList(this.profile?.hobbies, "미등록"),
+        },
+      ];
+    },
+    memoryDashboard() {
+      return buildMemoryDashboard(this.memoryPayload);
     },
     interestPreview() {
       return this.previewList(this.profile?.interests, "관심사 미등록");
@@ -334,7 +367,9 @@ export default {
       console.warn("Failed to restore mypage settings:", error);
     }
     this.applySettings();
+    this.loadTodayEmotion();
     this.loadMbtiDemoData();
+    this.loadMemoryData();
     this.loadWeatherRegions();
     this.weatherRefreshTimer = window.setInterval(() => {
       if (this.activePanel === "weather") this.loadWeatherData();
@@ -345,6 +380,19 @@ export default {
     if (this.toastTimer) window.clearTimeout(this.toastTimer);
   },
   methods: {
+    async loadTodayEmotion() {
+      this.todayEmotionLoading = true;
+      this.todayEmotionError = "";
+      try {
+        this.todayEmotionPayload = await fetchTodayEmotion();
+      } catch (error) {
+        console.warn("Failed to load today's emotion:", error);
+        this.todayEmotionPayload = null;
+        this.todayEmotionError = error.message || "오늘의 감정을 불러오지 못했습니다.";
+      } finally {
+        this.todayEmotionLoading = false;
+      }
+    },
     normalizeList(value) {
       if (Array.isArray(value)) return value.filter(Boolean);
       if (!value) return [];
@@ -432,6 +480,18 @@ export default {
       }
       this.activatePanel(panel);
     },
+    openMemoryPanel(memoryId = "") {
+      this.memorySelectedId = memoryId;
+      this.pendingPanel = null;
+      this.pendingChatNavigation = false;
+      this.pendingReportNavigation = false;
+      this.activatePanel("memory");
+    },
+    cancelPendingRoomAction() {
+      this.pendingPanel = null;
+      this.pendingChatNavigation = false;
+      this.pendingReportNavigation = false;
+    },
     shouldMoveBeforeOpen(panel) {
       return MOVABLE_PANEL_IDS.includes(panel);
     },
@@ -470,6 +530,7 @@ export default {
         this.cancelProfileEdit();
       }
       this.activePanel = null;
+      this.memorySelectedId = "";
     },
     async toggleProfileEdit() {
       if (!this.profileEdit) {
@@ -664,126 +725,23 @@ export default {
       this.memoryLoading = true;
       this.memoryError = "";
       this.memoryNotice = "";
-      if (!MEMORY_API_ENABLED) {
-        this.memoryPayload = this.createMemoryPreviewPayload();
-        this.memoryLoading = false;
-        return;
-      }
       try {
-        this.memoryPayload = await fetchMemoryVault(force);
+        const payload = await fetchMemoryVault(force);
+        this.memoryPayload = payload || { memories: [] };
       } catch (error) {
         console.warn(error);
         if (!this.memoryPayload) {
-          this.memoryPayload = this.createMemoryPreviewPayload();
+          this.memoryPayload = { memories: [] };
         }
-        this.memoryNotice = "기억 API 연결 전이라 미리보기 데이터로 표시합니다.";
+        this.memoryError = error.message || "기억 정보를 불러오지 못했습니다.";
       } finally {
         this.memoryLoading = false;
       }
-    },
-    createMemoryPreviewPayload() {
-      return {
-        source: "preview",
-        preview_label: "기능 미리보기",
-        memories: [
-          {
-            id: "preview-career-worry",
-            title: "커리어 전환 고민",
-            content: "최근 대화에서 직무 전환과 준비 방향에 대한 고민이 반복적으로 언급되었습니다.",
-            saved_at: "2026-07-01T09:00:00+09:00",
-            last_used_at: "2026-07-01T09:00:00+09:00",
-            is_preview: true,
-            type: "event",
-            raw_date: "2026-07-01",
-            raw_people: [{ name: "김팀장", relation: "직장상사" }],
-            raw_emotions: ["걱정", "불안"]
-          },
-          {
-            id: "preview-relationship",
-            title: "관계에서 느끼는 부담",
-            content: "가까운 관계에서 기대와 거리감 사이를 조절하고 싶다는 이야기가 있었습니다.",
-            saved_at: "2026-07-05T14:30:00+09:00",
-            last_used_at: "",
-            is_preview: true,
-            type: "event",
-            raw_date: "2026-07-05",
-            raw_people: [{ name: "민우", relation: "친구" }],
-            raw_emotions: ["상처", "우울"]
-          },
-          {
-            id: "preview-routine",
-            title: "혼자 정리하는 습관",
-            content: "기분이 복잡할 때 산책, 기록, 음악으로 생각을 정리하는 경향이 있습니다.",
-            saved_at: "2026-07-10T21:10:00+09:00",
-            last_used_at: "2026-07-10T21:10:00+09:00",
-            is_preview: true,
-            type: "event",
-            raw_date: "2026-07-10",
-            raw_emotions: ["기쁨"]
-          },
-          {
-            id: "preview-first-meeting",
-            title: "첫 만남",
-            content: "AI와 처음 대화를 나누며 앞으로 어떤 이야기를 기록할지 천천히 살펴보았습니다.",
-            saved_at: "2026-07-11T18:20:00+09:00",
-            last_used_at: "",
-            is_preview: true,
-            type: "event",
-            raw_date: "2026-07-11",
-            raw_emotions: ["설렘"]
-          },
-          {
-            id: "preview-rainy-afternoon",
-            title: "비 오는 오후",
-            content: "비 내리는 창밖을 떠올리며 복잡했던 마음을 차분하게 정리했습니다.",
-            saved_at: "2026-07-12T16:40:00+09:00",
-            last_used_at: "",
-            is_preview: true,
-            type: "event",
-            raw_date: "2026-07-12",
-            raw_emotions: ["슬픔"]
-          },
-          {
-            id: "preview-new-goal",
-            title: "새로운 목표",
-            content: "부담을 줄이고 매일 조금씩 실천할 수 있는 작은 계획을 세웠습니다.",
-            saved_at: "2026-07-13T10:15:00+09:00",
-            last_used_at: "",
-            is_preview: true,
-            type: "event",
-            raw_date: "2026-07-13",
-            raw_emotions: ["설렘", "기쁨"]
-          },
-          {
-            id: "preview-old-dream",
-            title: "잊고 있던 꿈",
-            content: "한동안 미뤄두었던 관심사를 다시 시작해 보고 싶은 마음을 이야기했습니다.",
-            saved_at: "2026-07-14T20:05:00+09:00",
-            last_used_at: "",
-            is_preview: true,
-            type: "event",
-            raw_date: "2026-07-14",
-            raw_emotions: ["설렘"]
-          },
-          {
-            id: "preview-evening-walk",
-            title: "저녁 산책",
-            content: "짧은 산책과 음악으로 하루의 긴장을 풀어내는 나만의 루틴을 정리했습니다.",
-            saved_at: "2026-07-15T19:30:00+09:00",
-            last_used_at: "",
-            is_preview: true,
-            type: "event",
-            raw_date: "2026-07-15",
-            raw_emotions: ["기쁨"]
-          }
-        ]
-      };
     },
     async deleteMemoryItems(ids = []) {
       const targetIds = ids.filter(Boolean).map(String);
       if (!targetIds.length) return;
       const previousPayload = this.memoryPayload;
-      const isPreview = this.memoryPayload?.source === "preview";
       const idSet = new Set(targetIds);
       const currentMemories = Array.isArray(this.memoryPayload)
         ? this.memoryPayload
@@ -798,15 +756,9 @@ export default {
         };
       }
 
-      if (isPreview) {
-        this.showToast("예시 기억을 목록에서 숨겼습니다. 새로고침하면 다시 표시됩니다.");
-        return;
-      }
-
       this.memoryNotice = "";
       try {
-        const realIds = targetIds.filter(id => !id.startsWith("preview-"));
-        await Promise.all(realIds.map(id => deleteMemoryVaultItem(id)));
+        await Promise.all(targetIds.map(id => deleteMemoryVaultItem(id)));
         this.showToast(`${targetIds.length}개의 기억을 삭제했습니다.`);
       } catch (error) {
         console.warn(error);

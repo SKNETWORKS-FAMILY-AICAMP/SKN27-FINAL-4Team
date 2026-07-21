@@ -14,7 +14,6 @@ from rest_framework.decorators import (
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from chat import graph_memory_v2_base
 from user.views import CsrfExemptSessionAuthentication
 
 from .constants import (
@@ -23,6 +22,7 @@ from .constants import (
     MEMORY_LOAD_ERROR_MESSAGE,
     MEMORY_NOT_FOUND_MESSAGE,
 )
+from .driver import get_memory_driver
 from .services import (
     _cause_lead,
     _memory_content,
@@ -44,9 +44,15 @@ _delete_memory_unit = delete_memory_unit
 @permission_classes([IsAuthenticated])
 def memory_vault_list(request):
     """User 사실을 원문 작성 시각별 연결 맥락으로 묶어서 반환한다."""
-    driver = graph_memory_v2_base._get_driver()
+    driver = get_memory_driver()
     if driver is None:
-        return Response({'memories': []})
+        return Response(
+            {
+                'memories': [],
+                'detail': DRIVER_UNAVAILABLE_MESSAGE,
+            },
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
 
     try:
         with driver.session() as session:
@@ -67,7 +73,7 @@ def memory_vault_list(request):
 @permission_classes([IsAuthenticated])
 def memory_vault_delete(request, memory_id):
     """원문 작성 시점별 User 기억 단위와 그 전용 맥락을 삭제한다."""
-    driver = graph_memory_v2_base._get_driver()
+    driver = get_memory_driver()
     if driver is None:
         return Response(
             {'detail': DRIVER_UNAVAILABLE_MESSAGE},

@@ -94,9 +94,9 @@
 }
 
 .modal.weather-modal {
-  width: min(1080px, calc(100vw - 32px));
-  height: min(840px, calc(100dvh - 32px));
-  max-height: min(840px, calc(100dvh - 32px));
+  width: min(980px, calc(100vw - 48px));
+  height: min(760px, calc(100dvh - 48px));
+  max-height: min(760px, calc(100dvh - 48px));
 }
 
 .modal.book-modal {
@@ -107,8 +107,8 @@
 }
 
 .modal.mbti-modal {
-  width: min(792px, calc(100vw - 48px));
-  max-height: min(630px, calc(100dvh - 48px));
+  width: min(980px, calc(100vw - 48px));
+  max-height: min(760px, calc(100dvh - 48px));
 }
 
 .modal.memory-modal {
@@ -158,8 +158,7 @@
 }
 
 .weather-modal .modal-content {
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 .book-modal .modal-content {
@@ -176,12 +175,18 @@
   overflow: hidden;
 }
 
-.weather-modal .weather-panel-body,
+.weather-modal .weather-panel-body {
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
 .weather-modal .weather-panel-layout {
-  height: auto;
+  height: 100%;
   min-height: 0;
   max-height: none;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .weather-modal .weather-panel-layout {
@@ -190,17 +195,26 @@
 
 .weather-modal .weather-current-card,
 .weather-modal .weather-insight-card {
+  height: 100%;
   min-height: 0;
 }
 
 .weather-modal .weather-recommend-section {
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  padding-right: 0;
+  padding-bottom: 4px;
+  overflow: hidden;
+}
+
+.weather-modal .weather-recommend-list {
   min-height: 0;
   padding-right: 8px;
-  padding-bottom: 16px;
-  overflow-y: visible;
+  padding-bottom: 4px;
+  overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
-  scrollbar-gutter: auto;
+  scrollbar-gutter: stable;
 }
 
 .memory-modal .modal-content {
@@ -233,29 +247,6 @@
 .memory-modal .memory-table td {
   padding-top: 14px;
   padding-bottom: 14px;
-}
-
-.character-modal .character-stage {
-  min-height: 238px;
-}
-
-.character-modal .character-stage img {
-  max-height: 238px;
-}
-
-.character-modal .character-showcase {
-  grid-template-rows: minmax(238px, 1fr) auto;
-  padding: 16px;
-}
-
-.character-modal .character-choice {
-  min-height: 90px;
-  grid-template-rows: 54px auto;
-}
-
-.character-modal .character-choice img {
-  max-width: 52px;
-  max-height: 52px;
 }
 
 .book-modal .recommendation-card {

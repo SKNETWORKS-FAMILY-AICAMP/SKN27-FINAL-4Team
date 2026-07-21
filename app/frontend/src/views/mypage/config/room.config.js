@@ -7,6 +7,14 @@ export const CHARACTER_MOVEMENT_PROFILES = Object.freeze({
   bird: { speedFactor: 1.18, transitionMs: 480, walkCycleMs: 430, arrivalMs: 540 },
 });
 
+export const ROOM_TANTRUM_SETTINGS = Object.freeze({
+  redirectLimit: 10,
+  redirectWindowMs: 6500,
+  pauseMs: 1800,
+  returnLeadInMs: 320,
+  returnSpeedFactor: 1.12,
+});
+
 export const ROOM_STOPS = Object.freeze({
   character: { x: 45.2, y: 33.8 },
   door: { x: 10.8, y: 17.0 },

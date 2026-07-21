@@ -23,19 +23,9 @@
   .quick-actions button {
     min-height: 72px;
     text-align: left;
-    border-right: 0;
-    border-bottom: 1px solid rgba(215, 183, 255, 0.12);
-  }
-  .quick-actions button:nth-child(even) {
-    border-right: 1px solid rgba(215, 183, 255, 0.12);
-  }
-  .quick-actions button:nth-child(odd) {
-    border-right: 0;
   }
   .quick-actions .character-action {
     grid-column: 1 / -1;
-    border-right: 0;
-    border-bottom: 0;
   }
   .identity-card {
     grid-template-columns: 72px minmax(0, 1fr);
@@ -122,17 +112,11 @@
   .quick-actions {
     grid-template-columns: minmax(0, 1fr);
   }
-  .quick-actions button,
-  .quick-actions button:nth-child(odd) {
-    border-right: 0;
-  }
-  .quick-actions button:nth-child(even) {
+  .quick-actions button:nth-of-type(odd) {
     border-right: 0;
   }
   .quick-actions .character-action {
     grid-column: auto;
-    border-right: 0;
-    border-bottom: 0;
   }
   .quick-actions .menu-copy strong,
   .quick-actions .menu-copy small {
@@ -180,4 +164,3 @@
     justify-self: start;
   }
 }
-

@@ -6,9 +6,14 @@ from typing import Any
 
 from django.utils import timezone
 
-from chat.models import ChatMessage
 from mindreport.services.criteria_service import ReportCriteriaService
-from mindreport.services.scoring import PERIOD_MONTH, PERIOD_WEEK, SUPPORTED_PERIODS, ReportSourceMessage
+from mindreport.services.scoring import (
+    PERIOD_MONTH,
+    PERIOD_WEEK,
+    SUPPORTED_PERIODS,
+    ReportSourceMessage,
+    load_source_messages,
+)
 
 
 @dataclass(frozen=True)
@@ -64,21 +69,12 @@ def collect_source_messages(
     year: int | None = None,
     month: int | None = None,
 ) -> tuple[ReportSourceMessage, ...]:
-    start, end = _get_period_range(period_type, target_date, year, month)
-    queryset = ChatMessage.objects.filter(
-        session__user=user,
-        role='user',
-        created_at__gte=start,
-        created_at__lte=end,
-    )
-    return tuple(
-        ReportSourceMessage(
-            message_id=message.id,
-            source_date=timezone.localtime(message.created_at).date(),
-            content=message.content,
-            emotion_label=message.emotion_label,
-        )
-        for message in queryset.order_by('created_at', 'id')
+    return load_source_messages(
+        user=user,
+        period_type=period_type,
+        target_date=target_date,
+        year=year,
+        month=month,
     )
 
 

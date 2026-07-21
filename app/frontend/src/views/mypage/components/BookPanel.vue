@@ -1,6 +1,6 @@
 <template>
   <div class="panel-body book-panel-body">
-    <section v-if="loading" class="book-state" aria-live="polite">
+    <section v-if="loading" class="book-state book-loading-state" aria-live="polite">
       <div class="book-spinner" aria-hidden="true"></div>
       <strong>{{ slowLoading ? "도서 내용을 한 번 더 확인하고 있어요" : "오늘의 책을 고르고 있어요" }}</strong>
       <p>{{ slowLoading ? "Kakao 도서 후보의 소개와 출판 정보를 비교하고 있어요. 조금만 더 기다려 주세요." : "오늘의 감정, 관심사, 취미에 맞는 책을 찾고 있어요. 보통 10~30초 정도 걸립니다." }}</p>
@@ -116,7 +116,7 @@
           </div>
         </details>
         <div>
-          <button class="secondary" type="button" @click="requestFullRefresh">현재 정보로 추천 새로고침</button>
+          <button class="secondary" type="button" @click="requestFullRefresh">새로 추천 받기</button>
           <a v-if="hasCurrentBook && currentSource.link" class="primary" :href="currentSource.link" target="_blank" rel="noopener noreferrer">책 정보 확인하기</a>
         </div>
       </footer>
@@ -147,7 +147,12 @@ export default {
     error: { type: String, default: "" }
   },
   emits: ["refresh", "close"],
-  data: () => ({ currentIndex: 0, failedCoverUrl: "", slowLoading: false, loadingTimer: null }),
+  data: () => ({
+    currentIndex: 0,
+    failedCoverUrl: "",
+    slowLoading: false,
+    loadingTimer: null
+  }),
   computed: {
     bookList() {
       return Array.isArray(this.payload?.books) ? this.payload.books : [];
@@ -252,7 +257,6 @@ export default {
       if (this.currentIndex < this.tabItems.length - 1) this.currentIndex += 1;
     },
     requestFullRefresh() {
-      if (!window.confirm("현재 저장된 주된 감정·관심사·취미를 다시 읽어 오늘의 추천 3권을 바꿀까요? 완료까지 10~30초 정도 걸릴 수 있어요.")) return;
       this.$emit("refresh", true);
     },
     tabLabel(book, index) {
@@ -342,6 +346,7 @@ export default {
 .primary { border: 1px solid #6b7fd7; background: #6b7fd7; color: #fff; }
 .secondary { border: 1px solid rgba(215,183,255,.28); background: rgba(32,41,105,.48); color: #f4efff; }
 .book-state { min-height: 100%; display: grid; place-items: center; align-content: center; gap: 10px; text-align: center; color: rgba(255,245,230,.72); }
+.book-loading-state { flex: 1 1 auto; align-self: stretch; width: 100%; min-height: 0; place-content: center; justify-items: center; }
 .book-state strong { color: #fff7df; font-size: 18px; }
 .book-state p { max-width: 420px; margin: 0; line-height: 1.55; }
 .book-state.error p { color: #ffb8c8; }

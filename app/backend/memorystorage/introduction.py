@@ -5,19 +5,12 @@ from datetime import date, datetime
 from .constants import (
     DEFAULT_PREFERENCE_POLARITY,
     DEFAULT_RELATION_NAME,
-    EMOTION_LABELS,
     EMPTY_MEMORY_DESCRIPTION,
     EMPTY_MEMORY_TITLE,
-    MAX_NARRATIVE_EMOTIONS,
-    MIN_SECONDARY_EMOTION_SCORE,
-    NARRATIVE_EMOTION_LABELS,
     NEGATIVE_PREFERENCE_POLARITIES,
     NEUTRAL_PREFERENCE_POLARITIES,
     SOURCE_ONLY_DESCRIPTION,
 )
-
-
-EMOTION_MAP_SHORT = EMOTION_LABELS
 
 def build_memory_title(unit):
     names = [event.get('name') for event in unit['events'] if event.get('name')]
@@ -125,47 +118,81 @@ def _normalised_phrase(value):
     )
 
 
-def _meaningful_emotions(event):
-    """확률이 낮은 모든 Emotion 엣지를 나열하지 않고 핵심 감정만 고른다."""
-    emotions = event.get('emotions') or []
-    top_type = event.get('top_emotion')
-    ranked = []
-    for item in emotions:
-        emotion_type = item.get('type')
-        if not emotion_type:
-            continue
+def _event_date_value(event):
+    value = event.get('occurs_start')
+    if not value:
+        value = next(
+            (
+                item.get('date')
+                for item in (event.get('dates') or [])
+                if item.get('date')
+            ),
+            None,
+        )
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if value:
         try:
-            score = float(item.get('score'))
-        except (TypeError, ValueError):
-            score = None
-        ranked.append((emotion_type, score))
-    ranked.sort(key=lambda item: item[1] if item[1] is not None else -1,
-                reverse=True)
+            return date.fromisoformat(str(value)[:10])
+        except ValueError:
+            return None
+    return None
 
-    selected = [top_type] if top_type else []
-    for emotion_type, score in ranked:
-        if emotion_type in selected:
-            continue
-        if (
-            top_type
-            and score is not None
-            and score < MIN_SECONDARY_EMOTION_SCORE
-        ):
-            continue
-        selected.append(emotion_type)
-        if len(selected) >= MAX_NARRATIVE_EMOTIONS:
-            break
-    if not selected:
-        selected = [
-            emotion_type
-            for emotion_type, _ in ranked[:MAX_NARRATIVE_EMOTIONS]
-        ]
 
-    return _unique_texts(
-        NARRATIVE_EMOTION_LABELS.get(str(value).lower())
-        or EMOTION_MAP_SHORT.get(str(value).lower(), value)
-        for value in selected
-    )
+def _event_context_values(event, key):
+    if key == 'people':
+        values = (
+            person.get('name')
+            for person in (event.get('people') or [])
+            if person.get('name')
+        )
+    else:
+        values = event.get(key) or []
+    return {
+        _normalised_phrase(value)
+        for value in values
+        if _normalised_phrase(value)
+    }
+
+
+def _event_transition(previous, current):
+    """두 사건 사이의 실제 공통 맥락을 짧은 연결어로 바꾼다."""
+    previous_date = _event_date_value(previous)
+    current_date = _event_date_value(current)
+    if previous_date and current_date:
+        if previous_date == current_date:
+            return '같은 날, '
+        if previous_date < current_date:
+            return '그 뒤로, '
+        return '그보다 앞서, '
+
+    if _event_context_values(previous, 'people') & _event_context_values(current, 'people'):
+        return '같은 사람과 이어진 일로, '
+    if _event_context_values(previous, 'places') & _event_context_values(current, 'places'):
+        return '같은 장소에서 이어진 일로, '
+    if _event_context_values(previous, 'topics') & _event_context_values(current, 'topics'):
+        return '이와 관련해, '
+    return '한편, '
+
+
+def _event_story_sentences(events):
+    sentences = []
+    previous = None
+    for event in events:
+        transition = ''
+        omit_date = False
+        if previous is not None:
+            transition = _event_transition(previous, event)
+            previous_date = _event_date_value(previous)
+            current_date = _event_date_value(event)
+            omit_date = bool(previous_date and previous_date == current_date)
+        introduction = f'{transition}{_event_intro(event, omit_date=omit_date)}'
+        sentences.append(introduction)
+        sentences.extend(_event_detail_sentences(event))
+        previous = event
+    return sentences
 
 
 def _cause_lead(event):
@@ -188,9 +215,9 @@ def _cause_lead(event):
     return f"{_join_nouns(quoted_causes)}{subject_particle} 계기가 되어, "
 
 
-def _event_intro(event):
+def _event_intro(event, *, omit_date=False):
     event_name = str(event.get('name') or '').strip()
-    date_text = _event_date_text(event)
+    date_text = '' if omit_date else _event_date_text(event)
     places = _unique_texts(event.get('places') or [])
     people = _unique_texts(
         _person_text(person) for person in (event.get('people') or [])
@@ -237,29 +264,12 @@ def _event_intro(event):
 def _event_detail_sentences(event):
     sentences = []
     topics = _unique_texts(event.get('topics') or [])
-    emotions = _meaningful_emotions(event)
     subject = '이 계획' if _event_date_text(event) else '이 기억'
-    if topics and emotions:
-        joined_topics = _join_nouns(topics)
-        topic_particle = _particle(joined_topics, '과', '와')
-        joined_emotions = _join_nouns(emotions)
-        emotion_particle = _particle(joined_emotions, '을', '를')
-        sentences.append(
-            f"{subject}은 {joined_topics}{topic_particle} 관련되어 있었고, "
-            f"{joined_emotions}{emotion_particle} 함께 느낀 것으로 남아 있어요."
-        )
-    elif topics:
+    if topics:
         joined_topics = _join_nouns(topics)
         topic_particle = _particle(joined_topics, '과', '와')
         sentences.append(
             f"{subject}은 {joined_topics}{topic_particle} 관련되어 있었어요."
-        )
-    elif emotions:
-        joined_emotions = _join_nouns(emotions)
-        emotion_particle = _particle(joined_emotions, '을', '를')
-        sentences.append(
-            f"{subject}에는 {joined_emotions}{emotion_particle} "
-            "함께 느낀 흔적이 남아 있어요."
         )
 
     membership = (
@@ -385,6 +395,7 @@ def build_memory_introduction(unit):
         if cause.get('name')
     }
     event_people = []
+    narrative_events = []
     for event in unit.get('events', []):
         event_name_key = _normalised_phrase(event.get('name'))
         if event_name_key in cause_names:
@@ -393,16 +404,14 @@ def build_memory_introduction(unit):
                 if person.get('name')
             )
             continue
-        sections['events'].append(_event_intro(event))
-        sections['events'].extend(_event_detail_sentences(event))
+        narrative_events.append(event)
         event_people.extend(
             person.get('name') for person in (event.get('people') or [])
             if person.get('name')
         )
-    if not sections['events'] and unit.get('events'):
-        for event in unit['events']:
-            sections['events'].append(_event_intro(event))
-            sections['events'].extend(_event_detail_sentences(event))
+    if not narrative_events and unit.get('events'):
+        narrative_events = list(unit['events'])
+    sections['events'].extend(_event_story_sentences(narrative_events))
 
     sections['relations'].extend(
         _relation_sentences(unit.get('relations', []), event_people)

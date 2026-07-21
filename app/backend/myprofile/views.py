@@ -3,7 +3,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from django.db import transaction
-from django.db.models import Count
 from django.utils import timezone
 from user.models import UserProfile
 from .constants import (
@@ -14,8 +13,8 @@ from user.views import CsrfExemptSessionAuthentication
 from .serializers import MyProfileSerializer
 from datetime import datetime
 
+from .emotion_service import build_today_emotion_summary
 
-from user.constants import EMOTION_LABELS_KO
 
 @api_view(['GET', 'PUT'])
 @authentication_classes([CsrfExemptSessionAuthentication])
@@ -97,7 +96,7 @@ def profile_detail(request):
                     profile.save(update_fields=[*dict.fromkeys(profile_update_fields), 'updated_at'])
 
             return Response({'profile': MyProfileSerializer({'user': user, 'profile': profile}).data})
-        
+
         return Response(serializer.errors, status=400)
 
 
@@ -105,44 +104,4 @@ def profile_detail(request):
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([IsAuthenticated])
 def today_emotion_summary(request):
-    from chat.models import ChatMessage
-
-    today = timezone.localdate()
-    rows = list(
-        ChatMessage.objects.filter(
-            session__user=request.user,
-            emotion_label__isnull=False,
-            created_at__date=today,
-        )
-        .exclude(emotion_label='')
-        .values('emotion_label')
-        .annotate(count=Count('id'))
-        .order_by('-count', 'emotion_label')
-    )
-
-    total_count = sum(row['count'] for row in rows)
-    top_count = rows[0]['count'] if rows else 0
-    dominant = [
-        {
-            'key': row['emotion_label'],
-            'label': EMOTION_LABELS_KO.get(row['emotion_label'], row['emotion_label']),
-            'count': row['count'],
-        }
-        for row in rows
-        if row['count'] == top_count
-    ]
-    distribution = [
-        {
-            'key': row['emotion_label'],
-            'label': EMOTION_LABELS_KO.get(row['emotion_label'], row['emotion_label']),
-            'count': row['count'],
-        }
-        for row in rows
-    ]
-
-    return Response({
-        'date': today.isoformat(),
-        'total_count': total_count,
-        'dominant': dominant,
-        'distribution': distribution,
-    })
+    return Response(build_today_emotion_summary(request.user))

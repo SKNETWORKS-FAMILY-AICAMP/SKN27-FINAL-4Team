@@ -195,17 +195,17 @@ class MemoryUnitSerialisationTests(SimpleTestCase):
         self.assertEqual(memory['saved_at'], '2026-07-20T10:00:00')
         self.assertEqual(memory['raw_events'], ['제주 여행'])
         self.assertEqual(memory['raw_people'][0]['name'], '준호')
-        self.assertEqual(memory['raw_emotions'], ['기쁨'])
+        self.assertNotIn('raw_emotions', memory)
         self.assertIn(
             '2026년 7월 21일에 친구 준호와 제주에서 ‘제주 여행’을 '
             '함께하기로 했던 기억이에요.',
             memory['content'],
         )
         self.assertIn(
-            '이 계획은 여행과 관련되어 있었고, '
-            '기쁨을 함께 느낀 것으로 남아 있어요.',
+            '이 계획은 여행과 관련되어 있었어요.',
             memory['content'],
         )
+        self.assertNotIn('emotions', memory['context']['events'][0])
         self.assertNotIn('준호는 친구로 기억하고 있어요.', memory['content'])
         self.assertIn('평소 여행을 좋아하는 취향도 함께 기억하고 있어요.', memory['content'])
         self.assertNotIn('당시에는', memory['content'])
@@ -248,12 +248,86 @@ class MemoryUnitSerialisationTests(SimpleTestCase):
         self.assertEqual(has_event['from'], '4:user:7')
         self.assertEqual(has_event['to'], '4:event:1')
 
+    def test_recovers_missing_saved_at_from_event_metadata(self):
+        created_at = '2026-07-21T11:35:57'
+        memories = views._serialise_units(
+            [{
+                'memory_id': 'legacy-event',
+                'saved_at': '',
+                'source_text': '',
+                'has_source': False,
+            }],
+            [{
+                'memory_id': 'legacy-event',
+                'event_id': 'ev_legacy',
+                'event_name': '프로젝트 상담',
+                'event_created_at': created_at,
+                'dates': [],
+                'places': [],
+                'topics': [],
+                'people': [],
+                'emotions': [],
+                'causes': [],
+            }],
+            [],
+            [],
+        )
+
+        self.assertEqual(memories[0]['created_at'], created_at)
+        self.assertTrue(memories[0]['has_created_at'])
+        self.assertEqual(memories[0]['created_at_source'], 'event')
+        self.assertEqual(memories[0]['context']['saved_at'], created_at)
+
 
 class StructuredIntroductionTests(SimpleTestCase):
     def test_cause_phrase_keeps_existing_korean_connector(self):
         self.assertEqual(
             views._cause_lead({'cause': '연속 야근 때문에'}),
             '연속 야근 때문에 ',
+        )
+
+    def test_connects_multiple_events_with_shared_timeline(self):
+        introduction = views._memory_introduction({
+            'source_text': '',
+            'events': [
+                {
+                    'name': '회사 발표',
+                    'occurs_start': '2026-07-21',
+                    'occurs_end': None,
+                    'dates': [],
+                    'places': ['회사'],
+                    'topics': ['업무'],
+                    'people': [{'name': '박준호', 'relation': '팀장'}],
+                    'causes': [],
+                    'cause': None,
+                    'graph': {'has_event': {'properties': {}}},
+                },
+                {
+                    'name': '지갑 분실',
+                    'occurs_start': '2026-07-21',
+                    'occurs_end': None,
+                    'dates': [],
+                    'places': ['퇴근길'],
+                    'topics': ['일상'],
+                    'people': [],
+                    'causes': [],
+                    'cause': None,
+                    'graph': {'has_event': {'properties': {}}},
+                },
+            ],
+            'relations': [],
+            'preferences': [],
+        })
+
+        self.assertIn(
+            '2026년 7월 21일에 팀장 박준호와 회사에서 ‘회사 발표’를 '
+            '함께하기로 했던 기억이에요. 이 계획은 업무와 관련되어 있었어요. '
+            '같은 날, 퇴근길에서 있었던 ‘지갑 분실’에 대한 기억이에요.',
+            introduction['text'],
+        )
+        self.assertNotIn(
+            '업무와 관련되어 있었어요. 2026년',
+            introduction['text'],
         )
 
     def test_uses_connected_context_without_repetitive_sentences(self):
@@ -320,11 +394,10 @@ class StructuredIntroductionTests(SimpleTestCase):
                 '‘제주 애월 휴가’를 함께하기로 했던 기억이에요.'
             )
         )
-        self.assertIn(
-            '이 계획은 취미와 관련되어 있었고, '
-            '설렘과 걱정을 함께 느낀 것으로 남아 있어요.',
-            text,
-        )
+        self.assertIn('이 계획은 취미와 관련되어 있었어요.', text)
+        self.assertNotIn('감정', text)
+        self.assertNotIn('설렘', text)
+        self.assertNotIn('걱정', text)
         self.assertNotIn('‘연속 야근’에 대해 이야기했던 기억이에요.', text)
         self.assertNotIn('민지는 친구로 기억하고 있어요.', text)
         self.assertIn(
@@ -421,6 +494,17 @@ class MemoryVaultApiTests(SimpleTestCase):
         self.factory = APIRequestFactory()
         self.user = mock.Mock(id=7, is_authenticated=True)
 
+    def test_list_reports_driver_unavailable_instead_of_empty_vault(self):
+        request = self.factory.get('/api/mymemory/memories/')
+        force_authenticate(request, user=self.user)
+
+        with mock.patch.object(views, 'get_memory_driver', return_value=None):
+            response = views.memory_vault_list(request)
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.data['memories'], [])
+        self.assertIn('detail', response.data)
+
     def test_list_uses_user_linked_source_as_memory_unit(self):
         session = _ReadSession([
             [{
@@ -453,7 +537,7 @@ class MemoryVaultApiTests(SimpleTestCase):
         force_authenticate(request, user=self.user)
 
         with mock.patch.object(
-                views.graph_memory_v2_base, '_get_driver',
+                views, 'get_memory_driver',
                 return_value=_Driver(session)):
             response = views.memory_vault_list(request)
 
@@ -462,7 +546,7 @@ class MemoryVaultApiTests(SimpleTestCase):
         self.assertEqual(len(session.calls), 4)
         self.assertIn('user:User', session.calls[0][0])
         self.assertIn('source:Episode', session.calls[0][0])
-        self.assertIn('EVOKED', session.calls[1][0])
+        self.assertNotIn('EVOKED', session.calls[1][0])
         self.assertIn('properties(event)', session.calls[1][0])
         self.assertIn('properties(has_event)', session.calls[1][0])
         self.assertIn('properties(records)', session.calls[1][0])
@@ -470,7 +554,7 @@ class MemoryVaultApiTests(SimpleTestCase):
         self.assertIn('properties(at_rel)', session.calls[1][0])
         self.assertIn('properties(about_rel)', session.calls[1][0])
         self.assertIn('properties(involves_rel)', session.calls[1][0])
-        self.assertIn('properties(evoked)', session.calls[1][0])
+        self.assertNotIn('properties(evoked)', session.calls[1][0])
         self.assertIn('properties(cause_rel)', session.calls[1][0])
         self.assertIn('RELATES_TO', session.calls[2][0])
         self.assertIn('properties(rel)', session.calls[2][0])
@@ -517,7 +601,7 @@ class MemoryVaultApiTests(SimpleTestCase):
         force_authenticate(request, user=self.user)
 
         with mock.patch.object(
-                views.graph_memory_v2_base, '_get_driver',
+                views, 'get_memory_driver',
                 return_value=_Driver(session)):
             response = views.memory_vault_list(request)
 
@@ -600,7 +684,7 @@ class MemoryVaultApiTests(SimpleTestCase):
         force_authenticate(request, user=self.user)
 
         with mock.patch.object(
-                views.graph_memory_v2_base, '_get_driver',
+                views, 'get_memory_driver',
                 return_value=_Driver(session)):
             response = views.memory_vault_list(request)
 
@@ -626,7 +710,7 @@ class MemoryVaultApiTests(SimpleTestCase):
         force_authenticate(request, user=self.user)
 
         with mock.patch.object(
-                views.graph_memory_v2_base, '_get_driver',
+                views, 'get_memory_driver',
                 return_value=_Driver(_WriteSession(tx))):
             response = views.memory_vault_delete(request, 'memory:ep_test')
 
@@ -679,7 +763,7 @@ class MemoryVaultApiTests(SimpleTestCase):
         force_authenticate(request, user=self.user)
 
         with mock.patch.object(
-                views.graph_memory_v2_base, '_get_driver',
+                views, 'get_memory_driver',
                 return_value=_Driver(_WriteSession(tx))):
             response = views.memory_vault_delete(
                 request, f'memory:{authored_at}')
@@ -702,7 +786,7 @@ class MemoryVaultApiTests(SimpleTestCase):
         force_authenticate(request, user=self.user)
 
         with mock.patch.object(
-                views.graph_memory_v2_base, '_get_driver',
+                views, 'get_memory_driver',
                 return_value=_Driver(_WriteSession(tx))):
             response = views.memory_vault_delete(request, 'memory:missing')
 

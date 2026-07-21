@@ -4,37 +4,56 @@
       <span aria-hidden="true">●</span>
       빛나는 지점을 선택하면 연결된 기능을 열 수 있어요.
     </p>
-    <div ref="roomCanvas" class="room-canvas">
+    <div
+      ref="roomCanvas"
+      class="room-canvas"
+      :class="{ 'is-character-locked': isMovementLocked }"
+    >
       <img class="room-image" src="../../../assets/UI 신버전4.png" alt="야간 톤 MindRoom 방 일러스트" />
       <button
         class="room-character"
         type="button"
-        :aria-label="currentCharacter.name"
-        :class="{ walking: isWalking, arrived: arrivalPulse }"
+        :aria-label="characterAriaLabel"
+        :class="{
+          walking: isWalking,
+          arrived: arrivalPulse,
+          'is-tantrum': isTantrum,
+          'is-returning-home': isReturningHome
+        }"
         :data-facing="facing"
         :data-character="currentCharacter.id"
+        :disabled="isMovementLocked"
         :style="characterStyle"
         @click="$emit('open-panel', 'character')"
       >
         <img :key="characterImage" :src="characterImage" :alt="currentCharacter.name" />
+        <span
+          v-if="isTantrum"
+          class="room-character-protest"
+          role="status"
+          aria-live="assertive"
+        >
+          나도 좀 쉬자! <span aria-hidden="true">💢</span>
+        </span>
       </button>
       <button
         class="hotspot door"
         type="button"
         aria-label="대화하러 가기"
         title="대화하러 가기"
+        :disabled="isMovementLocked"
         @mouseenter="showHotspotLabel"
         @mouseleave="hideHotspotLabel"
         @focus="showHotspotLabel"
         @blur="hideHotspotLabel"
         @click="$emit('open-chat')"
       ></button>
-      <button class="hotspot profile" type="button" :aria-label="labels.profile" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-panel', 'profile')"></button>
-      <button class="hotspot weather" type="button" :aria-label="labels.weather" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-panel', 'weather')"></button>
-      <button class="hotspot mbti" type="button" :aria-label="labels.mbti" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-panel', 'mbti')"></button>
-      <button class="hotspot book" type="button" :aria-label="labels.book || '오늘의 책 추천'" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-panel', 'book')"></button>
-      <button class="hotspot memory" type="button" :aria-label="labels.memory || '기억 보관함'" title="기억 보관함" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-panel', 'memory')"></button>
-      <button class="hotspot wardrobe" type="button" aria-label="마음리포트 보기" title="마음리포트 보기" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-report')"></button>
+      <button class="hotspot profile" type="button" :aria-label="labels.profile" :disabled="isMovementLocked" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-panel', 'profile')"></button>
+      <button class="hotspot weather" type="button" :aria-label="labels.weather" :disabled="isMovementLocked" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-panel', 'weather')"></button>
+      <button class="hotspot mbti" type="button" :aria-label="labels.mbti" :disabled="isMovementLocked" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-panel', 'mbti')"></button>
+      <button class="hotspot book" type="button" :aria-label="labels.book || '오늘의 책 추천'" :disabled="isMovementLocked" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-panel', 'book')"></button>
+      <button class="hotspot memory" type="button" :aria-label="labels.memory || '기억 보관함'" title="기억 보관함" :disabled="isMovementLocked" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-panel', 'memory')"></button>
+      <button class="hotspot wardrobe" type="button" aria-label="마음리포트 보기" title="마음리포트 보기" :disabled="isMovementLocked" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-report')"></button>
 
       <div
         v-if="activeHotspotLabel"
@@ -59,6 +78,7 @@ import {
   PATH_GRID_STEP,
   ROOM_OBSTACLES,
   ROOM_STOPS,
+  ROOM_TANTRUM_SETTINGS,
   WALKABLE_FLOOR_RECTS,
 } from "../config/room.config";
 import { createTransparentCharacterImage } from "../utils/character-image";
@@ -83,12 +103,15 @@ export default {
       default: 0
     }
   },
-  emits: ["open-panel", "open-chat", "open-report", "arrived"],
+  emits: ["open-panel", "open-chat", "open-report", "arrived", "movement-interrupted"],
   data() {
     return {
       characterPosition: { ...DEFAULT_CHARACTER_POSITION },
       activeTarget: "character",
       isWalking: false,
+      isTantrum: false,
+      isReturningHome: false,
+      redirectTimestamps: [],
       arrivalPulse: false,
       facing: "right",
       activeWalkCycleMs: null,
@@ -102,6 +125,18 @@ export default {
     };
   },
   computed: {
+    isMovementLocked() {
+      return this.isTantrum || this.isReturningHome;
+    },
+    characterAriaLabel() {
+      if (this.isTantrum) {
+        return `${this.currentCharacter.name}가 화가 나서 잠시 멈췄어요`;
+      }
+      if (this.isReturningHome) {
+        return `${this.currentCharacter.name}가 원래 자리로 돌아가는 중이에요`;
+      }
+      return this.currentCharacter.name;
+    },
     characterStyle() {
       const profile = this.currentMovementProfile;
       return {
@@ -113,6 +148,8 @@ export default {
       };
     },
     characterPose() {
+      if (this.isTantrum) return "anger";
+      if (this.isReturningHome) return "default";
       if (!this.isWalking && this.activeTarget === "mbti") return "search";
       return "default";
     },
@@ -212,7 +249,13 @@ export default {
         this.moveFrameId = null;
       }
     },
-    walkTo(target) {
+    walkTo(target, { force = false } = {}) {
+      if (this.isMovementLocked && !force) return;
+      if (!force && this.registerRapidRedirect(target)) {
+        this.startTantrum();
+        return;
+      }
+
       const destination = this.roomStops[target] || this.roomStops.character;
       const start = this.characterPosition;
       const route = this.buildRoute(start, destination, target);
@@ -224,6 +267,8 @@ export default {
       if (!route.length) {
         this.isWalking = false;
         this.activeTarget = target;
+        this.finishForcedReturn(target);
+        this.resetRedirectHistory();
         this.$emit("arrived", target);
         return;
       }
@@ -231,6 +276,8 @@ export default {
       if (this.prefersReducedMotion() || this.samePoint(start, destination)) {
         this.characterPosition = route[route.length - 1] || this.fromFootPoint(this.nearestWalkablePoint(this.toFootPoint(destination)));
         this.activeTarget = target;
+        this.finishForcedReturn(target);
+        this.resetRedirectHistory();
         this.$emit("arrived", target);
         return;
       }
@@ -260,6 +307,8 @@ export default {
         this.isWalking = false;
         this.arrivalPulse = true;
         this.activeTarget = target;
+        this.finishForcedReturn(target);
+        this.resetRedirectHistory();
         this.$emit("arrived", target);
         const pulseTimer = window.setTimeout(() => {
           this.arrivalPulse = false;
@@ -303,6 +352,52 @@ export default {
 
       this.moveFrameId = window.requestAnimationFrame(animate);
     },
+    registerRapidRedirect(target) {
+      if (!this.isWalking || target === this.activeTarget) return false;
+
+      const now = Date.now();
+      const windowStart = now - ROOM_TANTRUM_SETTINGS.redirectWindowMs;
+      this.redirectTimestamps = this.redirectTimestamps
+        .filter(timestamp => timestamp >= windowStart);
+      this.redirectTimestamps.push(now);
+      return this.redirectTimestamps.length >= ROOM_TANTRUM_SETTINGS.redirectLimit;
+    },
+    resetRedirectHistory() {
+      this.redirectTimestamps = [];
+    },
+    startTantrum() {
+      this.clearMoveTimers();
+      this.isWalking = false;
+      this.arrivalPulse = false;
+      this.isTantrum = true;
+      this.resetRedirectHistory();
+      this.hideHotspotLabel();
+      this.$emit("movement-interrupted");
+
+      const tantrumTimer = window.setTimeout(() => {
+        this.isTantrum = false;
+        this.isReturningHome = true;
+        this.faceDefaultPosition();
+
+        const returnTimer = window.setTimeout(() => {
+          this.walkTo("character", { force: true });
+        }, ROOM_TANTRUM_SETTINGS.returnLeadInMs);
+        this.moveTimers.push(returnTimer);
+      }, ROOM_TANTRUM_SETTINGS.pauseMs);
+      this.moveTimers.push(tantrumTimer);
+    },
+    faceDefaultPosition() {
+      const home = this.roomStops.character;
+      const horizontalDelta = home.x - this.characterPosition.x;
+      if (Math.abs(horizontalDelta) > 0.015) {
+        this.facing = horizontalDelta > 0 ? "right" : "left";
+      }
+    },
+    finishForcedReturn(target) {
+      if (this.isReturningHome && target === "character") {
+        this.isReturningHome = false;
+      }
+    },
     buildRoute(start, destination) {
       const startFoot = this.nearestWalkablePoint(this.toFootPoint(start));
       const goalFoot = this.nearestWalkablePoint(this.toFootPoint(destination));
@@ -340,8 +435,11 @@ export default {
     },
     routeDuration(distance) {
       const baseDuration = distance * 32;
+      const returnSpeedFactor = this.isReturningHome
+        ? ROOM_TANTRUM_SETTINGS.returnSpeedFactor
+        : 1;
       return Math.round(Math.min(3200, Math.max(850,
-        baseDuration * this.currentMovementProfile.speedFactor
+        baseDuration * this.currentMovementProfile.speedFactor * returnSpeedFactor
       )));
     },
     smoothTravelProgress(progress) {

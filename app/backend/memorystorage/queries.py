@@ -146,7 +146,6 @@ OPTIONAL MATCH (event)-[at_rel:AT]->(place:Place)
 OPTIONAL MATCH (event)-[about_rel:ABOUT]->(topic:Topic)
 OPTIONAL MATCH (event)-[involves_rel:INVOLVES]->(person:Person)
 OPTIONAL MATCH (user)-[user_rel:RELATES_TO]->(person)
-OPTIONAL MATCH (event)-[evoked:EVOKED]->(emotion:Emotion)
 OPTIONAL MATCH (event)-[cause_rel:BECAUSE_OF]->(cause:Event)
 RETURN memory_id,
        event.id AS event_id,
@@ -154,7 +153,6 @@ RETURN memory_id,
        event.name AS event_name,
        event.created_at AS event_created_at,
        event.cause AS cause_text,
-       event.top_emotion AS top_emotion,
        event.salience AS salience,
        event.occurs_start AS occurs_start,
        event.occurs_end AS occurs_end,
@@ -173,9 +171,8 @@ RETURN memory_id,
            .name, .uid, .key, .suppressed,
            relation: user_rel.relation
        }) AS people,
-       collect(DISTINCT emotion { .type, score: evoked.score }) AS emotions,
        collect(DISTINCT cause {
-           .id, .uid, .key, .name, .created_at, .cause, .top_emotion,
+           .id, .uid, .key, .name, .created_at, .cause,
            .salience, .occurs_start, .occurs_end, .recall_count, .suppressed
        }) AS causes,
        collect(DISTINCT {
@@ -213,14 +210,6 @@ RETURN memory_id,
            user_edge_type: type(user_rel),
            user_edge: properties(user_rel)
        }) AS person_graph,
-       collect(DISTINCT {
-           node_id: elementId(emotion),
-           labels: labels(emotion),
-           node: properties(emotion),
-           edge_id: elementId(evoked),
-           edge_type: type(evoked),
-           edge: properties(evoked)
-       }) AS emotion_graph,
        collect(DISTINCT {
            node_id: elementId(cause),
            labels: labels(cause),

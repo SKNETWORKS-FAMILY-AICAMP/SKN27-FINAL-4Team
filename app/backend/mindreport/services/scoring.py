@@ -6,6 +6,7 @@ import json
 import os
 from typing import Any, Mapping, Protocol, Sequence
 
+from django.db.models import OuterRef, Q, Subquery
 from django.utils import timezone
 
 from chat.models import ChatMessage
@@ -16,6 +17,9 @@ PERIOD_WEEK = 'week'
 PERIOD_MONTH = 'month'
 SUPPORTED_PERIODS = {PERIOD_WEEK, PERIOD_MONTH}
 AFFECT_SCORING_METHOD = 'independent-affect-balance-v2'
+LABEL_GROUNDED_AFFECT_SCORING_METHOD = 'persisted-label-grounded-affect-balance-v1'
+SCORING_ROUTE_LABEL_GROUNDED = 'persisted_emotion_labels_primary'
+SCORING_ROUTE_LLM_FALLBACK = 'raw_text_llm_fallback'
 AFFECT_DIMENSION_MIN = 0
 AFFECT_DIMENSION_MAX = 4
 AFFECT_BALANCE_POINT_VALUE = 12.5
@@ -28,6 +32,7 @@ class ReportSourceMessage:
     source_date: date
     content: str
     emotion_label: str | None
+    persisted_emotion_label: str | None = None
 
 
 @dataclass(frozen=True)
@@ -55,6 +60,7 @@ class MindReportScoringResult:
     source_messages: tuple[ReportSourceMessage, ...]
     emotion_scores: tuple[EmotionScore, ...]
     message: str
+    scoring_route: str = ''
 
 
 class EmotionScoreClient(Protocol):
@@ -98,11 +104,23 @@ def load_source_messages(
     else:
         raise ValueError(f'Unsupported mindreport period_type: {period_type}')
 
+    next_message = ChatMessage.objects.filter(
+        session_id=OuterRef('session_id'),
+    ).filter(
+        Q(created_at__gt=OuterRef('created_at'))
+        | Q(created_at=OuterRef('created_at'), id__gt=OuterRef('id'))
+    ).order_by('created_at', 'id')
+
     queryset = ChatMessage.objects.filter(
         session__user=user,
         role='user',
         created_at__gte=start,
         created_at__lte=end,
+    ).annotate(
+        next_message_role=Subquery(next_message.values('role')[:1]),
+        next_message_emotion_label=Subquery(
+            next_message.values('emotion_label')[:1]
+        ),
     )
     return tuple(
         ReportSourceMessage(
@@ -110,6 +128,11 @@ def load_source_messages(
             source_date=timezone.localtime(message.created_at).date(),
             content=message.content,
             emotion_label=message.emotion_label,
+            persisted_emotion_label=(
+                message.next_message_emotion_label
+                if message.next_message_role == 'assistant'
+                else None
+            ),
         )
         for message in queryset.order_by('created_at', 'id')
     )
@@ -150,12 +173,24 @@ def build_emotion_scoring_payload(
     *,
     period_type: str,
     messages: Sequence[ReportSourceMessage],
+    use_persisted_emotion_labels: bool = False,
 ) -> dict[str, Any]:
     grouped = _group_messages_by_date(messages)
-    return {
+    scoring_method = (
+        LABEL_GROUNDED_AFFECT_SCORING_METHOD
+        if use_persisted_emotion_labels
+        else AFFECT_SCORING_METHOD
+    )
+    scoring_route = (
+        SCORING_ROUTE_LABEL_GROUNDED
+        if use_persisted_emotion_labels
+        else SCORING_ROUTE_LLM_FALLBACK
+    )
+    payload = {
         'task': 'mind_report_daily_emotion_score_analysis',
         'period_type': period_type,
-        'scoring_method': AFFECT_SCORING_METHOD,
+        'scoring_method': scoring_method,
+        'scoring_route': scoring_route,
         'method_scope': (
             'Non-diagnostic internal affect index. The dimensions are informed by '
             'PANAS and the valence/arousal model, but this is not a validated '
@@ -216,7 +251,17 @@ def build_emotion_scoring_payload(
                     {
                         'message_id': message.message_id,
                         'content': message.content,
-                        'current_emotion_label': message.emotion_label,
+                        **(
+                            {
+                                'persisted_emotion_label': (
+                                    message.persisted_emotion_label
+                                ),
+                            }
+                            if use_persisted_emotion_labels
+                            else {
+                                'current_emotion_label': message.emotion_label,
+                            }
+                        ),
                     }
                     for message in grouped_messages
                 ],
@@ -239,6 +284,42 @@ def build_emotion_scoring_payload(
             ]
         },
     }
+
+    if use_persisted_emotion_labels:
+        payload['persisted_emotion_label_contract'] = {
+            'source': (
+                'The label saved on the assistant message immediately following '
+                'each user message. It represents the chat pipeline first-pass '
+                'assessment of that user message.'
+            ),
+            'labels': {
+                'joy': 'first-pass positive affect evidence',
+                'sadness': 'first-pass negative affect evidence',
+                'anger': 'first-pass negative and potentially activated affect evidence',
+                'normal': 'first-pass evidence of no dominant joy, sadness, or anger',
+            },
+            'usage': [
+                'Use the persisted label as the primary first-pass anchor, then read the user text to assess affect dimensions and intensity.',
+                'The persisted label is supporting evidence, not an unquestionable diagnosis; resolve obvious text-label conflicts cautiously and explain them in rationale.',
+                'Do not replace a valid persisted label with an unrelated emotion without explicit textual evidence.',
+            ],
+        }
+        payload['constraints'].extend([
+            'Base the daily assessment first on persisted_emotion_label and refine it using the corresponding user text.',
+            'Mention any material conflict between a persisted label and the text in the private rationale.',
+        ])
+
+    return payload
+
+
+def has_complete_persisted_emotion_labels(
+    messages: Sequence[ReportSourceMessage],
+) -> bool:
+    allowed_labels = {'joy', 'sadness', 'anger', 'normal'}
+    return bool(messages) and all(
+        message.persisted_emotion_label in allowed_labels
+        for message in messages
+    )
 
 
 def _extract_json_object(text: str) -> Mapping[str, Any]:
@@ -341,14 +422,25 @@ def parse_emotion_scores(
     *,
     payload: Mapping[str, Any],
     source_messages: Sequence[ReportSourceMessage],
+    affect_scoring_method: str = AFFECT_SCORING_METHOD,
 ) -> tuple[EmotionScore, ...]:
     source_by_id = {message.message_id: message for message in source_messages}
     total_by_date: dict[date, int] = {}
     labels_by_date: dict[date, list[str]] = {}
+    use_persisted_emotion_labels = (
+        affect_scoring_method == LABEL_GROUNDED_AFFECT_SCORING_METHOD
+    )
     for message in source_messages:
         total_by_date[message.source_date] = total_by_date.get(message.source_date, 0) + 1
-        if message.emotion_label:
-            labels_by_date.setdefault(message.source_date, []).append(message.emotion_label)
+        fallback_label = (
+            message.persisted_emotion_label
+            if use_persisted_emotion_labels
+            else message.emotion_label
+        )
+        if fallback_label:
+            labels_by_date.setdefault(message.source_date, []).append(
+                fallback_label
+            )
 
     parsed: list[EmotionScore] = []
     rows = payload.get('daily_scores', payload.get('scores', []))
@@ -390,7 +482,7 @@ def parse_emotion_scores(
                 if evidence_ids
                 else 0.0
             )
-            scoring_method = AFFECT_SCORING_METHOD
+            scoring_method = affect_scoring_method
         else:
             try:
                 emotion_score = float(row.get('emotion_score'))
@@ -546,6 +638,7 @@ class MindReportScoringService:
                 source_messages=source_messages,
                 emotion_scores=(),
                 message='리포트 생성 기준을 충족하지 않아 LLM 점수 분석을 시작하지 않습니다.',
+                scoring_route='criteria_not_met',
             )
 
         client = self.score_client
@@ -560,17 +653,33 @@ class MindReportScoringService:
                 source_messages=source_messages,
                 emotion_scores=(),
                 message='리포트 생성 기준은 충족했지만 LLM 점수 분석 클라이언트가 설정되지 않았습니다.',
+                scoring_route='scoring_client_unavailable',
             )
 
+        use_persisted_emotion_labels = has_complete_persisted_emotion_labels(
+            source_messages
+        )
+        scoring_route = (
+            SCORING_ROUTE_LABEL_GROUNDED
+            if use_persisted_emotion_labels
+            else SCORING_ROUTE_LLM_FALLBACK
+        )
+        affect_scoring_method = (
+            LABEL_GROUNDED_AFFECT_SCORING_METHOD
+            if use_persisted_emotion_labels
+            else AFFECT_SCORING_METHOD
+        )
         scoring_payload = build_emotion_scoring_payload(
             period_type=period_type,
             messages=source_messages,
+            use_persisted_emotion_labels=use_persisted_emotion_labels,
         )
         if revision_instructions:
             scoring_payload['revision_instructions'] = list(revision_instructions)
         scores = parse_emotion_scores(
             payload=client.score_messages(payload=scoring_payload),
             source_messages=source_messages,
+            affect_scoring_method=affect_scoring_method,
         )
         return MindReportScoringResult(
             status='scored',
@@ -578,5 +687,10 @@ class MindReportScoringService:
             eligibility=eligibility,
             source_messages=source_messages,
             emotion_scores=scores,
-            message='리포트 생성 기준을 충족해 LLM 일 단위 감정 점수 분석을 완료했습니다.',
+            message=(
+                '저장된 채팅 감정 라벨을 1차 근거로 사용해 LLM 일 단위 감정 점수 분석을 완료했습니다.'
+                if use_persisted_emotion_labels
+                else '저장된 채팅 감정 라벨을 완전하게 가져오지 못해 기존 원문 기반 LLM 감정 점수 분석을 완료했습니다.'
+            ),
+            scoring_route=scoring_route,
         )

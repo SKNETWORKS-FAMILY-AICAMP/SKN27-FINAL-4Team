@@ -8,7 +8,7 @@
 """
 from collections import OrderedDict
 
-from .constants import EMOTION_LABELS, MEMORY_ID_PREFIXES
+from .constants import MEMORY_ID_PREFIXES
 from .introduction import (
     _cause_lead,
     build_memory_content,
@@ -36,10 +36,6 @@ from .queries import (
 )
 
 
-# 기존 내부 import를 사용하는 코드와 테스트를 위한 호환 별칭.
-EMOTION_MAP_SHORT = EMOTION_LABELS
-
-
 def _clean_list(values):
     return [value for value in (values or []) if value not in (None, '')]
 
@@ -58,12 +54,49 @@ def _clean_graph_items(values):
     ]
 
 
-def _normalise_event(record):
-    emotions = _clean_maps(record.get('emotions'), 'type')
-    top_emotion = record.get('top_emotion')
-    if top_emotion and not any(item.get('type') == top_emotion for item in emotions):
-        emotions.insert(0, {'type': top_emotion, 'score': None})
+def _first_value(*values):
+    return next((value for value in values if value not in (None, '')), '')
 
+
+def _resolve_unit_saved_at(unit):
+    """가장 신뢰도 높은 그래프 메타데이터에서 기억 작성 시각을 찾는다."""
+    if unit.get('saved_at'):
+        return unit['saved_at'], unit.get('saved_at_source') or 'fact'
+
+    source_created_at = (
+        unit.get('graph', {}).get('source', {}).get('properties', {})
+        .get('created_at')
+    )
+    if source_created_at:
+        return source_created_at, 'episode'
+
+    for event in unit.get('events', []):
+        event_graph = event.get('graph', {})
+        value = _first_value(
+            event.get('created_at'),
+            event_graph.get('node', {}).get('properties', {}).get('created_at'),
+            event_graph.get('has_event', {}).get('properties', {}).get('created_at'),
+            event_graph.get('has_event', {}).get('properties', {}).get('valid_from'),
+            event_graph.get('records', {}).get('properties', {}).get('created_at'),
+        )
+        if value:
+            return value, 'event'
+
+    for category in ('relations', 'preferences'):
+        for fact in unit.get(category, []):
+            edge_properties = fact.get('graph', {}).get('edge', {}).get('properties', {})
+            value = _first_value(
+                fact.get('valid_from'),
+                edge_properties.get('created_at'),
+                edge_properties.get('valid_from'),
+            )
+            if value:
+                return value, 'fact'
+
+    return '', 'unknown'
+
+
+def _normalise_event(record):
     dates = _clean_maps(record.get('dates'), 'date')
     if record.get('occurs_start') and not any(
             item.get('date') == record['occurs_start'] for item in dates):
@@ -80,7 +113,6 @@ def _normalise_event(record):
         'key': record.get('event_key'),
         'name': record.get('event_name'),
         'cause': record.get('cause_text'),
-        'top_emotion': top_emotion,
         'salience': record.get('salience'),
         'created_at': record.get('event_created_at'),
         'recall_count': record.get('recall_count'),
@@ -91,7 +123,6 @@ def _normalise_event(record):
         'places': _clean_list(record.get('places')),
         'topics': _clean_list(record.get('topics')),
         'people': _clean_maps(record.get('people'), 'name'),
-        'emotions': emotions,
         'causes': _clean_maps(record.get('causes'), 'name'),
         'graph': {
             'node': {
@@ -113,7 +144,6 @@ def _normalise_event(record):
             'places': _clean_graph_items(record.get('place_graph')),
             'topics': _clean_graph_items(record.get('topic_graph')),
             'people': _clean_graph_items(record.get('person_graph')),
-            'emotions': _clean_graph_items(record.get('emotion_graph')),
             'causes': _clean_graph_items(record.get('cause_graph')),
         },
     }
@@ -165,7 +195,7 @@ def _consolidate_graph(unit):
         add_edge(event_graph['has_event'], root.get('id'), event_node.get('id'))
         add_edge(event_graph['records'], source.get('id'), event_node.get('id'))
 
-        for category in ('dates', 'places', 'topics', 'emotions', 'causes'):
+        for category in ('dates', 'places', 'topics', 'causes'):
             for item in event_graph[category]:
                 context_node = {
                     'id': item.get('node_id'),
@@ -237,6 +267,11 @@ def serialise_units(memory_records, event_records, relation_records, preference_
         units[memory_id] = {
             'memory_id': memory_id,
             'saved_at': record.get('saved_at') or '',
+            'saved_at_source': (
+                'episode' if record.get('saved_at') and record.get('has_source')
+                else 'fact' if record.get('saved_at')
+                else 'unknown'
+            ),
             'source_text': record.get('source_text') or '',
             'has_source': bool(record.get('has_source')),
             'graph': {
@@ -310,9 +345,10 @@ def serialise_units(memory_records, event_records, relation_records, preference_
     memories = []
     for unit in units.values():
         _consolidate_graph(unit)
+        unit['saved_at'], unit['saved_at_source'] = _resolve_unit_saved_at(unit)
+        unit['has_created_at'] = bool(unit['saved_at'])
         unit['introduction'] = build_memory_introduction(unit)
         people = {}
-        emotions = []
         event_names = []
         dates = []
         relation_names = []
@@ -324,12 +360,6 @@ def serialise_units(memory_records, event_records, relation_records, preference_
                 dates.append(event['occurs_start'])
             for person in event['people']:
                 people[person['name']] = person
-            for emotion in event['emotions']:
-                label = EMOTION_MAP_SHORT.get(
-                    str(emotion['type']).lower(), emotion['type'])
-                if label not in emotions:
-                    emotions.append(label)
-
         for relation in unit['relations']:
             people.setdefault(relation['name'], {
                 'name': relation['name'],
@@ -344,14 +374,22 @@ def serialise_units(memory_records, event_records, relation_records, preference_
             'content': unit['introduction']['text'],
             'saved_at': unit['saved_at'],
             'created_at': unit['saved_at'],
+            'has_created_at': unit['has_created_at'],
+            'created_at_source': unit['saved_at_source'],
             'type': 'memory',
             'raw_date': dates[0] if dates else '',
             'raw_people': list(people.values()),
-            'raw_emotions': emotions,
             'raw_relation': ', '.join(dict.fromkeys(relation_names)),
             'raw_events': event_names,
             'context': unit,
         })
+    memories.sort(
+        key=lambda memory: (
+            bool(memory['created_at']),
+            str(memory['created_at']),
+        ),
+        reverse=True,
+    )
     return memories
 
 

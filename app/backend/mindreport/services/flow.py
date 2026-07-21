@@ -281,6 +281,7 @@ class MindReportFlowService:
             status=status,
             message=message,
             payload={
+                'scoring_route': scoring_result.scoring_route,
                 'daily_score_count': len(scoring_result.emotion_scores),
                 'source_message_count': len(scoring_result.source_messages),
                 'eligibility': scoring_result.eligibility,
@@ -295,6 +296,7 @@ class MindReportFlowService:
                         'total_message_count': score.total_message_count,
                         'evidence_message_ids': list(score.evidence_message_ids),
                         'rationale': score.rationale,
+                        'scoring_method': score.scoring_method,
                     }
                     for score in scoring_result.emotion_scores
                 ],
@@ -789,7 +791,8 @@ def format_for_frontend(flow_result: MindReportFlowResult, user_id: int, period_
                     icon = "😔"
                 emotions.append({
                     "day": score['source_date'][-2:] + "일",
-                    "icon": icon
+                    "icon": icon,
+                    "emotion_state": score['emotion_state'],
                 })
         elif step.step == 'emotion_pattern_classification' and step.status == 'completed':
             summary = step.payload.get('interpretation', summary)
