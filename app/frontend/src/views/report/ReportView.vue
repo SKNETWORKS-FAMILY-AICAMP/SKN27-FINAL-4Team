@@ -59,17 +59,16 @@
       </aside>
 
       <!-- ────── 보드 ────── -->
-      <section class="board">
+      <section class="board" :class="{ 'is-loading': isLoading }" :aria-busy="isLoading">
         <!-- 상태 -->
-        <div v-if="isLoading || fetchError || !currentReport" class="board-state">
+        <div v-if="!isLoading && (fetchError || !currentReport)" class="board-state">
           <img :src="bubbleHeart" class="state-icon" alt="" aria-hidden="true" />
-          <template v-if="isLoading"><h1>리포트를 확인하고 있어요</h1><p>저장된 마음 리포트를 불러오는 중입니다.</p></template>
-          <template v-else-if="fetchError"><h1>마음 리포트를 불러오지 못했어요.</h1><p>{{ fetchError }}</p></template>
+          <template v-if="fetchError"><h1>마음 리포트를 불러오지 못했어요.</h1><p>{{ fetchError }}</p></template>
           <template v-else><h1>아직 기록이 조금 부족해요</h1><p>대화를 나눈 뒤 새로고침하면 최신 주간·월간 마음 리포트를 확인할 수 있어요.</p></template>
         </div>
 
         <!-- 안전 -->
-        <div v-else-if="currentReport.is_safety_response" class="board-state">
+        <div v-else-if="!isLoading && currentReport?.is_safety_response" class="board-state">
           <img :src="bubbleHeart" class="state-icon" alt="" aria-hidden="true" />
           <h1>{{ currentReport.title }}</h1>
           <p class="safety-line">지금은 안전을 먼저 확인할 시간이에요. 도움을 받을 수 있는 방법을 안내합니다.</p>
@@ -77,7 +76,7 @@
         </div>
 
         <!-- 본문 -->
-        <template v-else>
+        <template v-else-if="!isLoading && currentReport">
           <header class="board-header">
             <img class="bh-icon" :src="bubbleHeart" alt="" aria-hidden="true" />
             <div class="bh-text">
@@ -185,7 +184,7 @@
           </section>
         </template>
 
-        <footer class="report-actions">
+        <footer v-if="!isLoading" class="report-actions">
           <p>☆ 작은 기록이 모여, 당신의 내일을 더 단단하게 만듭니다. <span>♥</span></p>
           <button type="button" class="secondary-button">이미지 저장</button>
           <button type="button" class="primary-button" disabled aria-disabled="true">공유</button>
@@ -873,6 +872,10 @@ button {
     inset 0 0 0 1px rgba(255, 245, 240, 0.55);
   color: #5a4460;
   font-family: var(--font-soft);
+}
+
+.board.is-loading {
+  min-height: 532px;
 }
 
 .board-state {

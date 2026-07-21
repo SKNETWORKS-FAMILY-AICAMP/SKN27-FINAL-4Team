@@ -7,10 +7,10 @@ const router = useRouter();
 const route = useRoute();
 
 const expressions = [
-  { id: "joy", label: "기쁨", desc: "통통 튀는 밝은 반응" },
-  { id: "sadness", label: "슬픔", desc: "고개를 살짝 숙여요" },
-  { id: "anger", label: "화남", desc: "살짝 눈썹을 찌푸려요" },
-  { id: "anxiety", label: "불안", desc: "눈을 동그랗게 떠요" },
+  { id: "joy", label: "기쁨" },
+  { id: "sadness", label: "슬픔"},
+  { id: "anger", label: "화남"},
+  { id: "anxiety", label: "불안"},
 ];
 const defaultExpression = {
   id: "default",
