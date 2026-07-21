@@ -58,7 +58,6 @@ INSTALLED_APPS = [
     'wellness',
     'mbti',
     'myprofile',
-    'taste',
     'character',
     'calendar_api',
     'game.tarot_api',
@@ -67,6 +66,8 @@ INSTALLED_APPS = [
     'mycard',
     'emotion_cards',
     'mybook',
+    'myweather',
+    'memorystorage',
 ]
 
 MIDDLEWARE = [
@@ -184,6 +185,7 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'   # collectstatic 산출 (운영: nginx가 서빙)
 
 # ── TTS mp3 등 미디어 파일 (API 명세서 v6.0 §3-2) ──
 MEDIA_URL = '/media/'
@@ -192,7 +194,9 @@ MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
-
+# 마이페이지 날씨 검색에 사용합니다. 상용 운영 시 TAVILY_PLAN_NAME과
+# TAVILY_COMMERCIAL_USE_CONFIRMED를 함께 설정해 계약 확인 상태를 명시합니다.
+TAVILY_API_KEY = os.environ.get('TAVILY_API_KEY', '')
 # ── 마음카드(emotion_cards) ──
 # 기본은 외부 이미지 API를 호출하지 않는 안전한 개발 모드.
 EMOTION_CARD_ENABLE_REAL_IMAGE_API = os.environ.get('EMOTION_CARD_ENABLE_REAL_IMAGE_API', 'False').lower() == 'true'

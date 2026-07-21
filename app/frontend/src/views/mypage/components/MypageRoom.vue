@@ -1,42 +1,88 @@
 <template>
   <section class="room-stage">
-    <div class="room-canvas">
+    <p class="room-interaction-guide">
+      <span aria-hidden="true">●</span>
+      빛나는 지점을 선택하면 연결된 기능을 열 수 있어요.
+    </p>
+    <div
+      ref="roomCanvas"
+      class="room-canvas"
+      :class="{ 'is-character-locked': isMovementLocked }"
+    >
       <img class="room-image" src="../../../assets/UI 신버전4.png" alt="야간 톤 MindRoom 방 일러스트" />
       <button
         class="room-character"
         type="button"
-        :aria-label="currentCharacter.name"
-        :class="{ walking: isWalking, arrived: arrivalPulse }"
+        :aria-label="characterAriaLabel"
+        :class="{
+          walking: isWalking,
+          arrived: arrivalPulse,
+          'is-tantrum': isTantrum,
+          'is-returning-home': isReturningHome
+        }"
         :data-facing="facing"
+        :data-character="currentCharacter.id"
+        :disabled="isMovementLocked"
         :style="characterStyle"
         @click="$emit('open-panel', 'character')"
       >
-        <img :src="`/characters/${currentCharacter.id}/default.png`" :alt="currentCharacter.name" />
+        <img :key="characterImage" :src="characterImage" :alt="currentCharacter.name" />
+        <span
+          v-if="isTantrum"
+          class="room-character-protest"
+          role="status"
+          aria-live="assertive"
+        >
+          나도 좀 쉬자! <span aria-hidden="true">💢</span>
+        </span>
       </button>
       <button
         class="hotspot door"
         type="button"
         aria-label="대화하러 가기"
         title="대화하러 가기"
+        :disabled="isMovementLocked"
+        @mouseenter="showHotspotLabel"
+        @mouseleave="hideHotspotLabel"
+        @focus="showHotspotLabel"
+        @blur="hideHotspotLabel"
         @click="$emit('open-chat')"
       ></button>
-      <button class="hotspot profile" type="button" :aria-label="labels.profile" @click="$emit('open-panel', 'profile')"></button>
-      <button class="hotspot weather" type="button" :aria-label="labels.weather" @click="$emit('open-panel', 'weather')"></button>
-      <button class="hotspot mbti" type="button" :aria-label="labels.mbti" @click="$emit('open-panel', 'mbti')"></button>
-      <button class="hotspot book" type="button" :aria-label="labels.book || '오늘의 책 추천'" @click="$emit('open-panel', 'book')"></button>
-      <button class="hotspot memory" type="button" :aria-label="labels.memory || '기억 보관함'" @click="$emit('open-panel', 'memory')"></button>
-      <button class="hotspot wardrobe" type="button" aria-label="마음리포트 보기" title="마음리포트 보기" @click="$emit('open-report')"></button>
+      <button class="hotspot profile" type="button" :aria-label="labels.profile" :disabled="isMovementLocked" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-panel', 'profile')"></button>
+      <button class="hotspot weather" type="button" :aria-label="labels.weather" :disabled="isMovementLocked" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-panel', 'weather')"></button>
+      <button class="hotspot mbti" type="button" :aria-label="labels.mbti" :disabled="isMovementLocked" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-panel', 'mbti')"></button>
+      <button class="hotspot book" type="button" :aria-label="labels.book || '오늘의 책 추천'" :disabled="isMovementLocked" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-panel', 'book')"></button>
+      <button class="hotspot memory" type="button" :aria-label="labels.memory || '기억 보관함'" title="기억 보관함" :disabled="isMovementLocked" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-panel', 'memory')"></button>
+      <button class="hotspot wardrobe" type="button" aria-label="마음리포트 보기" title="마음리포트 보기" :disabled="isMovementLocked" @mouseenter="showHotspotLabel" @mouseleave="hideHotspotLabel" @focus="showHotspotLabel" @blur="hideHotspotLabel" @click="$emit('open-report')"></button>
 
-      <!-- 취향 분석 hotspot: 당장 비활성화. 재활성화 시 아래 버튼 주석 해제 -->
-      <!-- <button class="hotspot taste" type="button" :aria-label="labels.taste" @click="$emit('open-panel', 'taste')"></button> -->
-      <!-- 설정 hotspot: 당장 비활성화. 재활성화 시 아래 버튼 주석 해제 -->
-      <!-- <button class="hotspot settings" type="button" :aria-label="labels.settings" @click="$emit('open-panel', 'settings')"></button> -->
+      <div
+        v-if="activeHotspotLabel"
+        ref="hotspotTooltip"
+        class="room-hotspot-tooltip"
+        :style="hotspotTooltipStyle"
+        role="tooltip"
+      >
+        {{ activeHotspotLabel }}
+      </div>
     </div>
     <slot />
   </section>
 </template>
 
 <script>
+import {
+  CHARACTER_FLOOR_CLEARANCE,
+  CHARACTER_FOOT_OFFSET,
+  CHARACTER_MOVEMENT_PROFILES,
+  DEFAULT_CHARACTER_POSITION,
+  PATH_GRID_STEP,
+  ROOM_OBSTACLES,
+  ROOM_STOPS,
+  ROOM_TANTRUM_SETTINGS,
+  WALKABLE_FLOOR_RECTS,
+} from "../config/room.config";
+import { createTransparentCharacterImage } from "../utils/character-image";
+
 export default {
   name: "MypageRoom",
   props: {
@@ -57,118 +103,300 @@ export default {
       default: 0
     }
   },
-  emits: ["open-panel", "open-chat", "open-report", "arrived"],
+  emits: ["open-panel", "open-chat", "open-report", "arrived", "movement-interrupted"],
   data() {
     return {
-      characterPosition: { x: 45.2, y: 33.8 },
+      characterPosition: { ...DEFAULT_CHARACTER_POSITION },
       activeTarget: "character",
       isWalking: false,
+      isTantrum: false,
+      isReturningHome: false,
+      redirectTimestamps: [],
       arrivalPulse: false,
       facing: "right",
-      moveTimers: []
+      activeWalkCycleMs: null,
+      resolvedCharacterImage: "",
+      characterImageRequestId: 0,
+      moveTimers: [],
+      moveFrameId: null,
+      activeHotspotLabel: "",
+      hotspotTooltipStyle: { left: "0px", top: "0px" },
+      activeHotspotElement: null
     };
   },
   computed: {
+    isMovementLocked() {
+      return this.isTantrum || this.isReturningHome;
+    },
+    characterAriaLabel() {
+      if (this.isTantrum) {
+        return `${this.currentCharacter.name}가 화가 나서 잠시 멈췄어요`;
+      }
+      if (this.isReturningHome) {
+        return `${this.currentCharacter.name}가 원래 자리로 돌아가는 중이에요`;
+      }
+      return this.currentCharacter.name;
+    },
     characterStyle() {
+      const profile = this.currentMovementProfile;
       return {
         "--character-x": `${this.characterPosition.x}%`,
-        "--character-y": `${this.characterPosition.y}%`
+        "--character-y": `${this.characterPosition.y}%`,
+        "--character-move-duration": `${profile.transitionMs}ms`,
+        "--character-walk-cycle": `${this.activeWalkCycleMs || profile.walkCycleMs}ms`,
+        "--character-arrival-duration": `${profile.arrivalMs}ms`
       };
+    },
+    characterPose() {
+      if (this.isTantrum) return "anger";
+      if (this.isReturningHome) return "default";
+      if (!this.isWalking && this.activeTarget === "mbti") return "search";
+      return "default";
+    },
+    characterImageSource() {
+      return `/characters/${this.currentCharacter.id}/${this.characterPose}.png`;
+    },
+    characterImage() {
+      return this.resolvedCharacterImage || this.characterImageSource;
+    },
+    currentMovementProfile() {
+      return CHARACTER_MOVEMENT_PROFILES[this.currentCharacter.id]
+        || CHARACTER_MOVEMENT_PROFILES.otter;
     },
     roomStops() {
-      return {
-        character: { x: 45.2, y: 33.8 },
-        door: { x: 10.8, y: 17.0 },
-        profile: { x: 21.8, y: 20.1 },
-        weather: { x: 31.0, y: 16.6 },
-        book: { x: 58.1, y: 26.4 },
-        mbti: { x: 74.0, y: 20.8 },
-        memory: { x: 73.5, y: 63.5 },
-        wardrobe: { x: 84.8, y: 58.0 },
-        settings: { x: 82.8, y: 60.2 }
-      };
+      return ROOM_STOPS;
     },
     characterFootOffset() {
-      return { x: 3.7, y: 16.5 };
+      return CHARACTER_FOOT_OFFSET;
+    },
+    characterFloorClearance() {
+      return CHARACTER_FLOOR_CLEARANCE;
     },
     pathGridStep() {
-      return 1.5;
+      return PATH_GRID_STEP;
     },
     roomObstacles() {
-      return [
-        { id: "door", x1: 5, y1: 5, x2: 17, y2: 31, padding: 0.8 },
-        { id: "window", x1: 28, y1: 9, x2: 42, y2: 29, padding: 0.8 },
-        { id: "plant", x1: 45, y1: 12, x2: 54, y2: 36, padding: 1.1 },
-        { id: "bookcase", x1: 54, y1: 3, x2: 68.5, y2: 35, padding: 0.8 },
-        { id: "mbti-board", x1: 71, y1: 5, x2: 86.5, y2: 31.5, padding: 0.8 },
-        { id: "wall-shelf", x1: 87, y1: 14, x2: 97, y2: 34, padding: 1.2 },
-        { id: "nightstand", x1: 2, y1: 63, x2: 12, y2: 88, padding: 1.4 },
-        { id: "bed", x1: 13, y1: 40, x2: 31, y2: 96, padding: 1.8 },
-        { id: "desk", x1: 58.5, y1: 40, x2: 85.5, y2: 65.5, padding: 3.2 },
-        { id: "desk-chair", x1: 63.2, y1: 60, x2: 72.2, y2: 80.5, padding: 1.8 },
-        { id: "closet", x1: 86.2, y1: 39, x2: 97.5, y2: 76, padding: 1.6 },
-        { id: "trash-bin", x1: 77.8, y1: 79, x2: 86.2, y2: 93, padding: 0.8 },
-        { id: "heart-box", x1: 86, y1: 78, x2: 97.2, y2: 92, padding: 0.8 }
-      ];
+      return ROOM_OBSTACLES;
     },
     walkableFloorRects() {
-      return [
-        { id: "wood-floor", x1: 2, y1: 31.8, x2: 98, y2: 96 }
-      ];
+      return WALKABLE_FLOOR_RECTS;
     }
   },
   watch: {
     moveKey() {
       this.walkTo(this.focusTarget);
+    },
+    characterImageSource: {
+      immediate: true,
+      async handler(src) {
+        const requestId = this.characterImageRequestId + 1;
+        this.characterImageRequestId = requestId;
+
+        if (!src.endsWith("/search.png")) {
+          this.resolvedCharacterImage = src;
+          return;
+        }
+
+        const transparentImage = await createTransparentCharacterImage(src);
+        if (requestId !== this.characterImageRequestId) return;
+        this.resolvedCharacterImage = transparentImage || src;
+      }
     }
+  },
+  mounted() {
+    window.addEventListener("resize", this.repositionHotspotLabel);
   },
   beforeUnmount() {
     this.clearMoveTimers();
+    window.removeEventListener("resize", this.repositionHotspotLabel);
   },
   methods: {
+    showHotspotLabel(event) {
+      this.activeHotspotElement = event.currentTarget;
+      this.activeHotspotLabel = event.currentTarget.getAttribute("aria-label") || "";
+      this.$nextTick(this.repositionHotspotLabel);
+    },
+    hideHotspotLabel() {
+      this.activeHotspotElement = null;
+      this.activeHotspotLabel = "";
+    },
+    repositionHotspotLabel() {
+      const canvas = this.$refs.roomCanvas;
+      const tooltip = this.$refs.hotspotTooltip;
+      const target = this.activeHotspotElement;
+      if (!canvas || !tooltip || !target?.isConnected) return;
+
+      const canvasRect = canvas.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const tooltipRect = tooltip.getBoundingClientRect();
+      const padding = 8;
+      const gap = 8;
+      const desiredLeft = targetRect.left - canvasRect.left + targetRect.width / 2 - tooltipRect.width / 2;
+      const desiredTop = targetRect.top - canvasRect.top - tooltipRect.height - gap;
+      const maxLeft = Math.max(padding, canvasRect.width - tooltipRect.width - padding);
+      const maxTop = Math.max(padding, canvasRect.height - tooltipRect.height - padding);
+
+      this.hotspotTooltipStyle = {
+        left: `${Math.min(Math.max(desiredLeft, padding), maxLeft)}px`,
+        top: `${Math.min(Math.max(desiredTop, padding), maxTop)}px`
+      };
+    },
     clearMoveTimers() {
       this.moveTimers.forEach(timer => window.clearTimeout(timer));
       this.moveTimers = [];
+      if (this.moveFrameId !== null) {
+        window.cancelAnimationFrame(this.moveFrameId);
+        this.moveFrameId = null;
+      }
     },
-    walkTo(target) {
+    walkTo(target, { force = false } = {}) {
+      if (this.isMovementLocked && !force) return;
+      if (!force && this.registerRapidRedirect(target)) {
+        this.startTantrum();
+        return;
+      }
+
       const destination = this.roomStops[target] || this.roomStops.character;
       const start = this.characterPosition;
       const route = this.buildRoute(start, destination, target);
 
       this.clearMoveTimers();
       this.arrivalPulse = false;
+      this.activeTarget = target;
 
-      if (this.prefersReducedMotion() || !route.length || this.samePoint(start, destination)) {
+      if (!route.length) {
+        this.isWalking = false;
+        this.activeTarget = target;
+        this.finishForcedReturn(target);
+        this.resetRedirectHistory();
+        this.$emit("arrived", target);
+        return;
+      }
+
+      if (this.prefersReducedMotion() || this.samePoint(start, destination)) {
         this.characterPosition = route[route.length - 1] || this.fromFootPoint(this.nearestWalkablePoint(this.toFootPoint(destination)));
         this.activeTarget = target;
+        this.finishForcedReturn(target);
+        this.resetRedirectHistory();
         this.$emit("arrived", target);
         return;
       }
 
       this.isWalking = true;
-      let delay = 0;
-      let previousPoint = start;
-      route.forEach((point) => {
-        delay += this.segmentDuration(previousPoint, point);
-        previousPoint = point;
-        const timer = window.setTimeout(() => {
-          this.facing = point.x >= this.characterPosition.x ? "right" : "left";
-          this.characterPosition = point;
-        }, delay);
-        this.moveTimers.push(timer);
-      });
+      const points = [start, ...route];
+      const segments = [];
+      let totalDistance = 0;
+      for (let index = 1; index < points.length; index += 1) {
+        const from = points[index - 1];
+        const to = points[index];
+        const distance = Math.hypot(to.x - from.x, to.y - from.y);
+        if (distance <= 0.01) continue;
+        segments.push({ from, to, distance, startDistance: totalDistance });
+        totalDistance += distance;
+      }
 
-      const doneTimer = window.setTimeout(() => {
+      const duration = this.routeDuration(totalDistance);
+      const halfCycle = this.currentMovementProfile.walkCycleMs / 2;
+      const estimatedSteps = Math.max(2, Math.round(duration / halfCycle));
+      const stepCount = Math.max(2, Math.round(estimatedSteps / 2) * 2);
+      this.activeWalkCycleMs = (duration / stepCount) * 2;
+      const startedAt = performance.now();
+      const finishWalk = () => {
+        this.moveFrameId = null;
+        this.characterPosition = route[route.length - 1];
         this.isWalking = false;
         this.arrivalPulse = true;
         this.activeTarget = target;
+        this.finishForcedReturn(target);
+        this.resetRedirectHistory();
         this.$emit("arrived", target);
         const pulseTimer = window.setTimeout(() => {
           this.arrivalPulse = false;
-        }, 520);
+        }, this.currentMovementProfile.arrivalMs);
         this.moveTimers.push(pulseTimer);
-      }, delay + 260);
-      this.moveTimers.push(doneTimer);
+      };
+
+      const animate = (now) => {
+        const elapsedRatio = Math.min(1, (now - startedAt) / duration);
+        const steppedRatio = this.steppedTravelProgress(elapsedRatio, stepCount);
+        const travelRatio = this.smoothTravelProgress(steppedRatio);
+        const traveledDistance = totalDistance * travelRatio;
+        const segment = segments.find(item => (
+          traveledDistance <= item.startDistance + item.distance
+        )) || segments[segments.length - 1];
+
+        if (!segment) {
+          finishWalk();
+          return;
+        }
+
+        const segmentRatio = Math.min(1, Math.max(0,
+          (traveledDistance - segment.startDistance) / segment.distance
+        ));
+        const nextPosition = {
+          x: segment.from.x + (segment.to.x - segment.from.x) * segmentRatio,
+          y: segment.from.y + (segment.to.y - segment.from.y) * segmentRatio
+        };
+        const horizontalDelta = nextPosition.x - this.characterPosition.x;
+        if (Math.abs(horizontalDelta) > 0.015) {
+          this.facing = horizontalDelta > 0 ? "right" : "left";
+        }
+        this.characterPosition = nextPosition;
+
+        if (elapsedRatio >= 1) {
+          finishWalk();
+          return;
+        }
+        this.moveFrameId = window.requestAnimationFrame(animate);
+      };
+
+      this.moveFrameId = window.requestAnimationFrame(animate);
+    },
+    registerRapidRedirect(target) {
+      if (!this.isWalking || target === this.activeTarget) return false;
+
+      const now = Date.now();
+      const windowStart = now - ROOM_TANTRUM_SETTINGS.redirectWindowMs;
+      this.redirectTimestamps = this.redirectTimestamps
+        .filter(timestamp => timestamp >= windowStart);
+      this.redirectTimestamps.push(now);
+      return this.redirectTimestamps.length >= ROOM_TANTRUM_SETTINGS.redirectLimit;
+    },
+    resetRedirectHistory() {
+      this.redirectTimestamps = [];
+    },
+    startTantrum() {
+      this.clearMoveTimers();
+      this.isWalking = false;
+      this.arrivalPulse = false;
+      this.isTantrum = true;
+      this.resetRedirectHistory();
+      this.hideHotspotLabel();
+      this.$emit("movement-interrupted");
+
+      const tantrumTimer = window.setTimeout(() => {
+        this.isTantrum = false;
+        this.isReturningHome = true;
+        this.faceDefaultPosition();
+
+        const returnTimer = window.setTimeout(() => {
+          this.walkTo("character", { force: true });
+        }, ROOM_TANTRUM_SETTINGS.returnLeadInMs);
+        this.moveTimers.push(returnTimer);
+      }, ROOM_TANTRUM_SETTINGS.pauseMs);
+      this.moveTimers.push(tantrumTimer);
+    },
+    faceDefaultPosition() {
+      const home = this.roomStops.character;
+      const horizontalDelta = home.x - this.characterPosition.x;
+      if (Math.abs(horizontalDelta) > 0.015) {
+        this.facing = horizontalDelta > 0 ? "right" : "left";
+      }
+    },
+    finishForcedReturn(target) {
+      if (this.isReturningHome && target === "character") {
+        this.isReturningHome = false;
+      }
     },
     buildRoute(start, destination) {
       const startFoot = this.nearestWalkablePoint(this.toFootPoint(start));
@@ -177,12 +405,24 @@ export default {
         startFoot,
         goalFoot,
       );
+      if (!footRoute.length) return [];
       const route = footRoute.map(point => this.fromFootPoint(point));
       const safeDestination = this.fromFootPoint(goalFoot);
       if (!route.length || !this.samePoint(route[route.length - 1], safeDestination)) {
         route.push(safeDestination);
       }
-      return this.compactRoute(this.smoothRoute(route));
+      const directRoute = this.compactRoute(route);
+      const optimizedRoute = this.compactRoute(this.smoothRoute(directRoute));
+      if (this.isCharacterRouteWalkable(optimizedRoute)) return optimizedRoute;
+      if (this.isCharacterRouteWalkable(directRoute)) return directRoute;
+      return [];
+    },
+    isCharacterRouteWalkable(route) {
+      if (!route.length) return false;
+      const footPath = [this.characterPosition, ...route].map(point => this.toFootPoint(point));
+      return footPath.slice(1).every((point, index) => (
+        this.hasWalkableLine(footPath[index], point)
+      ));
     },
     compactRoute(route) {
       return route.filter((point, index, list) => {
@@ -193,9 +433,25 @@ export default {
     samePoint(a, b) {
       return Math.abs(a.x - b.x) < 0.3 && Math.abs(a.y - b.y) < 0.3;
     },
-    segmentDuration(from, to) {
-      const distance = Math.hypot(to.x - from.x, to.y - from.y);
-      return Math.min(520, Math.max(220, distance * 18));
+    routeDuration(distance) {
+      const baseDuration = distance * 32;
+      const returnSpeedFactor = this.isReturningHome
+        ? ROOM_TANTRUM_SETTINGS.returnSpeedFactor
+        : 1;
+      return Math.round(Math.min(3200, Math.max(850,
+        baseDuration * this.currentMovementProfile.speedFactor * returnSpeedFactor
+      )));
+    },
+    smoothTravelProgress(progress) {
+      return progress * progress * (3 - 2 * progress);
+    },
+    steppedTravelProgress(progress, stepCount) {
+      if (progress >= 1) return 1;
+      const exactStep = progress * stepCount;
+      const stepIndex = Math.floor(exactStep);
+      const phase = exactStep - stepIndex;
+      const localProgress = phase - 0.085 * Math.sin(Math.PI * 2 * phase);
+      return (stepIndex + localProgress) / stepCount;
     },
     toFootPoint(position) {
       return {
@@ -210,12 +466,72 @@ export default {
       };
     },
     findShortestWalkablePath(start, goal) {
-      const startNode = this.snapToGrid(start);
-      const goalNode = this.snapToGrid(goal);
+      const visibilityPath = this.findVisibilityPath(start, goal);
+      if (visibilityPath.length) return visibilityPath;
+      return this.findGridPath(start, goal);
+    },
+    findVisibilityPath(start, goal) {
+      if (this.hasWalkableLine(start, goal)) return [start, goal];
+
+      const nodes = [start, goal, ...this.obstacleCornerNodes()];
+      const distances = nodes.map(() => Number.POSITIVE_INFINITY);
+      const previous = nodes.map(() => -1);
+      const visited = new Set();
+      distances[0] = 0;
+
+      while (visited.size < nodes.length) {
+        let current = -1;
+        for (let index = 0; index < nodes.length; index += 1) {
+          if (visited.has(index)) continue;
+          if (current === -1 || distances[index] < distances[current]) current = index;
+        }
+        if (current === -1 || !Number.isFinite(distances[current])) break;
+        if (current === 1) break;
+        visited.add(current);
+
+        for (let next = 0; next < nodes.length; next += 1) {
+          if (next === current || visited.has(next)) continue;
+          if (!this.hasWalkableLine(nodes[current], nodes[next])) continue;
+          const nextDistance = distances[current] + this.pathHeuristic(nodes[current], nodes[next]);
+          if (nextDistance >= distances[next]) continue;
+          distances[next] = nextDistance;
+          previous[next] = current;
+        }
+      }
+
+      if (!Number.isFinite(distances[1])) return [];
+      const route = [];
+      for (let index = 1; index !== -1; index = previous[index]) {
+        route.unshift(nodes[index]);
+      }
+      return route;
+    },
+    obstacleCornerNodes() {
+      const clearance = this.characterFloorClearance;
+      const epsilon = 0.12;
+      const corners = this.roomObstacles.flatMap((box) => {
+        const padding = box.padding ?? 1.8;
+        const x1 = box.x1 - padding - clearance.x - epsilon;
+        const x2 = box.x2 + padding + clearance.x + epsilon;
+        const y1 = box.y1 - padding - clearance.y - epsilon;
+        const y2 = box.y2 + padding + clearance.y + epsilon;
+        return [
+          { x: x1, y: y1 }, { x: x2, y: y1 },
+          { x: x1, y: y2 }, { x: x2, y: y2 }
+        ];
+      });
+      const unique = new Map();
+      corners.filter(point => this.isWalkable(point)).forEach((point) => {
+        unique.set(`${point.x.toFixed(2)}:${point.y.toFixed(2)}`, point);
+      });
+      return [...unique.values()];
+    },
+    findGridPath(start, goal) {
+      const startNode = this.snapToWalkableGrid(start);
+      const goalNode = this.snapToWalkableGrid(goal);
       const open = new Map([[this.nodeKey(startNode), { ...startNode, g: 0, f: this.pathHeuristic(startNode, goalNode), parent: null }]]);
       const closed = new Set();
-      let bestNode = open.values().next().value;
-      const maxIterations = 6400;
+      const maxIterations = 12000;
 
       for (let i = 0; open.size && i < maxIterations; i += 1) {
         const current = this.lowestCostNode(open);
@@ -223,9 +539,6 @@ export default {
         open.delete(currentKey);
         closed.add(currentKey);
 
-        if (this.pathHeuristic(current, goalNode) < this.pathHeuristic(bestNode, goalNode)) {
-          bestNode = current;
-        }
         if (currentKey === this.nodeKey(goalNode)) {
           return this.reconstructPath(current, start, goal);
         }
@@ -248,7 +561,26 @@ export default {
         });
       }
 
-      return this.reconstructPath(bestNode, start, goal);
+      return [];
+    },
+    snapToWalkableGrid(point) {
+      const snapped = this.snapToGrid(point);
+      if (this.isWalkable(snapped)) return snapped;
+      const step = this.pathGridStep;
+      for (let radius = step; radius <= 6; radius += step) {
+        const candidates = [];
+        for (let offset = -radius; offset <= radius; offset += step) {
+          candidates.push({ x: snapped.x + offset, y: snapped.y - radius });
+          candidates.push({ x: snapped.x + offset, y: snapped.y + radius });
+          candidates.push({ x: snapped.x - radius, y: snapped.y + offset });
+          candidates.push({ x: snapped.x + radius, y: snapped.y + offset });
+        }
+        const nearest = candidates
+          .filter(candidate => this.isWalkable(candidate))
+          .sort((a, b) => this.pathHeuristic(point, a) - this.pathHeuristic(point, b))[0];
+        if (nearest) return nearest;
+      }
+      return snapped;
     },
     snapToGrid(point) {
       const step = this.pathGridStep;
@@ -279,9 +611,19 @@ export default {
       }));
     },
     isWalkable(point) {
-      if (point.x < 2 || point.x > 98 || point.y < 31.8 || point.y > 96) return false;
+      const clearance = this.characterFloorClearance;
+      if (
+        point.x < 2 + clearance.x ||
+        point.x > 98 - clearance.x ||
+        point.y < 31.8 ||
+        point.y > 96
+      ) return false;
       if (!this.walkableFloorRects.some(rect => this.pointInsideBox(point, rect))) return false;
-      return !this.roomObstacles.some(box => this.pointInsideBox(point, box, box.padding ?? 1.8));
+      return !this.roomObstacles.some(box => this.pointInsideObstacleClearance(
+        point,
+        box,
+        box.padding ?? 1.8
+      ));
     },
     canMoveBetween(current, neighbor, goal) {
       if (!this.isWalkable(neighbor, goal)) return false;
@@ -298,6 +640,15 @@ export default {
         point.x <= box.x2 + padding &&
         point.y >= box.y1 - padding &&
         point.y <= box.y2 + padding
+      );
+    },
+    pointInsideObstacleClearance(point, box, padding = 0) {
+      const clearance = this.characterFloorClearance;
+      return (
+        point.x >= box.x1 - padding - clearance.x &&
+        point.x <= box.x2 + padding + clearance.x &&
+        point.y >= box.y1 - padding - clearance.y &&
+        point.y <= box.y2 + padding + clearance.y
       );
     },
     nearestWalkablePoint(point) {
@@ -326,15 +677,21 @@ export default {
       return Math.hypot(a.x - b.x, a.y - b.y);
     },
     reconstructPath(node, exactStart, exactGoal) {
-      if (!node) return [exactGoal];
+      if (!node) return [];
       const path = [];
       let current = node;
       while (current) {
         path.unshift({ x: current.x, y: current.y });
         current = current.parent;
       }
-      path[0] = exactStart;
-      path[path.length - 1] = exactGoal;
+      if (path.length === 1 || this.hasWalkableLine(exactStart, path[1])) {
+        path[0] = exactStart;
+      }
+      const finalNode = path[path.length - 1];
+      if (this.hasWalkableLine(finalNode, exactGoal)) {
+        if (this.samePoint(finalNode, exactGoal)) path[path.length - 1] = exactGoal;
+        else path.push(exactGoal);
+      }
       return this.smoothFootPath(path);
     },
     smoothFootPath(path) {
@@ -357,8 +714,9 @@ export default {
       return this.smoothFootPath(footPath).map(point => this.fromFootPoint(point));
     },
     hasWalkableLine(a, b) {
+      if (!this.isWalkable(a) || !this.isWalkable(b)) return false;
       const distance = Math.hypot(b.x - a.x, b.y - a.y);
-      const steps = Math.max(1, Math.ceil(distance / 1.5));
+      const steps = Math.max(1, Math.ceil(distance / 0.25));
       for (let index = 1; index < steps; index += 1) {
         const point = {
           x: a.x + ((b.x - a.x) * index) / steps,

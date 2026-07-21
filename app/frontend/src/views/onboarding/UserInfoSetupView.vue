@@ -5,6 +5,7 @@ import hobbyCsv from "../../assets/data/preference_hobbies.csv?raw";
 import interestCsv from "../../assets/data/preference_interests.csv?raw";
 import {
   AGREEMENT_VERSION,
+  overseasTransferContent,
   privacyCollectionContent,
   termsContent,
 } from "../../constants/onboardingAgreements.js";
@@ -45,6 +46,7 @@ const saveError = ref("");
 const activePreferenceType = ref("hobby");
 const termsOfServiceAgreed = ref(false);
 const privacyCollectionAgreed = ref(false);
+const overseasTransferAgreed = ref(false);
 const activeAgreementModal = ref(null);
 
 const selectedPreferenceLabels = computed(() => [...selectedHobbies.value, ...selectedInterests.value]);
@@ -83,9 +85,17 @@ const preferenceGridItems = computed(() => {
 
   return slots;
 });
-const agreementsSatisfied = computed(() => termsOfServiceAgreed.value && privacyCollectionAgreed.value);
-const activeAgreementTitle = computed(() => activeAgreementModal.value === "privacy" ? "개인정보 수집 및 이용 안내" : "이용약관");
-const activeAgreementContent = computed(() => activeAgreementModal.value === "privacy" ? privacyCollectionContent : termsContent);
+const agreementsSatisfied = computed(() => termsOfServiceAgreed.value && privacyCollectionAgreed.value && overseasTransferAgreed.value);
+const activeAgreementTitle = computed(() => ({
+  privacy: "개인정보 수집 및 이용 안내",
+  overseas: "개인정보 국외 처리 및 이전 안내",
+  terms: "이용약관",
+}[activeAgreementModal.value] || "이용 안내"));
+const activeAgreementContent = computed(() => ({
+  privacy: privacyCollectionContent,
+  overseas: overseasTransferContent,
+  terms: termsContent,
+}[activeAgreementModal.value] || []));
 
 function getStoredProfile() {
   try {
@@ -420,8 +430,10 @@ async function saveUserInfo() {
     agreements: {
       termsOfService: termsOfServiceAgreed.value,
       privacyCollection: privacyCollectionAgreed.value,
+      overseasTransfer: overseasTransferAgreed.value,
       termsVersion: AGREEMENT_VERSION,
       privacyVersion: AGREEMENT_VERSION,
+      overseasTransferVersion: AGREEMENT_VERSION,
       agreedAt: new Date().toISOString(),
     },
   };
@@ -700,7 +712,7 @@ function formatBirthDateForDisplay(value) {
               <p>Required agreement</p>
               <h3 id="agreement-title">서비스 이용을 위한 확인</h3>
             </div>
-            <span>필수 2개</span>
+            <span>필수 3개</span>
           </header>
           <p class="agreement-desc">빈틈사이를 시작하기 전에 필요한 약관을 확인해 주세요.</p>
 
@@ -729,6 +741,19 @@ function formatBirthDateForDisplay(value) {
                 <strong>개인정보 수집 및 이용에 동의합니다</strong>
               </label>
               <button type="button" @click="openAgreementModal('privacy')">내용 보기</button>
+            </div>
+
+            <div class="agreement-row">
+              <label for="overseas-transfer-agreement">
+                <input
+                  id="overseas-transfer-agreement"
+                  v-model="overseasTransferAgreed"
+                  type="checkbox"
+                >
+                <span class="required-badge">필수</span>
+                <strong>개인정보 국외 처리 및 이전에 동의합니다</strong>
+              </label>
+              <button type="button" @click="openAgreementModal('overseas')">내용 보기</button>
             </div>
           </div>
 

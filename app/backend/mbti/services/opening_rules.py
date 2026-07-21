@@ -3,11 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Mapping, Protocol
 
-from mbti.services.monthly_questions import MBTI_AXES, MbtiMonthlyQuestionBatch
-
-
-DEFAULT_REQUIRED_QNA_COUNT = 5
-DEFAULT_REQUIRED_SCORED_COUNT = 1
+from mbti.constants import (
+    DEFAULT_REQUIRED_QNA_COUNT,
+    DEFAULT_REQUIRED_SCORED_COUNT,
+    MBTI_AXES,
+)
+from mbti.services.monthly_questions import MbtiMonthlyQuestionBatch
 
 
 class ResponseScoreLike(Protocol):

@@ -1,50 +1,66 @@
 <template>
   <div class="panel-body">
-    <div class="actions mbti-refresh-actions">
+    <div v-if="mbtiViewMode === 'onboardingNext' && !isMonthlyPreparing" class="actions mbti-refresh-actions">
       <button class="secondary-button" type="button" @click="$emit('refresh')">
         분석 결과 새로고침
       </button>
     </div>
+
+    <aside class="mbti-disclaimer" role="note">
+      MBTI는 대화와 사용자가 입력한 정보를 바탕으로 살펴본 성향입니다. 전문적인 심리검사나 진단 결과가 아니며, 상황에 따라 달라질 수 있어요.
+    </aside>
 
     <template v-if="mbtiViewMode === 'onboardingType'">
       <div class="mbti-dashboard mbti-dashboard-single">
         <section class="mbti-result-board mbti-onboarding-board">
           <div>
             <span class="mbti-kicker">온보딩 MBTI 유형</span>
-            <template v-if="mbtiData.onboarding.type === '----'">
-              <div class="mbti-input-area" style="margin-top: 16px; margin-bottom: 12px; display: flex; flex-direction: column; align-items: center; gap: 16px;">
-                <div class="mbti-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; width: 100%; max-width: 320px;">
-                  <button v-for="type in mbtiOptions" :key="type" type="button"
-                          :style="{ padding: '8px 4px', borderRadius: '10px', border: newMbti === type ? '2px solid #f84f9b' : '1px solid rgba(255,255,255,0.15)', background: newMbti === type ? 'rgba(248,79,155,0.15)' : 'rgba(255,255,255,0.05)', color: newMbti === type ? '#fff' : 'rgba(255,255,255,0.7)', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer', transition: 'all 0.2s' }"
-                          @click="newMbti = type">
+            <template v-if="!onboardingData || onboardingData.type === '----'">
+              <div class="mbti-input-area">
+                <div class="mbti-grid">
+                  <button
+                    v-for="type in mbtiOptions"
+                    :key="type"
+                    class="mbti-option-button"
+                    :class="{ active: newMbti === type }"
+                    type="button"
+                    @click="newMbti = type"
+                  >
                     {{ type }}
                   </button>
                 </div>
-                <button class="primary-button" @click="saveMbti" type="button" :disabled="!newMbti" :style="{ padding: '0 24px', borderRadius: '10px', minHeight: '42px', opacity: newMbti ? '1' : '0.5', cursor: newMbti ? 'pointer' : 'not-allowed' }">선택 완료</button>
+                <button class="primary-button mbti-save-button" @click="saveMbti" type="button" :disabled="!newMbti">선택 완료</button>
               </div>
             </template>
             <template v-else>
-              <div class="mbti-type">{{ mbtiData.onboarding.type }}</div>
+              <div class="mbti-type">{{ onboardingData.type }}</div>
             </template>
-            <div class="mbti-confidence">{{ mbtiData.onboarding.period }}</div>
+            <div v-if="onboardingData" class="mbti-confidence">{{ onboardingData.period }}</div>
           </div>
         </section>
-        <section class="card report-panel mbti-type-description">
+        <section v-if="onboardingData" class="card report-panel mbti-type-description">
           <h3>온보딩 MBTI 유형 설명</h3>
-          <p>{{ mbtiData.onboarding.description }}</p>
+          <p>{{ onboardingData.description }}</p>
           <ol class="report-lines compact-report">
-            <li v-for="line in mbtiData.onboarding.report" :key="line">{{ line }}</li>
+            <li v-for="line in onboardingData.report" :key="line">{{ line }}</li>
           </ol>
         </section>
       </div>
     </template>
 
     <template v-else-if="mbtiViewMode === 'onboardingNext'">
-      <section class="card mbti-combined-card" :class="{ 'is-preparing': isMonthlyPreparing }">
-        <div v-if="isMonthlyPreparing" class="mbti-preparing-banner" role="status">
-          <strong>월간 MBTI 분석을 준비하고 있어요.</strong>
-          <span>대화 기반 응답이 충분히 저장되면 이 화면에서 성향 그래프와 근거 리포트를 보여드릴게요.</span>
+      <section v-if="isMonthlyPreparing" class="card mbti-empty-state" role="status">
+        <span class="mbti-kicker">월간 분석</span>
+        <h3>아직 월간 성향을 보여드릴 만큼 대화가 쌓이지 않았어요.</h3>
+        <p>대화 기반 응답이 충분해지면 네 가지 선호 지표와 변화 이유를 이 화면에서 확인할 수 있어요.</p>
+        <div class="mbti-empty-baseline">
+          <span>현재 참고 기준</span>
+          <strong>{{ onboardingData?.type || '미등록' }}</strong>
+          <small>{{ onboardingData ? '온보딩에서 직접 입력한 유형' : '온보딩 MBTI를 먼저 등록해주세요.' }}</small>
         </div>
+      </section>
+
+      <section v-else class="card mbti-combined-card">
 
         <div class="mbti-combined-grid">
           <div class="mbti-type-stack">
@@ -62,16 +78,15 @@
             </article>
             <article class="mbti-type-panel previous">
               <span>이전 기준 MBTI</span>
-              <strong>{{ mbtiData.previous.type }}</strong>
-              <small>{{ mbtiData.previous.monthLabel }}</small>
+              <strong>{{ mbtiData.previous?.type || '기준 없음' }}</strong>
+              <small>{{ mbtiData.previous?.monthLabel || '' }}</small>
             </article>
           </div>
 
           <article class="mbti-current-graph">
             <div class="mbti-combined-head">
               <div>
-                <h3>{{ isMonthlyPreparing ? 'MBTI 선호성향 그래프 준비 중' : '현재 MBTI 선호성향 그래프' }}</h3>
-                <p v-if="isMonthlyPreparing">아직 확정된 월간 점수가 없어 기본 상태로 표시됩니다.</p>
+                <h3>현재 MBTI 선호성향 그래프</h3>
               </div>
               <div class="mbti-type mbti-type-current mbti-letter-row">
                 <span
@@ -106,7 +121,7 @@
           </article>
 
           <article class="mbti-evidence-report">
-            <h3>{{ isMonthlyPreparing ? '준비 중 안내' : '근거 리포트' }}</h3>
+            <h3>근거 리포트</h3>
             <ol class="report-lines compact-report">
               <li v-for="line in mbtiData.report" :key="line">{{ line }}</li>
             </ol>
@@ -123,7 +138,7 @@
           <p class="qna-subtitle">무작위 질문에 답하며 나만의 성향 데이터를 쌓아보세요.</p>
           
           <div class="qna-progress-bar" v-if="mockData.counts">
-            <div v-for="(count, axis) in mockData.counts" :key="axis" class="progress-pill" :class="{ 'is-complete': count >= 5 }">
+            <div v-for="(count, axis) in mockData.counts" :key="axis" class="progress-pill" :class="{ 'is-complete': count >= requiredAnswersPerAxis }">
               <span class="axis-name">{{ axis }}</span>
               <span class="axis-count">{{ count }}/5</span>
             </div>
@@ -182,12 +197,13 @@
       </section>
     </template>
 
-    <div v-if="mbtiData.onboarding.type !== '----'" class="actions mbti-switch-actions" aria-label="MBTI 화면 전환">
+    <div v-if="onboardingData?.type && onboardingData.type !== '----'" class="actions mbti-switch-actions" aria-label="MBTI 화면 전환">
       <button
         v-for="view in mbtiViews"
         :key="view.key"
         class="secondary-button"
         :class="{ active: mbtiViewMode === view.key }"
+        :aria-pressed="mbtiViewMode === view.key"
         type="button"
         @click="$emit('set-view', view.key)"
       >
@@ -199,11 +215,16 @@
 
 <script>
 import { fetchMockQuestion, saveMockAnswer, resetMockQna } from "../mypage.api";
+import {
+  MBTI_AXIS_COUNT,
+  MBTI_OPTIONS,
+  MBTI_REQUIRED_ANSWERS_PER_AXIS,
+} from "../config/mbti.constants";
 
 export default {
   name: "MbtiPanel",
   props: {
-    mbtiData: { type: Object, required: true },
+    mbtiData: { type: Object, default: null },
     mbtiViewMode: { type: String, required: true },
     mbtiViews: { type: Array, required: true },
     currentMbtiView: { type: Object, required: true }
@@ -212,12 +233,8 @@ export default {
   data() {
     return {
       newMbti: "",
-      mbtiOptions: [
-        'INTJ', 'INTP', 'ENTJ', 'ENTP',
-        'INFJ', 'INFP', 'ENFJ', 'ENFP',
-        'ISTJ', 'ISTP', 'ESTJ', 'ESTP',
-        'ISFJ', 'ISFP', 'ESFJ', 'ESFP'
-      ],
+      mbtiOptions: MBTI_OPTIONS,
+      requiredAnswersPerAxis: MBTI_REQUIRED_ANSWERS_PER_AXIS,
       mockData: {
         axis: "",
         question: "",
@@ -228,22 +245,31 @@ export default {
     };
   },
   computed: {
+    onboardingData() {
+      return this.mbtiData?.onboarding || null;
+    },
     canFinishMock() {
       if (!this.mockData.counts) return false;
       const axes = Object.keys(this.mockData.counts);
-      return axes.length >= 4 && Object.values(this.mockData.counts).every(count => count >= 5);
+      return axes.length >= MBTI_AXIS_COUNT
+        && Object.values(this.mockData.counts).every(
+          (count) => count >= MBTI_REQUIRED_ANSWERS_PER_AXIS
+        );
     },
     isMonthlyPreparing() {
-      return this.mbtiData.current?.type === "----";
+      const currentType = this.mbtiData?.current?.type;
+      return !currentType || currentType === "----";
     },
     currentTypeLetters() {
-      return Array.from(this.mbtiData.current?.type || "----");
+      return this.isMonthlyPreparing
+        ? []
+        : Array.from(this.mbtiData.current.type);
     }
   },
   methods: {
     isMbtiTypeLetterChanged(letter, index) {
       if (this.isMonthlyPreparing || letter === "-") return false;
-      return this.mbtiData.previous?.type?.[index] !== letter;
+      return this.mbtiData?.previous?.type?.[index] !== letter;
     },
     saveMbti() {
       const type = this.newMbti.trim().toUpperCase();
@@ -309,8 +335,8 @@ export default {
   padding: 32px 24px;
   max-width: 640px;
   margin: 0 auto;
-  background: linear-gradient(145deg, rgba(30,30,35,0.8) 0%, rgba(20,20,25,0.95) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(145deg, var(--mbti-surface-soft) 0%, var(--mbti-surface-deep) 100%);
+  border: 1px solid var(--mbti-line);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   border-radius: 20px;
   backdrop-filter: blur(20px);
@@ -324,8 +350,9 @@ export default {
 .qna-badge {
   display: inline-block;
   padding: 4px 12px;
-  background: rgba(248, 79, 155, 0.15);
-  color: #f84f9b;
+  background: rgba(229, 155, 95, 0.12);
+  color: #efb789;
+  border: 1px solid rgba(229, 155, 95, 0.22);
   font-size: 12px;
   font-weight: 700;
   border-radius: 20px;
@@ -337,13 +364,13 @@ export default {
   margin: 0 0 8px 0;
   font-size: 22px;
   font-weight: 700;
-  color: #fff;
+  color: var(--text);
 }
 
 .qna-subtitle {
   margin: 0;
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--muted);
 }
 
 .qna-empty-state {
@@ -358,32 +385,32 @@ export default {
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(229, 155, 95, 0.07);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.4);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  color: #d4b49f;
+  box-shadow: inset 0 0 0 1px var(--mbti-line);
 }
 
 .qna-draw-button {
   display: flex;
   align-items: center;
   padding: 14px 28px;
-  background: linear-gradient(135deg, #f84f9b 0%, #ff8c42 100%);
-  color: #fff;
+  background: linear-gradient(135deg, #e59b5f 0%, #8794a4 100%);
+  color: #21142b;
   font-weight: 600;
   font-size: 16px;
   border: none;
   border-radius: 14px;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(248, 79, 155, 0.3);
+  box-shadow: 0 4px 15px rgba(10, 7, 24, 0.28);
 }
 
 .qna-draw-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(248, 79, 155, 0.4);
+  box-shadow: 0 8px 25px rgba(229, 155, 95, 0.22);
 }
 
 .qna-active-state {
@@ -409,8 +436,8 @@ export default {
   width: 48px;
   height: 48px;
   border-radius: 16px;
-  background: linear-gradient(135deg, #2a2a35 0%, #1f1f26 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(135deg, #4a304d 0%, #292033 100%);
+  border: 1px solid var(--mbti-line-soft);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -420,19 +447,19 @@ export default {
 .axis-tag {
   font-size: 13px;
   font-weight: 800;
-  background: -webkit-linear-gradient(#f84f9b, #ffcf5a);
+  background: -webkit-linear-gradient(#efb789, #9ba8b8);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .chatbot-message {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(62, 38, 65, 0.72);
   padding: 18px 22px;
   border-radius: 4px 20px 20px 20px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--mbti-line-soft);
   font-size: 15px;
   line-height: 1.6;
-  color: #eaeaea;
+  color: var(--text);
   box-shadow: 0 4px 20px rgba(0,0,0,0.15);
   position: relative;
   max-width: 100%;
@@ -446,10 +473,10 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(27, 17, 36, 0.68);
   padding: 16px;
   border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--mbti-line-soft);
 }
 
 .qna-textarea {
@@ -457,7 +484,7 @@ export default {
   min-height: 120px;
   background: transparent;
   border: none;
-  color: #fff;
+  color: var(--text);
   font-size: 15px;
   line-height: 1.6;
   resize: none;
@@ -466,7 +493,7 @@ export default {
 }
 
 .qna-textarea::placeholder {
-  color: rgba(255, 255, 255, 0.3);
+  color: rgba(199, 179, 188, 0.62);
 }
 
 .qna-input-footer {
@@ -479,15 +506,15 @@ export default {
 
 .qna-hint {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--muted);
 }
 
 .qna-submit-button {
   display: flex;
   align-items: center;
   padding: 10px 20px;
-  background: #f84f9b;
-  color: #fff;
+  background: #e59b5f;
+  color: #21142b;
   font-weight: 600;
   font-size: 14px;
   border: none;
@@ -503,7 +530,7 @@ export default {
 }
 
 .qna-submit-button:not(:disabled):hover {
-  background: #ff5eaa;
+  background: #efb078;
   transform: translateY(-1px);
 }
 
@@ -518,23 +545,23 @@ export default {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(0,0,0,0.3);
+  background: rgba(27, 17, 36, 0.66);
   padding: 6px 12px;
   border-radius: 20px;
   font-size: 13px;
-  border: 1px solid rgba(255,255,255,0.05);
+  border: 1px solid var(--mbti-line-soft);
   transition: all 0.3s ease;
 }
 
 .progress-pill.is-complete {
-  background: rgba(248, 79, 155, 0.2);
-  border-color: rgba(248, 79, 155, 0.5);
-  box-shadow: 0 0 10px rgba(248, 79, 155, 0.2);
+  background: rgba(229, 155, 95, 0.14);
+  border-color: rgba(229, 155, 95, 0.38);
+  box-shadow: 0 0 10px rgba(229, 155, 95, 0.12);
 }
 
 .progress-pill .axis-name {
   font-weight: 700;
-  color: #ffcf5a;
+  color: #aeb8c4;
 }
 
 .progress-pill .axis-count {
@@ -543,7 +570,7 @@ export default {
 }
 
 .progress-pill.is-complete .axis-name {
-  color: #f84f9b;
+  color: #efb789;
 }
 
 .progress-pill.is-complete .axis-count {

@@ -1,0 +1,13 @@
+/* Import order preserves the original scoped chat cascade. */
+@import "./sections/01-foundation-secret.css";
+@import "./sections/02-legacy-layout-thread.css";
+@import "./sections/03-legacy-composer-tools.css";
+@import "./sections/04-immersive-shell-companion.css";
+@import "./sections/05-immersive-dialogue-composer.css";
+@import "./sections/06-immersive-responsive.css";
+@import "./sections/07-mind-room-atmosphere.css";
+@import "./sections/08-character-presence.css";
+@import "./sections/09-vn-dialogue-thread.css";
+@import "./sections/10-vn-console-composer.css";
+@import "./sections/11-story-log-motion.css";
+@import "./sections/12-vn-responsive.css";

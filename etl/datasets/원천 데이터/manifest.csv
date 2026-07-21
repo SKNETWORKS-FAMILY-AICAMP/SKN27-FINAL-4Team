@@ -1,5 +1,0 @@
-"source_id","file_name","format","kept","role","note"
-"kaggle_datasnaek_mbti_type","kaggle_datasnaek_mbti_type__mbti_1.csv","csv","True","main weak-label English training source","16-type MBTI labels are split into EI/NS/FT/JP after post chunking."
-"mbtibench","mbtibench__mbtibench.jsonl","jsonl","True","axis label support/evaluation source","Contains hardlabels and softlabels for E/I, S/N, T/F, J/P."
-"epinfomax_mbti_korean_dataset","epinfomax_mbti_korean_dataset/huggingface_epinfomax_mbti_korean_dataset_*.csv","csv/parquet","True","Korean MBTI text-label source","Hugging Face dataset with text and integer label columns; label-to-MBTI mapping requires verification."
-"huggingface_jojo0217_korean_safe_conversation","huggingface_jojo0217_korean_safe_conversation/*.jsonl","jsonl","True","Korean conversation validation source","Korean safe/daily/emotional conversation dataset; use instruction as user utterance for service-domain validation, not MBTI label training."

@@ -1,5 +1,5 @@
 <template>
-  <div class="chat-page" :class="{ 'is-secret': isSecret }"
+  <div class="chat-page" :class="{ 'is-secret': isSecret }" :style="charThemeVars"
        @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop.prevent="onDropImage">
 
     <!-- 📷 이미지 드래그&드롭 오버레이 -->
@@ -57,35 +57,78 @@
       </Transition>
     </Teleport>
 
-    <div class="chat-layout">
-      <!-- ===== 왼쪽 패널: 캐릭터 영역 ===== -->
-      <aside class="left-panel">
-        <div class="char-face character-image-frame" :style="{ background: displayCharacter.bg, color: displayCharacter.color }">
-          <img
-            :src="displayCharacterImage"
-            :alt="`${displayCharacter.name} ${displayExpressionLabel}`"
-            :class="displayAnimationClass"
-          />
+    <!-- 배경 무드: 어둠 그라데이션 + 떠오르는 빛 입자 (프로토타입 이식) -->
+    <div class="bg-grade"></div>
+    <div class="mote" style="left:16%; bottom:120px; width:9px; height:9px; animation-duration:12s;"></div>
+    <div class="mote" style="left:64%; bottom:90px; width:11px; height:11px; animation-duration:15s; animation-delay:4s;"></div>
+    <div class="mote" style="left:86%; bottom:150px; width:8px; height:8px; animation-duration:13s; animation-delay:2s;"></div>
+
+    <!-- ═════ 마음방 A-레이아웃 (클로드 디자인 프로토타입 이식, 2026-07-20) ═════
+         1순위 캐릭터(상단 중앙, 스크롤 시 접힘) → 2순위 대화 → 3순위 입력.
+         기능 배선(기억 API·표정 스왑·TTS·시크릿·칩 펼침)은 전부 기존 것 유지. -->
+    <div class="mind-header" :class="{ 'is-collapsed': isCollapsed }">
+      <button v-if="!isSecret" class="secret-enter" @click="toggleSecret" aria-label="시크릿챗 열기">🔒 시크릿챗</button>
+
+      <!-- 펼침: 큰 캐릭터 + 기억 별자리 칩 -->
+      <template v-if="!isCollapsed">
+        <div class="room-label">{{ isSecret ? '밤하늘 아래 · 비밀 이야기' : timeGreeting }}</div>
+        <div class="hero-wrap" @click="pokeCharacter" title="쓰다듬기">
+          <div class="hero-react" :style="reactStyle" :key="'r' + animKey">
+            <div class="hero-circle">
+              <img :src="displayCharacterImage"
+                   :alt="`${displayCharacter.name} ${displayExpressionLabel}`"
+                   :class="displayAnimationClass" />
+            </div>
+          </div>
+          <div v-if="floatSymbol" class="float-symbol" :key="'f' + animKey">{{ floatSymbol }}</div>
         </div>
         <div class="char-name">{{ displayCharacter.name }}</div>
-        <!-- 감정 라벨 텍스트("현재 표정 : 슬픔")는 표시하지 않음 — 친구 컨셉 (표정 이미지로만 반응) -->
+        <div class="char-status" :class="{ busy: isTyping || isSpeaking }">
+          <span class="status-dot"></span>{{ charStatus }}
+        </div>
 
         <template v-if="!isSecret">
-          <div class="ctrl-btns">
-            <button class="ctrl-btn" @click="toggleSecret">🔒 시크릿챗</button>
+          <div v-if="memoryPanelHasData" class="mem-chip-row">
+            <span class="mem-chip-title">✦ {{ displayCharacter.name }}의 기억 별자리</span>
+            <span v-for="c in memChips" :key="c.key" class="mem-chip" :class="{ glow: c.glow }">
+              <span class="chip-star" :style="{ color: c.color, textShadow: '0 0 6px ' + c.color }">{{ c.star }}</span>
+              {{ c.label }}
+            </span>
+            <span class="mem-more" role="button" aria-label="기억 전체 보기"
+                  @click="memoryOpen = !memoryOpen">{{ memoryOpen ? '접기 ▴' : '더보기 ▾' }}</span>
           </div>
-          <div v-if="displayCharacter.quote" class="char-quote">
-            {{ displayCharacter.quote }}
-          </div>
+          <div class="mem-notice">대화 속 이야기가 자동으로 기억돼요 · '잊어줘'라고 말하면 지워져요</div>
         </template>
+        <div v-else class="secret-note">🌙 비저장 모드 — 이 방의 이야기는 종료와 함께 흔적 없이 사라져요</div>
+      </template>
 
-        <div v-else class="secret-note">
-          🔒 비저장 모드 — 메모리 적립 정지<br>(종료 시 즉시 파기)
+      <!-- 접힘: 대화가 쌓이면 컴팩트 바 (클릭하면 다시 펼침) -->
+      <div v-else class="collapsed-bar" @click="expandHeader" role="button" aria-label="캐릭터 영역 펼치기">
+        <div class="hero-circle sm" :style="reactStyle">
+          <img :src="displayCharacterImage" :alt="displayCharacter.name" />
         </div>
-      </aside>
+        <div class="cb-meta">
+          <div class="cb-name">{{ displayCharacter.name }}</div>
+          <div class="char-status" :class="{ busy: isTyping || isSpeaking }">
+            <span class="status-dot"></span>{{ charStatus }}
+          </div>
+        </div>
+        <div class="cb-right">
+          <span v-if="!isSecret" class="mem-more" role="button" aria-label="기억 전체 보기"
+                @click.stop="memoryOpen = !memoryOpen">✦ 기억 별자리</span>
+          <span class="cb-expand">펼치기 ▾</span>
+        </div>
+      </div>
 
-      <!-- ===== 오른쪽: 대화 스레드 ===== -->
-      <section class="chat-thread" ref="threadRef">
+      <!-- 기억 영수증 토스트 — "'발표'를 기억했어요 / 잊었어요" -->
+      <Transition name="toastfade">
+        <div v-if="memToast" class="mem-toast">✦ {{ memToast }}</div>
+      </Transition>
+    </div>
+
+    <!-- ===== 대화 스레드 (중앙 정렬 컬럼) ===== -->
+    <section class="chat-thread" ref="threadRef" @scroll="onThreadScroll">
+      <div class="thread-col">
         <div
           v-for="msg in messages"
           :key="msg.id ?? msg._tempId"
@@ -93,14 +136,19 @@
           :class="msg.role"
         >
           <!-- 감정 라벨(슬픔 모드 등)은 화면에 표시하지 않음 — 친구 컨셉 (분석은 뒤에서만) -->
-          <div v-if="msg.role !== 'user'" class="char-msg-meta">
-            <img class="bubble-avatar" :src="displayCharacterImage" :alt="displayCharacter.name">
-            <span class="bubble-char-name">{{ displayCharacter.name }}</span>
+          <div class="bubble-row">
+            <img v-if="msg.role === 'assistant'" :src="displayCharacterImage" class="mini-avatar" alt="" />
+            <div class="bubble" :class="msg.role === 'user' ? 'bubble-user' : 'bubble-char'">
+              <img v-if="msg.image" :src="msg.image" class="bubble-img" alt="첨부 이미지" />
+              <span v-if="msg.content" class="bubble-text">{{ (msg.displayed !== undefined ? msg.displayed : msg.content) || '…' }}</span>
+            </div>
           </div>
-          <div class="bubble" :class="msg.role === 'user' ? 'bubble-user' : 'bubble-char'">
-            <img v-if="msg.image" :src="msg.image" class="bubble-img" alt="첨부 이미지" />
-            <span v-if="msg.content" class="bubble-text">{{ (msg.displayed !== undefined ? msg.displayed : msg.content) || '…' }}</span>
+          <div v-if="ttsEnabled && msg.role === 'assistant' && msg.displayed !== undefined && msg.displayed !== msg.content"
+               class="speak-hint">
+            <span class="eq"><i></i><i></i><i></i></span> 말하는 중
           </div>
+          <!-- (기억함 라벨 제거 2026-07-20 — 저장은 조용히, 패널 고지·칩 반짝임으로 충분.
+               삭제(잊어줘)만 토스트로 확인해준다) -->
           <!-- 대화 맥락 바로가기 칩 — 사용자가 관련 얘기를 꺼냈을 때만 (2026-07-12) -->
           <button v-if="msg.suggestPage && msg.displayed === msg.content" class="suggest-chip"
                   @click="router.push(msg.suggestPage === 'report' ? '/report' : '/mypage')">
@@ -109,23 +157,49 @@
 
         </div>
 
-        <div v-if="showQuickReplies" class="quick-replies" aria-label="감정 빠른 답장">
-          <button
-            v-for="reply in quickReplies"
-            :key="reply.text"
-            type="button"
-            class="quick-chip"
-            @click="sendQuickReply(reply.text)"
-          >
-            <span aria-hidden="true">{{ reply.icon }}</span>
-            {{ reply.text }}
-          </button>
-        </div>
-
         <div v-if="isTyping" class="typing-indicator">
           <span></span><span></span><span></span>
         </div>
-      </section>
+      </div>
+    </section>
+
+    <!-- ===== 기억 별자리 팝오버 (더보기 — 카드형 상세, 정보량 전부 유지) ===== -->
+    <div v-if="memoryOpen && !isSecret" class="mem-overlay" @click="memoryOpen = false"></div>
+    <div v-if="memoryOpen && !isSecret" class="mem-popover">
+      <div class="mem-pop-head">
+        <span class="mp-title">✦ {{ displayCharacter.name }}의 기억 별자리</span>
+        <button class="mem-pop-close" @click="memoryOpen = false" aria-label="닫기">✕</button>
+      </div>
+      <div v-if="memoryPanelData.upcoming.length" class="mp-sec">
+        <div class="mp-label">다가오는 일</div>
+        <div v-for="u in memoryPanelData.upcoming" :key="'u' + u.name" class="mp-item">
+          <span class="chip-star" style="color:#FCD34D; text-shadow:0 0 8px #FCD34D;">✦</span>
+          <span class="mp-text">{{ u.name }}</span>
+          <span class="mp-dday" :class="{ soon: u.dday <= 2 }">{{ u.dday === 0 ? '오늘' : 'D-' + u.dday }}</span>
+        </div>
+      </div>
+      <div v-if="memoryPanelData.people.length" class="mp-sec">
+        <div class="mp-label">소중한 사람</div>
+        <div v-for="p in memoryPanelData.people" :key="'p' + p.name" class="mp-item">
+          <span class="chip-star" style="color:#7dd3fc; text-shadow:0 0 8px #7dd3fc;">✦</span>
+          <span class="mp-text">{{ p.name }}</span>
+          <span v-if="p.relation" class="mp-sub">· {{ p.relation }}</span>
+        </div>
+      </div>
+      <div v-if="memoryPanelData.prefs.length" class="mp-sec">
+        <div class="mp-label">요즘 좋아하는 것</div>
+        <div v-for="t in memoryPanelData.prefs" :key="'t' + t.topic" class="mp-item">
+          <span class="chip-star" style="color:#f9a8d4; text-shadow:0 0 8px #f9a8d4;">{{ t.polarity === '오' ? '💧' : '♥' }}</span>
+          <span class="mp-text">{{ t.topic }}</span>
+        </div>
+      </div>
+      <div v-if="memoryPanelData.recent.length" class="mp-sec">
+        <div class="mp-label">최근 이야기</div>
+        <div v-for="n in memoryPanelData.recent" :key="'r' + n" class="mp-item mp-dim">
+          <span class="mp-text">{{ n }}</span>
+        </div>
+      </div>
+      <div class="mp-note">대화 속 이야기가 자동으로 기억돼요 · "잊어줘"라고 말하면 지워져요</div>
     </div>
 
     <!-- ===== 입력바 ===== -->
@@ -137,24 +211,42 @@
       </div>
       <div class="input-bar">
         <input ref="fileInputRef" type="file" accept="image/*" class="file-hidden" @change="onPickImage" />
-        <button class="attach-btn" :disabled="isTyping" @click="fileInputRef?.click()" title="사진 첨부">📷</button>
-        <button v-if="sttSupported" class="attach-btn stt-btn" :class="{ 'stt-recording': isRecording }"
-                :disabled="isTyping" @click="toggleStt"
-                :title="isRecording ? '음성 입력 중지' : '음성으로 입력'">🎤</button>
-        <button class="attach-btn tts-toggle" :class="{ 'tts-off': !ttsEnabled }" @click="toggleTtsPref"
-                :title="ttsEnabled ? '음성 끄기 (글자만 보기)' : '음성 켜기'">{{ ttsEnabled ? '🔊' : '🔇' }}</button>
+        <!-- + 메뉴 (프로토타입): 사진·음성입력·음성켜기를 한 버튼에 -->
+        <div class="plus-wrap">
+          <button class="attach-btn plus-btn" :class="{ 'stt-recording': isRecording }"
+                  @click="plusOpen = !plusOpen" aria-label="첨부와 음성 메뉴">＋</button>
+          <div v-if="plusOpen" class="plus-overlay" @click="plusOpen = false"></div>
+          <div v-if="plusOpen" class="plus-menu">
+            <div class="plus-item" :class="{ disabled: isTyping }"
+                 @click="!isTyping && (fileInputRef?.click(), plusOpen = false)">
+              <span class="pi-ico">🖼️</span><span class="pi-label">파일 또는 사진 추가</span>
+            </div>
+            <div v-if="sttSupported" class="plus-item" :class="{ disabled: isTyping }"
+                 @click="!isTyping && (toggleStt(), plusOpen = false)">
+              <span class="pi-ico">🎤</span><span class="pi-label">{{ isRecording ? '음성 입력 중지' : '음성으로 입력' }}</span>
+              <span v-if="isRecording" class="pi-state rec">● 녹음 중</span>
+            </div>
+            <div class="plus-divider"></div>
+            <div class="plus-item" @click="toggleTtsPref()">
+              <span class="pi-ico">{{ ttsEnabled ? '🔊' : '🔇' }}</span>
+              <span class="pi-label">음성 {{ ttsEnabled ? '끄기' : '켜기' }}</span>
+              <span class="pi-state">{{ ttsEnabled ? '켜짐' : '꺼짐' }}</span>
+            </div>
+          </div>
+        </div>
         <textarea
           ref="inputRef"
           v-model="inputText"
           class="msg-input"
-          :placeholder="isSecret ? '메시지 입력… (종료 시 전부 파기)' : '메시지 입력… (최대 300자)'"
+          :placeholder="isSecret ? '여기서 한 얘기는 흔적 없이 사라져요' : '오늘 어땠어? 무슨 얘기든 괜찮아'"
           maxlength="300"
           rows="1"
           @keydown.enter.exact.prevent="sendMessage"
           @input="autoResize"
         />
         <span class="char-count">{{ inputText.length }}/300</span>
-        <button class="send-btn" :disabled="(!inputText.trim() && !attachedImage) || isTyping" @click="sendMessage">
+        <button class="send-btn" :disabled="(!inputText.trim() && !attachedImage) || isTyping"
+                @click="sendMessage" aria-label="메시지 전송">
           전송 ➤
         </button>
       </div>
@@ -163,7 +255,7 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { chatApi } from '../../api/chat.js'
 import chatBg from '../../assets/chat-bg.png'
@@ -220,32 +312,28 @@ const CHARACTER_META = {
 
 const DISPLAY_CHARACTER_META = {
   otter: {
-    name: '토토',
+    name: '수달',
     color: '#7DD3FC',
     bg: 'rgba(125,211,252,0.18)',
     backendCharacter: 'toto',
-    quote: '오늘 마음은 내가 옆에서 같이 정리해줄게 ♥',
   },
   cat: {
     name: '까미',
     color: '#C4B5FD',
     bg: 'rgba(196,181,253,0.18)',
     backendCharacter: 'kkami',
-    quote: '피하고 싶은 마음까지 천천히 살펴볼까?',
   },
   redpanda: {
     name: '포리',
     color: '#5EEAD4',
     bg: 'rgba(94,234,212,0.18)',
     backendCharacter: 'pori',
-    quote: '싫은 날엔, 너의 빈틈도 내가 안아줄게 ♥',
   },
   bird: {
     name: '여울',
     color: '#FBBF77',
     bg: 'rgba(251,191,119,0.18)',
     backendCharacter: 'yeoul',
-    quote: '괜찮아, 천천히 말해도 내가 듣고 있을게 ♥',
   },
 }
 
@@ -337,6 +425,150 @@ const showExitModal  = ref(false)
 const messages       = ref([])
 const inputText      = ref('')
 const isTyping       = ref(false)
+
+// ── 기억 패널 (UI #3, 2026-07-20) — 그래프 기억을 좌측에 실시간 표시 ──
+const memoryPanelData = ref({ upcoming: [], prefs: [], people: [], recent: [] })
+const memoryPanelHasData = computed(() =>
+  memoryPanelData.value.upcoming.length || memoryPanelData.value.prefs.length ||
+  memoryPanelData.value.people.length || memoryPanelData.value.recent.length)
+async function refreshMemoryPanel() {
+  if (isSecret.value) return   // 시크릿 = 무저장 — 패널도 침묵
+  try {
+    const next = await chatApi.memoryPanel()
+    _diffToast(memoryPanelData.value, next)   // 기억 영수증 (추가/삭제 알림)
+    memoryPanelData.value = next
+    stickBottom()   // 칩 로드로 헤더가 커지면 스레드가 줄어듦 — 바닥 재고정
+  } catch { /* 패널은 부가 기능 — 실패해도 대화 흐름 무영향 */ }
+}
+
+// 캐릭터 쓰다듬기 (UI #60) — 클릭하면 폴짝 (애착 소품, 기능 무관)
+const isPoked = ref(false)
+function pokeCharacter() {
+  if (isPoked.value) return
+  isPoked.value = true
+  reactTo('surprise')   // A-레이아웃: 쓰다듬으면 폴짝+❕ (프로토타입 poke)
+  setTimeout(() => { isPoked.value = false }, 600)
+}
+
+// ── 마음방 리디자인 (2026-07-20) — 캐릭터 색 테마 · 방 라벨 · 상태 뱃지 ──
+// 캐릭터마다 말풍선·글로우 색이 달라진다 (까미 보라 / 포리 주황 / 토토 청록 / 여울 분홍)
+const CHAR_THEME = {
+  kkami: { accent: '#a78bfa', bubble: 'rgba(64,40,110,0.78)' },
+  pori:  { accent: '#ffab6b', bubble: 'rgba(120,62,26,0.72)' },
+  toto:  { accent: '#5eead4', bubble: 'rgba(16,84,74,0.72)' },
+  yeoul: { accent: '#f9a8d4', bubble: 'rgba(112,44,74,0.72)' },
+}
+const charThemeVars = computed(() => {
+  const t = CHAR_THEME[displayCharacterId.value] || CHAR_THEME.kkami
+  return { '--char-accent': t.accent, '--char-bubble': t.bubble }
+})
+// 시간대 인사 — 방문할 때마다 다른 방 (팀원 시안의 '느긋한 오후' 아이디어)
+const timeGreeting = computed(() => {
+  const h = new Date().getHours()
+  if (h < 6) return '고요한 새벽'
+  if (h < 11) return '맑은 아침'
+  if (h < 17) return '느긋한 오후'
+  if (h < 21) return '노을 지는 저녁'
+  return '포근한 밤'
+})
+// 캐릭터 상태 뱃지 — 생각 중(응답 대기) / 말하는 중(타이핑 연출) / 듣고 있어요
+const isSpeaking = computed(() => {
+  const last = messages.value[messages.value.length - 1]
+  return !!(last && last.role === 'assistant'
+            && last.displayed !== undefined && last.displayed !== last.content)
+})
+const charStatus = computed(() =>
+  isTyping.value ? '생각을 고르는 중…' : (isSpeaking.value ? '말하는 중' : '네 이야기를 듣고 있어'))
+
+// ── A-레이아웃: 접힘 헤더 (프로토타입 이식 — 스크롤 40px↑ 접힘, 12px↓ 펼침) ──
+const isCollapsed = ref(false)
+const userExpanded = ref(false)
+const nearBottom = ref(true)   // 사용자가 위로 올려 읽는 중인지 추적 (바닥 고정 여부)
+function onThreadScroll(e) {
+  const el = e.target
+  nearBottom.value = (el.scrollHeight - el.scrollTop - el.clientHeight) < 80
+  // (접힘 동작 제거 2026-07-20 — 사용자 결정: 캐릭터·기억 별자리는 상시 고정,
+  //  대화만 그 아래에서 스크롤. 낮은 화면은 @media가 캐릭터를 축소해 커버)
+}
+function expandHeader() { isCollapsed.value = false; userExpanded.value = true }
+// 바닥 고정 (2026-07-20 실측 수정): 기억 칩 로드·입력창 확장·헤더 접힘 등으로
+// 주변 높이가 변하면 스레드가 줄어도 스크롤이 보정 안 돼 마지막 메시지가
+// 입력바에 깔렸다 → 높이가 변하는 모든 지점에서, 바닥 근처였다면 다시 붙인다.
+function stickBottom() { if (nearBottom.value) scrollToBottom() }
+watch(isCollapsed, () => stickBottom())
+
+// ── 감정 리액션 (프로토타입 이식) — 봇 답변·쓰다듬기마다 캐릭터가 감정대로 움직인다 ──
+const EMO_FX = {
+  normal:   { r: 'reactCalm', s: '',   c: '#a78bfa' },
+  joy:      { r: 'reactJoy',  s: '✨', c: '#FCD34D' },
+  sadness:  { r: 'reactSad',  s: '🫂', c: '#93c5fd' },
+  anger:    { r: 'reactPop',  s: '💢', c: '#f9a8d4' },   // 편들기 에너지 (봇이 화내는 게 아님)
+  surprise: { r: 'reactPop',  s: '❕', c: '#f9a8d4' },
+}
+const animKey = ref(0)
+const reactEmo = ref('normal')
+function reactTo(emo) {
+  reactEmo.value = EMO_FX[emo] ? emo : 'normal'
+  animKey.value += 1
+}
+const reactStyle = computed(() => {
+  const fx = EMO_FX[reactEmo.value] || EMO_FX.normal
+  const suf = animKey.value % 2 ? 'B' : 'A'
+  return {
+    animation: `${fx.r}${suf} .95s ease both`,
+    transformOrigin: 'center bottom',
+    filter: `drop-shadow(0 14px 18px rgba(0,0,0,.32)) drop-shadow(0 0 26px ${fx.c}77)`,
+  }
+})
+const floatSymbol = computed(() => (EMO_FX[reactEmo.value] || EMO_FX.normal).s)
+
+// ── 기억 별자리 칩 (요약 3개) + 팝오버 열림 상태 ──
+const memoryOpen = ref(false)
+const plusOpen = ref(false)   // 입력바 + 메뉴 (프로토타입)
+const glowName = ref(null)
+const memChips = computed(() => {
+  const d = memoryPanelData.value
+  const chips = []
+  for (const u of d.upcoming.slice(0, 2)) {
+    chips.push({ key: 'u' + u.name, star: '✦', color: '#FCD34D',
+                 label: `${u.name} ${u.dday === 0 ? '오늘' : 'D-' + u.dday}`, glow: u.name === glowName.value })
+  }
+  if (d.people[0]) chips.push({ key: 'p' + d.people[0].name, star: '✦', color: '#7dd3fc',
+                                label: d.people[0].name, glow: d.people[0].name === glowName.value })
+  if (d.prefs[0]) chips.push({ key: 't' + d.prefs[0].topic, star: '♥', color: '#f9a8d4',
+                               label: d.prefs[0].topic, glow: d.prefs[0].topic === glowName.value })
+  return chips.slice(0, 3)
+})
+
+// ── 기억 영수증 토스트 — 패널 전후 비교로 "기억했어요/잊었어요" 알림 ──
+const memToast = ref(null)
+let _toastT = null
+const _flatten = (d) => [
+  ...d.upcoming.map(u => u.name), ...d.people.map(p => p.name),
+  ...d.prefs.map(t => t.topic), ...d.recent,
+]
+let _panelLoaded = false
+function _diffToast(prev, next) {
+  if (!_panelLoaded) { _panelLoaded = true; return }   // 첫 로드는 알림 없음
+  const a = _flatten(prev); const b = _flatten(next)
+  const added = b.find(x => !a.includes(x))
+  const removed = a.find(x => !b.includes(x))
+  let msg = null
+  // 저장은 조용히 (2026-07-20 결정) — 칩 반짝임만, 토스트·라벨 없음.
+  // 삭제(잊어줘)만 토스트로 확인 (잊힐 권리의 영수증).
+  if (added) {
+    glowName.value = added
+    clearTimeout(_toastT)
+    _toastT = setTimeout(() => { glowName.value = null }, 3400)
+    return
+  }
+  if (removed) { msg = `'${removed}' 이야기를 잊었어요`; glowName.value = null }
+  if (msg) {
+    memToast.value = msg
+    clearTimeout(_toastT)
+    _toastT = setTimeout(() => { memToast.value = null; glowName.value = null }, 3400)
+  }
+}
 const currentEmotion = ref('default')
 const threadRef = ref(null)
 const inputRef  = ref(null)
@@ -507,6 +739,7 @@ async function initSession() {
     // 서버가 만든 친구 첫인사를 바로 표시 (+ 음성 자동 재생)
     const opener = sess.opener || OPENER_MSG[character.value]?.(isSecret.value) || '안녕! 뭐 하고 있었어?'
     pushAssistant(opener, { tts_task_id: sess.tts_task_id })
+    refreshMemoryPanel()   // 기억 패널 (UI #3) — 진입 시 현재 기억 표시
     // MBTI 질문은 유휴 타이머 대신 대화 흐름에 맞춰 백엔드가 응답에 얹음 (startIdleTimer 제거)
   } catch {
     sessionId.value = null
@@ -599,23 +832,6 @@ function onPasteImage(e) {
 }
 function clearImage() { attachedImage.value = null }
 
-const quickReplies = [
-  { icon: '😢', text: '자꾸 눈물이 났어' },
-  { icon: '😶', text: '아무 이유 없이 지쳤어' },
-  { icon: '❤️', text: '누군가에게 위로 받고 싶었어' },
-]
-const quickReplyUsed = ref(false)
-const showQuickReplies = computed(() =>
-  !quickReplyUsed.value && !isTyping.value && messages.value.filter((m) => m.role === 'user').length === 0,
-)
-
-function sendQuickReply(text) {
-  if (isTyping.value) return
-  quickReplyUsed.value = true
-  inputText.value = text
-  sendMessage()
-}
-
 async function sendMessage() {
   const content = inputText.value.trim()
   const image = attachedImage.value
@@ -642,6 +858,7 @@ async function sendMessage() {
     })
     if (res.emotion_label) {
       currentEmotion.value = res.emotion_label
+      reactTo(res.emotion_label)   // 캐릭터 감정 리액션 (A-레이아웃)
       if (res.emotion_label === 'joy') {
         triggerJoyCelebration()
       }
@@ -651,6 +868,8 @@ async function sendMessage() {
   } finally {
     isTyping.value = false
     await scrollToBottom()
+    // 기억 패널 갱신 (UI #3) — 그래프 저장이 비동기라 잠깐 뒤에 (말한 게 기억으로 뜨는 순간)
+    setTimeout(refreshMemoryPanel, 4000)
   }
 }
 
@@ -682,7 +901,11 @@ async function confirmExitSecret() {
   router.replace({ query: { character: displayCharacterId.value } })
 }
 
-function autoResize(e) { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px' }
+function autoResize(e) {
+  e.target.style.height = 'auto'
+  e.target.style.height = e.target.scrollHeight + 'px'
+  stickBottom()   // 입력창이 여러 줄로 커지면 스레드가 줄어듦 — 바닥 재고정
+}
 async function scrollToBottom() { await nextTick(); if (threadRef.value) threadRef.value.scrollTop = threadRef.value.scrollHeight }
 
 </script>
@@ -691,7 +914,9 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
 .chat-page {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 54px);
+  /* 입력창 잘림 수정 (UI #4, 2026-07-20): 헤더 실측 89px인데 54px로 가정 → 35px 잘림.
+     실측값 + dvh(모바일 주소창 대응)로 교정 */
+  height: calc(100dvh - 89px);
   position: relative;
   overflow: hidden;
 }
@@ -702,7 +927,7 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   inset: 0;
   z-index: 0;
   background-size: cover;
-  background-position: center 74%;
+  background-position: center 30%;
   background-repeat: no-repeat;
   overflow: hidden;
 }
@@ -929,7 +1154,7 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
 
 /* ── 왼쪽 패널 (글래스모피즘) ── */
 .left-panel {
-  flex: 0 0 460px;
+  flex: 0 0 340px;   /* 리디자인: 460→340 — 대화 공간 확대, 비율 개선 */
   border-right: 1px solid rgba(192,132,252,0.2);
   padding: 40px 34px;
   display: flex;
@@ -968,9 +1193,34 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
 
 .char-name {
   font-weight: 700;
-  font-size: 28px;
+  font-size: 26px;
   color: #fff;
 }
+
+/* 상태 뱃지 — 듣고 있어요 / 생각하는 중 / 말하는 중 (살아있는 느낌의 핵심) */
+.char-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #86efac;
+  background: rgba(34,84,61,0.35);
+  border: 1px solid rgba(134,239,172,0.25);
+  border-radius: 999px;
+  padding: 3px 12px;
+  margin-top: -12px;
+}
+.char-status .status-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor;
+  animation: statusPulse 2.4s ease infinite;
+}
+.char-status.busy {
+  color: #FFD9A8;
+  background: rgba(120,72,20,0.35);
+  border-color: rgba(255,217,168,0.3);
+}
+@keyframes statusPulse { 50% { opacity: 0.35; } }
 
 .ctrl-btns { display: flex; gap: 12px; width: 100%; }
 .ctrl-btn {
@@ -996,6 +1246,71 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   line-height: 1.6;
 }
 
+/* ── 기억 패널 (UI #3) — 좌측 빈 공간에 '기억하는 것' 카드 ── */
+.memory-panel {
+  width: 100%;
+  background: rgba(13,5,32,0.45);
+  border: 1px solid rgba(192,132,252,0.22);
+  border-radius: 16px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.mp-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #E9D5FF;
+}
+.mp-sec { display: flex; flex-direction: column; gap: 7px; }
+.mp-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(233,213,255,0.55);
+}
+.mp-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13.5px;
+  color: rgba(255,255,255,0.9);
+  line-height: 1.45;
+}
+.mp-item .mp-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-dim .mp-text { color: rgba(255,255,255,0.6); }
+.mp-dday {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  color: #C4B5FD;                       /* 여유 있는 일정 = 차분한 보라 */
+  background: rgba(167,139,250,0.14);
+  border-radius: 7px;
+  padding: 2px 7px;
+}
+.mp-dday.soon {                          /* D-2 이내 = 타오르는 주황 */
+  color: #FFB347;
+  background: rgba(255,179,71,0.16);
+}
+.mp-note {
+  font-size: 10px;
+  color: rgba(233,213,255,0.45);
+  line-height: 1.55;
+  border-top: 1px solid rgba(192,132,252,0.14);
+  padding-top: 9px;
+}
+.mp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.mp-chip {
+  font-size: 12.5px;
+  color: rgba(255,255,255,0.88);
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.13);
+  border-radius: 999px;
+  padding: 4px 11px;
+  white-space: nowrap;
+}
+.mp-chip small { color: rgba(255,255,255,0.5); }
+
 /* ── 대화 스레드 ── */
 .chat-thread {
   flex: 1;
@@ -1004,13 +1319,76 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   flex-direction: column;
   gap: 22px;
   overflow-y: auto;
-  background: rgba(13,5,32,0.15);
+  /* 가독성 (UI #2): 배경 일러스트가 텍스트를 침식 → 오버레이 강화 (그림은 가장자리로 살아있음) */
+  background: rgba(13,5,32,0.38);
 }
 
 .bubble-wrap {
   display: flex;
   flex-direction: column;
-  max-width: 82%;
+  max-width: 62%;   /* 폭 제한 (UI #15): 한 줄이 너무 길어 눈 피로 → 82%에서 축소 */
+  animation: bubbleIn 0.28s ease both;   /* 등장 페이드 (UI #56) */
+}
+
+/* 방 라벨 — "노을 지는 저녁 · 까미의 마음방" (시간대별로 바뀜) */
+.room-label {
+  align-self: center;
+  font-size: 12px;
+  color: rgba(233,213,255,0.6);
+  background: rgba(13,5,32,0.5);
+  border: 1px solid rgba(192,132,252,0.18);
+  border-radius: 999px;
+  padding: 5px 16px;
+  margin-bottom: 4px;
+}
+
+/* 말풍선 행 — 봇은 미니 아바타와 나란히 */
+.bubble-row { display: flex; align-items: flex-end; gap: 9px; }
+.mini-avatar {
+  width: 34px; height: 34px;
+  flex: 0 0 auto;
+  border-radius: 11px;
+  background: rgba(13,5,32,0.55);
+  border: 1px solid var(--char-accent, #a78bfa);
+  object-fit: contain;
+  padding: 2px;
+}
+
+/* 말하는 중 표시 (UI #21) — 이퀄라이저 점 3개 */
+.speak-hint {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 5px 0 0 43px;
+  font-size: 11.5px;
+  color: var(--char-accent, #a78bfa);
+}
+.speak-hint .eq { display: inline-flex; gap: 2px; align-items: flex-end; height: 11px; }
+.speak-hint .eq i {
+  width: 3px;
+  background: currentColor;
+  border-radius: 2px;
+  animation: eqBar 0.9s ease-in-out infinite;
+}
+.speak-hint .eq i:nth-child(1) { height: 6px; }
+.speak-hint .eq i:nth-child(2) { height: 11px; animation-delay: 0.15s; }
+.speak-hint .eq i:nth-child(3) { height: 8px;  animation-delay: 0.3s; }
+@keyframes eqBar { 50% { transform: scaleY(0.4); } }
+@keyframes bubbleIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* 캐릭터 쓰다듬기 반응 (UI #60) */
+.char-face { cursor: pointer; }
+.char-poke {
+  animation: charPoke 0.55s ease;
+}
+@keyframes charPoke {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.08) rotate(-3deg); }
+  55%  { transform: scale(0.97) rotate(2deg); }
+  100% { transform: scale(1); }
 }
 .bubble-wrap.user      { align-self: flex-end;   align-items: flex-end; }
 .bubble-wrap.assistant { align-self: flex-start;  align-items: flex-start; }
@@ -1026,20 +1404,24 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
 }
 
 .bubble {
-  border-radius: 20px;
-  padding: 16px 22px;
-  font-size: 17.5px;
+  border-radius: 18px;
+  padding: 14px 20px;
+  font-size: 16.5px;
   line-height: 1.65;
 }
 .bubble-user {
-  background: linear-gradient(135deg, rgba(255,138,101,0.28), rgba(255,179,71,0.22));
-  color: #FFD9C0;
-  border: 1px solid rgba(255,138,101,0.35);
+  /* 유저 = 코랄 + 오른쪽 꼬리 (말하는 방향 모서리만 각지게) */
+  background: rgba(96,44,22,0.78);
+  color: #FFE4D6;
+  border: 1px solid rgba(255,138,101,0.5);
+  border-radius: 18px 18px 5px 18px;
 }
 .bubble-char {
-  background: rgba(255,255,255,0.09);
-  border: 1px solid rgba(255,255,255,0.14);
-  color: rgba(255,255,255,0.92);
+  /* 캐릭터 = 자기 색 + 왼쪽 꼬리 (까미 보라 / 포리 주황 / 토토 청록 / 여울 분홍) */
+  background: var(--char-bubble, rgba(64,40,110,0.78));
+  border: 1px solid var(--char-accent, #a78bfa);
+  color: rgba(255,255,255,0.96);
+  border-radius: 18px 18px 18px 5px;
 }
 .tea-card {
   background: rgba(255,255,255,0.08);
@@ -1079,30 +1461,46 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
 
 /* ── 입력바 ── */
 .input-zone {
-  border-top: 1px solid rgba(192,132,252,0.15);
-  padding: 20px 32px 24px;
-  background: rgba(13,5,32,0.4);
-  backdrop-filter: blur(20px);
+  /* 떠 있는 독 (2026-07-20): 전폭 검은 띠 제거 — 배경 노을이 양옆으로 흐르고,
+     입력바 자체가 유리 알약으로 떠 있는다 */
+  border-top: none;
+  padding: 6px 32px 18px;
+  background: transparent;
   flex-shrink: 0;
 }
-.input-bar { display: flex; align-items: flex-end; gap: 14px; }
+.input-bar {
+  display: flex; align-items: flex-end; gap: 12px;
+  /* 비율 정합: 대화 컬럼(880px)과 같은 폭 + 유리 독 스타일 */
+  width: 100%; max-width: 880px; margin: 0 auto;
+  background: rgba(13,5,32,0.5);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(192,132,252,0.2);
+  border-radius: 28px;
+  padding: 9px 12px;
+}
+.img-preview { max-width: 880px; margin: 0 auto 10px; }
 
 .msg-input {
   flex: 1;
   background: rgba(255,255,255,0.07);
-  border: 1px solid rgba(255,255,255,0.15);
-  border-radius: 16px;
-  padding: 15px 19px;
-  font-size: 17px;
+  border: 1.5px solid rgba(255,255,255,0.15);
+  border-radius: 999px;   /* 알약형 — 부드러운 인상 */
+  padding: 14px 22px;
+  font-size: 16.5px;
   font-family: inherit;
   color: #fff;
   resize: none;
   line-height: 1.5;
   max-height: 160px;
   overflow-y: auto;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
-.msg-input::placeholder { color: rgba(255,255,255,0.3); }
-.msg-input:focus { outline: none; border-color: rgba(94,234,212,0.5); }
+.msg-input::placeholder { color: rgba(255,255,255,0.35); }
+.msg-input:focus {
+  outline: none;
+  border-color: var(--char-accent, #a78bfa);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--char-accent, #a78bfa) 25%, transparent);
+}
 
 .char-count {
   font-size: 10.5px;
@@ -1114,14 +1512,19 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
 .send-btn {
   background: linear-gradient(135deg, #FF8A65, #FFB347);
   color: #1a0a00;
-  border-radius: 16px;
-  padding: 15px 28px;
-  font-size: 16.5px;
+  border-radius: 999px;   /* 알약형 — 입력창과 짝 */
+  padding: 14px 26px;
+  font-size: 16px;
   font-weight: 700;
   flex-shrink: 0;
-  transition: opacity 0.2s, transform 0.1s;
+  transition: opacity 0.2s, transform 0.12s, box-shadow 0.2s;
 }
-.send-btn:not(:disabled):hover { opacity: 0.88; transform: translateY(-1px); }
+.send-btn:not(:disabled):hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(255,138,101,0.35);
+}
+.send-btn:not(:disabled):active { transform: scale(0.96); }
 .send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
 /* 📷 사진 첨부 (MVP) */
@@ -1130,15 +1533,313 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
 .attach-btn {
   background: rgba(255,255,255,0.07);
   border: 1px solid rgba(255,255,255,0.15);
-  border-radius: 16px;
-  padding: 13px 15px;
+  border-radius: 50%;   /* 원형 아이콘 버튼 */
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   font-size: 18px;
   line-height: 1;
   flex-shrink: 0;
-  transition: background 0.2s;
+  transition: background 0.2s, transform 0.12s;
 }
-.attach-btn:not(:disabled):hover { background: rgba(255,255,255,0.14); }
+.attach-btn:not(:disabled):hover { background: rgba(255,255,255,0.14); transform: translateY(-1px); }
 .attach-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* ═════════ A-레이아웃 (클로드 디자인 프로토타입 이식, 2026-07-20) ═════════ */
+/* 감정 리액션 키프레임 — A/B 교대로 같은 감정 연속에도 재발동 */
+@keyframes breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.03); } }
+@keyframes reactCalmA { 0%{transform:translateY(0) scale(1);} 50%{transform:translateY(-4px) scale(1.02);} 100%{transform:none;} }
+@keyframes reactCalmB { 0%{transform:translateY(0) scale(1);} 50%{transform:translateY(-4px) scale(1.02);} 100%{transform:none;} }
+@keyframes reactJoyA { 0%{transform:translateY(0) scale(1);} 25%{transform:translateY(-18px) scale(1.07) rotate(-3deg);} 45%{transform:translateY(0) scale(1);} 65%{transform:translateY(-9px) rotate(2deg);} 100%{transform:none;} }
+@keyframes reactJoyB { 0%{transform:translateY(0) scale(1);} 25%{transform:translateY(-18px) scale(1.07) rotate(3deg);} 45%{transform:translateY(0) scale(1);} 65%{transform:translateY(-9px) rotate(-2deg);} 100%{transform:none;} }
+@keyframes reactSadA { 0%{transform:translateY(0) rotate(0);} 45%{transform:translateY(6px) rotate(-5deg) scale(.98);} 100%{transform:translateY(3px) rotate(-3deg);} }
+@keyframes reactSadB { 0%{transform:translateY(0) rotate(0);} 45%{transform:translateY(6px) rotate(5deg) scale(.98);} 100%{transform:translateY(3px) rotate(3deg);} }
+@keyframes reactPopA { 0%{transform:scale(1);} 20%{transform:scale(1.13) translateY(-8px);} 38%{transform:translateX(-5px);} 55%{transform:translateX(5px);} 72%{transform:translateX(-3px);} 100%{transform:none;} }
+@keyframes reactPopB { 0%{transform:scale(1);} 20%{transform:scale(1.13) translateY(-8px);} 38%{transform:translateX(5px);} 55%{transform:translateX(-5px);} 72%{transform:translateX(3px);} 100%{transform:none;} }
+@keyframes floatUp { 0%{opacity:0;transform:translate(-50%,0) scale(.5);} 18%{opacity:1;} 100%{opacity:0;transform:translate(-50%,-84px) scale(1.15);} }
+@keyframes pillPulse { 0%,100%{box-shadow:0 0 0 0 rgba(255,179,71,0);} 50%{box-shadow:0 0 0 5px rgba(255,179,71,.28);} }
+@keyframes toastIn { from{opacity:0;transform:translate(-50%,6px);} to{opacity:1;transform:translate(-50%,0);} }
+@keyframes dotBounce { 0%,80%,100%{transform:translateY(0);opacity:.4;} 40%{transform:translateY(-6px);opacity:1;} }
+
+/* 캐릭터 헤더 (1순위) — 접히면 컴팩트 바 */
+.mind-header {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 20px 24px 10px;
+  transition: padding 0.3s ease, background 0.3s ease;
+  border-bottom: 1px solid transparent;
+}
+.mind-header.is-collapsed {
+  padding: 10px 24px;
+  border-bottom: 1px solid rgba(192,132,252,0.16);
+  background: rgba(13,5,32,0.42);
+  backdrop-filter: blur(16px);
+}
+.secret-enter {
+  position: absolute;
+  top: 14px; right: 20px;
+  z-index: 5;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(20,9,31,0.5);
+  border: 1px solid rgba(255,138,101,0.4);
+  color: #FFD9C0;
+  font-size: 12.5px;
+  backdrop-filter: blur(6px);
+}
+.hero-wrap { position: relative; cursor: pointer; animation: breathe 5.5s ease-in-out infinite; }
+.hero-circle {
+  /* 둥근 사각형 (2026-07-20): 원형이 몸통·귀를 잘라먹음 → 전신이 보이게 */
+  width: 188px; height: 180px;
+  border-radius: 44px;
+  overflow: hidden;
+  position: relative;
+  background: radial-gradient(circle at 50% 38%, #fef7ef, #f6e6d6);
+  box-shadow: 0 0 0 6px rgba(255,240,225,0.14), inset 0 -16px 26px rgba(205,150,120,0.35);
+}
+.hero-circle img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: contain; object-position: 50% 100%;
+  padding: 8px 6px 0;
+}
+.hero-circle.sm { width: 48px; height: 48px; flex: 0 0 auto; box-shadow: 0 0 0 3px rgba(255,240,225,0.16); }
+.float-symbol {
+  position: absolute; left: 50%; top: 4px;
+  font-size: 30px; pointer-events: none; opacity: 0;
+  animation: floatUp 1.5s ease forwards;
+}
+.mind-header .char-name { font-size: 24px; }
+.mem-chip-row {
+  display: flex; align-items: center; justify-content: center;
+  gap: 7px; flex-wrap: wrap; max-width: 680px;
+}
+.mem-chip-title { color: rgba(255,225,200,0.55); font-size: 11.5px; white-space: nowrap; }
+.mem-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px; border-radius: 999px;
+  white-space: nowrap; font-size: 12.5px;
+  color: rgba(255,232,219,0.9);
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+}
+.mem-chip.glow {
+  color: #fff;
+  background: rgba(252,211,77,0.18);
+  border-color: rgba(252,211,77,0.6);
+  animation: pillPulse 1s ease infinite;
+}
+.chip-star { font-size: 12px; }
+.mem-more {
+  cursor: pointer;
+  padding: 5px 13px; border-radius: 999px;
+  background: rgba(20,9,31,0.4);
+  border: 1px dashed rgba(192,132,252,0.4);
+  color: rgba(233,213,255,0.85);
+  font-size: 12px; white-space: nowrap;
+  backdrop-filter: blur(6px);
+}
+.mem-notice { font-size: 10.5px; color: rgba(255,225,200,0.5); }
+.collapsed-bar {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; max-width: 880px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.cb-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; align-items: flex-start; }
+.cb-name { color: #fff; font-size: 16px; font-weight: 700; line-height: 1.2; }
+.collapsed-bar .char-status { margin-top: 0; }
+.cb-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.cb-expand { color: rgba(255,255,255,0.4); font-size: 12px; white-space: nowrap; }
+.mem-toast {
+  position: absolute; left: 50%; bottom: -32px; transform: translateX(-50%);
+  z-index: 6; white-space: nowrap;
+  padding: 7px 14px; border-radius: 999px;
+  background: rgba(20,9,31,0.88);
+  border: 1px solid rgba(255,179,71,0.5);
+  color: #ffd9a8; font-size: 12.5px;
+  animation: toastIn 0.3s ease;
+  backdrop-filter: blur(6px);
+}
+.toastfade-leave-active { transition: opacity 0.4s; }
+.toastfade-leave-to { opacity: 0; }
+
+/* 대화 스레드 — 중앙 정렬 컬럼 (A-레이아웃 재정의) */
+.chat-thread { align-items: center; padding: 14px 40px 20px; background: transparent; min-height: 0; }
+/* (위/아래 밝기 경계 수정: 무드는 .bg-grade 그라데이션 하나만 담당 — 스레드 자체 배경 제거.
+    말풍선이 크림 불투명이라 가독성은 배경 없이도 충분) */
+.thread-col {
+  width: 100%; max-width: 880px;
+  display: flex; flex-direction: column; gap: 18px;
+}
+.bubble-wrap { max-width: 82%; }
+.bubble-char {
+  background: rgba(255,250,244,0.95);   /* 크림 불투명 — 가독성 최상 (프로토타입) */
+  color: #41283f;
+  border: 1px solid rgba(255,255,255,0.7);
+  border-left: 5px solid var(--char-accent, #a78bfa);   /* 캐릭터 색 정체성 */
+  border-radius: 20px 20px 20px 6px;
+  box-shadow: 0 10px 28px rgba(80,30,60,0.24);
+}
+.bubble-user {
+  background: linear-gradient(135deg, #FF8A65, #FFB347);
+  color: #2a0f00;
+  border: none;
+  border-radius: 20px 20px 6px 20px;
+  box-shadow: 0 12px 26px rgba(255,138,101,0.3);
+}
+.mini-avatar { border-radius: 12px; background: #efe9fb; box-shadow: 0 0 0 2px var(--char-accent, #a78bfa); border: none; }
+.speak-hint { color: var(--char-accent, #a78bfa); }
+.typing-indicator {
+  align-self: flex-start;
+  display: flex; align-items: center; gap: 5px;
+  background: rgba(255,250,244,0.9);
+  border: 1px solid rgba(255,255,255,0.6);
+  border-radius: 14px; padding: 12px 16px;
+}
+.typing-indicator span {
+  display: block; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--char-accent, #a78bfa);
+  animation: dotBounce 1.2s infinite;
+}
+.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+/* 기억 별자리 팝오버 */
+.chat-page > .mem-overlay {
+  position: absolute; inset: 0; z-index: 8;
+  background: rgba(8,4,18,0.4);
+  backdrop-filter: blur(2px);
+}
+.chat-page > .mem-popover {
+  position: absolute; z-index: 9;
+  left: 50%; top: 88px; transform: translateX(-50%);
+  animation: none;   /* bubbleIn의 transform이 가운데 정렬(translateX)을 깨서 제거 */
+  width: 392px; max-height: 72vh; overflow-y: auto;
+  background: rgba(20,9,31,0.94);
+  border: 1px solid rgba(192,132,252,0.3);
+  border-radius: 18px;
+  padding: 18px 18px 14px;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+  display: flex; flex-direction: column; gap: 13px;
+}
+.mem-pop-head { display: flex; align-items: center; justify-content: space-between; }
+.mem-popover .mp-title { font-size: 15px; font-weight: 700; color: #E9D5FF; }
+.mem-pop-close { color: rgba(255,255,255,0.5); font-size: 17px; line-height: 1; background: none; border: none; cursor: pointer; }
+.mp-sub { color: rgba(255,255,255,0.5); font-size: 12px; }
+.mem-popover .mp-dday { margin-left: auto; }
+
+/* 배경 무드 (프로토타입) — 어둠 그라데이션 + 빛 입자 */
+.chat-page > .bg-grade {   /* ★.chat-page > :not(.chat-bg) 의 relative 덮어쓰기 이김 */
+  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(13,5,32,0.16), rgba(20,8,48,0.32) 46%, rgba(13,5,32,0.6) 100%);
+}
+.chat-page > .mote {
+  position: absolute; z-index: 1; pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffe6c2, transparent 70%);
+  animation: riseMote 12s linear infinite;
+}
+@keyframes riseMote {
+  0% { transform: translateY(0) scale(1); opacity: 0; }
+  12% { opacity: 0.8; }
+  100% { transform: translateY(-520px) scale(0.4); opacity: 0; }
+}
+
+/* 감성 폰트 (프로토타입) — 이름은 바탕, 대화·라벨은 도담 */
+.mind-header .char-name, .cb-name { font-family: 'Gowun Batang', serif; }
+.bubble, .room-label, .char-status, .mem-chip, .mem-chip-title, .mem-notice, .secret-note { font-family: 'Gowun Dodum', sans-serif; }
+
+/* 기억함 라벨 (말풍선 밑 영수증) */
+.mem-label {
+  margin: 6px 0 0 46px;
+  display: inline-flex; align-self: flex-start; align-items: center; gap: 5px;
+  padding: 4px 11px; border-radius: 999px;
+  background: rgba(252,211,77,0.16);
+  border: 1px solid rgba(252,211,77,0.4);
+  color: #ffe08a; font-size: 11.5px; white-space: nowrap;
+}
+
+/* + 메뉴 (프로토타입 입력바) */
+.plus-wrap { position: relative; flex: 0 0 auto; }
+.plus-btn { font-size: 24px; color: #fff; }
+.plus-btn.stt-recording { border-color: #f87171; box-shadow: 0 0 10px rgba(248,113,113,0.5); }
+.plus-overlay { position: fixed; inset: 0; z-index: 10; }
+.plus-menu {
+  position: absolute; left: 0; bottom: calc(100% + 12px); z-index: 11;
+  width: 250px;
+  background: rgba(20,9,31,0.95);
+  border: 1px solid rgba(192,132,252,0.28);
+  border-radius: 16px; padding: 7px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+  backdrop-filter: blur(10px);
+  animation: bubbleIn 0.16s ease;
+}
+.plus-item {
+  cursor: pointer;
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 12px; border-radius: 11px;
+  color: #f0e6f5; font-size: 14.5px;
+}
+.plus-item:hover { background: rgba(255,255,255,0.08); }
+.plus-item.disabled { opacity: 0.4; cursor: not-allowed; }
+.pi-ico { font-size: 17px; width: 20px; text-align: center; }
+.pi-label { flex: 1; }
+.pi-state { font-size: 11.5px; color: rgba(255,255,255,0.42); }
+.pi-state.rec { color: #f87171; }
+.plus-divider { height: 1px; background: rgba(192,132,252,0.16); margin: 4px 6px; }
+
+/* ═════ 긴 텍스트 전수 방어 (2026-07-20 감사) — 어떤 길이가 와도 잘리거나 넘치지 않게 ═════ */
+/* ① 기억 칩: 긴 이름은 말줄임 (칩 폭 상한 220px) — 전체 이름은 더보기 팝오버에서 */
+.mem-chip {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mem-chip .chip-star { flex: 0 0 auto; }
+/* ② 팝오버 상세: 여기선 절대 안 자름 — 줄바꿈으로 전체 표시 (칩과 역할 분담) */
+.mem-popover .mp-item { align-items: flex-start; }
+.mem-popover .mp-text {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: break-word;
+  flex: 1;
+  min-width: 0;
+}
+.mem-popover .mp-dday { margin-top: 1px; }
+/* ③ 토스트·기억함 라벨: 화면 폭 초과 방지 + 말줄임 */
+.mem-toast { max-width: min(86vw, 560px); overflow: hidden; text-overflow: ellipsis; }
+.mem-label { max-width: 70%; overflow: hidden; text-overflow: ellipsis; }
+/* ④ 말풍선: 공백 없는 긴 문자열(URL 등)도 강제 줄바꿈 */
+.bubble { word-break: break-word; overflow-wrap: anywhere; min-width: 0; }
+.bubble-row { min-width: 0; width: 100%; }
+.bubble-row .bubble { min-width: 0; }
+/* ⑤ 접힘 바: 이름·상태 긴 경우 말줄임 (우측 버튼 안 밀리게) */
+.cb-meta { flex: 1; min-width: 0; }
+.cb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.collapsed-bar .char-status { max-width: 100%; overflow: hidden; }
+/* ⑥ 방 라벨·상태 뱃지: 좁은 화면에서 줄바꿈 허용 */
+.room-label { white-space: normal; text-align: center; max-width: 90%; }
+.char-status { max-width: 92%; }
+/* ⑦ + 메뉴 항목: 긴 라벨 줄바꿈 */
+.pi-label { word-break: keep-all; overflow-wrap: break-word; }
+
+/* 낮은 노트북 (1366×768 이하) — 캐릭터 축소로 대화 공간 확보 */
+@media (max-height: 800px) {
+  .hero-circle { width: 128px; height: 128px; }
+  .mind-header { padding-top: 12px; gap: 6px; }
+  .mind-header .char-name { font-size: 20px; }
+}
 
 .img-preview { position: relative; display: inline-block; margin-bottom: 10px; }
 .img-preview img {
@@ -1330,72 +2031,6 @@ async function scrollToBottom() { await nextTick(); if (threadRef.value) threadR
   }
 }
 
-
-/* ── 2026-07: 채팅 UI 보강 (인용카드·퀵리플라이·말풍선 아바타) ── */
-.char-quote {
-  margin-top: 14px;
-  padding: 14px 16px;
-  border: 1px solid rgba(255, 217, 164, 0.28);
-  border-radius: 14px;
-  background: rgba(255, 245, 238, 0.06);
-  color: #ffe9c9;
-  font-size: 13.5px;
-  line-height: 1.6;
-  text-align: center;
-  word-break: keep-all;
-}
-
-.char-msg-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 2px 0 6px;
-}
-
-.bubble-avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  object-fit: contain;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 245, 238, 0.18);
-  padding: 3px;
-}
-
-.bubble-char-name {
-  color: rgba(255, 245, 238, 0.85);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.quick-replies {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin: 10px 0 4px 44px;
-}
-
-.quick-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 42px;
-  padding: 0 18px;
-  border: 1px solid rgba(255, 217, 164, 0.3);
-  border-radius: 999px;
-  background: rgba(30, 14, 44, 0.62);
-  color: #ffeedd;
-  font: inherit;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease;
-}
-
-.quick-chip:hover {
-  transform: translateY(-1px);
-  border-color: rgba(255, 140, 170, 0.6);
-  background: rgba(60, 26, 70, 0.72);
-}
-
 </style>
+
+

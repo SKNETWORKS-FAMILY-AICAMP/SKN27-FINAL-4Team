@@ -1,0 +1,204 @@
+.character-panel-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.86fr) minmax(0, 1.14fr);
+  gap: 14px;
+}
+
+.character-showcase,
+.character-detail {
+  min-width: 0;
+  border: 1px solid rgba(229, 155, 95, 0.2);
+  border-radius: 8px;
+  background: rgba(73, 27, 88, 0.3);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.character-showcase {
+  display: grid;
+  grid-template-rows: minmax(260px, 1fr) auto;
+  gap: 14px;
+  padding: 18px;
+  background: linear-gradient(160deg, rgba(62, 22, 82, 0.62), rgba(26, 13, 44, 0.82));
+}
+
+.character-stage {
+  min-height: 276px;
+  display: grid;
+  place-items: end center;
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 50% 82%, rgba(255, 211, 122, 0.2), transparent 34%),
+    rgba(23, 16, 68, 0.5);
+  overflow: hidden;
+}
+
+.character-stage img {
+  max-width: 86%;
+  max-height: 276px;
+  object-fit: contain;
+  filter: drop-shadow(0 24px 28px rgba(5, 2, 18, 0.48));
+}
+
+.character-switcher {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.character-choice {
+  min-width: 0;
+  min-height: 104px;
+  display: grid;
+  grid-template-rows: 66px auto;
+  place-items: center;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 245, 230, 0.82);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.character-choice img {
+  max-width: 64px;
+  max-height: 64px;
+  object-fit: contain;
+}
+
+.character-choice.active {
+  border-color: rgba(229, 155, 95, 0.58);
+  background: linear-gradient(135deg, rgba(229, 155, 95, 0.22), rgba(130, 144, 160, 0.13));
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(156, 91, 255, 0.18);
+}
+
+.character-detail {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: 22px;
+}
+
+.character-heading span {
+  display: inline-flex;
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 245, 230, 0.72);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.character-heading h3 {
+  margin: 0;
+  color: #fff7df;
+  font-size: 34px;
+  line-height: 1.1;
+}
+
+.character-heading p {
+  margin: 8px 0 0;
+  color: #d7b7ff;
+  font-size: 16px;
+  font-weight: 850;
+}
+
+.character-detail blockquote {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid rgba(229, 155, 95, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.055);
+  color: rgba(255, 245, 230, 0.92);
+  line-height: 1.55;
+}
+
+.character-meta {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.character-meta div {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.character-meta dt {
+  color: rgba(255, 245, 230, 0.62);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.character-meta dd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 0;
+  color: #fff7df;
+  font-weight: 800;
+}
+
+.character-meta dd span {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 245, 230, 0.86);
+  font-size: 12px;
+}
+
+.character-stats {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 8px;
+  background: rgba(15, 10, 49, 0.28);
+}
+
+.character-stat {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) 34px;
+  gap: 10px;
+  align-items: center;
+  color: rgba(255, 245, 230, 0.86);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.character-stat div {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.character-stat b {
+  display: block;
+  width: var(--value);
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--blue), var(--pur));
+}
+
+.character-stat strong {
+  color: #fff7df;
+  text-align: right;
+}
+
+.character-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.character-actions .primary-button:disabled {
+  opacity: 0.62;
+  cursor: default;
+}
+

@@ -7,6 +7,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/user/', include('user.urls')),
     path('api/mypage/', include('wellness.urls')),
+    path('api/mymemory/', include('memorystorage.urls')),
     path('api/', include('checkin.urls')),
     path('api/mycard/', include('mycard.urls')),
     path('api/emotion-cards/', include('emotion_cards.urls')),

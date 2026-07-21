@@ -14,4 +14,5 @@ urlpatterns = [
     path('tts/<str:task_id>/',       views.tts_status),      # TTS 상태 폴링
     path('tts/<str:task_id>/audio/', views.tts_audio),       # 오디오 1회 다운로드 후 파기
     path('mbti/next-question/',  views.mbti_next_question),  # MBTI 질문 (10초 유휴 · 일반 전용)
+    path('memory/panel/',        views.memory_panel),        # 기억 패널 (좌측 UI 카드, UI #3)
 ]

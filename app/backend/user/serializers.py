@@ -48,7 +48,11 @@ class UserPersonalProfileSerializer(serializers.ModelSerializer):
         if not isinstance(value, dict):
             raise serializers.ValidationError('필수 약관 동의가 필요합니다.')
 
-        if value.get('termsOfService') is not True or value.get('privacyCollection') is not True:
+        if (
+            value.get('termsOfService') is not True
+            or value.get('privacyCollection') is not True
+            or value.get('overseasTransfer') is not True
+        ):
             raise serializers.ValidationError('필수 약관 동의가 필요합니다.')
 
         return value
