@@ -54,7 +54,7 @@ SCORING_ROUTE_LLM_FALLBACK = 'raw_text_llm_fallback'
 SCORING_ROUTE_KCELECTRA = 'kcelectra_scoring'
 KCELECTRA_SCORING_METHOD = 'kcelectra-finetuned-v1'
 KCELECTRA_EMOTION_CLASSES = ('기쁨', '슬픔', '분노', '일반')
-KCELECTRA_SCORE_WEIGHTS = (100.0, 25.0, 0.0, 50.0)
+KCELECTRA_SCORE_WEIGHTS = (70.0, 40.0, 30.0, 50.0)
 KCELECTRA_REQUIRED_FILES = ('config.json', 'model.safetensors', 'tokenizer.json')
 MINDREPORT_KCELECTRA_MODEL_PATH = os.environ.get(
     'MINDREPORT_KCELECTRA_MODEL_PATH', ''
