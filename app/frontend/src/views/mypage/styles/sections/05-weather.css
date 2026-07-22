@@ -1039,6 +1039,13 @@
   line-height: 1.1;
 }
 
+.weather-guide-status {
+  margin: 8px 0 0;
+  color: rgba(255, 247, 223, 0.72);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 .weather-alert-card {
   grid-column: 1 / -1;
   min-width: 0;

@@ -33,7 +33,8 @@ KAKAO_BOOK_QUERY_LIMIT = min(
 KAKAO_API_KEY_ENV_VARS = ("KAKAO_REST_API_KEY", "KAKAO_CLIENT_ID")
 NLK_API_KEY_ENV_VARS = ("NLK_BIBLIO_SERVICE_KEY", "DATA_GO_KR_SERVICE_KEY")
 
-RECOMMENDATION_ENGINE_VERSION = "kakao_books_v1"
+RECOMMENDATION_ENGINE_VERSION = "kakao_books_v2"
+RECOMMENDATION_HISTORY_LIMIT = 12
 BOOK_COVER_TIMEOUT_SECONDS = float(os.environ.get("BOOK_COVER_TIMEOUT_SECONDS", "3"))
 BOOK_COVER_CACHE_SECONDS = max(
     3600,
@@ -52,6 +53,13 @@ PROFILE_BASIS_TO_THEME = {
     "interests": "interests",
     "hobbies": "hobbies",
 }
+POSITIVE_EMOTION_LABELS = frozenset((
+    "기쁨", "평온", "행복", "즐거움", "만족", "설렘", "안도", "감사", "joy", "normal",
+))
+EMOTION_SEARCH_MARKERS = frozenset((
+    "감정", "기쁨", "행복", "즐거움", "웃음", "긍정", "평온", "만족", "설렘",
+    "슬픔", "분노", "불안", "우울", "외로움", "스트레스",
+))
 LEGACY_BOOK_METADATA_SOURCE = "국립중앙도서관 국가서지 LOD"
 
 BASIS_TOKEN_ALIASES = {
@@ -99,7 +107,7 @@ OPEN_LIBRARY_COVER_PROVIDER_INFO = {
 }
 
 FALLBACK_KEYWORDS = {
-    "emotion": ("마음 위로 소설", "오늘 감정이 좋다면 유지하고, 무겁다면 덜어내는 독서 방향입니다."),
+    "emotion": ("마음 회복 소설", "오늘 감정이 좋다면 유지하고, 무겁다면 덜어내는 독서 방향입니다."),
     "interests": ("교양 입문", "프로필 관심사 자체를 더 깊이 읽을 수 있는 방향입니다."),
     "hobbies": ("취미 실용", "프로필 취미를 실제로 즐기고 넓히는 방향입니다."),
 }
@@ -129,7 +137,9 @@ THEME_SEARCH_GUIDES = {
     "emotion": (
         "오늘의 주된 감정이 기쁨, 평온 등 좋은 감정이면 그 긍정적인 마음 상태를 그대로 유지하고 더욱 깊이 음미하게 돕는 도서, "
         "슬픔, 분노 등 나쁜 감정이면 그 무겁고 어두운 감정을 가볍고 자연스럽게 해소하여 기분을 환기할 수 있는 도서 검색어를 만드세요. "
-        "마음리포트처럼 원인 분석, 감정 진단, 하루 요약을 하는 방향과 겹치면 안 됩니다."
+        "마음리포트처럼 원인 분석, 감정 진단, 하루 요약을 하는 방향과 겹치면 안 됩니다. "
+        "감정 단어는 검색어에 넣지 마세요. 후보 제목에 감정 단어가 포함되어 있어도 제외할 필요는 없지만, "
+        "제목 일치만으로 고르지 말고 독서 경험과 책의 실제 내용이 그 목적에 도움 되는 후보를 찾으세요."
     ),
     "interests": (
         "프로필 관심사 분야를 더욱 자세하고 깊이 있게 파고들어 깊은 교양과 지식을 제공하는 도서 검색어를 만드세요. "

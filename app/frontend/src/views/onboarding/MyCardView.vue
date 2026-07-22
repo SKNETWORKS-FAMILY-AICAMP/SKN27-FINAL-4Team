@@ -34,13 +34,12 @@ let timer = null
 
 const form = reactive({ memory_text: '' })
 const MIN_MEMORY_TEXTAREA_HEIGHT = 154
-// 그림체 프리셋(11_style_presets.csv와 동일). generate 시 백엔드가 available_styles로 재검증한다.
 const styles = [
   ['STYLE_3D', '3D 렌더', style3d],
   ['STYLE_WATERCOLOR', '수채화', styleWatercolor],
   ['STYLE_ANIME_FILM', '지브리', styleGhibli],
   ['STYLE_CARTOON', '카툰', styleCartoon],
-  ['STYLE_ROMANCE_FANTASY', '로맨스판타지', styleRomanceFantasy],
+  ['STYLE_ROMANCE_FANTASY', '로맨스 판타지', styleRomanceFantasy],
   ['STYLE_RETRO', '레트로', styleRetro],
   ['STYLE_POP_ART', '팝아트', stylePopArt],
   ['STYLE_TRADITIONAL_PAINTING', '채색화', styleTraditionalPainting],
@@ -354,8 +353,8 @@ textarea { min-height: 82px; overflow-y: hidden; resize: none; }
 .ai-loading-caption { color: #c9b2d9; font-size: 12px; }
 
 .style-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-.style-grid button { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 8px; min-height: 148px; padding: 8px 8px 10px; border: 1px solid rgba(237, 183, 177, .3); border-radius: 14px; background: rgba(28, 10, 48, .65); color: #f4e7e8; font: inherit; font-weight: 800; cursor: pointer; overflow: hidden; }
-.style-thumb-wrap { position: relative; width: 100%; aspect-ratio: 1 / 1; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255, 255, 255, .12); }
+.style-grid button { display: grid; grid-template-rows: minmax(0, 1fr) 22px; place-items: center; gap: 6px; min-width: 0; min-height: 0; aspect-ratio: .82; padding: 8px; border: 1px solid rgba(237, 183, 177, .3); border-radius: 14px; background: rgba(28, 10, 48, .65); color: #f4e7e8; font: inherit; font-size: clamp(10px, .9vw, 12px); font-weight: 400; line-height: 1.1; white-space: nowrap; cursor: pointer; overflow: hidden; }
+.style-thumb-wrap { position: relative; grid-row: 1; width: 100%; height: 100%; min-height: 0; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255, 255, 255, .12); }
 .style-thumb-wrap::after { content: ''; position: absolute; inset: 0; background: rgba(12, 4, 22, .32); pointer-events: none; }
 .style-thumb { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 12%; }
 .style-grid .chosen { border-color: #ffb576; background: linear-gradient(145deg, rgba(243, 81, 144, .6), rgba(255, 147, 96, .5)); box-shadow: 0 0 0 1px rgba(255, 190, 112, .45); }
@@ -389,6 +388,6 @@ textarea { min-height: 82px; overflow-y: hidden; resize: none; }
 
 @keyframes thumbPulse { 50% { transform: scale(1.04); filter: brightness(1.18); } }
 @media (max-width: 1100px) { .mind-card-layout { grid-template-columns: 1fr; width: min(1060px, 100%); margin-inline: auto; } .card-preview-panel { position: static; } }
-@media (max-width: 720px) { .mind-card-page { padding: 18px 11px 42px; } .mind-card-shell { padding: 24px 17px; } .head-row { margin: 20px 0; } .panel-thumb { width: 80px; height: 80px; } .input-grid, .result-card { grid-template-columns: 1fr; } .style-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .shell-footer { display: block; } .shell-footer p + p { margin-top: 6px; } .primary-cta { position: sticky; bottom: 12px; z-index: 2; } .card-modal > div { flex-wrap: wrap; } }
+@media (max-width: 720px) { .mind-card-page { padding: 18px 11px 42px; } .mind-card-shell { padding: 24px 17px; } .head-row { margin: 20px 0; } .panel-thumb { width: 80px; height: 80px; } .input-grid, .result-card { grid-template-columns: 1fr; } .style-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } .style-grid button { font-size: 10px; } .shell-footer { display: block; } .shell-footer p + p { margin-top: 6px; } .primary-cta { position: sticky; bottom: 12px; z-index: 2; } .card-modal > div { flex-wrap: wrap; } }
 @media (prefers-reduced-motion: reduce) { .pulsing, .card-preview-frame.generating .card-preview-empty img { animation: none !important; } }
 </style>
