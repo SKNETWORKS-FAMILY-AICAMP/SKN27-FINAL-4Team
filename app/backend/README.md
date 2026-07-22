@@ -40,6 +40,32 @@ python manage.py runserver
 docker compose down -v && docker compose up -d --build
 ```
 
+### MBTI 월간 자동 분석
+
+Docker Compose에서는 `mbti-scheduler`가 매월 1일 00:05(Asia/Seoul)에 직전 월의
+분석 후보를 `mbti_monthly_analysis_jobs`에 등록하고, `mbti-worker`가 한 번에
+하나씩 처리합니다. 컨테이너가 월초 이후 재기동되어도 시작 시 직전 월을 한 번
+확인하며, 입력 해시가 같은 작업은 다시 LLM을 호출하지 않습니다.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.mbti.yml up -d --build
+```
+
+외부 cron을 사용하는 배포 환경에서는 다음 one-shot 명령을 매월 1일에 실행하고,
+worker 명령은 상시 프로세스로 운영합니다.
+
+```bash
+python manage.py schedule_mbti_monthly
+python manage.py run_mbti_monthly_worker
+```
+
+수동 검증에는 `--period-key YYYY-MM`와 `--once`를 사용할 수 있습니다.
+
+```bash
+python manage.py schedule_mbti_monthly --period-key 2026-06
+python manage.py run_mbti_monthly_worker --once
+```
+
 ## 필요한 .env 키
 
 | 키 | 필수 | 비고 |

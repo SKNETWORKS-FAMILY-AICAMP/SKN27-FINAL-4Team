@@ -1,6 +1,7 @@
 export { fetchBookRecommendation } from "./services/book.api";
 export {
   fetchMbtiDemoPayload,
+  requestMbtiMonthlyAnalysis,
   fetchMockQuestion,
   resetMockQna,
   saveMockAnswer,

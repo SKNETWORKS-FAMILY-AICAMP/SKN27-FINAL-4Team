@@ -36,7 +36,9 @@ from mindreport.services.keyword_candidates import (
     KeywordCandidate,
     build_keyword_candidate_payload,
 )
+from mindreport.services.narrative import MindReportNarrativeGenerator
 from mindreport.services.narrative_action_agent import MindReportNarrativeActionAgent
+from mindreport.services.payloads import select_comfort_message
 from mindreport.services.validation_agent import (
     VALIDATION_ROUTE_CAUSE,
     VALIDATION_ROUTE_CRITERIA,
@@ -100,6 +102,15 @@ class MindReportFallbackSafetyTests(SimpleTestCase):
         self.assertEqual(report['recommendations'], [])
         self.assertIn('분석 대기 중', report['title'])
         self.assertTrue(any('계속 수집' in line for line in report['analysis']))
+        self.assertIn('기록이 더 모이면', report['summary'])
+        self.assertEqual(
+            select_comfort_message(
+                summary=report['summary'],
+                analysis=report['analysis'],
+                recommendations=report['recommendations'],
+            ),
+            '기록이 아직 적어도, 회원님은 마음을 천천히 알아갈 충분한 시간이 있어요.',
+        )
 
     @patch(
         'mindreport.services.fallback_service.FallbackWebAgent.get_trendy_contents',
@@ -122,6 +133,14 @@ class MindReportFallbackSafetyTests(SimpleTestCase):
         self.assertTrue(
             any('대화에서 분석한 결과가 아니라' in line for line in report['analysis'])
         )
+        self.assertTrue(any(
+            '왜 추천하나요?: Tavily 결과에 소개된 활동입니다.' in line
+            for line in report['analysis']
+        ))
+        self.assertTrue(any(
+            '어떻게 시작할까요?: 공식 안내를 먼저 확인해보세요.' in line
+            for line in report['analysis']
+        ))
 
 
 class LegacyFallbackSanitizationTests(TestCase):
@@ -384,7 +403,7 @@ class FakeNarrativeClient:
                 ),
                 (
                     '앞으로는 일이 많았다는 사실만 보기보다 부담이 커진 시간대와 그 직전에 있었던 상황을 함께 살펴보는 편이 좋아요. '
-                    '반대로 조금 편해졌던 순간에 무엇을 멈추거나 시작했는지도 짧게 남기면 자신에게 맞는 조절 방법을 찾는 단서가 될 수 있어요.'
+                    '진로를 준비하며 애쓴 리포트테스터님은, 모든 걸 한 번에 해내지 않아도 괜찮아요.'
                 ),
             ],
             'action_recommendations': [
@@ -427,7 +446,7 @@ class RevisingNarrativeClient:
             'analysis_sentences': [
                 '최근 기록에서는 해야 할 일을 정리하려는 이야기와 여러 과제가 한꺼번에 떠오르는 장면이 이어졌어요. 무엇부터 시작할지 정하기 어려운 순간에는 평소보다 더 많은 에너지가 들었을 가능성이 있어 보여요.',
                 '그 사이에는 잠깐 멈추거나 할 일을 나누어 보려는 시도도 함께 나타났어요. 문제 전체를 한 번에 해결하기보다 지금 다룰 수 있는 범위를 정하는 일이 부담을 덜어주는 단서가 될 수 있어요.',
-                '앞으로는 부담이 커진 순간의 앞뒤 상황과 잠시 편해졌던 때의 행동을 함께 기록해보면 좋아요. 반복해서 도움이 된 조건이 보이면 자신에게 맞는 일상 조절 방법을 조금 더 구체적으로 찾을 수 있어요.',
+                '앞으로는 부담이 커진 순간의 앞뒤 상황과 잠시 편해졌던 때의 행동을 함께 기록해보면 좋아요. 해야 할 일을 이어온 리포트테스터님은, 잠시 숨을 고르며 자신의 속도로 가도 괜찮아요.',
             ],
             'action_recommendations': [
                 '선택해야 할 항목을 줄이면 시작할 때 드는 부담을 낮추는 데 도움이 될 수 있어요. 오늘 저녁 5분 동안 가장 작은 행동 하나만 적고 10분 정도 시도해보세요.',
@@ -580,6 +599,10 @@ class MindReportScoringServiceTests(TestCase):
         self.assertFalse(result['report_payload']['is_fallback'])
         self.assertTrue(result['report_payload']['emotions'])
         self.assertEqual(
+            result['report_payload']['comfortMessage'],
+            '진로를 준비하며 애쓴 리포트테스터님은, 모든 걸 한 번에 해내지 않아도 괜찮아요.',
+        )
+        self.assertEqual(
             {day['icon'] for day in result['report_payload']['emotions']},
             {'😐'},
         )
@@ -676,19 +699,24 @@ class MindReportScoringServiceTests(TestCase):
 
     def test_narrative_action_agent_generates_evidence_and_practical_actions(self):
         self._create_user_messages(5)
+        narrative_client = FakeNarrativeClient()
         initial_state = build_initial_mindreport_state(
             user=self.user,
             period_type='week',
             score_client=FakeEmotionScoreClient(),
             keyword_client=FakeKeywordCandidateClient(keyword='meeting prep'),
             cause_client=FakeCauseKeywordClient(cause_type='stress'),
-            narrative_client=FakeNarrativeClient(),
+            narrative_client=narrative_client,
         )
         criteria_state = MindReportGenerationCriteriaAgent().run(initial_state)
         emotion_state = MindReportEmotionAnalysisAgent().run(criteria_state)
         cause_state = MindReportCauseKeywordAgent().run(emotion_state)
 
-        result = MindReportNarrativeActionAgent().run(cause_state)
+        result = MindReportNarrativeActionAgent(
+            narrative_generator=MindReportNarrativeGenerator(
+                narrative_client=narrative_client
+            )
+        ).run(cause_state)
 
         self.assertEqual(result['status'], 'running')
         self.assertEqual(result['narrative_result'].status, 'generated')
@@ -701,6 +729,18 @@ class MindReportScoringServiceTests(TestCase):
             3,
         )
         self.assertEqual(trace_payload['actions']['recommendation_count'], 2)
+        support_guidance = narrative_client.last_payload['editorial_guidance'][
+            'support_message'
+        ]
+        self.assertEqual(
+            support_guidance['dominant_emotion_state'],
+            'neutral',
+        )
+        self.assertEqual(
+            support_guidance['recipient_name'],
+            '리포트테스터님',
+        )
+        self.assertIn('격려', support_guidance['writing_direction'])
 
     def test_validation_agent_routes_unsafe_narrative_back_for_revision(self):
         self._create_user_messages(5)
@@ -781,6 +821,33 @@ class MindReportScoringServiceTests(TestCase):
         }
         self.assertIn('direct_conversation_quote_disclosed', quoted_codes)
         self.assertEqual(quoted['revision_target'], VALIDATION_ROUTE_NARRATIVE)
+
+        generic_comfort_narrative = replace(
+            narrative_result.narrative,
+            analysis_sentences=(
+                *narrative_result.narrative.analysis_sentences[:-1],
+                '기록의 맥락을 차분히 살펴볼 수 있어요. 앞으로 도움이 되는 조건을 계속 찾아볼 수 있어요.',
+            ),
+        )
+        generic_comfort = MindReportValidationAgent().run({
+            **complete_state,
+            'narrative_result': replace(
+                narrative_result,
+                narrative=generic_comfort_narrative,
+            ),
+        })
+        generic_comfort_codes = {
+            issue['code']
+            for issue in generic_comfort['validation_result']['issues']
+        }
+        self.assertIn(
+            'support_message_missing_recipient_name',
+            generic_comfort_codes,
+        )
+        self.assertEqual(
+            generic_comfort['revision_target'],
+            VALIDATION_ROUTE_NARRATIVE,
+        )
 
     def test_supervisor_graph_routes_high_risk_language_to_safety_response(self):
         self._create_user_messages(5)
@@ -1543,6 +1610,40 @@ class MindReportGraphAPIViewTests(TestCase):
         return_value=False,
     )
     @patch('mindreport.views.MindReportSupervisorAgent')
+    def test_get_automatically_creates_fallback_when_criteria_is_not_met(
+        self,
+        supervisor_class,
+        _is_last_week,
+    ):
+        payload = self._report_payload()
+        payload.update({
+            'type': '주간 (데이터 부족)',
+            'title': '마음 리포트 분석 대기 중',
+            'stressCauses': [],
+            'reliefCauses': [],
+            'causeLabels': [],
+            'emotions': [],
+            'is_fallback': True,
+        })
+        supervisor_class.return_value.run.return_value = {
+            'status': 'fallback_ready',
+            'fallback_payload': payload,
+        }
+
+        response = self.client.get('/api/report/generate/')
+
+        self.assertEqual(response.status_code, 200)
+        report = response.json()['reports'][0]
+        self.assertEqual(report['title'], '마음 리포트 분석 대기 중')
+        self.assertTrue(report['is_fallback'])
+        self.assertTrue(report['id'].startswith('fallback-weekly-'))
+        self.assertEqual(MindReport.objects.filter(user=self.user).count(), 1)
+
+    @patch(
+        'mindreport.views.MindReportGenerateAPIView._is_last_week_of_month',
+        return_value=False,
+    )
+    @patch('mindreport.views.MindReportSupervisorAgent')
     def test_graph_report_payload_reaches_frontend_contract(
         self,
         supervisor_class,
@@ -1561,6 +1662,10 @@ class MindReportGraphAPIViewTests(TestCase):
         self.assertEqual(report['stressCauses'], ['회의 준비'])
         self.assertEqual(report['causeLabels'][0]['emphasis'], 'secondary')
         self.assertEqual(report['recommendations'], ['10분 쉬기'])
+        self.assertEqual(
+            report['comfortMessage'],
+            '테스트 요약',
+        )
         self.assertFalse(report['is_fallback'])
         self.assertFalse(report['is_safety_response'])
         self.assertTrue(report['id'].startswith('weekly-'))

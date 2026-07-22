@@ -230,7 +230,7 @@
 </template>
 
 <script>
-import { fetchCurrentWeather, fetchMbtiDemoPayload, fetchMyProfile, fetchTodayEmotion, updateMyProfile, saveOnboardingMbti, fetchBookRecommendation, fetchMemoryVault, deleteMemoryVaultItem, fetchWeatherRegions } from "./mypage.api";
+import { fetchCurrentWeather, fetchMbtiDemoPayload, requestMbtiMonthlyAnalysis, fetchMyProfile, fetchTodayEmotion, updateMyProfile, saveOnboardingMbti, fetchBookRecommendation, fetchMemoryVault, deleteMemoryVaultItem, fetchWeatherRegions } from "./mypage.api";
 import { LOCATION_CONSENT_VERSION } from "../../constants/consentVersions";
 import { createMypageState, i18n } from "./state/mypage.state";
 import {
@@ -822,14 +822,24 @@ export default {
       );
     },
     async refreshMbtiDemoData() {
-      this.showToast("데이터베이스 기반으로 성향 분석을 시작합니다...");
-      await this.loadMbtiDemoData(true);
-      const message = this.mbtiApiStatus === "error"
-        ? "분석 파이프라인 호출에 실패했습니다."
-        : this.mbtiApiStatus === "preparing"
-          ? "아직 확정된 월간 분석 결과가 없습니다."
-          : "성향 분석이 완료되어 결과가 업데이트되었습니다!";
-      this.showToast(message);
+      this.showToast("성향 분석을 요청하고 있습니다...");
+      try {
+        const requestPayload = await requestMbtiMonthlyAnalysis();
+        await this.loadMbtiDemoData();
+        const jobStatus = requestPayload?.analysis_job?.status;
+        const message = requestPayload.status === "not_eligible"
+          ? "분석에 필요한 답변이 아직 충분하지 않습니다."
+          : jobStatus === "completed"
+            ? "성향 분석 결과가 최신 상태입니다."
+            : jobStatus === "failed"
+              ? "분석 작업에 실패했습니다. 잠시 후 다시 시도해주세요."
+              : "분석 요청이 접수되었습니다. 완료 후 결과가 표시됩니다.";
+        this.showToast(message);
+      } catch (error) {
+        console.warn(error);
+        this.mbtiApiStatus = "error";
+        this.showToast("분석 요청에 실패했습니다.");
+      }
     },
     applySettings() {
       document.documentElement.dataset.contrast = String(this.settings.highContrast);

@@ -9,8 +9,8 @@ from rest_framework.response import Response
 
 from mbti.constants import EMPTY_AXIS_COUNTS, MBTI_AXES
 from mbti.services.dashboard_payload import load_latest_frontend_payload
+from mbti.services.job_service import enqueue_user_month_job, latest_job_payload
 from mbti.services.mbti_utils import is_valid_mbti_type
-from mbti.services.monthly_pipeline import run_monthly_mbti_pipeline_for_user_month
 from mbti.services.onboarding_service import save_onboarding_mbti
 from mbti.services.qna_service import (
     current_period_key,
@@ -30,17 +30,18 @@ logger = logging.getLogger(__name__)
 @permission_classes([IsAuthenticated])
 def monthly_demo(request):
     user_id = request.user.id
-    period_key = request.query_params.get("period_key") or None
+    period_key = request.query_params.get("period_key") or current_period_key()
 
+    # 이전 클라이언트의 force=true도 동기 LLM 호출 대신 작업 큐로 보낸다.
     if request.query_params.get("force") == "true":
         try:
-            run_monthly_mbti_pipeline_for_user_month(
+            enqueue_user_month_job(
                 user_id=user_id,
                 period_key=period_key,
-                persist_result=True,
+                trigger_source='dashboard_on_demand',
             )
         except Exception:
-            logger.exception("Forced monthly MBTI pipeline failed.")
+            logger.exception("Failed to enqueue monthly MBTI analysis.")
 
     try:
         payload = load_latest_frontend_payload(user_id=user_id, period_key=period_key)
@@ -50,7 +51,46 @@ def monthly_demo(request):
 
     if payload is None:
         return Response({"error": "Failed to load payload"}, status=500)
+    payload['analysis_job'] = latest_job_payload(
+        user_id=user_id,
+        period_key=period_key,
+    )
     return Response(payload)
+
+
+@api_view(["POST"])
+@authentication_classes([CsrfExemptSessionAuthentication])
+@permission_classes([IsAuthenticated])
+def request_monthly_analysis(request):
+    period_key = request.data.get('period_key') or current_period_key()
+    try:
+        result = enqueue_user_month_job(
+            user_id=request.user.id,
+            period_key=period_key,
+            trigger_source='dashboard_on_demand',
+        )
+    except ValueError as exc:
+        return Response({'error': str(exc)}, status=400)
+    except DatabaseError:
+        logger.exception("Failed to enqueue monthly MBTI analysis.")
+        return Response({'error': 'Failed to enqueue analysis'}, status=500)
+
+    if not result.eligible:
+        return Response({
+            'status': 'not_eligible',
+            'period_key': period_key,
+            'reason': result.reason,
+            'analysis_job': None,
+        })
+    return Response({
+        'status': result.job.status,
+        'period_key': period_key,
+        'created': result.created,
+        'analysis_job': latest_job_payload(
+            user_id=request.user.id,
+            period_key=period_key,
+        ),
+    }, status=202 if result.job.status in {'pending', 'running'} else 200)
 
 
 @api_view(["POST", "PUT"])

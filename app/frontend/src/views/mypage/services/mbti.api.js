@@ -10,6 +10,19 @@ export async function fetchMbtiDemoPayload(force = false) {
   return response.json();
 }
 
+export async function requestMbtiMonthlyAnalysis(periodKey = "") {
+  const response = await fetch("/api/mbti/monthly-analysis/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(periodKey ? { period_key: periodKey } : {})
+  });
+  if (!response.ok) {
+    throw new Error(`MBTI analysis request failed: ${response.status}`);
+  }
+  return response.json();
+}
+
 export async function saveOnboardingMbti(mbtiType) {
   const response = await fetch("/api/mbti/onboarding/", {
     method: "POST",

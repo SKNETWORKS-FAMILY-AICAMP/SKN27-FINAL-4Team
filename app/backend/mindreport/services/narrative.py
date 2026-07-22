@@ -48,14 +48,45 @@ def build_narrative_payload(
     alternative_plan: AlternativePlanResult,
     cause_result: CauseKeywordResult,
     label_result: LabelDisplayResult,
+    recipient_name: str,
     ltm_context: str | None = None,
 ) -> dict[str, Any]:
     # Internal scores select useful context, but are never exposed to the writer.
+    dominant_emotion_state = None
+    if emotion_flow.daily_summaries:
+        highest_count = max(emotion_flow.state_counts.values(), default=0)
+        dominant_candidates = {
+            state
+            for state, count in emotion_flow.state_counts.items()
+            if count == highest_count
+        }
+        dominant_emotion_state = next(
+            (
+                summary.emotion_state
+                for summary in reversed(emotion_flow.daily_summaries)
+                if summary.emotion_state in dominant_candidates
+            ),
+            None,
+        )
+    support_directions = {
+        'negative': '힘들었던 감정을 가볍게 넘기지 말고 인정하며 차분한 위로와 지지를 건넨다.',
+        'neutral': '이어온 노력과 버틴 시간을 알아주며 부담스럽지 않은 격려를 건넨다.',
+        'positive': '따뜻하거나 기뻤던 흐름을 함께 기뻐하며 그 힘을 이어갈 수 있도록 응원한다.',
+    }
     payload = {
         'task': 'mind_report_analysis_and_action_generation',
         'editorial_guidance': {
             'action_direction': emotion_flow.action_direction,
             'suggestions': list(emotion_flow.suggestions),
+            'support_message': {
+                'recipient_name': recipient_name,
+                'dominant_emotion_state': dominant_emotion_state,
+                'writing_direction': support_directions.get(
+                    dominant_emotion_state,
+                    '기록의 주된 감정 맥락을 살펴 위로, 격려, 응원 중 가장 자연스러운 말을 건넨다.',
+                ),
+                'use_as_private_writing_context_only': True,
+            },
             'use_as_private_writing_context_only': True,
         },
         'alternative_plan': {
@@ -104,6 +135,10 @@ def build_narrative_payload(
             '제목과 요약은 내부 분석 용어 없이 기록의 구체적인 주제를 자연스럽게 담는다.',
             '상단 요약은 핵심 맥락만 담은 35~80자 한 문장으로 작성하고 자세한 설명은 분석 문단으로 보낸다.',
             '분석은 실제 대화의 주제, 반복 맥락, 부담 또는 도움이 된 장면, 서로 연결되는 이유를 충분히 설명한다.',
+            '마지막 분석 문단의 두 번째 문장은 화면의 "당신에게 한마디"로 사용된다. 반드시 이번 기록의 구체적인 맥락과 editorial_guidance.support_message의 주된 감정 방향을 반영한다.',
+            '당신에게 한마디는 editorial_guidance.support_message.recipient_name을 문장에 정확히 한 번 넣어 사용자를 직접 부르고, "당신"이라는 표현은 사용하지 않는다.',
+            '호명 뒤에는 주된 감정에 따라 위로·격려·응원 중 가장 자연스러운 역할을 선택한다.',
+            '당신에게 한마디는 20~60자의 따뜻한 해요체 한 문장으로 쓰며 행동을 지시하거나 근거 없이 잘될 것이라고 낙관하지 않는다.',
             'cause_evidence_status가 no_supported_causes이면 원인을 새로 만들거나 특정 소재를 원인으로 단정하지 않는다.',
             '분석 문단은 2~3개 작성하고 각 문단은 2문장으로 구성한다. 전체 글 분량이 너무 길어지지 않게 간결하고 핵심적인 사실 위주로 작성한다.',
             '치료나 심리상담 형태의 지시적 조언을 철저히 배제하고, 사용자가 스스로 자신의 생각과 장기 기억을 되돌아보며 스스로를 발견하고 이해할 수 있도록 돕는 "자기 이해(Self-Understanding)"의 다정한 안내자 톤앤매너를 유지한다.',
@@ -120,7 +155,7 @@ def build_narrative_payload(
         'output_schema': {
             'title': '구체적이지만 상태를 판정하지 않는 한국어 제목 1개',
             'summary': '기록의 핵심 맥락만 담은 35~80자 한국어 한 문장',
-            'analysis_sentences': ['2 to 3 concise Korean paragraphs, each containing precisely 2 sentences'],
+            'analysis_sentences': ['2 to 3 concise Korean paragraphs, each containing precisely 2 sentences; the final sentence of the final paragraph must be a 20-to-60-character, context-grounded message of comfort, encouragement, or cheering that includes editorial_guidance.support_message.recipient_name exactly once and never uses 당신'],
             'action_recommendations': ['2 concrete Korean action paragraphs, each containing a reason and a small starting method (1 to 2 short sentences proposing a light activity)'],
         },
     }
@@ -189,6 +224,9 @@ def parse_narrative(payload: Mapping[str, Any]) -> MindReportNarrative:
     )
     title = str(payload.get('title') or '').strip()
     summary = str(payload.get('summary') or '').strip()
+    resolved_summary = summary or (
+        analysis_sentences[0] if analysis_sentences else ''
+    )
     return MindReportNarrative(
         analysis_sentences=analysis_sentences,
         action_recommendations=_parse_string_list(
@@ -196,7 +234,7 @@ def parse_narrative(payload: Mapping[str, Any]) -> MindReportNarrative:
             limit=4,
         ),
         title=title or '이번 기록에서 발견한 작은 단서',
-        summary=summary or (analysis_sentences[0] if analysis_sentences else ''),
+        summary=resolved_summary,
     )
 
 
@@ -213,6 +251,7 @@ class MindReportNarrativeGenerator:
         alternative_plan: AlternativePlanResult,
         cause_result: CauseKeywordResult,
         label_result: LabelDisplayResult,
+        recipient_name: str,
         revision_instructions: Sequence[str] = (),
         ltm_context: str | None = None,
     ) -> MindReportNarrativeResult:
@@ -241,6 +280,7 @@ class MindReportNarrativeGenerator:
             alternative_plan=alternative_plan,
             cause_result=cause_result,
             label_result=label_result,
+            recipient_name=recipient_name,
             ltm_context=ltm_context,
         )
         if revision_instructions:

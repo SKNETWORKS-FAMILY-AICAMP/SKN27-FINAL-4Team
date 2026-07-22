@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>[모델배포] 서비스 테스트 계획 및 결과 보고서 (27기 4팀)</title>
+<style>
+body { font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; line-height: 1.6; margin: 40px; color: #333; }
+h1 { color: #1a365d; border-bottom: 3px solid #2b6cb0; padding-bottom: 10px; }
+h2 { color: #2c5282; margin-top: 30px; border-left: 5px solid #3182ce; padding-left: 12px; }
+h3 { color: #2b6cb0; margin-top: 20px; }
+table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; }
+th, td { border: 1px solid #cbd5e0; padding: 10px 12px; text-align: left; }
+th { background-color: #ebf8ff; color: #2b6cb0; font-weight: bold; }
+tr:nth-child(even) { background-color: #f7fafc; }
+.badge-pass { background-color: #c6f6d5; color: #22543d; padding: 4px 10px; border-radius: 4px; font-weight: bold; }
+.alert-note { background-color: #feebc8; border-left: 5px solid #dd6b20; padding: 15px; margin: 20px 0; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>[모델배포] 서비스 테스트 계획 및 결과 보고서</h1>
+<p><strong>SK 네트웍스 Family AI 27기 : 4팀</strong></p>
+
+<table>
+<tr><th>산출물 단계</th><td>모델배포</td></tr>
+<tr><th>제출 일자</th><td>2026. 07. 22.</td></tr>
+<tr><th>깃허브 경로</th><td><a href="https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN27-FINAL-4Team" target="_blank">https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN27-FINAL-4Team</a></td></tr>
+<tr><th>작성 팀원</th><td>27기 4팀 (김한솔, 박송원, 이성진, 한재웅)</td></tr>
+</table>
+
+<h2>1. 테스트 개요 (Test Overview)</h2>
+<h3>1.1 테스트 목적</h3>
+<p>본 테스트의 목적은 LangGraph 기반의 마음리포트(MindReport) 멀티 에이전트 협업 체계(MindReportSupervisorAgent)와 감성 분석 sLLM/KcELECTRA, Neo4j 장기 기억 그래프 DB(LTM), 외부 API(Tavily Search API) 연동의 서비스 안정성, 정확도 및 모듈화 구조를 배포 단계에서 최종 검증하는 데 있습니다. 구현된 에이전트가 설계 의도대로 동작하는지 전체 53개 단위/통합 테스트 스위트를 구동하여 검증하였으며, 에이전트 간의 상태(MindReportGraphState) 전이, 검증 에이전트(MindReportValidationAgent)를 통한 안전성 및 할루시네이션 방지 체계, 그리고 소스코드가 기능별로 잘 모듈화되었는지 점검합니다.</p>
+
+<h3>1.2 테스트 범위 및 대상 기능</h3>
+<p>테스트는 사용자 대화 데이터 수집(Criteria Check)부터 에이전트 오케스트레이션, 검증 루프, 렌더링 응답 생성(ReportView.vue)까지의 전 과정을 포함하며, 다음 핵심 기능을 중점적으로 검증합니다.</p>
+
+<table>
+<tr><th>분류</th><th>테스트 대상 기능 (Checklist)</th><th>주요 검증 포인트</th></tr>
+<tr><td><b>데이터 수집/저장</b></td><td>MySQL 및 Neo4j Graph DB 적재</td><td>ChatMessage/MindReport PK 정의, 데이터 무결성, 비정형 사용자 대화 원문 저장 및 LTM Graph Memory(Episode/Event/Person/Emotion) 연동 구조</td></tr>
+<tr><td><b>데이터 전처리</b></td><td>의도 분석 및 감정 분류 ML/DL 모델</td><td>요청 대화의 감정 상태(Affect/Score) 산출 및 감정 흐름(Score Upward/Downward/Volatile/Maintenance) 패턴 분류 성능</td></tr>
+<tr><td><b>RAG/에이전트</b></td><td>LangChain/LangGraph 협업 로직</td><td>MindReportSupervisorAgent의 조건부 라우팅 정확도, 에이전트 간 상태 유지(MindReportGraphState Pipeline) 및 검증 실패 시 재시도(Revision Loop) / Fallback 분기</td></tr>
+<tr><td><b>외부 연동</b></td><td>Tavily Search API / Web Agent 연동</td><td>외부 검색 도구(FallbackWebAgent) 호출 체계 및 데이터 부족/활동 추천 연동 정보 처리 신뢰성</td></tr>
+<tr><td><b>보안 및 UI</b></td><td>프론트엔드-백엔드-LLM 통합</td><td>PII 및 의료 진단/단정 표현 필터링(Safety Response), 대화 원문 마스킹, 웹 프로그램 상의 차트/감정카드 시각화 정합성</td></tr>
+</table>
+
+<h2>2. 테스트 환경 및 도구 (Test Environment)</h2>
+<table>
+<tr><th>구분</th><th>상세 내용</th><th>버전 및 사양</th></tr>
+<tr><td><b>인프라</b></td><td>Cloud / Local Container / On-premise</td><td>AWS EC2 g5.xlarge (GPU: NVIDIA A10G 24GB), Ubuntu 22.04 LTS, Docker Compose</td></tr>
+<tr><td><b>데이터베이스</b></td><td>RDB (MySQL) / Graph DB (Neo4j)</td><td>MySQL 8.0 (ChatMessage, MindReport, MbtiQuestionResponse) / Neo4j 5.15 (LTM Graph Memory)</td></tr>
+<tr><td><b>오케스트레이션</b></td><td>LangChain / LangGraph</td><td>LangChain Core 0.2.3, LangGraph 0.1.5 (StateGraph 오케스트레이션)</td></tr>
+<tr><td><b>핵심 프로토콜</b></td><td>Tavily Search API / REST API</td><td>Tavily API v1.0 (비동기 트렌디 활동 검색), Django REST Framework 3.14</td></tr>
+<tr><td><b>AI 모델</b></td><td>sLLM (Fine-tuned KcELECTRA-v2) / Base LLM</td><td>KcELECTRA-v2 Fine-tuned (감정 점수화/4감정 분류, Macro-F1 0.78), GPT-4o-mini (서사/대안/검증 에이전트)</td></tr>
+</table>
+
+<h2>3. 테스트 상세 계획 (Test Scenarios & Methods)</h2>
+<h3>3.1 핵심 시나리오 테스트</h3>
+<p>사용자 요청부터 최종 리포트 생성까지의 정상 워크플로우를 총 53개 단위/통합 테스트 스위트 기반으로 검증합니다. 모든 테스트는 Session ID / User ID를 기반으로 로그를 추적하여 에이전트 간 데이터 전달의 일관성을 확인합니다.</p>
+
+<h3>3.2 예외 상황 테스트 (Edge Cases & Failure Mode)</h3>
+<table>
+<tr><th>ID</th><th>테스트 항목</th><th>검증 및 기대 결과 (Imperative)</th></tr>
+<tr><td><b>ERR-RAG-01</b></td><td>RAG/LTM 검색 실패 (기억 미존재 또는 DB 장애)</td><td>Neo4j LTM Graph Memory 조회 실패 시에도 그래프 recall 예외를 안전하게 포획(catch)하고, 세션이 중단되지 않으며 최근 대화 원문만으로 무중단 분석을 진행하는지 확인하라.</td></tr>
+<tr><td><b>ERR-GRPH-01</b></td><td>LangGraph 검증 실패 및 재시도 초과</td><td>ValidationAgent에서 검증 실패(needs_revision) 발생 시 지정된 생성 노드로 재시도되며, max_retries(1회) 초과 시 안전 모드(fallback_report)로 강제 전환되어 폴백 리포트를 반환하는지 검증하라.</td></tr>
+<tr><td><b>ERR-MCP-01</b></td><td>외부 API (Tavily/OpenAI) 장애</td><td>Tavily API 타임아웃 또는 API 키 미설정 시 static dummy 추천 대신 안전하게 빈 리스트([])를 반환하고 데이터 수집 안내 문구를 출력하는지 확인하라.</td></tr>
+<tr><td><b>ERR-HALU-01</b></td><td>할루시네이션 및 안전성 위반 (의료 진단/직접 인용)</td><td>생성된 서사에 '우울증', '치료' 등 의료 진단/단정 표현이나 대화 원문 직접 인용, 감정 점수 무단 노출이 포함될 경우 ValidationAgent가 이를 즉시 감지하여 수정(needs_revision) 또는 차단(blocked)하는지 검증하라.</td></tr>
+</table>
+
+<h2>4. 테스트 결과 기록 (Test Results)</h2>
+<h3>4.1 상세 테스트 결과 (총 53개 단위/통합 테스트 스위트 100% Pass)</h3>
+<table>
+<tr><th>ID</th><th>테스트 항목</th><th>측정 지표 (Measured)</th><th>예상 결과</th><th>실제 결과</th><th>Pass/Fail</th></tr>
+<tr><td><b>FUNC-RAG-01</b></td><td>Neo4j LTM Graph Memory 및 대화 수집</td><td>LTM Recall Rate: 0.94</td><td>5건 이상 대화 수집 및 LTM Context 정상 통합</td><td>5건 이상 메시지 수집 및 LTM Context 연동 성공</td><td><span class="badge-pass">Pass</span></td></tr>
+<tr><td><b>INTEG-MCP-01</b></td><td>Tavily 외부 검색 API / Web Agent 연동</td><td>Latency: 1.2s / 0.05s</td><td>5초 이내 응답 반환 및 API 장애 시 폴백</td><td>Tavily 1.2s, 장애 시 빈 리스트 반환 성공</td><td><span class="badge-pass">Pass</span></td></tr>
+<tr><td><b>SEC-PII-01</b></td><td>PII 및 의료 진단/위험 표현 필터링</td><td>필터링율: 100%</td><td>Unsafe/진단 표현 탐지 시 즉시 재시도/차단</td><td>의료 진단/직접 인용 100% 감지 후 교정 성공</td><td><span class="badge-pass">Pass</span></td></tr>
+<tr><td><b>PERF-RESP-01</b></td><td>파이프라인 최종 응답 속도</td><td>Total Time: 4.8s</td><td>평균 10초 이내 최종 응답 반환</td><td>6개 노드 파이프라인 평균 4.8초 완수</td><td><span class="badge-pass">Pass</span></td></tr>
+</table>
+
+<h3>4.3 sLLM 파인튜닝 비교 평가</h3>
+<table>
+<tr><th>비교 항목</th><th>Base Model</th><th>Fine-tuned sLLM</th><th>개선 효과</th></tr>
+<tr><td><b>감정 분류 채팅체 Macro-F1</b></td><td>0.48 (기존 기준선)</td><td>0.78 (무누수 공식성적)</td><td>+ 0.30 향상 (0.48 -> 0.78, 3 epoch 확정)</td></tr>
+<tr><td><b>감정 게이트 확신도 (Confidence Gate)</b></td><td>0.55 (기존)</td><td>0.70 (개선 채택)</td><td>게이트 통과 고확신(82.7%) 구간 정확도 0.831 달성</td></tr>
+<tr><td><b>추론 속도 / 인프라 비용</b></td><td>GPT-4o 전수 (3.0s)</td><td>KcELECTRA Local (0.08s)</td><td>로컬 감정 추론으로 Latency 97% 절감</td></tr>
+</table>
+
+<h2>5. 이슈 개선 (Issues & Action Plan)</h2>
+<table>
+<tr><th>이슈 ID</th><th>결함 내용 (Root Cause)</th><th>심각도</th><th>조치 현황</th><th>개선 대책</th></tr>
+<tr><td><b>IS-001</b></td><td>Unsafe Narrative (의료 진단/치료 표현) 발생</td><td>High</td><td>조치 완료</td><td>ValidationAgent에 diagnosis_or_treatment_claim 검증 규칙 추가</td></tr>
+<tr><td><b>IS-002</b></td><td>감정 점수 및 대화 원문 직접 인용 노출</td><td>Mid</td><td>조치 완료</td><td>internal_score_or_state_disclosed 및 direct_quote_disclosed 규칙 추가</td></tr>
+</table>
+
+<div class="alert-note">
+<strong>SLA 준수 안내:</strong> 서비스 수준 계약(SLA) 미달 시 배포 판정은 자동 No-Go 처리됩니다.<br>
+- <b>정확도 지표 미달 시</b>: RAG/LTM 스키마 고도화 및 Confidence Gate 0.70 유지.<br>
+- <b>응답 속도 10초 초과 시</b>: 에이전트 간 비동기(Async) 처리 로직 강화.
+</div>
+</body>
+</html>

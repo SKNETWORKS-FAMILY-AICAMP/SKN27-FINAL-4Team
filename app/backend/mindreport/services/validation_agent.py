@@ -16,6 +16,10 @@ from mindreport.services.scoring import (
     emotion_state_from_score,
 )
 from mindreport.services.periods import resolve_period_window
+from mindreport.services.payloads import (
+    report_recipient_name,
+    select_comfort_message,
+)
 
 
 VALIDATION_ROUTE_FORMAT = 'format'
@@ -343,6 +347,28 @@ class MindReportValidationAgent:
                 issues.append(self._issue(
                     'summary_too_long',
                     'Shorten the header summary to one natural Korean sentence of 35 to 80 characters and move details into the analysis paragraphs.',
+                    'warning',
+                    VALIDATION_ROUTE_NARRATIVE,
+                ))
+
+            recipient_name = report_recipient_name(state['user'])
+            comfort_message = select_comfort_message(
+                summary=narrative.summary,
+                analysis=narrative.analysis_sentences,
+                recommendations=narrative.action_recommendations,
+                recipient_name=recipient_name,
+            )
+            compact_comfort = len(re.sub(r'\s+', '', comfort_message))
+            has_recipient_name = comfort_message.count(recipient_name) == 1
+            if (
+                compact_comfort < 20
+                or compact_comfort > 60
+                or not has_recipient_name
+                or '당신' in comfort_message
+            ):
+                issues.append(self._issue(
+                    'support_message_missing_recipient_name',
+                    f'Rewrite the second sentence of the final analysis paragraph as a 20-to-60-character, context-grounded Korean message that addresses the user exactly once as "{recipient_name}" and does not use "당신". Match the dominant emotional context with comfort, encouragement, or cheering; avoid analysis, instructions, and generic optimism.',
                     'warning',
                     VALIDATION_ROUTE_NARRATIVE,
                 ))

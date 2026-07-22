@@ -59,6 +59,19 @@ DEFAULT_REQUIRED_QNA_COUNT = 5
 DEFAULT_REQUIRED_SCORED_COUNT = 1
 TIE_EPSILON = 1e-12
 
+MONTHLY_JOB_STATUSES = ("pending", "running", "completed", "skipped", "failed")
+MONTHLY_JOB_STATUS_CHOICES = [(status, status) for status in MONTHLY_JOB_STATUSES]
+MONTHLY_JOB_TRIGGER_SOURCES = (
+    "monthly_scheduler",
+    "dashboard_on_demand",
+    "admin_retry",
+    "manual",
+)
+MONTHLY_JOB_TRIGGER_SOURCE_CHOICES = [
+    (source, source) for source in MONTHLY_JOB_TRIGGER_SOURCES
+]
+DEFAULT_MONTHLY_PROMPT_VERSION = "monthly-mbti-v1"
+
 DEFAULT_LLM_QUESTION_MODEL = "gpt-5.4-mini"
 DEFAULT_LLM_QUESTION_TEMPERATURE = 0.9
 DEFAULT_LLM_QUESTION_MAX_TOKENS = 120
