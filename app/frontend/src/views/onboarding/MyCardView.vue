@@ -26,7 +26,6 @@ const selectedStyle = ref('STYLE_3D')
 const feedbackSaved = ref(false)
 const imagePreviewError = ref(false)
 const usage = reactive({ used: 0, limit: 10 })
-const resettingUsage = ref(false)
 const generation = reactive({ status: 'PENDING', progress: 0 })
 const showExitModal = ref(false)
 const showRegenerationModal = ref(false)
@@ -35,13 +34,12 @@ let timer = null
 
 const form = reactive({ memory_text: '' })
 const MIN_MEMORY_TEXTAREA_HEIGHT = 154
-// 그림체 프리셋(11_style_presets.csv와 동일). generate 시 백엔드가 available_styles로 재검증한다.
 const styles = [
   ['STYLE_3D', '3D 렌더', style3d],
   ['STYLE_WATERCOLOR', '수채화', styleWatercolor],
   ['STYLE_ANIME_FILM', '지브리', styleGhibli],
   ['STYLE_CARTOON', '카툰', styleCartoon],
-  ['STYLE_ROMANCE_FANTASY', '로맨스판타지', styleRomanceFantasy],
+  ['STYLE_ROMANCE_FANTASY', '로맨스 판타지', styleRomanceFantasy],
   ['STYLE_RETRO', '레트로', styleRetro],
   ['STYLE_POP_ART', '팝아트', stylePopArt],
   ['STYLE_TRADITIONAL_PAINTING', '채색화', styleTraditionalPainting],
@@ -87,18 +85,16 @@ watch(stage, async (value) => {
 })
 
 async function loadUsage() { try { const data = await emotionCardsApi.today(); Object.assign(usage, data.daily_generation_count || usage); if (data.card) { card.value = data.card; imagePreviewError.value = false } } catch { /* 로그인 가드와 API 오류는 화면에서만 안내 */ } }
-async function resetUsage() {
-  if (resettingUsage.value) return
-  resettingUsage.value = true
-  errorMessage.value = ''
-  try {
-    const data = await emotionCardsApi.resetTodayUsage()
-    Object.assign(usage, data.daily_generation_count || { used: 0, limit: 10 })
-  } catch (error) {
-    errorMessage.value = errorOf(error)
-  } finally {
-    resettingUsage.value = false
+function requestCardCreation() {
+  if (card.value) {
+    showRegenerationModal.value = true
+    return
   }
+  createCard()
+}
+function confirmCardReplacement() {
+  showRegenerationModal.value = false
+  createCard()
 }
 
 // 한 화면 입력 -> 분석 -> 장면 -> 생성까지 한 번에 진행(중간 검증·미리보기 단계 없음).
@@ -154,7 +150,7 @@ async function downloadCard() {
     URL.revokeObjectURL(url)
   } catch (error) { errorMessage.value = '이미지를 저장하지 못했어요.' }
 }
-function regenerate() { showRegenerationModal.value=false; stage.value='INPUT'; router.replace({ query:{} }) }
+function regenerate() { stage.value='INPUT'; router.replace({ query:{} }) }
 onMounted(async()=>{
   // 세션은 남아 있어도 새 탭·새로고침 뒤에는 CSRF 토큰이 localStorage에 없을 수 있다.
   // 카드 생성 POST 전에 사용자 조회로 최신 토큰을 확보한다.
@@ -178,7 +174,7 @@ onBeforeUnmount(()=>{if(timer) clearTimeout(timer)})
           <textarea ref="memoryTextarea" v-model="form.memory_text" maxlength="500" placeholder="오늘의 장면을 짧게 적어보세요." />
         </label>
         <div class="wide style-block"><span class="block-title">어떤 그림체로 그릴까요?</span><div class="style-grid"><button v-for="item in styles" :key="item[0]" :class="{chosen:selectedStyle===item[0]}" type="button" @click="selectedStyle=item[0]"><span class="style-thumb-wrap"><img :src="item[2]" :alt="`${item[1]} 예시`" class="style-thumb" /></span>{{ item[1] }}</button></div></div>
-        <button class="primary-cta wide" type="button" :disabled="!canCreate" @click="createCard">오늘의 카드 만들기</button>
+        <button class="primary-cta wide" type="button" :disabled="!canCreate" @click="requestCardCreation">오늘의 카드 만들기</button>
         <p class="generation-count wide">{{ usageLabel }}</p>
       </section>
 
@@ -204,11 +200,11 @@ onBeforeUnmount(()=>{if(timer) clearTimeout(timer)})
             <p>{{ resultSummary }}</p>
             <div class="ai-summary-tags"><em v-for="tag in resultTags" :key="tag"># {{ tag }}</em></div>
           </section>
-          <div class="result-actions"><button class="save-card" type="button" @click="showRegenerationModal=true">카드 다시 생성하기</button></div>
+          <div class="result-actions"><button class="save-card" type="button" @click="regenerate">카드 다시 생성하기</button></div>
         </div>
       </section>
 
-      <div class="shell-footer"><div class="generation-controls"><p class="generation-count">{{ usageLabel }}</p><button class="usage-reset-button" type="button" :disabled="resettingUsage" @click="resetUsage">{{ resettingUsage ? '초기화 중...' : '사용량 초기화' }}</button></div><p>{{ summary }}</p></div><p v-if="errorMessage" class="error-message" role="alert">{{ errorMessage }}</p>
+      <div class="shell-footer"><div class="generation-controls"><p class="generation-count">{{ usageLabel }}</p></div><p>{{ summary }}</p></div><p v-if="errorMessage" class="error-message" role="alert">{{ errorMessage }}</p>
     </section>
 
     <aside class="card-preview-panel" aria-live="polite">
@@ -233,7 +229,7 @@ onBeforeUnmount(()=>{if(timer) clearTimeout(timer)})
     <div v-if="showExitModal || showRegenerationModal" class="card-modal-backdrop" role="presentation">
       <section class="card-modal" role="dialog" aria-modal="true">
         <template v-if="showExitModal"><h2>작업을 나갈까요?</h2><p>작성한 내용은 이 화면에 남아 있지만, 진행 중인 작업은 이어지지 않을 수 있어요.</p><div><button class="save-card" type="button" @click="showExitModal=false">계속 작성하기</button><button class="primary-cta" type="button" @click="confirmExit">홈으로 이동</button></div></template>
-        <template v-else><h2>새로운 그림체로 다시 그릴까요?</h2><p>오늘 남은 생성 횟수: {{ unlimited ? '무제한' : Math.max(usage.limit - usage.used, 0) + '회' }}</p><div><button class="primary-cta" type="button" :disabled="atLimit" @click="regenerate">다시 생성하기</button><button class="save-card" type="button" @click="showRegenerationModal=false">취소</button></div><small v-if="atLimit">오늘 생성 가능한 카드를 모두 사용했어요. 내일 다시 시도해주세요.</small></template>
+        <template v-else><h2>새 카드를 만들까요?</h2><p class="card-replacement-notice">새 카드를 만들면 현재 카드는 삭제돼요.<br />필요한 경우 먼저 저장해 주세요.</p><p class="remaining-generation-count">오늘 남은 생성 횟수: <strong>{{ unlimited ? '무제한' : Math.max(usage.limit - usage.used, 0) + '회' }}</strong></p><div><button class="primary-cta" type="button" :disabled="atLimit" @click="confirmCardReplacement">새 카드 만들기</button><button class="save-card" type="button" @click="showRegenerationModal=false">취소</button></div><small v-if="atLimit">오늘 생성 가능한 카드를 모두 사용했어요. 내일 다시 시도해주세요.</small></template>
       </section>
     </div>
   </main>
@@ -357,8 +353,8 @@ textarea { min-height: 82px; overflow-y: hidden; resize: none; }
 .ai-loading-caption { color: #c9b2d9; font-size: 12px; }
 
 .style-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-.style-grid button { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 8px; min-height: 148px; padding: 8px 8px 10px; border: 1px solid rgba(237, 183, 177, .3); border-radius: 14px; background: rgba(28, 10, 48, .65); color: #f4e7e8; font: inherit; font-weight: 800; cursor: pointer; overflow: hidden; }
-.style-thumb-wrap { position: relative; width: 100%; aspect-ratio: 1 / 1; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255, 255, 255, .12); }
+.style-grid button { display: grid; grid-template-rows: minmax(0, 1fr) 22px; place-items: center; gap: 6px; min-width: 0; min-height: 0; aspect-ratio: .82; padding: 8px; border: 1px solid rgba(237, 183, 177, .3); border-radius: 14px; background: rgba(28, 10, 48, .65); color: #f4e7e8; font: inherit; font-size: clamp(10px, .9vw, 12px); font-weight: 400; line-height: 1.1; white-space: nowrap; cursor: pointer; overflow: hidden; }
+.style-thumb-wrap { position: relative; grid-row: 1; width: 100%; height: 100%; min-height: 0; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255, 255, 255, .12); }
 .style-thumb-wrap::after { content: ''; position: absolute; inset: 0; background: rgba(12, 4, 22, .32); pointer-events: none; }
 .style-thumb { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 12%; }
 .style-grid .chosen { border-color: #ffb576; background: linear-gradient(145deg, rgba(243, 81, 144, .6), rgba(255, 147, 96, .5)); box-shadow: 0 0 0 1px rgba(255, 190, 112, .45); }
@@ -366,9 +362,6 @@ textarea { min-height: 82px; overflow-y: hidden; resize: none; }
 .style-grid .chosen .style-thumb-wrap::after { background: rgba(12, 4, 22, .18); }
 .generation-controls { display: flex; align-items: center; gap: 10px; }
 .generation-count { margin: 0; color: #bfaec8; font-size: 12px; text-align: center; }
-.usage-reset-button { min-height: 28px; padding: 0 12px; border: 1px solid rgba(255, 190, 112, .38); border-radius: 999px; background: rgba(255, 190, 112, .08); color: #ffd6a3; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
-.usage-reset-button:hover:not(:disabled) { background: rgba(255, 190, 112, .16); border-color: rgba(255, 190, 112, .62); }
-.usage-reset-button:disabled { cursor: wait; opacity: .65; }
 
 .result-card { display: grid; grid-template-columns: minmax(240px, .8fr) minmax(0, 1.2fr); gap: 25px; }
 .result-image-button { display: block; overflow: hidden; padding: 0; border: 0; border-radius: 14px; background: transparent; cursor: zoom-in; }
@@ -391,10 +384,10 @@ textarea { min-height: 82px; overflow-y: hidden; resize: none; }
 
 .card-modal-backdrop { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: 20px; background: rgba(10, 4, 22, .64); backdrop-filter: blur(6px); }
 .card-modal { width: min(430px, 100%); padding: 28px; border: 1px solid rgba(255, 190, 176, .35); border-radius: 22px; background: rgba(49, 20, 70, .96); color: #f7ead9; box-shadow: 0 24px 60px rgba(0, 0, 0, .4); }
-.card-modal h2 { margin: 0 0 10px; font-size: 22px; line-height: 1.25; white-space: nowrap; }.card-modal p, .card-modal small { color: #d0c1da; }.card-modal > div { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
+.card-modal h2 { margin: 0 0 10px; font-size: 22px; line-height: 1.25; white-space: nowrap; }.card-modal p, .card-modal small { color: #d0c1da; }.card-modal .card-replacement-notice { margin: 0; font-size: 14px; line-height: 1.45; }.card-modal .remaining-generation-count { margin: 10px 0 0; color: #ffcf85; font-size: 14px; font-weight: 800; }.card-modal .remaining-generation-count strong { color: #ff9f70; }.card-modal > div { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
 
 @keyframes thumbPulse { 50% { transform: scale(1.04); filter: brightness(1.18); } }
 @media (max-width: 1100px) { .mind-card-layout { grid-template-columns: 1fr; width: min(1060px, 100%); margin-inline: auto; } .card-preview-panel { position: static; } }
-@media (max-width: 720px) { .mind-card-page { padding: 18px 11px 42px; } .mind-card-shell { padding: 24px 17px; } .head-row { margin: 20px 0; } .panel-thumb { width: 80px; height: 80px; } .input-grid, .result-card { grid-template-columns: 1fr; } .style-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .shell-footer { display: block; } .shell-footer p + p { margin-top: 6px; } .primary-cta { position: sticky; bottom: 12px; z-index: 2; } .card-modal > div { flex-wrap: wrap; } }
+@media (max-width: 720px) { .mind-card-page { padding: 18px 11px 42px; } .mind-card-shell { padding: 24px 17px; } .head-row { margin: 20px 0; } .panel-thumb { width: 80px; height: 80px; } .input-grid, .result-card { grid-template-columns: 1fr; } .style-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } .style-grid button { font-size: 10px; } .shell-footer { display: block; } .shell-footer p + p { margin-top: 6px; } .primary-cta { position: sticky; bottom: 12px; z-index: 2; } .card-modal > div { flex-wrap: wrap; } }
 @media (prefers-reduced-motion: reduce) { .pulsing, .card-preview-frame.generating .card-preview-empty img { animation: none !important; } }
 </style>

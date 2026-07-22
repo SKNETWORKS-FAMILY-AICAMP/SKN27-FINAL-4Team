@@ -1,7 +1,9 @@
 from copy import deepcopy
 import tempfile
 from unittest.mock import patch
+from pathlib import Path
 
+from django.conf import settings
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 
@@ -11,7 +13,7 @@ from .management.commands.import_emotion_card_data import validate_data_files
 from .models import (
     CatalogEntry,
     EmotionCardJob,
-    EmotionCardUsageReset,
+    GeneratedEmotionCard,
 )
 from .prompt_compiler import PROMPT_MAX_CHARS, build_image_prompt
 from .scene_pipeline import (
@@ -642,6 +644,38 @@ class EmotionCardApiTests(TestCase):
         self.assertEqual(feedback.status_code, 200)
         self.assertTrue(feedback.json()["feedback"]["helpful"])
 
+    def test_successful_new_card_replaces_the_previous_card_and_image(self):
+        def generate_card(idempotency_key):
+            analysis = self.client.post(
+                "/api/emotion-cards/analyze/",
+                {"emotion_text": "오늘의 마음을 카드로 남겨요"},
+                content_type="application/json",
+            ).json()
+            scene = self.client.post(
+                f"/api/emotion-cards/analyses/{analysis['analysis_id']}/scene/"
+            ).json()
+            generation = self.client.post(
+                f"/api/emotion-cards/scenes/{scene['scene_id']}/generate/",
+                {"style_id": scene["available_styles"][0]["style_id"], "idempotency_key": idempotency_key},
+                content_type="application/json",
+            ).json()
+            return generation
+
+        # The job endpoint exposes the new card ID after synchronous completion.
+        first_job = generate_card("replace-first-card")
+        first_card_id = self.client.get(f"/api/emotion-cards/jobs/{first_job['job_id']}/").json()["card_id"]
+        first_card = self.client.get(f"/api/emotion-cards/{first_card_id}/").json()
+        first_image = Path(settings.MEDIA_ROOT) / first_card["image_url"].removeprefix(settings.MEDIA_URL).lstrip("/")
+        self.assertTrue(first_image.exists())
+
+        second_job = generate_card("replace-second-card")
+        second_card_id = self.client.get(f"/api/emotion-cards/jobs/{second_job['job_id']}/").json()["card_id"]
+
+        self.assertNotEqual(first_card_id, second_card_id)
+        self.assertEqual(GeneratedEmotionCard.objects.filter(user=self.user).count(), 1)
+        self.assertFalse(first_image.exists())
+        self.assertEqual(self.client.get(f"/api/emotion-cards/{first_card_id}/").status_code, 404)
+
     def test_safety_block_prevents_image_job_creation(self):
         response = self.client.post(
             "/api/emotion-cards/analyze/",
@@ -670,13 +704,8 @@ class EmotionCardApiTests(TestCase):
         )
 
     @override_settings(EMOTION_CARD_MAX_DAILY_GENERATIONS=10)
-    def test_today_usage_can_be_reset(self):
-        response = self.client.post("/api/emotion-cards/today/reset/")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            response.json()["daily_generation_count"],
-            {"used": 0, "limit": 10},
-        )
-        self.assertTrue(
-            EmotionCardUsageReset.objects.filter(user=self.user).exists()
-        )
+    def test_today_usage_reset_route_is_not_exposed(self):
+        from django.urls import Resolver404, resolve
+
+        with self.assertRaises(Resolver404):
+            resolve('/api/emotion-cards/today/reset/')

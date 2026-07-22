@@ -10,7 +10,6 @@ urlpatterns = [
     path('scenes/<uuid:scene_id>/generate/', views.generate_view),
     path('jobs/<uuid:job_id>/', views.job_detail),
     path('today/', views.today_card),
-    path('today/reset/', views.reset_today_usage),
     path('<uuid:card_id>/', views.card_detail),
     path('<uuid:card_id>/feedback/', views.card_feedback),
 ]
