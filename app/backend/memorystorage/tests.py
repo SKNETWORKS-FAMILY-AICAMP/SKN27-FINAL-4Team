@@ -621,11 +621,11 @@ class MemoryVaultApiTests(SimpleTestCase):
         self.assertNotIn('SET fact.episode', statements)
         self.assertIn('fact.created_at', statements)
 
-    def test_list_includes_legacy_knows_and_preference_nodes(self):
+    def test_list_includes_relation_and_preference_nodes(self):
         session = _ReadSession([
             [
                 {
-                    'memory_id': 'knows_legacy_1',
+                    'memory_id': 'relates_1',
                     'saved_at': '',
                     'source_text': '',
                     'has_source': False,
@@ -643,7 +643,7 @@ class MemoryVaultApiTests(SimpleTestCase):
             ],
             [],
             [{
-                'memory_id': 'knows_legacy_1',
+                'memory_id': 'relates_1',
                 'name': '민수',
                 'relation': '직장 동료',
                 'valid_from': None,
@@ -657,8 +657,8 @@ class MemoryVaultApiTests(SimpleTestCase):
                     'name': '민수',
                     'relation': '직장 동료',
                 },
-                'relation_edge_id': '5:knows:1',
-                'relation_edge_type': 'KNOWS',
+                'relation_edge_id': '5:relates:1',
+                'relation_edge_type': 'RELATES_TO',
                 'relation_properties': {},
             }],
             [{
@@ -697,11 +697,11 @@ class MemoryVaultApiTests(SimpleTestCase):
         relation_graph = response.data['memories'][0]['context']['graph']
         preference_graph = response.data['memories'][1]['context']['graph']
         self.assertIn(
-            'KNOWS', {edge['type'] for edge in relation_graph['edges']})
+            'RELATES_TO', {edge['type'] for edge in relation_graph['edges']})
         self.assertIn(
             'PREFERS', {edge['type'] for edge in preference_graph['edges']})
         statements = '\n'.join(query for query, _ in session.calls)
-        self.assertIn("'RELATES_TO', 'KNOWS'", statements)
+        self.assertIn("type(fact) = 'RELATES_TO'", statements)
         self.assertIn('preference:Preference', statements)
 
     def test_delete_removes_memory_owned_graph_and_orphan_context(self):
@@ -721,7 +721,7 @@ class MemoryVaultApiTests(SimpleTestCase):
         self.assertEqual(response.data['deleted']['deleted_event_count'], 2)
         statements = '\n'.join(query for query, _ in tx.calls)
         self.assertIn('fact:HAS_EVENT', statements)
-        self.assertIn("'RELATES_TO', 'KNOWS'", statements)
+        self.assertIn("type(fact) = 'RELATES_TO'", statements)
         self.assertIn('fact:PREFERS', statements)
         self.assertIn(
             "type(fact) IN ['ON', 'AT', 'ABOUT', 'INVOLVES', 'EVOKED']",

@@ -1,12 +1,11 @@
 
 ```mermaid
 flowchart TD
-    START["사용자 요청<br/>GET /api/report/generate/"] --> VIEW["MindReportGenerateAPIView<br/>views.py"]
+    START["사용자 새로고침 요청<br/>POST /api/report/generate/"] --> VIEW["MindReportGenerateAPIView<br/>views.py"]
 
     VIEW --> AUTH{"인증 사용자 여부"}
     AUTH -->|"인증됨"| USER["request.user 사용"]
-    AUTH -->|"미인증 테스트 상태"| FIRSTUSER["DB 첫 번째 user 사용"]
-    FIRSTUSER --> USER
+    AUTH -->|"미인증"| REJECT["401 응답"]
 
     USER --> PERIOD["리포트 대상 기간 계산<br/>주간 기본 + 월말 주간이면 월간도 생성"]
 
@@ -20,7 +19,7 @@ flowchart TD
     WFB2 --> WFB3["부족 데이터용 fallback 리포트 생성"]
     WFB3 --> SAVE_FB_W["MindReport 저장<br/>is_fallback=True"]
 
-    W2 -->|"충족"| FLOW_W["MindReportFlowService.run<br/>period_type=week"]
+    W2 -->|"충족"| FLOW_W["MindReportSupervisorAgent.run<br/>period_type=week"]
 
     FLOW_W --> AG1W["1. 데이터 조회·기준 충족 판단 에이전트<br/>MindReportDataCollector"]
     AG1W --> COLDATA_W["기간 내 source_messages 수집<br/>collect_source_messages"]
@@ -54,8 +53,7 @@ flowchart TD
 
     LABEL_W --> AG4W["4. 분석 근거 문장·실천 대안 생성 에이전트<br/>narrative.py + alternatives.py"]
     AG4W --> NARR_W["분석 문장 생성<br/>MindReportNarrativeGenerator"]
-    NARR_W --> FORMAT_W["프론트 포맷 변환<br/>format_for_frontend"]
-    FORMAT_W --> AG5W["5. 리포트 검증 에이전트<br/>validation.py 신규 추가"]
+    NARR_W --> AG5W["5. 리포트 검증 에이전트<br/>validation_agent.py"]
 
     AG5W --> DV_W["데이터 검증<br/>기간·기준·근거 메시지 존재 확인"]
     AG5W --> AV_W["분석 검증<br/>점수 흐름·패턴·키워드 근거 확인"]
@@ -67,7 +65,8 @@ flowchart TD
     SV_W --> VR_W
     FV_W --> VR_W
 
-    VR_W -->|"passed"| SAVE_W["MindReport 저장<br/>is_fallback=False"]
+    VR_W -->|"passed"| FORMAT_W["프론트 포맷 변환<br/>format_report_node"]
+    FORMAT_W --> SAVE_W["MindReport 저장<br/>is_fallback=False"]
     VR_W -->|"needs_revision"| REV_W["수정 요청 생성<br/>문제 항목 전달"]
     REV_W --> AG4W
     VR_W -->|"blocked"| SAFE_W["안전 fallback 리포트 생성"]
@@ -85,7 +84,7 @@ flowchart TD
     MFB2 --> MFB3["월간 fallback 리포트 생성"]
     MFB3 --> SAVE_FB_M["MindReport 저장<br/>is_fallback=True"]
 
-    M2 -->|"충족"| FLOW_M["MindReportFlowService.run<br/>period_type=month"]
+    M2 -->|"충족"| FLOW_M["MindReportSupervisorAgent.run<br/>period_type=month"]
     FLOW_M --> MAG2["월간 1~4번 에이전트 동일 실행<br/>수집 → 감정분석 → 키워드분류 → 문장생성"]
     MAG2 --> MAG5["월간 리포트 검증 에이전트"]
     MAG5 --> MVR{"검증 결과"}

@@ -104,6 +104,7 @@ def save_monthly_pipeline_result(
 
     monthly_defaults = {
         'previous_estimated_mbti_type': result.monthly_result.previous_estimated_mbti_type,
+        'previous_period_key': result.monthly_result.previous_period_key,
         'estimated_mbti_type': result.monthly_result.estimated_mbti_type,
         'changed_axes_json': list(result.monthly_result.changed_axes),
         'status': result.monthly_result.status,

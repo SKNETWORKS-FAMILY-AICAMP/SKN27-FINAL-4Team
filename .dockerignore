@@ -1,0 +1,37 @@
+# 빌드 컨텍스트에서 제외 (2026-07-21)
+# 없으면 deploy/Dockerfile:35의 `COPY app /app`이 아래를 통째로 이미지에 굽는다.
+#  - app/backend/.venv-ragas/  : Windows venv (.gitignore가 "절대 커밋 금지"로 지정한 것)
+#  - app/frontend/node_modules/: 프론트는 이미지 안에서 npm ci로 다시 설치한다
+
+**/.venv
+**/.venv-*
+**/venv
+**/node_modules
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.mypy_cache
+
+.git
+.github
+.gitignore
+**/.env
+**/.env.*
+!**/.env.example
+
+**/db.sqlite3
+**/*.log
+**/media
+**/staticfiles
+
+docs/
+_archive/
+test/
+work/
+**/*.md
+**/*.pdf
+**/*.docx
+**/*.ipynb
+
+# 감정모델 산출물은 이미지에 굽지 않는다 — EC2 볼륨(/opt/binteumsai/artifacts)으로 마운트
+ai/emotion/artifacts_ft/model.safetensors

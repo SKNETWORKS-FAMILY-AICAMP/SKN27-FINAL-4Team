@@ -254,8 +254,3 @@ def consume_audio(task_id: str) -> bytes | None:
             task['audio'] = None          # 재생 1회 후 메모리에서 삭제
             task['status'] = 'consumed'
         return audio
-
-
-# 하위 호환 (기존 호출부)
-def get_task(task_id: str) -> dict | None:
-    return get_status(task_id)

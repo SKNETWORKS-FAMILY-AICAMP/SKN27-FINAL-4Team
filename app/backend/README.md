@@ -40,6 +40,30 @@ python manage.py runserver
 docker compose down -v && docker compose up -d --build
 ```
 
+### MBTI 월간 자동 분석
+
+기존 Django 서버 프로세스가 월간 예약과 작업 처리를 함께 담당하므로 별도 YML이나
+컨테이너가 필요하지 않습니다. 매월 1일 00:05(Asia/Seoul)에 직전 월 분석 후보를
+`mbti_monthly_analysis_jobs`에 등록하고 한 번에 하나씩 처리합니다. 서버가 월초
+이후 재기동되어도 직전 월을 다시 확인하며, 입력 해시가 같은 작업은 LLM을 중복
+호출하지 않습니다. 테스트·마이그레이션 같은 관리 명령에서는 백그라운드 서비스가
+시작되지 않습니다.
+
+외부 cron/worker 방식이 필요한 환경에서는 아래 관리 명령도 선택적으로 사용할 수
+있습니다.
+
+```bash
+python manage.py schedule_mbti_monthly
+python manage.py run_mbti_monthly_worker
+```
+
+수동 검증에는 `--period-key YYYY-MM`와 `--once`를 사용할 수 있습니다.
+
+```bash
+python manage.py schedule_mbti_monthly --period-key 2026-06
+python manage.py run_mbti_monthly_worker --once
+```
+
 ## 필요한 .env 키
 
 | 키 | 필수 | 비고 |
@@ -48,7 +72,7 @@ docker compose down -v && docker compose up -d --build
 | `OPENAI_MODEL` | N | 기본 `gpt-5.4-mini` |
 | `LLM_PROVIDER` | N | `openai`(기본) / `groq` — groq 쓸 땐 `GROQ_API_KEY` 필요 |
 | `PG_*` | Y | PostgreSQL 접속 (docker면 자동) |
-| `ELEVENLABS_API_KEY` + `VOICE_ID_{PORI,KKAMI,TOTO,YEOUL}` | N | 없으면 TTS만 failed, 대화는 정상 |
+| `OPENAI_API_KEY` (TTS 겸용) · `OPENAI_AUDIO_MODEL`(기본 `gpt-audio`) · `TTS_PROVIDER`(`openai`/`off`) | N | TTS는 OpenAI gpt-audio 사용(2026-07-19 확정, ElevenLabs·Typecast 은퇴). 키 없거나 `off`면 TTS만 failed, 대화는 정상 |
 | `KAKAO_REST_API_KEY` | 마이페이지 도서 | Kakao Daum 책 검색의 후보·책 소개·서지정보·상세 링크·표지 조회. 미설정 시 소셜 로그인용 `KAKAO_CLIENT_ID`를 재사용 |
 | `TAVILY_API_KEY` | 마이페이지 날씨 | 공개 웹 날씨 맥락 검색. 사용자 프로필·정밀 좌표는 전송하지 않음 |
 | `TAVILY_PLAN_NAME` | 운영 권장 | 확인한 Tavily 구독/계약 플랜명 |

@@ -5,6 +5,8 @@ from mbti.constants import (
     CODING_STATUS_CHOICES,
     BASELINE_SOURCE_CHOICES,
     AXIS_DATA_STATUS_CHOICES,
+    MONTHLY_JOB_STATUS_CHOICES,
+    MONTHLY_JOB_TRIGGER_SOURCE_CHOICES,
 )
 
 
@@ -95,6 +97,56 @@ class MbtiMonthlyResultRecord(models.Model):
             ),
         ]
         ordering = ['-period_key', '-id']
+
+
+class MbtiMonthlyAnalysisJob(models.Model):
+    user_id = models.BigIntegerField(db_index=True)
+    period_key = models.CharField(max_length=7, db_index=True)
+    status = models.CharField(
+        max_length=32,
+        choices=MONTHLY_JOB_STATUS_CHOICES,
+        default='pending',
+        db_index=True,
+    )
+    trigger_source = models.CharField(
+        max_length=32,
+        choices=MONTHLY_JOB_TRIGGER_SOURCE_CHOICES,
+        default='monthly_scheduler',
+    )
+    input_hash = models.CharField(max_length=64, db_index=True)
+    scoring_model = models.CharField(max_length=64)
+    prompt_version = models.CharField(max_length=64)
+    retry_count = models.PositiveIntegerField(default=0)
+    scheduled_at = models.DateTimeField(db_index=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    error_message = models.TextField(null=True, blank=True)
+    monthly_result = models.ForeignKey(
+        MbtiMonthlyResultRecord,
+        db_column='monthly_result_id',
+        on_delete=models.SET_NULL,
+        related_name='analysis_jobs',
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = 'mbti'
+        db_table = 'mbti_monthly_analysis_jobs'
+        indexes = [
+            models.Index(fields=['status', 'scheduled_at']),
+            models.Index(fields=['user_id', 'period_key']),
+            models.Index(fields=['user_id', 'period_key', 'input_hash']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user_id', 'period_key', 'input_hash', 'prompt_version'],
+                name='uniq_mbti_analysis_job_input_prompt',
+            ),
+        ]
+        ordering = ['scheduled_at', 'id']
 
 
 class MbtiMonthlyAxisResult(models.Model):

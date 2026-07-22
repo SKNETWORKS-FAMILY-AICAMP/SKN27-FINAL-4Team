@@ -1,16 +1,24 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 import re
 from typing import Iterable
-
-from django.utils import timezone
 
 from mindreport.services.emotion_flow import analyze_emotion_flow
 from mindreport.services.graph_state import (
     MindReportGraphState,
     MindReportValidationIssue,
     append_trace,
+)
+from mindreport.services.scoring import (
+    KCELECTRA_SCORING_METHOD,
+    SCORING_ROUTE_KCELECTRA,
+    emotion_state_from_score,
+)
+from mindreport.services.periods import resolve_period_window
+from mindreport.services.payloads import (
+    report_recipient_name,
+    select_comfort_message,
 )
 
 
@@ -196,10 +204,37 @@ class MindReportValidationAgent:
                 ))
 
         for score in scoring.emotion_scores:
+            if not 0.0 <= score.emotion_score <= 100.0:
+                issues.append(self._issue(
+                    'emotion_score_out_of_range',
+                    'Emotion score must stay within the 0..100 contract.',
+                    'error',
+                    VALIDATION_ROUTE_EMOTION,
+                ))
+            expected_state = emotion_state_from_score(score.emotion_score)
+            if score.emotion_state != expected_state:
+                issues.append(self._issue(
+                    'emotion_state_score_mismatch',
+                    'Emotion state must be derived from the current 0..100 score.',
+                    'error',
+                    VALIDATION_ROUTE_EMOTION,
+                ))
             if not set(score.evidence_message_ids).issubset(collection_ids):
                 issues.append(self._issue(
                     'unknown_scoring_evidence',
                     'Emotion scoring cites a message that does not exist.',
+                    'error',
+                    VALIDATION_ROUTE_EMOTION,
+                ))
+            evidence_dates = {
+                source_by_id[message_id].source_date
+                for message_id in score.evidence_message_ids
+                if message_id in source_by_id
+            }
+            if evidence_dates and evidence_dates != {score.source_date}:
+                issues.append(self._issue(
+                    'scoring_evidence_date_mismatch',
+                    'Daily emotion scoring may cite only messages from its source date.',
                     'error',
                     VALIDATION_ROUTE_EMOTION,
                 ))
@@ -210,6 +245,17 @@ class MindReportValidationAgent:
                     'error',
                     VALIDATION_ROUTE_EMOTION,
                 ))
+
+        if scoring.scoring_route == SCORING_ROUTE_KCELECTRA and any(
+            score.scoring_method != KCELECTRA_SCORING_METHOD
+            for score in scoring.emotion_scores
+        ):
+            issues.append(self._issue(
+                'kcelectra_scoring_method_mismatch',
+                'KcELECTRA scoring route must use the KcELECTRA scoring method.',
+                'error',
+                VALIDATION_ROUTE_EMOTION,
+            ))
 
         for evidence_owner in self._keyword_evidence(state):
             evidence_ids = set(evidence_owner.evidence_message_ids)
@@ -301,6 +347,28 @@ class MindReportValidationAgent:
                 issues.append(self._issue(
                     'summary_too_long',
                     'Shorten the header summary to one natural Korean sentence of 35 to 80 characters and move details into the analysis paragraphs.',
+                    'warning',
+                    VALIDATION_ROUTE_NARRATIVE,
+                ))
+
+            recipient_name = report_recipient_name(state['user'])
+            comfort_message = select_comfort_message(
+                summary=narrative.summary,
+                analysis=narrative.analysis_sentences,
+                recommendations=narrative.action_recommendations,
+                recipient_name=recipient_name,
+            )
+            compact_comfort = len(re.sub(r'\s+', '', comfort_message))
+            has_recipient_name = comfort_message.count(recipient_name) == 1
+            if (
+                compact_comfort < 20
+                or compact_comfort > 60
+                or not has_recipient_name
+                or '당신' in comfort_message
+            ):
+                issues.append(self._issue(
+                    'support_message_missing_recipient_name',
+                    f'Rewrite the second sentence of the final analysis paragraph as a 20-to-60-character, context-grounded Korean message that addresses the user exactly once as "{recipient_name}" and does not use "당신". Match the dominant emotional context with comfort, encouragement, or cheering; avoid analysis, instructions, and generic optimism.',
                     'warning',
                     VALIDATION_ROUTE_NARRATIVE,
                 ))
@@ -444,14 +512,13 @@ class MindReportValidationAgent:
 
     @staticmethod
     def _is_in_period(source_date: date, state: MindReportGraphState) -> bool:
-        now = timezone.now().date()
-        if state['period_type'] == 'week':
-            target = state.get('target_date') or now
-            start = target - timedelta(days=target.weekday())
-            return start <= source_date <= start + timedelta(days=6)
-        year = state.get('year') or now.year
-        month = state.get('month') or now.month
-        return source_date.year == year and source_date.month == month
+        window = resolve_period_window(
+            period_type=state['period_type'],
+            target_date=state.get('target_date'),
+            year=state.get('year'),
+            month=state.get('month'),
+        )
+        return window.start.date() <= source_date <= window.end_inclusive.date()
 
     @staticmethod
     def _issue(

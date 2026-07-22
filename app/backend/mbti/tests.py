@@ -833,6 +833,7 @@ class MonthlyResultAndReportTests(TestCase):
 
         self.assertEqual(result.monthly_result.user_id, 7)
         self.assertEqual(result.monthly_result.estimated_mbti_type, 'ESTP')
+        self.assertEqual(result.monthly_result.previous_period_key, '2026-05')
         self.assertEqual(result.final_axis_results['IE'].baseline_source, 'latest_monthly_result')
         self.assertEqual(result.final_axis_results['IE'].axis_avg, 0.2)
         self.assertEqual(result.final_axis_results['IE'].axis_ratios, {'I': 0.4, 'E': 0.6})

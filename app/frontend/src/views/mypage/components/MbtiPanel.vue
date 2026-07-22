@@ -1,8 +1,8 @@
 <template>
   <div class="panel-body">
     <div v-if="mbtiViewMode === 'onboardingNext' && !isMonthlyPreparing" class="actions mbti-refresh-actions">
-      <button class="secondary-button" type="button" @click="$emit('refresh')">
-        분석 결과 새로고침
+      <button class="secondary-button" type="button" :disabled="analysisPolling || !canRequestAnalysis" @click="$emit('refresh')">
+        {{ analysisPolling ? '분석 중...' : canRequestAnalysis ? '분석 결과 새로고침' : '분석에 필요한 대화가 더 필요해요' }}
       </button>
     </div>
 
@@ -58,6 +58,15 @@
           <strong>{{ onboardingData?.type || '미등록' }}</strong>
           <small>{{ onboardingData ? '온보딩에서 직접 입력한 유형' : '온보딩 MBTI를 먼저 등록해주세요.' }}</small>
         </div>
+        <button
+          v-if="canRequestAnalysis"
+          class="primary-button"
+          type="button"
+          :disabled="analysisPolling"
+          @click="$emit('refresh')"
+        >
+          {{ analysisPolling ? '분석 중...' : '지금 월간 성향 분석하기' }}
+        </button>
       </section>
 
       <section v-else class="card mbti-combined-card">
@@ -152,8 +161,8 @@
         </header>
 
         <div v-if="canFinishMock" class="qna-finish-action">
-          <button @click="$emit('refresh')" class="qna-finish-button">
-            ✨ 최소 요건 달성! 분석 결과 새로고침
+          <button @click="$emit('refresh')" class="qna-finish-button" :disabled="analysisPolling">
+            {{ analysisPolling ? '분석 중...' : '✨ 최소 요건 달성! 분석 결과 새로고침' }}
           </button>
         </div>
         
@@ -227,7 +236,9 @@ export default {
     mbtiData: { type: Object, default: null },
     mbtiViewMode: { type: String, required: true },
     mbtiViews: { type: Array, required: true },
-    currentMbtiView: { type: Object, required: true }
+    currentMbtiView: { type: Object, required: true },
+    analysisEligibility: { type: Object, default: null },
+    analysisPolling: { type: Boolean, default: false }
   },
   emits: ["refresh", "set-view", "save-mbti"],
   data() {
@@ -251,10 +262,22 @@ export default {
     canFinishMock() {
       if (!this.mockData.counts) return false;
       const axes = Object.keys(this.mockData.counts);
+      const counts = Object.values(this.mockData.counts);
+      const hasBaseline = Boolean(
+        this.onboardingData?.type && this.onboardingData.type !== "----"
+      ) || Boolean(
+        this.mbtiData?.previous?.type && this.mbtiData.previous.type !== "----"
+      );
+      if (hasBaseline) {
+        return counts.some((count) => count >= MBTI_REQUIRED_ANSWERS_PER_AXIS);
+      }
       return axes.length >= MBTI_AXIS_COUNT
-        && Object.values(this.mockData.counts).every(
+        && counts.every(
           (count) => count >= MBTI_REQUIRED_ANSWERS_PER_AXIS
         );
+    },
+    canRequestAnalysis() {
+      return Boolean(this.analysisEligibility?.eligible || this.canFinishMock);
     },
     isMonthlyPreparing() {
       const currentType = this.mbtiData?.current?.type;

@@ -44,6 +44,7 @@ class MonthlyMbtiResult:
     changed_axes: tuple[str, ...]
     status: str
     axis_results: dict[str, FinalAxisPreference]
+    previous_period_key: str | None = None
 
 
 def extract_onboarding_baselines(
@@ -178,6 +179,7 @@ def combine_monthly_mbti(
     period_key: str,
     axis_results: Mapping[str, FinalAxisPreference],
     previous_estimated_mbti_type: str | None = None,
+    previous_period_key: str | None = None,
 ) -> MonthlyMbtiResult:
     letters: list[str] = []
     has_primary_open_axis = False
@@ -192,6 +194,7 @@ def combine_monthly_mbti(
                 changed_axes=(),
                 status='insufficient_data',
                 axis_results=dict(axis_results),
+                previous_period_key=previous_period_key,
             )
         if axis_results[axis].qna_count >= 5:
             has_primary_open_axis = True
@@ -206,6 +209,7 @@ def combine_monthly_mbti(
             changed_axes=(),
             status='insufficient_data',
             axis_results=dict(axis_results),
+            previous_period_key=previous_period_key,
         )
 
     estimated_mbti_type = ''.join(letters)
@@ -225,4 +229,5 @@ def combine_monthly_mbti(
         changed_axes=tuple(changed_axes),
         status='complete',
         axis_results=dict(axis_results),
+        previous_period_key=previous_period_key,
     )

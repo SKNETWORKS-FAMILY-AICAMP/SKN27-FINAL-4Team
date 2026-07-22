@@ -1,29 +1,38 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date
 import json
-import os
 from typing import Any, Mapping, Protocol, Sequence
 
 from django.db.models import OuterRef, Q, Subquery
 from django.utils import timezone
 
 from chat.models import ChatMessage
+from mindreport.constants import (
+    AFFECT_BALANCE_POINT_VALUE,
+    AFFECT_DIMENSION_MAX,
+    AFFECT_DIMENSION_MIN,
+    AFFECT_SCORING_METHOD,
+    CONFIDENCE_LEVELS,
+    EMOTION_SCORE_NEGATIVE_MAX,
+    EMOTION_SCORE_POSITIVE_MIN,
+    KCELECTRA_EMOTION_CLASSES,
+    KCELECTRA_SCORE_WEIGHTS,
+    KCELECTRA_SCORING_METHOD,
+    LABEL_GROUNDED_AFFECT_SCORING_METHOD,
+    MINDREPORT_LLM_TEMPERATURE,
+    MINDREPORT_SCORING_MAX_TOKENS,
+    MINDREPORT_SCORING_MODEL,
+    PERIOD_MONTH,
+    PERIOD_WEEK,
+    SCORING_ROUTE_KCELECTRA,
+    SCORING_ROUTE_LABEL_GROUNDED,
+    SCORING_ROUTE_LLM_FALLBACK,
+    SUPPORTED_PERIODS,
+)
 from mindreport.services.criteria_service import ReportCriteriaService
-
-
-PERIOD_WEEK = 'week'
-PERIOD_MONTH = 'month'
-SUPPORTED_PERIODS = {PERIOD_WEEK, PERIOD_MONTH}
-AFFECT_SCORING_METHOD = 'independent-affect-balance-v2'
-LABEL_GROUNDED_AFFECT_SCORING_METHOD = 'persisted-label-grounded-affect-balance-v1'
-SCORING_ROUTE_LABEL_GROUNDED = 'persisted_emotion_labels_primary'
-SCORING_ROUTE_LLM_FALLBACK = 'raw_text_llm_fallback'
-AFFECT_DIMENSION_MIN = 0
-AFFECT_DIMENSION_MAX = 4
-AFFECT_BALANCE_POINT_VALUE = 12.5
-CONFIDENCE_LEVELS = (0.0, 0.25, 0.5, 0.75, 1.0)
+from mindreport.services.periods import resolve_period_window
 
 
 @dataclass(frozen=True)
@@ -68,24 +77,6 @@ class EmotionScoreClient(Protocol):
         ...
 
 
-def _week_range(target_date: date) -> tuple[datetime, datetime]:
-    start_date = target_date - timedelta(days=target_date.weekday())
-    end_date = start_date + timedelta(days=6)
-    return (
-        timezone.make_aware(datetime.combine(start_date, datetime.min.time())),
-        timezone.make_aware(datetime.combine(end_date, datetime.max.time())),
-    )
-
-
-def _month_range(year: int, month: int) -> tuple[datetime, datetime]:
-    start = timezone.make_aware(datetime(year, month, 1))
-    if month == 12:
-        end = timezone.make_aware(datetime(year + 1, 1, 1)) - timedelta(microseconds=1)
-    else:
-        end = timezone.make_aware(datetime(year, month + 1, 1)) - timedelta(microseconds=1)
-    return start, end
-
-
 def load_source_messages(
     *,
     user,
@@ -94,15 +85,12 @@ def load_source_messages(
     year: int | None = None,
     month: int | None = None,
 ) -> tuple[ReportSourceMessage, ...]:
-    if period_type == PERIOD_WEEK:
-        start, end = _week_range(target_date or timezone.now().date())
-    elif period_type == PERIOD_MONTH:
-        now = timezone.now()
-        resolved_year = year or now.year
-        resolved_month = month or now.month
-        start, end = _month_range(resolved_year, resolved_month)
-    else:
-        raise ValueError(f'Unsupported mindreport period_type: {period_type}')
+    window = resolve_period_window(
+        period_type=period_type,
+        target_date=target_date,
+        year=year,
+        month=month,
+    )
 
     next_message = ChatMessage.objects.filter(
         session_id=OuterRef('session_id'),
@@ -114,8 +102,8 @@ def load_source_messages(
     queryset = ChatMessage.objects.filter(
         session__user=user,
         role='user',
-        created_at__gte=start,
-        created_at__lte=end,
+        created_at__gte=window.start,
+        created_at__lt=window.end_exclusive,
     ).annotate(
         next_message_role=Subquery(next_message.values('role')[:1]),
         next_message_emotion_label=Subquery(
@@ -366,9 +354,9 @@ class LangChainEmotionScoreClient:
             ]
         )
         llm = ChatOpenAI(
-            model=os.getenv('MINDREPORT_SCORING_MODEL', 'gpt-5.4-mini'),
-            temperature=0,
-            max_tokens=1400,
+            model=MINDREPORT_SCORING_MODEL,
+            temperature=MINDREPORT_LLM_TEMPERATURE,
+            max_tokens=MINDREPORT_SCORING_MAX_TOKENS,
         )
         message = (prompt | llm).invoke(
             {'scoring_payload': json.dumps(payload, ensure_ascii=False)}
@@ -382,12 +370,17 @@ class LangChainEmotionScoreClient:
         return _extract_json_object(str(content))
 
 
-def _state_from_score(score: float) -> str:
-    if score > 55:
+def emotion_state_from_score(score: float) -> str:
+    """Return the canonical downstream state for every 0..100 score."""
+    if score > EMOTION_SCORE_POSITIVE_MIN:
         return 'positive'
-    if score < 45:
+    if score < EMOTION_SCORE_NEGATIVE_MAX:
         return 'negative'
     return 'neutral'
+
+
+# Backward-compatible private name used by older parsing helpers.
+_state_from_score = emotion_state_from_score
 
 
 def _parse_affect_dimension(row: Mapping[str, Any], key: str) -> float | None:
@@ -590,8 +583,11 @@ def _fallback_label(labels: Sequence[str]) -> str | None:
 
 
 class MindReportScoringService:
-    def __init__(self, *args, **kwargs):
-        pass
+    def __init__(self, score_client: EmotionScoreClient | None = None):
+        # Production defaults to KcELECTRA. An explicit client remains available
+        # for controlled tests and revision flows without changing that default.
+        self.score_client = score_client
+
     def run(
         self,
         *,
@@ -640,11 +636,59 @@ class MindReportScoringService:
                 scoring_route='criteria_not_met',
             )
 
+        if self.score_client is not None:
+            use_persisted_emotion_labels = has_complete_persisted_emotion_labels(
+                source_messages
+            )
+            scoring_route = (
+                SCORING_ROUTE_LABEL_GROUNDED
+                if use_persisted_emotion_labels
+                else SCORING_ROUTE_LLM_FALLBACK
+            )
+            affect_scoring_method = (
+                LABEL_GROUNDED_AFFECT_SCORING_METHOD
+                if use_persisted_emotion_labels
+                else AFFECT_SCORING_METHOD
+            )
+            scoring_payload = build_emotion_scoring_payload(
+                period_type=period_type,
+                messages=source_messages,
+                use_persisted_emotion_labels=use_persisted_emotion_labels,
+            )
+            if revision_instructions:
+                scoring_payload['revision_instructions'] = list(
+                    revision_instructions
+                )
+            scores = parse_emotion_scores(
+                payload=self.score_client.score_messages(payload=scoring_payload),
+                source_messages=source_messages,
+                affect_scoring_method=affect_scoring_method,
+            )
+            return MindReportScoringResult(
+                status='scored',
+                period_type=period_type,
+                eligibility=eligibility,
+                source_messages=source_messages,
+                emotion_scores=scores,
+                message='명시적으로 주입된 점수 클라이언트로 감정 점수 분석을 완료했습니다.',
+                scoring_route=scoring_route,
+            )
+
         # KcELECTRA 기반 스코어링 로직 연동
         from mindreport.services.electra_scorer import ElectraEmotionScorer, EMO4_CLASSES
         import numpy as np
         
         scorer = ElectraEmotionScorer()
+        if getattr(scorer, 'model', None) is None:
+            return MindReportScoringResult(
+                status='scoring_model_unavailable',
+                period_type=period_type,
+                eligibility=eligibility,
+                source_messages=source_messages,
+                emotion_scores=(),
+                message='KcELECTRA 감정분류 모델을 불러오지 못했습니다.',
+                scoring_route='scoring_model_unavailable',
+            )
         grouped = _group_messages_by_date(source_messages)
         scores = []
         
@@ -656,23 +700,32 @@ class MindReportScoringService:
                 continue
                 
             probs = scorer.predict_probs(texts)
+            if (
+                probs.shape != (len(texts), len(EMO4_CLASSES))
+                or not np.isfinite(probs).all()
+                or not np.allclose(probs.sum(axis=1), 1.0, atol=1e-3)
+            ):
+                return MindReportScoringResult(
+                    status='invalid_model_output',
+                    period_type=period_type,
+                    eligibility=eligibility,
+                    source_messages=source_messages,
+                    emotion_scores=(),
+                    message='KcELECTRA 감정 확률 출력이 유효하지 않습니다.',
+                    scoring_route='invalid_model_output',
+                )
             # 일일 평균 확률
             avg_probs = np.mean(probs, axis=0)
             
-            # EMO4_CLASSES = ["기쁨", "슬픔", "분노", "일반"]
-            # 점수 = 기쁨*100 + 일반*50 + 슬픔*25 + 분노*0
-            emotion_score = (avg_probs[0] * 100) + (avg_probs[3] * 50) + (avg_probs[1] * 25) + (avg_probs[2] * 0)
+            # The model class order and score weights are one versioned contract.
+            emotion_score = float(np.dot(avg_probs, KCELECTRA_SCORE_WEIGHTS))
             
             top_idx = int(np.argmax(avg_probs))
-            top_emotion = EMO4_CLASSES[top_idx]
+            top_emotion = KCELECTRA_EMOTION_CLASSES[top_idx]
             
-            # emotion_flow.py가 기대하는 emotion_state 매핑
-            if top_emotion == "기쁨":
-                emotion_state = "positive"
-            elif top_emotion in ["슬픔", "분노"]:
-                emotion_state = "negative"
-            else:
-                emotion_state = "neutral"
+            # 대표 감정 라벨과 별개로, downstream 상태는 실제 점수에서
+            # 일관되게 파생한다. 혼합 확률에서는 두 값이 다를 수 있다.
+            emotion_state = emotion_state_from_score(float(emotion_score))
                 
             scores.append(EmotionScore(
                 source_date=day_messages[0].source_date,
@@ -684,16 +737,19 @@ class MindReportScoringService:
                 total_message_count=len(texts),
                 evidence_message_ids=tuple(message_ids),
                 rationale=f"KcELECTRA 분석 결과, '{top_emotion}' 확률이 가장 높습니다.",
-                scoring_method="kcelectra-finetuned-v1"
+                scoring_method=KCELECTRA_SCORING_METHOD,
             ))
 
-
+        excess_count = max(
+            0,
+            eligibility['current_count'] - eligibility['required_count'],
+        )
         return MindReportScoringResult(
             status='scored',
             period_type=period_type,
             eligibility=eligibility,
             source_messages=source_messages,
-            emotion_scores=scores,
-            message=f"총 {len(source_messages)}개({eligibility['missing_count']}개 여유)의 사용자 메시지를 기반으로 성공적으로 ML 점수 분석(KcELECTRA)을 마쳤습니다.",
-            scoring_route='kcelectra_scoring',
+            emotion_scores=tuple(scores),
+            message=f"총 {len(source_messages)}개({excess_count}개 여유)의 사용자 메시지를 기반으로 성공적으로 ML 점수 분석(KcELECTRA)을 마쳤습니다.",
+            scoring_route=SCORING_ROUTE_KCELECTRA,
         )

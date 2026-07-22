@@ -1,21 +1,26 @@
 """
-기능: 채팅 데이터 부족 시(주간 5개/월간 20개 미만) 사용자에게 제공할 대체(Fallback) 리포트를 생성하는 서비스입니다.
+기능: 설정된 최소 대화 수에 미달할 때 대체(Fallback) 리포트를 생성합니다.
 """
+import logging
 import sys
+
 from django.conf import settings
-from user.models import UserProfile
+
+
+logger = logging.getLogger(__name__)
 
 # ai 폴더를 import 할 수 있도록 PYTHONPATH 경로 임시 추가
 if str(settings.PROJECT_ROOT) not in sys.path:
     sys.path.append(str(settings.PROJECT_ROOT))
 
 from ai.agents.web_agent import FallbackWebAgent
+from mindreport.services.payloads import report_recipient_name
 
 class FallbackReportService:
     @staticmethod
     def generate_fallback_report(user, report_type="주간", range_text="이번 주"):
         """
-        사용자 정보와 Web Agent(Mocking)를 사용하여 데이터 부족 보완 리포트를 생성합니다.
+        사용자 정보와 Tavily 근거 기반 Web Agent를 사용하여 데이터 부족 안내를 생성합니다.
         """
         # 1. 사용자 프로필 정보 조회
         age = None
@@ -41,8 +46,8 @@ class FallbackReportService:
                 mbti_profile = MbtiOnboardingProfile.objects.filter(user_id=user.id).first()
                 if mbti_profile and mbti_profile.mbti_type:
                     user_mbti = mbti_profile.mbti_type
-            except Exception as e:
-                print(f"MBTI 조회 실패: {e}")
+            except Exception:
+                logger.exception('Failed to load MBTI context for mind-report fallback.')
                 
         # 3. Web Agent로 트렌디한 콘텐츠/활동 추천 받기
         recommendations = FallbackWebAgent.get_trendy_contents(
@@ -54,37 +59,46 @@ class FallbackReportService:
         )
         
         # 4. 프론트엔드 ReportView.vue 구조에 맞게 JSON(Dict) 조립
-        analysis_lines = [
-            "아직 마음 리포트를 짠! 하고 보여드리기엔 대화 기록이 조금 부족해요 🥺 저와 조금 더 이야기를 나눠주시면, 마음의 흐름을 꼼꼼하게 살펴서 딱 맞는 리포트를 분석해 드릴게요! ✨",
-            "우리의 소중한 대화가 모이는 동안 심심하시지 않게, 지금 당장 가볍게 기분 전환하기 딱 좋은 맞춤 활동들을 쏙쏙 골라왔어요! 🎁"
-        ]
+        analysis_lines = []
         
         recommendations_names = []
+        if recommendations:
+            analysis_lines.append(
+                "아래 활동은 대화에서 분석한 결과가 아니라, 기다리는 동안 참고할 수 있도록 Tavily 웹 검색 결과를 바탕으로 정리한 제안이에요."
+            )
+        else:
+            analysis_lines.append(
+                "현재는 근거를 확인할 수 있는 웹 추천을 준비하지 못했어요. 임의의 활동을 대신 표시하지 않고 대화 기록을 계속 수집할게요."
+            )
+
         for rec in recommendations:
-            if isinstance(rec, dict):
-                act = rec.get("activity", "")
-                reason = rec.get("reason", "")
-                how_to = rec.get("how_to", "")
-                
-                analysis_lines.append(f"✅ {act}")
-                if reason:
-                    analysis_lines.append(f"  - 왜 추천하나요? {reason}")
-                if how_to:
-                    analysis_lines.append(f"  - 어떻게 시작할까요? {how_to}")
-                recommendations_names.append(act)
-            else:
-                # 만약 이전 로직처럼 문자열만 온 경우 방어 코드
-                analysis_lines.append(f"✅ {rec}")
-                recommendations_names.append(rec)
+            if not isinstance(rec, dict):
+                continue
+            act = str(rec.get("activity") or "").strip()
+            if not act:
+                continue
+            reason = str(rec.get("reason") or "").strip()
+            how_to = str(rec.get("how_to") or "").strip()
+
+            analysis_lines.append(f"✅ {act}")
+            if reason:
+                analysis_lines.append(f"  - 왜 추천하나요?: {reason}")
+            if how_to:
+                analysis_lines.append(f"  - 어떻게 시작할까요?: {how_to}")
+            recommendations_names.append(act)
+
+        analysis_lines.append(
+            f"기록이 아직 적어도, {report_recipient_name(user)}은 마음을 천천히 알아갈 충분한 시간이 있어요."
+        )
                 
         report_data = {
             "id": f"fallback-{user.id}",
             "type": f"{report_type} (데이터 부족)",
             "range": range_text,
             "title": f"마음 리포트 분석 대기 중",
-            "summary": "기록이 아직 적어 가볍게 시도할 수 있는 활동을 추천합니다.",
-            "stressCauses": ["기록 수집 중..."],
-            "reliefCauses": ["기록 수집 중..."],
+            "summary": "아직 대화 기록이 조금 부족해요. 기록이 더 모이면 실제 대화를 바탕으로 마음의 흐름을 살펴볼게요.",
+            "stressCauses": [],
+            "reliefCauses": [],
             "emotions": [], # 데이터가 없으므로 비움
             "analysis": analysis_lines,
             "recommendations": recommendations_names,
@@ -104,7 +118,7 @@ class FallbackReportService:
         if range_text is None:
             range_text = timezone.now().strftime("%Y.%m.%d") + " 생성"
             
-        # 기존 가짜 리포트 삭제
+        # 기존 폴백 리포트 삭제
         MindReport.objects.filter(user=user, is_fallback=True).delete()
         
         # 새 리포트 데이터 생성

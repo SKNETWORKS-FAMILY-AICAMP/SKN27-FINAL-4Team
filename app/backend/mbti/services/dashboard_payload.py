@@ -142,7 +142,7 @@ def build_frontend_payload_from_monthly_record(monthly_result) -> dict[str, Any]
             'previous_estimated_mbti_type': previous_type,
             'previous_basis': (
                 'monthly_result'
-                if stored_previous_type
+                if stored_previous_type and monthly_result.previous_period_key
                 else 'onboarding'
                 if onboarding_type
                 else None

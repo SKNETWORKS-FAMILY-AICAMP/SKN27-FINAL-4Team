@@ -5,6 +5,15 @@ import json
 import os
 from typing import Any, Mapping, Protocol, Sequence
 
+from mindreport.constants import (
+    FLOW_SCORE_DOWNWARD,
+    FLOW_SCORE_MAINTENANCE,
+    FLOW_SCORE_UPWARD,
+    FLOW_SCORE_VOLATILE,
+    MINDREPORT_CAUSE_KEYWORD_MODEL,
+    MINDREPORT_CAUSE_MAX_TOKENS,
+    MINDREPORT_LLM_TEMPERATURE,
+)
 from mindreport.services.keyword_candidates import KeywordCandidate
 from mindreport.services.emotion_flow import EmotionFlowResult
 from mindreport.services.scoring import EmotionScore, ReportSourceMessage, _extract_json_object
@@ -12,13 +21,8 @@ from mindreport.services.scoring import EmotionScore, ReportSourceMessage, _extr
 
 CAUSE_STRESS = 'stress'
 CAUSE_RELIEF = 'relief'
-FLOW_SCORE_UPWARD = 'score_upward'
-FLOW_SCORE_MAINTENANCE = 'score_maintenance'
-FLOW_SCORE_VOLATILE = 'score_volatile'
-FLOW_SCORE_DOWNWARD = 'score_downward'
-
-LABEL_SIZE_DEFAULT = 'default'
-LABEL_SIZE_COMPACT = 'compact'
+LABEL_EMPHASIS_PRIMARY = 'primary'
+LABEL_EMPHASIS_SECONDARY = 'secondary'
 
 
 @dataclass(frozen=True)
@@ -43,8 +47,8 @@ class CauseKeywordResult:
 @dataclass(frozen=True)
 class LabelDisplayPolicy:
     emotion_flow_type: str
-    stress_label_size: str
-    relief_label_size: str
+    stress_emphasis: str
+    relief_emphasis: str
     stress_display_weight: float
     relief_display_weight: float
     rationale: str
@@ -73,6 +77,21 @@ def build_cause_keyword_payload(
     source_by_id = {message.message_id: message for message in source_messages}
     return {
         'task': 'mind_report_cause_keyword_classification',
+        'scoring_context': {
+            'role': 'supporting affect direction only; source text remains primary',
+            'flow_type': emotion_flow.flow_type,
+            'daily_results': [
+                {
+                    'source_date': score.source_date.isoformat(),
+                    'emotion_label': score.emotion_label,
+                    'emotion_state': score.emotion_state,
+                    'confidence': score.confidence,
+                    'scoring_method': score.scoring_method,
+                    'evidence_message_ids': list(score.evidence_message_ids),
+                }
+                for score in emotion_scores
+            ],
+        },
         'candidates': [
             {
                 'keyword': candidate.keyword,
@@ -99,6 +118,7 @@ def build_cause_keyword_payload(
             '진단, 위험도, 성격 판정을 하지 않는다.',
             '후보별 근거 메시지를 직접 다시 읽고 후보 추출 결과에 동조하지 말고 독립적으로 판단한다.',
             '일별 감정 점수나 같은 날짜에 등장했다는 사실을 원인 판정 근거로 사용하지 않는다.',
+            'KcELECTRA 감정 결과는 근거 메시지를 해석하는 보조 정보일 뿐이며, stress/relief 판정은 원문에 드러난 방향과 인과 표현으로 결정한다.',
             'stress는 소재가 부담, 긴장, 불편 또는 소진과 연결된 경우에만 사용한다.',
             'relief는 소재가 편안함, 즐거움, 안정 또는 회복과 연결된 경우에만 사용한다.',
             '단순 언급, 혼합된 방향, 불명확한 인과관계는 unresolved로 분류하고 publishable을 false로 반환한다.',
@@ -142,9 +162,9 @@ class LangChainCauseKeywordClient:
             ]
         )
         llm = ChatOpenAI(
-            model=os.getenv('MINDREPORT_CAUSE_KEYWORD_MODEL', 'gpt-5.4-mini'),
-            temperature=0,
-            max_tokens=1000,
+            model=MINDREPORT_CAUSE_KEYWORD_MODEL,
+            temperature=MINDREPORT_LLM_TEMPERATURE,
+            max_tokens=MINDREPORT_CAUSE_MAX_TOKENS,
         )
         message = (prompt | llm).invoke(
             {'cause_keyword_payload': json.dumps(payload, ensure_ascii=False)}
@@ -284,20 +304,26 @@ def determine_label_display_policy(
     if emotion_flow_type == FLOW_SCORE_UPWARD:
         return LabelDisplayPolicy(
             emotion_flow_type=emotion_flow_type,
-            stress_label_size=LABEL_SIZE_COMPACT,
-            relief_label_size=LABEL_SIZE_DEFAULT,
+            stress_emphasis=LABEL_EMPHASIS_SECONDARY,
+            relief_emphasis=LABEL_EMPHASIS_PRIMARY,
             stress_display_weight=0.7,
             relief_display_weight=1.0,
-            rationale='점수 상향 흐름은 회복 구간이 있으므로 이완 원인 라벨을 기본 크기로 유지하고 스트레스 원인 라벨은 작게 표시합니다.',
+            rationale=(
+                '점수 상향 흐름은 회복 구간이 있으므로 모든 라벨의 읽기 크기는 '
+                '유지하되 이완 원인을 우선 강조하고 스트레스 원인은 보조 강조합니다.'
+            ),
         )
 
     return LabelDisplayPolicy(
         emotion_flow_type=emotion_flow_type,
-        stress_label_size=LABEL_SIZE_DEFAULT,
-        relief_label_size=LABEL_SIZE_DEFAULT,
+        stress_emphasis=LABEL_EMPHASIS_PRIMARY,
+        relief_emphasis=LABEL_EMPHASIS_PRIMARY,
         stress_display_weight=1.0,
         relief_display_weight=1.0,
-        rationale='점수 유지, 감정 변동성, 점수 하향 흐름은 스트레스 원인과 이완 원인 라벨을 같은 크기로 표시합니다.',
+        rationale=(
+            '점수 유지, 감정 변동성, 점수 하향 흐름은 스트레스 원인과 '
+            '이완 원인을 같은 읽기 크기와 강조도로 표시합니다.'
+        ),
     )
 
 
@@ -311,20 +337,20 @@ def apply_label_display_policy(
 
     for keyword in cause_keywords:
         if keyword.cause_type == CAUSE_STRESS:
-            label_size = policy.stress_label_size
+            emphasis = policy.stress_emphasis
             display_weight = policy.stress_display_weight
         elif keyword.cause_type == CAUSE_RELIEF:
-            label_size = policy.relief_label_size
+            emphasis = policy.relief_emphasis
             display_weight = policy.relief_display_weight
         else:
-            label_size = LABEL_SIZE_DEFAULT
+            emphasis = LABEL_EMPHASIS_PRIMARY
             display_weight = 1.0
 
         labels.append(
             {
                 'keyword': keyword.keyword,
                 'cause_type': keyword.cause_type,
-                'label_size': label_size,
+                'emphasis': emphasis,
                 'display_weight': display_weight,
                 'confidence': keyword.confidence,
                 'evidence_message_ids': list(keyword.evidence_message_ids),

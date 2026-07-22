@@ -59,7 +59,7 @@
       </aside>
 
       <!-- ────── 보드 ────── -->
-      <section class="board" :class="{ 'is-loading': isLoading }" :aria-busy="isLoading">
+      <section class="board report-card" :class="{ 'is-loading': isLoading }" :aria-busy="isLoading">
         <!-- 상태 -->
         <div v-if="!isLoading && (fetchError || !currentReport)" class="board-state">
           <img :src="bubbleHeart" class="state-icon" alt="" aria-hidden="true" />
@@ -105,7 +105,7 @@
                   v-for="tag in mindTags"
                   :key="tag.type + tag.text"
                   class="mind-tag"
-                  :class="tag.type === 'relief' ? 'is-relief' : 'is-stress'"
+                  :class="[`is-${tag.type}`, `is-${tag.emphasis}`]"
                 >#{{ tag.text }}</span>
                 <span v-if="mindTags.length === 0" class="mind-tag is-muted">아직 모이는 중</span>
               </div>
@@ -153,9 +153,9 @@
               </ul>
             </section>
 
-            <!-- 나를 다독이는 한마디 -->
+            <!-- 당신에게 한마디 -->
             <section class="card card-comfort">
-              <h2 class="card-title"><img :src="heartIcon" alt="" aria-hidden="true" />나를 다독이는 한마디 <em>(위로 선물)</em></h2>
+              <h2 class="card-title"><img :src="heartIcon" alt="" aria-hidden="true" />당신에게 한마디 <em>(마음 선물)</em></h2>
               <p class="comfort-quote">{{ comfortMessage }}</p>
               <img class="comfort-mascot" :src="flowRedpanda" alt="" aria-hidden="true" />
             </section>
@@ -186,37 +186,12 @@
 
         <footer v-if="!isLoading" class="report-actions">
           <p>☆ 작은 기록이 모여, 당신의 내일을 더 단단하게 만듭니다. <span>♥</span></p>
-          <button type="button" class="secondary-button">이미지 저장</button>
-          <button type="button" class="primary-button" disabled aria-disabled="true">공유</button>
+          <button type="button" class="secondary-button" :disabled="!currentReport">이미지 저장</button>
         </footer>
 
       </section>
     </section>
 
-    <!-- 추천 행동 피드백 -->
-    <section v-if="currentReport && !currentReport.is_safety_response && todayAction" class="feedback-panel" aria-labelledby="action-feedback-title">
-      <h2 id="action-feedback-title"><img :src="sparkle" alt="" aria-hidden="true" />추천 행동은 어땠나요?</h2>
-      <p class="feedback-desc"><strong>{{ todayAction.title }}</strong>을(를) 해본 뒤, 감정 완화에 도움이 된 정도를 남겨주세요.</p>
-      <div class="feedback-score-row">
-        <button
-          v-for="option in feedbackOptions"
-          :key="option.value"
-          type="button"
-          class="feedback-score"
-          :class="{ active: actionFeedbackValue === option.value }"
-          @click="actionFeedbackValue = option.value"
-        >
-          <strong>{{ option.value }}</strong>
-          <span>{{ option.label }}</span>
-        </button>
-      </div>
-      <div class="feedback-footer">
-        <span v-if="actionFeedbackMessage" class="feedback-message">{{ actionFeedbackMessage }}</span>
-        <button type="button" class="primary-button" :disabled="isFeedbackSaving || !actionFeedbackValue" @click="saveActionFeedback">
-          {{ isFeedbackSaving ? '저장 중…' : '평가 저장' }}
-        </button>
-      </div>
-    </section>
   </main>
 </template>
 
@@ -249,28 +224,17 @@ const isMonthFilterOpen = ref(false)
 const selectedMonth = ref('')
 const selectedReportId = ref(null)
 
-const todayCheckin = ref(null)
-const actionFeedbackValue = ref(null)
-const actionFeedbackMessage = ref('')
-const isFeedbackSaving = ref(false)
-
-const feedbackOptions = [
-  { value: 1, label: '전혀 아니에요' },
-  { value: 2, label: '조금 아쉬워요' },
-  { value: 3, label: '보통이에요' },
-  { value: 4, label: '도움이 됐어요' },
-  { value: 5, label: '큰 도움이 됐어요' },
-]
-
 let detachReportImageSaver = null
 
 const normalizeReport = (report) => ({
   ...report,
   stressCauses: Array.isArray(report?.stressCauses) ? report.stressCauses : [],
   reliefCauses: Array.isArray(report?.reliefCauses) ? report.reliefCauses : [],
+  causeLabels: Array.isArray(report?.causeLabels) ? report.causeLabels : [],
   emotions: Array.isArray(report?.emotions) ? report.emotions : [],
   analysis: Array.isArray(report?.analysis) ? report.analysis : [],
   recommendations: Array.isArray(report?.recommendations) ? report.recommendations : [],
+  comfortMessage: String(report?.comfortMessage ?? report?.summary ?? '').trim(),
   is_fallback: Boolean(report?.is_fallback),
   is_safety_response: Boolean(report?.is_safety_response),
 })
@@ -338,8 +302,6 @@ const currentReport = computed(() => (
   ) ?? filteredReports.value[0] ?? null
 ))
 
-const todayAction = computed(() => todayCheckin.value?.selected_action ?? null)
-
 const headerDate = computed(() => {
   const report = currentReport.value
   if (!report?.range) return ''
@@ -367,13 +329,39 @@ const mindTags = computed(() => {
   const report = currentReport.value
   if (!report) return []
 
+  const detailedLabels = report.causeLabels
+    .map((label) => {
+      const text = String(label?.keyword ?? '').trim()
+      const type = ['stress', 'relief'].includes(label?.causeType)
+        ? label.causeType
+        : null
+      const emphasis = label?.emphasis === 'secondary' ? 'secondary' : 'primary'
+      const hasDisplayWeight = label?.displayWeight !== null
+        && label?.displayWeight !== undefined
+        && label?.displayWeight !== ''
+      const parsedWeight = hasDisplayWeight ? Number(label.displayWeight) : Number.NaN
+
+      return {
+        text,
+        type,
+        emphasis,
+        displayWeight: Number.isFinite(parsedWeight)
+          ? Math.min(1, Math.max(0, parsedWeight))
+          : emphasis === 'secondary' ? 0.7 : 1,
+      }
+    })
+    .filter((tag) => tag.type && tag.text && tag.text !== '기록 수집 중...')
+    .sort((a, b) => b.displayWeight - a.displayWeight)
+
+  if (detailedLabels.length) return detailedLabels
+
   const clean = (list) => list
     .map((text) => String(text).trim())
     .filter((text) => text && text !== '기록 수집 중...')
 
   return [
-    ...clean(report.stressCauses).map((text) => ({ text, type: 'stress' })),
-    ...clean(report.reliefCauses).map((text) => ({ text, type: 'relief' })),
+    ...clean(report.stressCauses).map((text) => ({ text, type: 'stress', emphasis: 'primary' })),
+    ...clean(report.reliefCauses).map((text) => ({ text, type: 'relief', emphasis: 'primary' })),
   ]
 })
 
@@ -390,6 +378,19 @@ const parsedAnalysis = computed(() => {
   if (hasMarker) {
     let currentCard = null
 
+    const valueAfterLabel = (line, labels) => {
+      for (const label of labels) {
+        const index = line.indexOf(label)
+        if (index >= 0) {
+          return line
+            .slice(index + label.length)
+            .replace(/^[\s:?-]*/, '')
+            .trim()
+        }
+      }
+      return null
+    }
+
     for (const raw of analysis) {
       const line = String(raw).trim()
 
@@ -400,22 +401,20 @@ const parsedAnalysis = computed(() => {
           how: '',
         }
         cards.push(currentCard)
-      } else if (line.includes('왜 추천하나요?')) {
-        if (currentCard) {
-          currentCard.reason = line
-            .split('왜 추천하나요?')[1]
-            .replace(/^[\s:?-]*/, '')
-            .trim()
-        }
-      } else if (line.includes('어떻게 시작할까요?')) {
-        if (currentCard) {
-          currentCard.how = line
-            .split('어떻게 시작할까요?')[1]
-            .replace(/^[\s:?-]*/, '')
-            .trim()
-        }
       } else if (!currentCard && line) {
         reflections.push(line)
+      } else if (currentCard) {
+        const reason = valueAfterLabel(
+          line,
+          ['왜 추천하나요?', '웹 추천 이유'],
+        )
+        const how = valueAfterLabel(
+          line,
+          ['어떻게 시작할까요?', '가볍게 시작하기'],
+        )
+
+        if (reason !== null) currentCard.reason = reason
+        if (how !== null) currentCard.how = how
       }
     }
   } else {
@@ -445,6 +444,10 @@ const hardMoments = computed(() => {
   const report = currentReport.value
   if (!report) return []
 
+  if (report.is_fallback) {
+    return ['기록이 조금 더 모이면 마음을 힘들게 한 순간도 알려드릴게요.']
+  }
+
   const causes = report.stressCauses
     .map((text) => String(text).trim())
     .filter((text) => text && text !== '기록 수집 중...')
@@ -455,24 +458,11 @@ const hardMoments = computed(() => {
 
 const suggestCards = computed(() => parsedAnalysis.value.cards.slice(0, 4))
 
-const comfortPool = [
-  '지금 이 순간도, 나는\n나의 속도로 잘 가고 있어요.',
-  '애쓴 마음을 가장 먼저 알아주는 건,\n바로 나 자신이에요.',
-  '느려도 괜찮아요.\n멈추지 않았다는 게 중요해요.',
-  '오늘의 나에게,\n작은 쉼표 하나를 선물해요.',
-  '충분히 잘하고 있어요.\n조금 더 다정해도 좋아요, 나에게.',
-]
-
-const comfortMessage = computed(() => {
-  const id = String(currentReport.value?.id ?? '')
-  let hash = 0
-
-  for (let index = 0; index < id.length; index += 1) {
-    hash = (hash + id.charCodeAt(index)) % comfortPool.length
-  }
-
-  return comfortPool[hash]
-})
+const comfortMessage = computed(() => (
+  currentReport.value?.comfortMessage
+  || currentReport.value?.summary
+  || ''
+))
 
 const FLOW_W = 640
 const FLOW_H = 150
@@ -580,50 +570,9 @@ const refreshReports = async () => {
   }
 }
 
-const loadTodayCheckin = async () => {
-  try {
-    const data = await reportApi.getTodayCheckin()
-    todayCheckin.value = data?.checkin ?? null
-    actionFeedbackValue.value = data?.action_feedback?.helpfulness ?? null
-  } catch (error) {
-    console.warn('Failed to fetch today check-in:', error)
-  }
-}
-
-const saveActionFeedback = async () => {
-  if (
-    !todayCheckin.value?.id
-    || !todayAction.value?.id
-    || !actionFeedbackValue.value
-    || isFeedbackSaving.value
-  ) {
-    return
-  }
-
-  isFeedbackSaving.value = true
-  actionFeedbackMessage.value = ''
-
-  try {
-    await reportApi.saveActionFeedback(
-      todayCheckin.value.id,
-      todayAction.value.id,
-      actionFeedbackValue.value,
-    )
-    actionFeedbackMessage.value = '평가를 저장했어요. 다음 행동 추천에 참고할게요.'
-  } catch (error) {
-    actionFeedbackMessage.value = (
-      error?.response?.data?.error?.message
-      ?? '평가를 저장하지 못했어요. 잠시 후 다시 시도해주세요.'
-    )
-  } finally {
-    isFeedbackSaving.value = false
-  }
-}
-
 onMounted(() => {
   detachReportImageSaver = attachMindReportImageSaver()
   loadReports()
-  loadTodayCheckin()
 })
 
 onBeforeUnmount(() => {
@@ -1082,10 +1031,12 @@ button {
 
 .mind-tag {
   padding: 8px 14px;
+  border: 1px solid transparent;
   border-radius: 999px;
   font-family: var(--font-ui);
   font-size: 13.5px;
   font-weight: 600;
+  line-height: 1.3;
 }
 
 .mind-tag.is-stress {
@@ -1096,6 +1047,24 @@ button {
 .mind-tag.is-relief {
   background: rgba(170, 160, 225, 0.42);
   color: #574f9c;
+}
+
+.mind-tag.is-primary {
+  box-shadow: 0 4px 12px rgba(95, 70, 120, 0.12);
+}
+
+.mind-tag.is-stress.is-secondary {
+  border-color: rgba(156, 77, 106, 0.28);
+  background: rgba(255, 250, 252, 0.54);
+  color: #7c5665;
+  box-shadow: none;
+}
+
+.mind-tag.is-relief.is-secondary {
+  border-color: rgba(87, 79, 156, 0.28);
+  background: rgba(250, 249, 255, 0.56);
+  color: #625d88;
+  box-shadow: none;
 }
 
 .mind-tag.is-muted {
@@ -1383,7 +1352,6 @@ button {
   color: #d46f91;
 }
 
-.primary-button,
 .secondary-button {
   min-height: 40px;
   padding: 9px 18px;
@@ -1392,128 +1360,19 @@ button {
   transition: transform 0.16s ease, opacity 0.16s ease;
 }
 
-.primary-button {
-  border: 1px solid #e73e65;
-  background: linear-gradient(135deg, #e73e65, #ee5d5f);
-  color: #fffaff;
-}
-
 .secondary-button {
   border: 1px solid rgba(113, 72, 124, 0.34);
   background: rgba(255, 255, 255, 0.48);
   color: #6a4270;
 }
 
-.primary-button:hover:not(:disabled),
 .secondary-button:hover:not(:disabled) {
   transform: translateY(-1px);
 }
 
-.primary-button:disabled,
 .secondary-button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
-}
-
-.feedback-panel {
-  width: min(1400px, 100%);
-  margin: 16px auto 0;
-  padding: 20px 22px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 20px;
-  background: linear-gradient(
-    135deg,
-    rgba(52, 30, 78, 0.82),
-    rgba(70, 40, 96, 0.8)
-  );
-  box-shadow: 0 18px 44px rgba(6, 3, 18, 0.35);
-  color: #fbf5ff;
-  font-family: var(--font-ui);
-}
-
-.feedback-panel h2 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 6px;
-  font-family: var(--font-soft);
-  font-size: 18px;
-}
-
-.feedback-panel h2 img {
-  width: 22px;
-  height: 22px;
-  object-fit: contain;
-}
-
-.feedback-desc {
-  margin: 0 0 12px;
-  color: rgba(255, 245, 250, 0.78);
-  font-size: 13.5px;
-  line-height: 1.6;
-}
-
-.feedback-desc strong {
-  color: #ffc7dc;
-}
-
-.feedback-score-row {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.feedback-score {
-  display: grid;
-  justify-items: center;
-  gap: 5px;
-  min-height: 60px;
-  padding: 9px 6px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 240, 248, 0.8);
-  transition:
-    transform 0.16s ease,
-    border-color 0.16s ease,
-    background 0.16s ease;
-}
-
-.feedback-score strong {
-  color: #fff2f8;
-  font-size: 17px;
-}
-
-.feedback-score span {
-  font-size: 10px;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.feedback-score:hover,
-.feedback-score.active {
-  border-color: rgba(231, 62, 101, 0.7);
-  background: linear-gradient(
-    135deg,
-    rgba(231, 62, 101, 0.7),
-    rgba(231, 126, 110, 0.6)
-  );
-  color: #fff;
-  transform: translateY(-1px);
-}
-
-.feedback-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 12px;
-}
-
-.feedback-message {
-  color: #bff8ef;
-  font-size: 12px;
-  font-weight: 700;
 }
 
 @media (max-width: 1040px) {
@@ -1564,16 +1423,6 @@ button {
     grid-template-columns: 1fr !important;
   }
 
-  .feedback-score-row {
-    grid-template-columns: repeat(5, minmax(50px, 1fr));
-    overflow-x: auto;
-  }
-
-  .feedback-score span {
-    font-size: 9px;
-  }
-
-  .feedback-footer,
   .report-actions {
     align-items: stretch;
     flex-direction: column;
@@ -1583,7 +1432,6 @@ button {
     flex-basis: auto;
   }
 
-  .primary-button,
   .secondary-button {
     width: 100%;
   }
