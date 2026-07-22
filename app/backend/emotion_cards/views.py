@@ -7,18 +7,18 @@ from rest_framework.decorators import api_view, authentication_classes, permissi
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import EmotionCardAnalysis, EmotionCardJob, EmotionCardScene, EmotionCardUsageReset, GeneratedEmotionCard
+from .models import EmotionCardAnalysis, EmotionCardJob, EmotionCardScene, GeneratedEmotionCard
 from .serializers import AnalysisPatchSerializer, AnalysisRequestSerializer, FeedbackSerializer, GenerationSerializer
 from .services import analyze, build_scene, create_generation_job, daily_generation_queryset, ensure_card_image, update_analysis
 
 
 class EmotionCardSessionAuthentication(SessionAuthentication):
-    # 이 프로젝트의 로컬 Vue 프록시 기반 세션 흐름은 다른 기능에서도
-    # CSRF exempt 인증을 사용한다. 마음카드만 기본 SessionAuthentication을
-    # 사용하면 유효한 로그인 세션도 POST 시 403으로 차단된다.
-    # 로그인 여부는 아래 IsAuthenticated 권한 검사가 계속 보장한다.
+    # 로컬 Vue 개발 프록시만 CSRF를 면제한다. 운영에서는 프런트가 보내는
+    # X-CSRFToken으로 세션 요청을 검증한다.
     def enforce_csrf(self, request):
-        return
+        if settings.DEBUG:
+            return
+        return super().enforce_csrf(request)
 
     def authenticate_header(self, request):
         return 'Session'
@@ -164,16 +164,3 @@ def today_card(request):
     used = daily_generation_queryset(request.user).count()
     limit = int(getattr(settings, 'EMOTION_CARD_MAX_DAILY_GENERATIONS', 10))
     return Response({'card': _card_payload(card) if card else None, 'daily_generation_count': {'used': used, 'limit': limit}})
-
-
-@api_view(['POST'])
-@authentication_classes([EmotionCardSessionAuthentication])
-@permission_classes([IsAuthenticated])
-def reset_today_usage(request):
-    """오늘 이미지 생성 사용량을 현재 시점부터 다시 계산하도록 초기화한다."""
-    EmotionCardUsageReset.objects.update_or_create(
-        user=request.user,
-        defaults={'reset_at': timezone.now()},
-    )
-    limit = int(getattr(settings, 'EMOTION_CARD_MAX_DAILY_GENERATIONS', 10))
-    return Response({'daily_generation_count': {'used': 0, 'limit': limit}})

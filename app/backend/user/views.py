@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.middleware.csrf import get_token
 from rest_framework.authentication import SessionAuthentication
@@ -7,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from .models import OAuthAccount, User, UserAgreementRecord, UserPreferenceKeyword, UserProfile
+from config.permissions import IsAuthenticatedOrDevelopment
 from .oauth import (
     SocialOAuthError,
     build_authorization_url,
@@ -19,7 +21,9 @@ from .serializers import UserPersonalProfileSerializer
 
 class CsrfExemptSessionAuthentication(SessionAuthentication):
     def enforce_csrf(self, request):
-        return
+        if settings.DEBUG:
+            return
+        return super().enforce_csrf(request)
 
 
 def _get_social_demo_email(provider, client_id):
@@ -38,6 +42,9 @@ def _get_client_id(request):
 
 
 def _get_development_user(request, nickname=''):
+    if not settings.DEBUG:
+        return None
+
     client_id = _get_client_id(request)
     if not client_id:
         return None
@@ -62,7 +69,7 @@ def _serialize_auth_user(request, user, provider=None, created=False):
         'character': user.character,
         'onboarding_done': user.onboarding_done,
         'onboarding_required': onboarding_required,
-        'next_path': '/onboarding/character', #if onboarding_required else '/home',
+        'next_path': '/onboarding/character' if onboarding_required else '/home',
         'csrf_token': get_token(request),
         'created': created,
     }
@@ -327,7 +334,7 @@ def logout_view(request):
 
 @api_view(['GET', 'PUT'])
 @authentication_classes([CsrfExemptSessionAuthentication])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticatedOrDevelopment])
 def profile(request):
     nickname = request.data.get('nickname', '').strip()
     profile_user = request.user if request.user.is_authenticated else _get_development_user(request, nickname)

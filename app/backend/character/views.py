@@ -1,8 +1,9 @@
+from django.conf import settings
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
+from config.permissions import IsAuthenticatedOrDevelopment
 from .models import CharacterPreference
 from .serializers import CharacterPreferenceSerializer
 
@@ -32,6 +33,9 @@ def get_owner_filter(request):
     if request.user.is_authenticated:
         return {'user': request.user}
 
+    if not settings.DEBUG:
+        return None
+
     client_id = get_client_id(request)
     if not client_id:
         return None
@@ -40,7 +44,7 @@ def get_owner_filter(request):
 
 
 @api_view(['GET', 'POST', 'PUT'])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticatedOrDevelopment])
 def character_preference(request):
     owner_filter = get_owner_filter(request)
     if owner_filter is None:
@@ -69,8 +73,7 @@ def character_preference(request):
             serializer.validated_data['character_id'],
             serializer.validated_data['character_id'],
         )
-        request.user.onboarding_done = True
-        request.user.save(update_fields=['character', 'onboarding_done'])
+        request.user.save(update_fields=['character'])
 
     return Response(
         {'preference': CharacterPreferenceSerializer(preference).data},

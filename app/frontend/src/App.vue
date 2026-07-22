@@ -94,7 +94,6 @@ const BRIGHT_BACKGROUND_PATHS = new Set([
   "/onboarding/fortune",
   "/onboarding/fortune/draw",
   "/onboarding/info",
-  "/onboarding/preferencesetup",
 ]);
 
 const isAuthScreen = computed(() => route.path.startsWith("/login"));
@@ -181,7 +180,6 @@ const NAV = {
   my: "/mypage",
   mypage: "/mypage",
   report: "/report",
-  preferencesetup: "/onboarding/preferencesetup",
   fortune: "/onboarding/fortune",
   fortuneDraw: "/onboarding/fortune/draw",
   info: "/onboarding/info",

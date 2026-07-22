@@ -18,24 +18,22 @@ const PREFERENCE_GRID_SLOT_COUNT = 16;
 const hobbyItems = parseKeywordCsv(hobbyCsv, "hobby");
 const interestItems = parseKeywordCsv(interestCsv, "interest");
 const storedProfile = getStoredProfile();
-const defaultHobbies = ["볼링", "해외여행", "카페 투어"];
-const defaultInterests = [];
 const initialHobbies = normalizeInitialPreferenceLabels(
-  storedProfile.hobbies?.length ? storedProfile.hobbies : defaultHobbies,
+  storedProfile.hobbies || [],
   "hobby",
   Infinity,
 );
 const initialInterests = normalizeInitialPreferenceLabels(
-  storedProfile.interests?.length ? storedProfile.interests : defaultInterests,
+  storedProfile.interests || [],
   "interest",
   Infinity,
 );
 
 const profileForm = ref({
-  nickname: storedProfile.nickname || "레이설",
-  birthDate: formatBirthDateForDisplay(storedProfile.birth_date) || storedProfile.birthDate || storedProfile.birthday || "1998.12.23",
-  gender: storedProfile.gender || "남",
-  job: storedProfile.job || "UI/UX 디자이너",
+  nickname: storedProfile.nickname || "",
+  birthDate: formatBirthDateForDisplay(storedProfile.birth_date) || storedProfile.birthDate || storedProfile.birthday || "",
+  gender: storedProfile.gender || "",
+  job: storedProfile.job || "",
 });
 
 const genderOptions = ["남", "여", "선택 안 함"];
