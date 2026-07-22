@@ -6,26 +6,24 @@ from datetime import date
 from statistics import pstdev
 from typing import Any, Sequence
 
-from mindreport.services.scoring import EmotionScore
-
-
-FLOW_SCORE_UPWARD = 'score_upward'
-FLOW_SCORE_MAINTENANCE = 'score_maintenance'
-FLOW_SCORE_VOLATILE = 'score_volatile'
-FLOW_SCORE_DOWNWARD = 'score_downward'
-
-MAINTENANCE_GREEN = 'green_maintenance'
-MAINTENANCE_GRAY = 'gray_maintenance'
-MAINTENANCE_RED = 'red_maintenance'
-MAINTENANCE_INSUFFICIENT = 'maintenance_insufficient'
-
-UPWARD_DELTA_THRESHOLD = 8.0
-DOWNWARD_DELTA_THRESHOLD = -8.0
-NET_CHANGE_THRESHOLD = 12.0
-VOLATILITY_STDDEV_THRESHOLD = 16.0
-LARGE_JUMP_THRESHOLD = 18.0
-SIGNIFICANT_DIFF_THRESHOLD = 5.0
-MIN_TREND_DAYS = 3
+from mindreport.constants import (
+    DOWNWARD_DELTA_THRESHOLD,
+    FLOW_SCORE_DOWNWARD,
+    FLOW_SCORE_MAINTENANCE,
+    FLOW_SCORE_UPWARD,
+    FLOW_SCORE_VOLATILE,
+    LARGE_JUMP_THRESHOLD,
+    MAINTENANCE_GRAY,
+    MAINTENANCE_GREEN,
+    MAINTENANCE_INSUFFICIENT,
+    MAINTENANCE_RED,
+    MIN_TREND_DAYS,
+    NET_CHANGE_THRESHOLD,
+    SIGNIFICANT_DIFF_THRESHOLD,
+    UPWARD_DELTA_THRESHOLD,
+    VOLATILITY_STDDEV_THRESHOLD,
+)
+from mindreport.services.scoring import EmotionScore, emotion_state_from_score
 
 
 @dataclass(frozen=True)
@@ -99,14 +97,25 @@ def emotion_flow_result_to_payload(result: EmotionFlowResult) -> dict[str, Any]:
 def _build_daily_summaries(
     scores: Sequence[EmotionScore],
 ) -> tuple[DailyScoreSummary, ...]:
+    grouped: dict[date, list[EmotionScore]] = {}
+    for score in scores:
+        grouped.setdefault(score.source_date, []).append(score)
+
     return tuple(
         DailyScoreSummary(
-            source_date=score.source_date,
-            average_score=score.emotion_score,
-            emotion_state=score.emotion_state,
-            score_count=score.total_message_count,
+            source_date=source_date,
+            average_score=round(
+                sum(score.emotion_score for score in daily_scores)
+                / len(daily_scores),
+                3,
+            ),
+            emotion_state=emotion_state_from_score(
+                sum(score.emotion_score for score in daily_scores)
+                / len(daily_scores)
+            ),
+            score_count=sum(score.total_message_count for score in daily_scores),
         )
-        for score in sorted(scores, key=lambda item: item.source_date)
+        for source_date, daily_scores in sorted(grouped.items())
     )
 
 
@@ -123,6 +132,8 @@ def _build_metrics(summaries: Sequence[DailyScoreSummary]) -> dict[str, Any]:
             'net_delta': 0.0,
             'stddev': 0.0,
             'large_jump_count': 0,
+            'large_positive_jump_count': 0,
+            'large_negative_jump_count': 0,
             'direction_change_count': 0,
             'trend_eligible': False,
             'required_trend_days': MIN_TREND_DAYS,
@@ -151,6 +162,12 @@ def _build_metrics(summaries: Sequence[DailyScoreSummary]) -> dict[str, Any]:
         'stddev': round(pstdev(values), 3) if len(values) > 1 else 0.0,
         'large_jump_count': sum(
             1 for diff in diffs if abs(diff) >= LARGE_JUMP_THRESHOLD
+        ),
+        'large_positive_jump_count': sum(
+            1 for diff in diffs if diff >= LARGE_JUMP_THRESHOLD
+        ),
+        'large_negative_jump_count': sum(
+            1 for diff in diffs if diff <= -LARGE_JUMP_THRESHOLD
         ),
         'direction_change_count': _count_direction_changes(diffs),
         'trend_eligible': len(values) >= MIN_TREND_DAYS,
@@ -181,7 +198,10 @@ def _classify_time_series_flow(metrics: dict[str, Any], score_count: int) -> str
         and metrics['stddev'] >= VOLATILITY_STDDEV_THRESHOLD
         and (
             metrics['direction_change_count'] >= 1
-            or metrics['large_jump_count'] >= 2
+            or (
+                metrics['large_positive_jump_count'] >= 1
+                and metrics['large_negative_jump_count'] >= 1
+            )
         )
     ):
         return FLOW_SCORE_VOLATILE

@@ -1,15 +1,21 @@
 import logging
-import os
-import torch
+
 import numpy as np
-from django.conf import settings
+import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
+
+from mindreport.constants import (
+    KCELECTRA_EMOTION_CLASSES,
+    MINDREPORT_KCELECTRA_BATCH_SIZE,
+    MINDREPORT_KCELECTRA_MAX_LENGTH,
+)
+from mindreport.services.model_config import resolve_kcelectra_model_path
 
 logger = logging.getLogger(__name__)
 
 # 감정 클래스 매핑 (학습 시의 클래스 순서)
 # 학습 스크립트에서는: ["기쁨", "슬픔", "분노", "일반"] 순서 사용됨 (EMO4)
-EMO4_CLASSES = ["기쁨", "슬픔", "분노", "일반"]
+EMO4_CLASSES = list(KCELECTRA_EMOTION_CLASSES)
 
 
 class ElectraEmotionScorer:
@@ -29,9 +35,7 @@ class ElectraEmotionScorer:
         logger.info(f"Initializing ElectraEmotionScorer on {self.device}...")
         
         # 모델 경로 설정 (app/backend에서 상위로 올라가 ai/emotion/artifacts_ft 참조)
-        self.model_path = os.path.abspath(
-            os.path.join(settings.BASE_DIR, "..", "..", "ai", "emotion", "artifacts_ft")
-        )
+        self.model_path = str(resolve_kcelectra_model_path())
         
         try:
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
@@ -43,7 +47,11 @@ class ElectraEmotionScorer:
             logger.error(f"Failed to load Electra model from {self.model_path}: {e}")
             self.model = None
 
-    def predict_probs(self, texts: list[str], batch_size: int = 16) -> np.ndarray:
+    def predict_probs(
+        self,
+        texts: list[str],
+        batch_size: int = MINDREPORT_KCELECTRA_BATCH_SIZE,
+    ) -> np.ndarray:
         """
         입력된 텍스트 리스트에 대해 감정별 확률을 반환합니다.
         반환 형태: (N, 4) 배열 (각 열은 EMO4_CLASSES 순서에 대응)
@@ -60,7 +68,7 @@ class ElectraEmotionScorer:
                     batch_texts, 
                     padding=True, 
                     truncation=True, 
-                    max_length=128, 
+                    max_length=MINDREPORT_KCELECTRA_MAX_LENGTH,
                     return_tensors='pt'
                 ).to(self.device)
                 
