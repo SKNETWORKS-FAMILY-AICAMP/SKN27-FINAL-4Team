@@ -28,11 +28,6 @@ MAJOR_CARD_KEYWORDS_KO = {
 }
 
 
-class TarotSelectedCardSerializer(serializers.Serializer):
-    card_number = serializers.IntegerField()
-    orientation = serializers.ChoiceField(choices=['upright', 'reversed'])
-
-
 class TarotReadingRequestSerializer(serializers.Serializer):
     topic = serializers.ChoiceField(
         choices=[
@@ -51,18 +46,7 @@ class TarotReadingRequestSerializer(serializers.Serializer):
         allow_blank=True,
         max_length=500,
     )
-    cards = TarotSelectedCardSerializer(many=True)
     date = serializers.DateField(required=False)
-
-    def validate_cards(self, value):
-        if len(value) != 3:
-            raise serializers.ValidationError('Exactly 3 cards are required.')
-
-        card_numbers = [card['card_number'] for card in value]
-        if len(set(card_numbers)) != 3:
-            raise serializers.ValidationError('Duplicate cards are not allowed.')
-
-        return value
 
 
 class DailyTarotFortuneSerializer(serializers.Serializer):

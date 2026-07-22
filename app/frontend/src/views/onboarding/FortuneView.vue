@@ -2,7 +2,6 @@
 import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { tarotApi } from "../../api/tarot.js";
-import tarotCsv from "../../assets/data/tarot_card_meanings.csv?raw";
 import { getTarotCardImage } from "../../assets/tarot/cardImages.js";
 import tarotCardBackImage from "../../assets/tarot/tarot-card-back.png";
 import searchBirdImage from "../../assets/characters/search-bird.png";
@@ -43,7 +42,6 @@ const categories = [
 ];
 
 const cardRoles = ["오늘의 흐름", "핵심 신호", "조언"];
-const tarotDeck = parseTarotCsv(tarotCsv);
 const selectedCategory = ref(getInitialCategory());
 const cardSlots = ref(createCardSlots());
 const selectedSlotIds = ref([]);
@@ -69,6 +67,7 @@ const selectedSlots = computed(() => selectedSlotIds.value
   })
   .filter(Boolean));
 const selectedCount = computed(() => selectedSlots.value.length);
+const drawnCards = computed(() => readingResult.value?.cards || []);
 const canAnalyze = computed(() => (
   selectedCount.value === MAX_SELECTED_CARDS &&
   !isReadingLoading.value &&
@@ -334,9 +333,7 @@ async function streamReadingResult(result) {
     16,
   );
 
-  const cardTexts = selectedSlots.value.map((slot, index) => (
-    result?.card_readings?.[index]?.interpretation || slot.card.uprightMeaning
-  ));
+  const cardTexts = (result?.card_readings || []).map((reading) => reading?.interpretation || "");
 
   for (const [index, text] of cardTexts.entries()) {
     if (runId !== streamRunId.value) return;
@@ -358,14 +355,14 @@ async function streamReadingResult(result) {
   }
 }
 
-function getDisplayedCardReading(slot, index) {
+function getDisplayedCardReading(index) {
   const streamedText = streamedCardReadings.value[index];
 
   if (isResultStreaming.value || streamedText) {
     return streamedText || "";
   }
 
-  return readingResult.value?.card_readings?.[index]?.interpretation || slot.card.uprightMeaning;
+  return readingResult.value?.card_readings?.[index]?.interpretation || "";
 }
 
 function applyShuffledDeckToSlots() {
@@ -406,10 +403,6 @@ async function requestTarotReading() {
     const payload = {
       topic: selectedCategoryData.value.apiId,
       question: question.value.trim(),
-      cards: selectedSlots.value.map((slot) => ({
-        card_number: slot.card.cardNumber,
-        orientation: slot.orientation,
-      })),
     };
     nextReadingResult = await tarotApi.createReading(payload);
     readingResult.value = nextReadingResult;
@@ -438,157 +431,12 @@ function isSlotSelected(slotId) {
 }
 
 function createCardSlots() {
-  const source = tarotDeck.length ? tarotDeck : createFallbackDeck();
-  const shuffled = hinduShuffleDeck(source).slice(0, 20);
-
-  return shuffled.map((card, index) => ({
-    id: `${card.cardNumber}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+  return Array.from({ length: 20 }, (_, index) => ({
+    id: `slot-${index + 1}-${Math.random().toString(36).slice(2, 7)}`,
     index: index + 1,
-    card,
-    orientation: Math.random() > 0.22 ? "upright" : "reversed",
   }));
 }
 
-function hinduShuffleDeck(cards) {
-  let deck = [...cards];
-
-  for (let round = 0; round < 4; round += 1) {
-    const remaining = [...deck];
-    let shuffled = [];
-
-    while (remaining.length) {
-      const packetSize = Math.min(remaining.length, 2 + Math.floor(Math.random() * 6));
-      const packet = remaining.splice(0, packetSize);
-      shuffled = [...packet, ...shuffled];
-    }
-
-    const cutPoint = Math.floor(Math.random() * shuffled.length);
-    deck = [...shuffled.slice(cutPoint), ...shuffled.slice(0, cutPoint)];
-  }
-
-  return deck;
-}
-
-function parseTarotCsv(csv) {
-  const lines = csv.replace(/^\uFEFF/, "").split(/\r?\n/).filter(Boolean);
-  const headers = parseCsvLine(lines.shift() || "");
-
-  return lines.map((line) => {
-    const values = parseCsvLine(line);
-    const raw = Object.fromEntries(headers.map((header, index) => [header, values[index] || ""]));
-    const cardNumber = Number(raw.card_number || raw.cardNumber || raw.id || 0);
-
-    return {
-      cardNumber,
-      englishName: raw.card_name || raw.english_name || raw.name || `Card ${cardNumber}`,
-      koreanName: raw.card_name_ko || raw.korean_name || translateCardName(raw.card_name || raw.name || ""),
-      uprightMeaning: raw.upright_meaning || raw.upright || raw.keywords || "차분히 흐름을 살펴보라는 신호",
-      reversedMeaning: raw.reversed_meaning || raw.reversed || "조급함을 내려놓으라는 신호",
-    };
-  }).filter((card) => Number.isFinite(card.cardNumber));
-}
-
-function parseCsvLine(line) {
-  const result = [];
-  let current = "";
-  let inQuotes = false;
-
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index];
-    const next = line[index + 1];
-
-    if (char === '"' && next === '"') {
-      current += '"';
-      index += 1;
-      continue;
-    }
-
-    if (char === '"') {
-      inQuotes = !inQuotes;
-      continue;
-    }
-
-    if (char === "," && !inQuotes) {
-      result.push(current);
-      current = "";
-      continue;
-    }
-
-    current += char;
-  }
-
-  result.push(current);
-  return result.map((value) => value.trim());
-}
-
-function createFallbackDeck() {
-  return Array.from({ length: 22 }, (_, index) => ({
-    cardNumber: index,
-    englishName: `Major Arcana ${index}`,
-    koreanName: `카드 ${index}`,
-    uprightMeaning: "새로운 흐름을 바라보는 카드",
-    reversedMeaning: "멈춤 속에서 방향을 찾는 카드",
-  }));
-}
-
-function translateCardName(name) {
-  const map = {
-    "The Fool": "바보",
-    "The Magician": "마법사",
-    "The High Priestess": "여사제",
-    "The Empress": "여황제",
-    "The Emperor": "황제",
-    "The Hierophant": "교황",
-    "The Lovers": "연인",
-    "The Chariot": "전차",
-    Strength: "힘",
-    "The Hermit": "은둔자",
-    "Wheel of Fortune": "운명의 수레바퀴",
-    Justice: "정의",
-    "The Hanged Man": "행맨",
-    Death: "죽음",
-    Temperance: "절제",
-    "The Devil": "악마",
-    "The Tower": "탑",
-    "The Star": "별",
-    "The Moon": "달",
-    "The Sun": "태양",
-    Judgement: "심판",
-    "The World": "세계",
-  };
-  if (map[name]) return map[name];
-
-  const rankNames = {
-    Ace: "에이스",
-    Two: "2",
-    Three: "3",
-    Four: "4",
-    Five: "5",
-    Six: "6",
-    Seven: "7",
-    Eight: "8",
-    Nine: "9",
-    Ten: "10",
-    Page: "페이지",
-    Knight: "기사",
-    Queen: "여왕",
-    King: "왕",
-  };
-  const suitNames = {
-    Wands: "완드",
-    Cups: "컵",
-    Swords: "소드",
-    Pentacles: "펜타클",
-  };
-
-  const minorMatch = String(name || "").match(/^(.+?) of (Wands|Cups|Swords|Pentacles)$/);
-  if (minorMatch) {
-    const [, rank, suit] = minorMatch;
-    return `${suitNames[suit]} ${rankNames[rank] || rank}`;
-  }
-
-  return name || "타로 카드";
-}
 </script>
 
 <template>
@@ -672,20 +520,14 @@ function translateCardName(name) {
               class="selected-card-preview"
               @click="removeSelectedCard(selectedSlots[position - 1].id)"
             >
-              <img
-                v-if="getTarotCardImage(selectedSlots[position - 1].card.cardNumber)"
-                :src="getTarotCardImage(selectedSlots[position - 1].card.cardNumber)"
-                :alt="`${selectedSlots[position - 1].card.koreanName} 카드`"
-                :class="{ reversed: selectedSlots[position - 1].orientation === 'reversed' }"
-              >
-              <strong v-else>{{ selectedSlots[position - 1].card.koreanName }}</strong>
+              <img :src="tarotCardBackImage" alt="선택한 타로 카드">
             </button>
             <div v-else class="empty-slot"></div>
             <strong v-if="selectedSlots[position - 1]" class="selected-slot-name">
-              {{ selectedSlots[position - 1].card.koreanName }}
+              카드 선택 완료
             </strong>
             <small v-if="selectedSlots[position - 1]" class="selected-slot-orientation">
-              {{ selectedSlots[position - 1].orientation === "reversed" ? "역방향" : "정방향" }}
+              결과와 함께 공개돼요
             </small>
           </article>
         </div>
@@ -727,19 +569,19 @@ function translateCardName(name) {
           <p class="category-pill">{{ selectedCategoryData.resultLabel }}</p>
         </section>
 
-        <section v-if="selectedSlots.length" class="selected-result-summary">
+        <section v-if="drawnCards.length" class="selected-result-summary">
           <h4>선택한 카드 요약</h4>
           <div class="selected-result-cards">
-            <article v-for="slot in selectedSlots" :key="slot.id">
+            <article v-for="card in drawnCards" :key="`${card.card_number}-${card.card_order}`">
               <img
-                v-if="getTarotCardImage(slot.card.cardNumber)"
-                :src="getTarotCardImage(slot.card.cardNumber)"
-                :alt="`${slot.card.koreanName} 카드`"
-                :class="{ reversed: slot.orientation === 'reversed' }"
+                v-if="getTarotCardImage(card.card_number)"
+                :src="getTarotCardImage(card.card_number)"
+                :alt="`${card.card_name_ko} 카드`"
+                :class="{ reversed: card.orientation === 'reversed' }"
               >
               <div>
-                <strong>{{ slot.card.koreanName }}</strong>
-                <small>{{ slot.orientation === "reversed" ? "역방향" : "정방향" }}</small>
+                <strong>{{ card.card_name_ko }}</strong>
+                <small>{{ card.orientation === "reversed" ? "역방향" : "정방향" }}</small>
               </div>
             </article>
           </div>
@@ -760,9 +602,9 @@ function translateCardName(name) {
           </div>
 
           <div class="card-reading-list">
-            <article v-for="(slot, index) in selectedSlots" :key="`reading-${slot.id}`">
-              <strong>{{ cardRoles[index] }} · {{ slot.card.koreanName }}</strong>
-              <p class="streaming-text" :class="{ streaming: isResultStreaming && streamingTarget === index }">{{ getDisplayedCardReading(slot, index) }}</p>
+            <article v-for="(card, index) in drawnCards" :key="`reading-${card.card_number}-${card.card_order}`">
+              <strong>{{ cardRoles[index] }} · {{ card.card_name_ko }}</strong>
+              <p class="streaming-text" :class="{ streaming: isResultStreaming && streamingTarget === index }">{{ getDisplayedCardReading(index) }}</p>
             </article>
           </div>
         </section>

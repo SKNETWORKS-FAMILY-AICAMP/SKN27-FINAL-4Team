@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import secrets
 
 from django.db import connection, transaction
 from django.utils import timezone
@@ -60,6 +61,8 @@ POSITION_LABELS = [
     ('flow', '흐름'),
     ('advice', '조언'),
 ]
+
+TAROT_READING_CARD_COUNT = len(POSITION_LABELS)
 
 MAJOR_CARD_NAMES_KO = {
     'The Fool': '바보',
@@ -343,10 +346,29 @@ def fetch_cards(selected_cards):
             'guide_url': row[17],
         }
 
-    if len(cards_by_number) != 3:
+    if len(cards_by_number) != TAROT_READING_CARD_COUNT:
         raise ValueError('선택한 카드 정보를 DB에서 찾을 수 없습니다.')
 
     return [cards_by_number[number] for number in card_numbers]
+
+
+def draw_reading_cards():
+    """Choose the reading cards and orientations on the server."""
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT card_number FROM tarot_cards")
+        card_numbers = [row[0] for row in cursor.fetchall()]
+
+    if len(card_numbers) < TAROT_READING_CARD_COUNT:
+        raise ValueError("Tarot card data is not ready.")
+
+    randomizer = secrets.SystemRandom()
+    return [
+        {
+            "card_number": card_number,
+            "orientation": randomizer.choice(("upright", "reversed")),
+        }
+        for card_number in randomizer.sample(card_numbers, TAROT_READING_CARD_COUNT)
+    ]
 
 
 def select_card_meaning(card, orientation):
@@ -826,7 +848,7 @@ def create_reading(data, user=None):
         'gender': data.get('gender') or '',
         'age': data.get('age') or '',
     }
-    selected_cards = data['cards']
+    selected_cards = draw_reading_cards()
 
     db_cards = fetch_cards(selected_cards)
     cards = build_card_payload(selected_cards, db_cards, retrieval_topic)
