@@ -3,6 +3,7 @@ import json
 import os
 import re
 import time
+from functools import lru_cache
 from urllib.parse import urlparse
 
 import requests
@@ -151,7 +152,7 @@ class WeatherWebAgent:
         try:
             indices = WeatherWebAgent._calculate_weather_indices(weather)
             prompt = WeatherWebAgent._build_prompt(weather, user_profile, tavily_context, indices)
-            llm = _get_openai_llm(temperature=0.35, max_tokens=1400)
+            llm = _get_openai_llm(temperature=0.35, max_tokens=1000)
             # Remove json_object binding to prevent 400 validation error on certain wrappers,
             # as _parse_json_response robustly handles markdown JSON.
 
@@ -183,7 +184,10 @@ class WeatherWebAgent:
     @staticmethod
     def _build_prompt(weather, user_profile, tavily_context, indices):
         location = weather.get("location", {}).get("name", "현재 지역")
-        hobbies = ", ".join(user_profile.get("hobbies") or [])
+        selected_hobby = (
+            user_profile.get("selected_hobby")
+            or next(iter(user_profile.get("hobbies") or []), "")
+        )
         tavily_evidence = tavily_context.get("snippets") or "공식 검색 근거 없음"
         index_summary = ", ".join(
             f"{label} {entry.get('value')}{entry.get('unit', '')}({entry.get('level')})"
@@ -220,7 +224,7 @@ class WeatherWebAgent:
             "[사용자&날씨 정보]\n"
             f"위치: {location}\n"
             f"기상: {weather.get('condition')}, {weather.get('temperature')}도, 습도 {weather.get('humidity')}%, 강수 {weather.get('rainfall_1h')}mm, 풍속 {weather.get('wind_speed')}m/s\n"
-            f"개인화 참고(최소 항목): 취미 {hobbies or '없음'} / 오늘의 감정 {user_profile.get('today_emotion') or '해당 없음'}\n\n"
+            f"개인화 참고(최소 항목): 이번 회차 선택 취미 {selected_hobby or '없음'} / 오늘의 감정 {user_profile.get('today_emotion') or '해당 없음'}\n\n"
             "[산출된 기상 지표]\n"
             f"{index_summary or '계산 가능한 지표 없음'}\n"
             "이 수치는 서버가 확정하므로 출력에서 점수나 단계를 다시 만들지 마세요.\n\n"
@@ -241,7 +245,7 @@ class WeatherWebAgent:
             "2. forecastSummary (120~180자): 기상청 API허브의 단기·중기 자료를 합친 주간예보를 요약하세요. 기온 변화, 비 가능성이 큰 날, 주간 생활상 주의점을 자연스럽게 연결하되 없는 날짜나 수치를 추측하지 마세요. 제공 범위가 7일보다 짧으면 실제 제공된 마지막 날짜까지만 요약하고 '이후 예보는 확인 중'이라고 밝혀 주세요. 주간 데이터가 없으면 '기상청 주간예보를 일시적으로 확인할 수 없습니다'라고 쓰세요.\n"
             "3. recommendations (정확히 3개): 반드시 일반 날씨 추천 2개를 먼저 쓰고, 저장된 취미와 연결한 추천 1개를 마지막에 쓰세요. 일반 추천의 우선순위가 더 높습니다.\n"
             "   - 첫 번째·두 번째 항목의 kind는 general: 현재 관측값과 가까운 시간대 예보에 바로 대응하는 준비를 서로 겹치지 않게 작성하세요.\n"
-            "   - 세 번째 항목의 kind는 hobby: 저장된 취미 중 하나를 오늘 날씨에 맞게 즐기는 구체적인 방법을 작성하세요. 취미 이름은 이 항목에서만 자연스럽게 언급해도 됩니다.\n"
+            f"   - 세 번째 항목의 kind는 hobby: 이번 회차에 선택된 취미 '{selected_hobby or '없음'}'만 오늘 날씨에 맞게 즐기는 구체적인 방법을 작성하세요. 다른 취미로 바꾸거나 여러 취미를 섞지 마세요. 취미 이름은 이 항목에서만 자연스럽게 언급해도 됩니다.\n"
             "   - title (12~24자): 무엇을 할지 바로 알 수 있는 제목.\n"
             "   - summary (45~80자): 현재 날씨 수치나 예보와 행동을 한 문장으로 연결하되 '이유' 같은 표제어는 쓰지 마세요.\n"
             "   - actions (2개): 시간·횟수·준비물·설정값 중 하나 이상을 담은 20~45자의 실행 항목. 추상적인 격려 문장은 금지합니다.\n"
@@ -249,10 +253,8 @@ class WeatherWebAgent:
             "Output ONLY in JSON format:\n"
             "{\n"
             '  "weatherAnalysis": "맞춤형 날씨 해설 (직접 언급 금지)",\n'
-            '  "moodImpact": "기분 영향 (선택)",\n'
             '  "forecastSummary": "기상청 주간예보와 검색 맥락을 바탕으로 한 7일 요약",\n'
-            '  "recommendations": [{"kind": "general", "title": "...", "summary": "...", "actions": ["...", "..."]}, {"kind": "general", "title": "...", "summary": "...", "actions": ["...", "..."]}, {"kind": "hobby", "title": "...", "summary": "...", "actions": ["...", "..."]}],\n'
-            '  "careNote": ""\n'
+            '  "recommendations": [{"kind": "general", "title": "...", "summary": "...", "actions": ["...", "..."]}, {"kind": "general", "title": "...", "summary": "...", "actions": ["...", "..."]}, {"kind": "hobby", "title": "...", "summary": "...", "actions": ["...", "..."]}]\n'
             "}"
         )
 
@@ -297,6 +299,7 @@ class WeatherWebAgent:
                     (user_profile or {}).get("hobbies")
                     or (user_profile or {}).get("today_emotion")
                 ),
+                "selected_hobby": (user_profile or {}).get("selected_hobby") or "",
                 "personalization_fields": [
                     field
                     for field in WEATHER_PERSONALIZATION_FIELDS
@@ -343,6 +346,7 @@ class WeatherWebAgent:
                 "reason": generation_error or "generation_failed",
                 "personalized": False,
                 "personalization_fields": [],
+                "selected_hobby": (user_profile or {}).get("selected_hobby") or "",
             },
             "is_fallback": True,
         }
@@ -546,6 +550,7 @@ class WeatherWebAgent:
         return text
 
 
+@lru_cache(maxsize=4)
 def _get_openai_llm(temperature=0.35, max_tokens=4000):
     from langchain_openai import ChatOpenAI
 

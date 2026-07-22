@@ -196,8 +196,7 @@ def _without_excluded_books(books, excluded_isbns=None):
     }
     if not excluded:
         return candidates
-    eligible = [book for book in candidates if book.get("isbn") not in excluded]
-    return eligible or candidates
+    return [book for book in candidates if book.get("isbn") not in excluded]
 
 
 def _open_library_cover_url(isbn):

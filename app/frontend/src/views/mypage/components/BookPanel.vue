@@ -206,8 +206,21 @@ export default {
     curationDetails() {
       return [
         { label: "검색 키워드", value: this.currentBook.keyword },
-        { label: "추천 기준", value: this.currentBook.keyword_basis }
+        { label: "추천 기준", value: this.recommendationBasis }
       ].filter(detail => detail.value);
+    },
+    recommendationBasis() {
+      if (this.currentBook.recommendation_basis) {
+        return this.currentBook.recommendation_basis;
+      }
+      const label = this.currentBook.keyword_basis || this.currentBook.basis_label || "";
+      const basisValues = Array.isArray(this.currentBook.basis_values)
+        ? this.currentBook.basis_values.filter(Boolean)
+        : [];
+      const value = this.currentBook.theme_id === "emotion"
+        ? basisValues[0]
+        : this.currentBook.selected_basis;
+      return value ? `${label} · ${value}` : label;
     },
     currentThemeReason() {
       const theme = this.currentTab;

@@ -117,6 +117,46 @@ class NationalBibliographyBookSearchTests(SimpleTestCase):
         self.assertEqual(themes_by_id['hobbies']['basis_values'], ['산책', '요리'])
         self.assertEqual(build_search_intent.call_count, 3)
 
+    @patch('mybook.agent._get_llm')
+    @patch.object(BookRecommendationAgent, '_build_search_intent')
+    def test_search_term_stage_reuses_client_without_skipping_theme_calls(
+        self,
+        build_search_intent,
+        get_llm,
+    ):
+        shared_llm = Mock()
+        get_llm.return_value = shared_llm
+        build_search_intent.return_value = {
+            'keyword': '테스트 도서',
+            'content_terms': ['테스트 주제'],
+            'search_terms': ['테스트 검색어'],
+            'selected_basis': '테스트',
+            'reason': '테스트 추천 이유',
+            'keyword_basis': '테스트 기준',
+        }
+
+        BookRecommendationAgent._build_themes(
+            {
+                'today_emotion': '기쁨',
+                'interests': ['음악', '심리학'],
+                'hobbies': ['산책', '요리'],
+            },
+            {'interests': '음악', 'hobbies': '산책'},
+        )
+
+        self.assertEqual(build_search_intent.call_count, 3)
+        self.assertTrue(all(
+            call.kwargs['llm'] is shared_llm
+            for call in build_search_intent.call_args_list
+        ))
+        required_by_theme = {
+            call.args[1]['id']: call.kwargs['required_basis']
+            for call in build_search_intent.call_args_list
+        }
+        self.assertEqual(required_by_theme['emotion'], '')
+        self.assertEqual(required_by_theme['interests'], '심리학')
+        self.assertEqual(required_by_theme['hobbies'], '요리')
+
     @patch.dict('os.environ', {'NLK_BIBLIO_SERVICE_KEY': 'public-data-key'}, clear=False)
     @patch('mybook.agent.requests.get')
     def test_searches_actual_top_level_contract_and_normalizes_general_book(self, request_get):
@@ -263,13 +303,71 @@ class NationalBibliographyBookSearchTests(SimpleTestCase):
 
         self.assertEqual([book['title'] for book in eligible], ['책2', '책3'])
 
-    def test_exclusion_falls_back_when_it_would_remove_every_candidate(self):
+    def test_exclusion_never_reintroduces_a_previously_recommended_candidate(self):
         books = [{'title': '유일한 책', 'isbn': '9788959710256'}]
 
         self.assertEqual(
             _without_excluded_books(books, ['9788959710256']),
-            books,
+            [],
         )
+
+    def test_profile_topics_rotate_in_stored_order(self):
+        values = ['심리학', '천문학', '음악']
+
+        first = BookRecommendationAgent._next_profile_basis('interests', values, '')
+        second = BookRecommendationAgent._next_profile_basis('interests', values, first)
+        third = BookRecommendationAgent._next_profile_basis('interests', values, second)
+        wrapped = BookRecommendationAgent._next_profile_basis('interests', values, third)
+
+        self.assertEqual([first, second, third, wrapped], ['심리학', '천문학', '음악', '심리학'])
+
+    def test_emotion_search_intent_uses_goal_without_exposing_emotion_word(self):
+        keyword, content_terms, search_terms = (
+            BookRecommendationAgent._sanitize_emotion_search_intent(
+                '기쁨을 더 깊게 만드는 몰입형 소설',
+                ['기쁨', '행복 습관'],
+                ['기쁨 심리학', '긍정 심리학'],
+                ['기쁨'],
+            )
+        )
+
+        self.assertNotIn('기쁨', keyword)
+        self.assertTrue(all('기쁨' not in term for term in content_terms))
+        self.assertTrue(all('기쁨' not in term for term in search_terms))
+        self.assertTrue(all('긍정' not in term for term in search_terms))
+        self.assertEqual(keyword, '몰입형 소설')
+        self.assertIn('몰입', content_terms)
+
+    def test_emotion_title_is_allowed_but_title_match_is_not_selection_basis(self):
+        prompt = BookRecommendationAgent._single_review_prompt(
+            {'nickname': '테스터'},
+            {
+                'id': 'emotion',
+                'basis_label': '오늘의 주된 감정',
+                'basis_values': ['기쁨'],
+                'candidates': [],
+            },
+        )
+
+        self.assertIn('제목에 감정 단어가 포함된 후보도 제외하지 마세요', prompt)
+        self.assertIn('제목 일치만으로 고르지 말고', prompt)
+
+    def test_negative_emotion_search_targets_relief_without_emotion_word(self):
+        keyword, content_terms, search_terms = (
+            BookRecommendationAgent._sanitize_emotion_search_intent(
+                '슬픔을 달래는 휴식 에세이',
+                ['슬픔', '감정 치유'],
+                ['슬픔 에세이', '자연 산문'],
+                ['슬픔'],
+            )
+        )
+
+        self.assertTrue(all(
+            '슬픔' not in value
+            for value in [keyword, *content_terms, *search_terms]
+        ))
+        self.assertIn('마음 환기', content_terms)
+        self.assertIn('환기·회복', BookRecommendationAgent._emotion_reading_goal(['슬픔']))
 
     def test_rejects_thesis_even_when_it_has_an_isbn(self):
         item = _general_book_item(
@@ -495,6 +593,33 @@ class NationalBibliographyBookSearchTests(SimpleTestCase):
         self.assertEqual(raised.exception.code, 'BOOK_REVIEW_GENERATION_FAILED')
         generate_review.assert_called_once()
 
+    @patch('mybook.agent._get_llm')
+    @patch.object(BookRecommendationAgent, '_generate_single_review')
+    def test_review_stage_reuses_client_without_skipping_theme_calls(
+        self,
+        generate_review,
+        get_llm,
+    ):
+        shared_llm = Mock()
+        get_llm.return_value = shared_llm
+        themes = [
+            {'id': theme_id, 'candidates': [{'candidate_id': 'book_1'}]}
+            for theme_id in ('emotion', 'interests', 'hobbies')
+        ]
+        generate_review.side_effect = [
+            {'theme_id': theme_id}
+            for theme_id in ('emotion', 'interests', 'hobbies')
+        ]
+
+        books = BookRecommendationAgent._generate_reviews({}, themes)
+
+        self.assertEqual(len(books), 3)
+        self.assertEqual(generate_review.call_count, 3)
+        self.assertTrue(all(
+            call.kwargs['llm'] is shared_llm
+            for call in generate_review.call_args_list
+        ))
+
     @patch.dict('os.environ', {'NLK_BIBLIO_SERVICE_KEY': 'public-data-key'}, clear=False)
     @patch('mybook.agent.requests.get')
     def test_service_failure_is_not_treated_as_empty_result(self, request_get):
@@ -666,6 +791,32 @@ class NationalBibliographyBookSearchTests(SimpleTestCase):
         self.assertEqual(payload['ai_curation']['review'], 'AI 추천 서평')
         self.assertEqual(payload['source_provider']['id'], 'kakao_daum_book_search')
 
+    def test_emotion_payload_names_the_actual_emotion_in_recommendation_basis(self):
+        theme = {
+            'id': 'emotion',
+            'name': '오늘의 감정 추천',
+            'keyword': '몰입 소설',
+            'keyword_basis': '오늘의 주된 감정',
+            'basis_label': '오늘의 주된 감정',
+            'basis_values': ['기쁨'],
+        }
+        book = {
+            'title': '테스트 소설',
+            'author': '테스트 저자',
+            'publisher': '테스트 출판사',
+            'isbn': '9788959710256',
+            'source_provider': KAKAO_BOOK_PROVIDER_INFO,
+        }
+
+        payload = BookRecommendationAgent._book_payload(
+            theme,
+            book,
+            '감정 기준 추천 서평',
+            genre='소설',
+        )
+
+        self.assertEqual(payload['recommendation_basis'], '오늘의 주된 감정 · 기쁨')
+
     @patch.object(BookRecommendationAgent, '_generate_reviews')
     @patch.object(BookRecommendationAgent, '_search_kakao_books')
     @patch.object(BookRecommendationAgent, '_build_themes')
@@ -718,7 +869,7 @@ class NationalBibliographyBookSearchTests(SimpleTestCase):
             excluded_isbns=[],
         )
         self.assertTrue(result['selection_policy']['general_books_only'])
-        self.assertEqual(result['recommendation_engine'], 'kakao_books_v1')
+        self.assertEqual(result['recommendation_engine'], 'kakao_books_v2')
         self.assertEqual(result['selection_policy']['candidate_source'], 'Kakao Daum 책 검색')
         self.assertEqual(
             result['source_disclosure']['cover_metadata'],
@@ -1114,6 +1265,60 @@ class BookRecommendationViewStabilityTests(TestCase):
             [book['title'] for book in response.data['books']],
             ['기쁨 책', '음악 책', '요리 책'],
         )
+
+    @patch('mybook.views._build_user_profile')
+    @patch('mybook.views.BookRecommendationAgent.recommend')
+    def test_forced_refresh_excludes_accumulated_same_day_isbn_history(
+        self,
+        recommend,
+        build_profile,
+    ):
+        build_profile.return_value = self.profile
+        old_payload = {
+            'recommendation_engine': 'kakao_books_v2',
+            'recommendation_history': {
+                'isbns': {
+                    'hobbies': ['9788959710256', '9788937460449'],
+                },
+                'selected_basis': {'hobbies': ['산책']},
+            },
+            'books': [{
+                'theme_id': 'hobbies',
+                'title': '현재 추천',
+                'isbn': '9788971998557',
+            }],
+            'themes': [{
+                'id': 'hobbies',
+                'selected_basis': '산책',
+            }],
+        }
+        recommend.return_value = {
+            'recommendation_engine': 'kakao_books_v2',
+            'books': [{
+                'theme_id': 'hobbies',
+                'title': '새 추천',
+                'isbn': '9788996991342',
+            }],
+            'themes': [],
+        }
+        DailyBookRecommendation.objects.create(
+            user=self.user,
+            recommendation_date=self.today,
+            payload=old_payload,
+            profile_basis=self.profile,
+        )
+        request = self.factory.get('/api/mybook/recommendation/?force=true')
+        force_authenticate(request, user=self.user)
+
+        with patch('mybook.views.timezone.localdate', return_value=self.today):
+            response = book_recommendation(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            recommend.call_args.kwargs['excluded_isbns']['hobbies'],
+            ['9788959710256', '9788937460449', '9788971998557'],
+        )
+        self.assertEqual(recommend.call_args.kwargs['cached_data'], old_payload)
 
     @patch('mybook.views._build_user_profile')
     @patch('mybook.views.BookRecommendationAgent.recommend')

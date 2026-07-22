@@ -172,28 +172,57 @@ def calculate_weather_indices(weather, to_float):
             apparent_method = "기상청 겨울철 산출 조건: 기온 10℃ 이하·풍속 1.3m/s 이상"
             apparent_status = "겨울철 공식 산출 조건 밖입니다."
 
-    food_poisoning = None
+    food_poisoning_payload = weather.get("food_poisoning_index") or {}
+    food_poisoning = to_float(food_poisoning_payload.get("value"))
+    food_poisoning_raw = food_poisoning
+    food_poisoning_derived = False
     food_poisoning_level = "정보 없음"
     food_poisoning_severity = "unavailable"
-    food_poisoning_status = "기온·습도 관측값이 없어 계산하지 못했습니다."
-    if temperature is not None and humidity is not None:
-        food_poisoning = 1.79 * (1.03 ** temperature) * (1.04 ** humidity)
-        if food_poisoning >= 86:
+    food_poisoning_status = "기온·습도 관측값이 없어 참고지수를 계산하지 못했습니다."
+    food_poisoning_method = "기온·습도 기반 식중독 참고지수 산식"
+    food_poisoning_source_url = (
+        "https://www.weather.go.kr/w/forecast/life/index-info.do"
+    )
+    if (
+        food_poisoning_payload.get("status") == "available"
+        and food_poisoning is not None
+        and 0 <= food_poisoning <= 300
+    ):
+        food_poisoning_method = food_poisoning_payload.get("method") or (
+            "공식 제공기관의 식중독 위험도 발표값"
+        )
+        food_poisoning_source_url = (
+            food_poisoning_payload.get("source_url") or food_poisoning_source_url
+        )
+    elif temperature is not None and humidity is not None:
+        food_poisoning_raw = 1.79 * (1.03 ** temperature) * (1.04 ** humidity)
+        food_poisoning = food_poisoning_raw
+        food_poisoning_derived = True
+        food_poisoning_method = (
+            "기온·습도 기반 참고 산식: 1.79 × 1.03^기온 × 1.04^습도 "
+            "(표시 범위 0~300, 현행 공식 발표값과는 다름)"
+        )
+    else:
+        food_poisoning = None
+        food_poisoning_raw = None
+
+    if food_poisoning is not None:
+        if food_poisoning >= 258:
             food_poisoning_level = "위험"
             food_poisoning_severity = "danger"
-            food_poisoning_status = "식중독 발생 위험이 매우 높으니 조리 후 즉시 섭취하세요."
-        elif food_poisoning >= 70:
+            food_poisoning_status = "식중독 발생 가능성이 매우 높아 각별한 경계가 필요합니다."
+        elif food_poisoning >= 213:
             food_poisoning_level = "경고"
             food_poisoning_severity = "warning"
-            food_poisoning_status = "식중독 발생 위험이 높으니 조리 시 각별히 주의하세요."
-        elif food_poisoning >= 55:
+            food_poisoning_status = "식중독 발생 가능성이 높아 예방에 경계가 필요합니다."
+        elif food_poisoning >= 165:
             food_poisoning_level = "주의"
             food_poisoning_severity = "caution"
-            food_poisoning_status = "식중독 발생 가능성이 있으니 조리 기구의 위생을 챙기세요."
+            food_poisoning_status = "식중독 발생 가능성이 중간 단계여서 예방에 주의가 필요합니다."
         else:
             food_poisoning_level = "관심"
             food_poisoning_severity = "safe"
-            food_poisoning_status = "식중독 발생 위험이 낮으나 개인위생을 유지하세요."
+            food_poisoning_status = "식중독 발생 가능성은 낮지만 지속적인 관심이 필요합니다."
 
     uv_payload = weather.get("uv_index") or {}
     uv_index = to_float(uv_payload.get("value"))
@@ -214,6 +243,18 @@ def calculate_weather_indices(weather, to_float):
         uv_severity = uv_band["severity"]
         uv_status = UV_INDEX_STATUS[uv_level]
 
+    food_poisoning_item = item(
+        "식중독지수", food_poisoning, "", food_poisoning_level,
+        food_poisoning_severity, 0, 300, food_poisoning_status,
+        food_poisoning_method, food_poisoning_derived,
+        FOOD_POISONING_INDEX_BANDS, food_poisoning_source_url,
+    )
+    food_poisoning_item.update({
+        "raw_value": round(food_poisoning_raw, 1)
+        if food_poisoning_raw is not None else None,
+        "capped": False,
+    })
+
     return {
         "불쾌지수": item(
             "불쾌지수", discomfort, "", discomfort_level, discomfort_severity, 60, 90,
@@ -228,13 +269,7 @@ def calculate_weather_indices(weather, to_float):
             apparent_method, True, apparent_bands,
             "https://data.kma.go.kr/climate/windChill/selectWindChillChart.do",
         ),
-        "식중독지수": item(
-            "식중독지수", food_poisoning, "", food_poisoning_level, food_poisoning_severity, 0, 100,
-            food_poisoning_status,
-            "기상청·식약처식중독 예측 모델식: 1.79 * 1.03^T * 1.04^H", True,
-            FOOD_POISONING_INDEX_BANDS,
-            "https://www.weather.go.kr/w/theme/daily-life-weather/lifestyle.do",
-        ),
+        "식중독지수": food_poisoning_item,
         "자외선지수": item(
             "자외선지수", uv_index, "", uv_level, uv_severity, 0, 15,
             uv_status,

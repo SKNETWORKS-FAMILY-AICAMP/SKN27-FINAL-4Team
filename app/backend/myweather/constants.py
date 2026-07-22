@@ -249,12 +249,13 @@ APPARENT_TEMP_WINTER_BANDS = [
     {"level": "관심", "from": -10, "to": 10, "color": "#c3a832"},
 ]
 
-# 식중독지수 구간 설정
+# 기온 40℃·습도 100%에서 산식 결과가 약 294.9이므로 표시 상한을 300으로 둔다.
+# 기존 0~100 단계 비율(55%·71%·86%)을 0~300 범위에 동일하게 적용한다.
 FOOD_POISONING_INDEX_BANDS = [
-    {"level": "관심", "from": 0, "to": 55, "color": "#36a269"},
-    {"level": "주의", "from": 55, "to": 70, "color": "#c3a832"},
-    {"level": "경고", "from": 70, "to": 86, "color": "#ed982f"},
-    {"level": "위험", "from": 86, "to": 100, "color": "#d9424e"},
+    {"level": "관심", "from": 0, "to": 165, "color": "#36a269"},
+    {"level": "주의", "from": 165, "to": 213, "color": "#c3a832"},
+    {"level": "경고", "from": 213, "to": 258, "color": "#ed982f"},
+    {"level": "위험", "from": 258, "to": 300, "color": "#d9424e"},
 ]
 
 # 기상청 자외선지수 공식 구간.
@@ -306,6 +307,7 @@ WEATHER_INSIGHT_WEEKLY_STATE_FIELDS = (
 WEATHER_INSIGHT_ALERT_STATE_FIELDS = ("type", "level", "region", "effective_at")
 WEATHER_INSIGHT_FALLBACK_CACHE_SECONDS = 60
 WEATHER_INSIGHT_SUCCESS_CACHE_SECONDS = 3600
+WEATHER_HOBBY_ROTATION_CACHE_SECONDS = 60 * 60 * 24 * 30
 
 # 기상 문구 필터링 기본 폴백 규칙 (DB 미연동 대비)
 STATIC_PHRASING_FALLBACK_REPLACEMENTS = {
