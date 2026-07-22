@@ -63,7 +63,6 @@ INSTALLED_APPS = [
     'game.tarot_api',
     'mindreport',
     'checkin',
-    'mycard',
     'emotion_cards',
     'mybook',
     'myweather',
@@ -249,7 +248,7 @@ TAVILY_API_KEY = os.environ.get('TAVILY_API_KEY', '')
 # ── 마음카드(emotion_cards) ──
 # 기본은 외부 이미지 API를 호출하지 않는 안전한 개발 모드.
 EMOTION_CARD_ENABLE_REAL_IMAGE_API = os.environ.get('EMOTION_CARD_ENABLE_REAL_IMAGE_API', 'False').lower() == 'true'
-EMOTION_CARD_MAX_DAILY_GENERATIONS = int(os.environ.get('EMOTION_CARD_MAX_DAILY_GENERATIONS', '10'))
+EMOTION_CARD_MAX_DAILY_GENERATIONS = int(os.environ.get('EMOTION_CARD_MAX_DAILY_GENERATIONS', '5'))
 # 텍스트 구조화 분석: 공유 LLM 공급자(ai/agents/llm). 키 없으면 자동 키워드 폴백. 테스트는 자동 오프라인.
 EMOTION_CARD_ENABLE_LLM_ANALYSIS = os.environ.get('EMOTION_CARD_ENABLE_LLM_ANALYSIS', 'True').lower() == 'true'
 # 학습된 감정 분류기(ai/emotion) 확신도 게이트. 이하이면 LLM/키워드로 폴백.
@@ -265,7 +264,10 @@ EMOTION_CARD_IMAGE_SIZE = os.environ.get('EMOTION_CARD_IMAGE_SIZE', '1024x1536')
 # 이미지 품질: low | medium(기본) | high. .env로 변경.
 EMOTION_CARD_IMAGE_QUALITY = os.environ.get('EMOTION_CARD_IMAGE_QUALITY', 'medium')
 # 입력 프롬프트 모더레이션(선택). 비우면 로컬 안전규칙만 사용.
-EMOTION_CARD_MODERATION_MODEL = os.environ.get('EMOTION_CARD_MODERATION_MODEL', '')
+EMOTION_CARD_MODERATION_MODEL = (
+    os.environ.get('EMOTION_CARD_MODERATION_MODEL', 'omni-moderation-latest').strip()
+    or 'omni-moderation-latest'
+)
 # (TAVILY_API_KEY는 장소 추천 기능 폐기로 제거 — 2026-07-05)
 
 # ── TTS 공급자 (openai=gpt-audio | off=생성 차단·비용 절약) ──

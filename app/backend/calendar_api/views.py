@@ -3,9 +3,9 @@ from datetime import date
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
+from config.permissions import IsAuthenticatedOrDevelopment
 from chat.models import ChatMessage
 from .models import DailyFortune
 from .serializers import DailyFortuneSerializer
@@ -37,7 +37,7 @@ def serialize_daily_fortune_with_emotion(request, fortune):
 
 
 @api_view(['GET'])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticatedOrDevelopment])
 def get_calendar_month(request):
     owner_filter = get_owner_filter(request)
     today = timezone.localdate()
@@ -83,7 +83,7 @@ def get_calendar_month(request):
 
 
 @api_view(['GET'])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticatedOrDevelopment])
 def get_calendar_day(request):
     owner_filter = get_owner_filter(request)
     value = request.query_params.get('date')

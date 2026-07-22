@@ -4,9 +4,9 @@ from django.utils import timezone
 from rest_framework.authentication import SessionAuthentication
 from rest_framework import status
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
-from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
+from config.permissions import IsAuthenticatedOrDevelopment
 from calendar_api.serializers import DailyFortuneSerializer
 from calendar_api.services import (
     save_daily_major_as_daily_fortune,
@@ -19,10 +19,12 @@ from .services import create_reading, get_or_create_daily_major_fortune
 
 
 class CsrfExemptSessionAuthentication(SessionAuthentication):
-    """Allow the local development client-id flow to use session-backed requests."""
+    """Skip CSRF only for the local development client-id flow."""
 
     def enforce_csrf(self, request):
-        return
+        if settings.DEBUG:
+            return
+        return super().enforce_csrf(request)
 
 
 def _get_social_demo_email(provider, client_id):
@@ -32,6 +34,9 @@ def _get_social_demo_email(provider, client_id):
 
 
 def _get_development_user(request):
+    if not settings.DEBUG:
+        return None
+
     client_id = (
         request.headers.get('X-Binteumsai-Client-Id')
         or request.query_params.get('client_id')
@@ -53,7 +58,7 @@ def _get_development_user(request):
 
 @api_view(['POST'])
 @authentication_classes([CsrfExemptSessionAuthentication])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticatedOrDevelopment])
 def create_tarot_reading(request):
     serializer = TarotReadingRequestSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
@@ -85,7 +90,7 @@ def create_tarot_reading(request):
 
 @api_view(['GET', 'POST'])
 @authentication_classes([CsrfExemptSessionAuthentication])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticatedOrDevelopment])
 def daily_major_fortune(request):
     raw_date = request.data.get('date') if request.method == 'POST' else request.query_params.get('date')
     target_date = timezone.localdate()
@@ -97,6 +102,8 @@ def daily_major_fortune(request):
 
     try:
         fortune_user = request.user if request.user.is_authenticated else _get_development_user(request)
+        if fortune_user is None:
+            return Response({'error': '로그인이 필요한 요청입니다.'}, status=status.HTTP_401_UNAUTHORIZED)
         fortune = get_or_create_daily_major_fortune(fortune_user, target_date)
         result = DailyTarotFortuneSerializer(fortune).data
 

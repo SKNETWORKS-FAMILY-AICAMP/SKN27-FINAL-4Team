@@ -1,3 +1,6 @@
+from django.conf import settings
+
+
 def get_client_id(request):
     value = (
         request.headers.get('X-Binteumsai-Client-Id')
@@ -11,6 +14,9 @@ def get_client_id(request):
 def get_owner_filter(request):
     if request.user.is_authenticated:
         return {'user': request.user}
+
+    if not settings.DEBUG:
+        return None
 
     client_id = get_client_id(request)
     if not client_id:

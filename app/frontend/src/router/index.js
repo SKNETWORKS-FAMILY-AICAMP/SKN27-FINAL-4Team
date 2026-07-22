@@ -15,7 +15,6 @@ const routes = [
   { path: '/mycard',              component: () => import('../views/onboarding/MyCardView.vue') },
   { path: '/onboarding/info',      component: () => import('../views/onboarding/UserInfoSetupView.vue') },
   { path: '/onboarding/character', component: () => import('../views/onboarding/CharacterSetupView.vue') },
-  { path: '/onboarding/preferencesetup',   component: () => import('../views/onboarding/PreferenceSetupView.vue') },
   { path: '/onboarding/complete', component: () => import('../views/onboarding/OnboardingCompleteView.vue') },
   { path: '/onboarding/fortune',   component: () => import('../views/onboarding/TarotIntroView.vue') },
   { path: '/onboarding/fortune/draw', component: () => import('../views/onboarding/FortuneView.vue') },

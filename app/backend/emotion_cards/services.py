@@ -18,7 +18,6 @@ from .models import (
     EmotionCardAnalysis,
     EmotionCardJob,
     EmotionCardScene,
-    EmotionCardUsageReset,
     FeatureCode,
     GeneratedEmotionCard,
     RuleEntry,
@@ -63,14 +62,14 @@ GENDER_TO_CARD_GENDER = {
 
 
 def daily_generation_queryset(user):
-    queryset = GeneratedEmotionCard.objects.filter(
+    """Count accepted jobs rather than saved image files.
+
+    Storage changes must not weaken the daily generation limit.
+    """
+    return EmotionCardJob.objects.filter(
         user=user,
         created_at__date=timezone.localdate(),
-    ).exclude(image_url="")
-    reset = EmotionCardUsageReset.objects.filter(user=user).first()
-    if reset:
-        queryset = queryset.filter(created_at__gt=reset.reset_at)
-    return queryset
+    )
 
 
 def _catalog(catalog, code):
@@ -465,6 +464,35 @@ def ensure_card_image(card):
     return card
 
 
+def _delete_card_image_file(image_url):
+    """Delete only files owned by this app under MEDIA_ROOT."""
+    media_url = str(settings.MEDIA_URL)
+    if not image_url or not image_url.startswith(media_url):
+        return
+
+    media_root = Path(settings.MEDIA_ROOT).resolve()
+    target = (media_root / image_url.removeprefix(media_url).lstrip('/')).resolve()
+    try:
+        target.relative_to(media_root)
+    except ValueError:
+        logger.warning("[emotion_card] refused to delete a path outside MEDIA_ROOT")
+        return
+
+    try:
+        target.unlink(missing_ok=True)
+    except OSError:
+        logger.exception("[emotion_card] failed to delete previous card image: %s", target)
+
+
+def _delete_previous_cards(user, current_card_id):
+    """Keep just the latest completed card for each user."""
+    previous_cards = list(GeneratedEmotionCard.objects.filter(user=user).exclude(id=current_card_id))
+    for previous_card in previous_cards:
+        _delete_card_image_file(previous_card.image_url)
+    if previous_cards:
+        GeneratedEmotionCard.objects.filter(id__in=[card.id for card in previous_cards]).delete()
+
+
 def _scene_label(spec, key, fallback):
     return (spec.get(key) or {}).get("label") or fallback
 
@@ -506,6 +534,7 @@ def _create_card(job, image_url):
     job.progress = 100
     job.card = card
     job.save(update_fields=["status", "progress", "card", "updated_at"])
+    _delete_previous_cards(job.user, card.id)
     return job
 
 
@@ -526,7 +555,7 @@ def _fake_complete(job):
 
 
 def _passes_moderation(text):
-    model = getattr(settings, "EMOTION_CARD_MODERATION_MODEL", "")
+    model = getattr(settings, "EMOTION_CARD_MODERATION_MODEL", "") or "omni-moderation-latest"
     api_key = getattr(settings, "OPENAI_API_KEY", "")
     if not model or not api_key:
         return True

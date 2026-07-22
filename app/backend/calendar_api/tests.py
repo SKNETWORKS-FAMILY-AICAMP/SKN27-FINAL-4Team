@@ -68,3 +68,16 @@ class DailyMajorCalendarSaveTests(TestCase):
 
         self.assertEqual(DailyFortune.objects.count(), 1)
         self.assertEqual(fortune.content, '갱신된 오늘의 키워드 내용')
+
+from django.test import override_settings
+
+
+class CalendarPermissionTests(TestCase):
+    @override_settings(DEBUG=False)
+    def test_production_rejects_anonymous_calendar_requests(self):
+        response = self.client.get(
+            '/api/calendar/month/',
+            HTTP_X_BINTEUMSAI_CLIENT_ID='must-not-read-calendar',
+        )
+
+        self.assertIn(response.status_code, (401, 403))
