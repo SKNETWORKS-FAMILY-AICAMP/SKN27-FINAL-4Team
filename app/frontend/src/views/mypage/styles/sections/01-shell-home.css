@@ -188,6 +188,9 @@
 }
 
 .identity-chips span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 5px 8px;
   border: 1px solid rgba(215, 183, 255, 0.22);
   border-radius: 999px;
@@ -195,6 +198,11 @@
   color: rgba(255, 245, 230, 0.86);
   font-size: 12px;
   font-weight: 800;
+}
+
+.identity-chip-icon {
+  font-style: normal;
+  line-height: 1;
 }
 
 .identity-chips span b {

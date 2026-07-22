@@ -82,7 +82,8 @@
                 :key="keyword"
                 class="interest-chip active"
               >
-                {{ getKeywordIcon(keyword, 'interest') }} {{ keyword }}
+                <span class="keyword-chip-icon" aria-hidden="true">{{ getKeywordIcon(keyword, 'interest') }}</span>
+                {{ keyword }}
               </span>
               <button 
                 v-if="profileEdit"
@@ -108,7 +109,8 @@
                              :class="{ active: profile.interests.includes(item.label) }"
                              :aria-pressed="profile.interests.includes(item.label)"
                              @click.prevent="toggleKeyword('interest', item.label)">
-                       {{ getKeywordIcon(item.label, 'interest') }} {{ item.label }}
+                       <span class="keyword-chip-icon" aria-hidden="true">{{ getKeywordIcon(item.label, 'interest') }}</span>
+                       {{ item.label }}
                      </button>
                   </div>
                 </div>
@@ -127,7 +129,8 @@
                 :key="keyword"
                 class="interest-chip active hobby-chip"
               >
-                {{ getKeywordIcon(keyword, 'hobby') }} {{ keyword }}
+                <span class="keyword-chip-icon" aria-hidden="true">{{ getKeywordIcon(keyword, 'hobby') }}</span>
+                {{ keyword }}
               </span>
               <button 
                 v-if="profileEdit"
@@ -153,7 +156,8 @@
                              :class="{ active: profile.hobbies.includes(item.label) }"
                              :aria-pressed="profile.hobbies.includes(item.label)"
                              @click.prevent="toggleKeyword('hobby', item.label)">
-                       {{ getKeywordIcon(item.label, 'hobby') }} {{ item.label }}
+                       <span class="keyword-chip-icon" aria-hidden="true">{{ getKeywordIcon(item.label, 'hobby') }}</span>
+                       {{ item.label }}
                      </button>
                   </div>
                 </div>
@@ -381,6 +385,9 @@ export default {
   gap: 8px;
 }
 .interest-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 6px 12px;
   border-radius: 999px;
   border: 1px solid rgba(176, 112, 255, 0.3);
@@ -770,5 +777,11 @@ export default {
   .profile-edit-actions button {
     flex: 1 1 0;
   }
+}
+.keyword-chip-icon {
+  display: inline-grid;
+  min-width: 1.2em;
+  place-items: center;
+  line-height: 1;
 }
 </style>

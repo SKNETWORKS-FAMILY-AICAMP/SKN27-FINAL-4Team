@@ -9,6 +9,7 @@ import {
   privacyCollectionContent,
   termsContent,
 } from "../../constants/onboardingAgreements.js";
+import { getKeywordIcon } from "../../constants/keywordIcons.js";
 
 const emit = defineEmits(["navigate"]);
 
@@ -211,80 +212,6 @@ function getOnboardingCategory(raw, type) {
   if (/감성|무드|창작|표현/.test(source)) return "감성·표현";
   if (/트렌드|레트로|뉴트로|호러|오컬트|로맨스|판타지|디지털/.test(source)) return "트렌드";
   return "라이프스타일";
-}
-
-function getKeywordIcon(label, type) {
-  const text = String(label || "");
-  if (/드라마/.test(text)) return "📺";
-  if (/홈트레이닝/.test(text)) return "🏠";
-  if (/국내여행|해외여행|캠핑/.test(text)) return "🚅";
-  if (/웹툰 보기|웹툰/.test(text)) return "📖";
-  if (/유튜브 시청|OTT 시청|OTT시청/.test(text)) return "📺";
-  if (/꽃꽂이|꽃꽃이/.test(text)) return "🌸";
-  if (/외국어|자격증/.test(text)) return "📚";
-  if (/독서/.test(text)) return "📕";
-  if (/낚시/.test(text)) return "🎣";
-  if (/동호회|봉사 활동|봉사활동/.test(text)) return "👨‍👩‍👧‍👦";
-  if (/원데이 클래스|원데이클래스|공방체험|공방 체험/.test(text)) return "🎨";
-  if (/수집/.test(text)) return "📁";
-  if (/패션 코디/.test(text)) return "🥼";
-  if (/인테리어 꾸미기/.test(text)) return "🪄";
-  if (/쇼핑/.test(text)) return "🛍️";
-  if (/SNS/.test(text)) return "📱";
-
-  if (/판타지/.test(text)) return "🧚";
-  if (/호러|오컬트/.test(text)) return "👻";
-  if (/홈라이프|홈 라이프/.test(text)) return "🏠";
-  if (/K[- ]?POP/i.test(text)) return "🎤";
-  if (/힙합|R&B/i.test(text)) return "🎵";
-  if (/콘서트|페스티벌/.test(text)) return "🎪";
-  if (/클래식|재즈/.test(text)) return "🎷";
-  if (/다큐멘터리/.test(text)) return "🎞️";
-  if (/레트로|뉴트로/.test(text)) return "📻";
-  if (/로맨스/.test(text)) return "💕";
-  if (/루틴|습관/.test(text)) return "🔁";
-  if (/모임|소셜/.test(text)) return "🫂";
-  if (/뮤지컬/.test(text)) return "🎭";
-  if (/반려동물/.test(text)) return "🐾";
-  if (/뷰티/.test(text)) return "💄";
-  if (/여행/.test(text)) return "✈️";
-  if (/연애/.test(text)) return "💘";
-  if (/유튜브|유트브/.test(text)) return "💻";
-  if (/팝업스토어|팝업 스토어/.test(text)) return "🎪";
-  if (/인테리어/.test(text)) return "🛋️";
-  if (/자기관리/.test(text)) return "💪";
-
-  if (/자전거|사이클|라이딩/.test(text)) return "🚲";
-  if (/골프/.test(text)) return "🏌️";
-  if (/배드민턴/.test(text)) return "🏸";
-  if (/테니스/.test(text)) return "🎾";
-  if (/볼링/.test(text)) return "🎳";
-  if (/축구|풋살/.test(text)) return "⚽";
-  if (/농구/.test(text)) return "🏀";
-  if (/수영/.test(text)) return "🏊";
-  if (/클라이밍/.test(text)) return "🧗";
-  if (/헬스|근력|웨이트/.test(text)) return "🏋️";
-  if (/필라테스|요가/.test(text)) return "🧘";
-  if (/러닝|달리기/.test(text)) return "🏃";
-  if (/리본|댄스/.test(text)) return "💃";
-  if (/노래 부르기/.test(text)) return "🎤";
-  if (/음악|K-POP|발라드|재즈|콘서트/.test(text)) return "🎧";
-  if (/악기|연주/.test(text)) return "🎸";
-  if (/산책|러닝|운동|요가|등산|스포츠/.test(text)) return "🚶";
-  if (/카페|커피|차|맛집|요리|베이킹/.test(text)) return "☕";
-  if (/영화|드라마|웹툰|예능|애니|콘텐츠|유튜브|OTT시청/.test(text)) return "🎬";
-  if (/게임|디지털|트렌드|방탈출/.test(text)) return "🎮";
-  if (/독서|글쓰기|자기계발|학습/.test(text)) return "📚";
-  if (/심리/.test(text)) return "💞 ";
-  if (/전시|문화|공연/.test(text)) return "🎟️";
-  if (/창작|드로잉|표현/.test(text)) return "🖋️";
-  if (/사진/.test(text)) return "📷";
-  if (/영상촬영/.test(text)) return "📽️";
-  if (/반려|동물/.test(text)) return "🐾";
-  if (/식물|가드닝|자연/.test(text)) return "🌱";
-  if (/국내여행|외출|공간|팝업스토어 방문|캠핑|해외여행/.test(text)) return "🚅";
-  if (/패션|뷰티|인테리어|쇼핑/.test(text)) return "🛍️";
-  if (/낚시/.test(text)) return "🎣";
 }
 
 function splitRelatedKeywords(value) {

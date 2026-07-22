@@ -15,6 +15,7 @@
             <div class="identity-chips" aria-label="나의 관심사와 취미">
               <span class="identity-chip-mbti">{{ profileMbtiLabel }}</span>
               <span v-for="chip in tasteSummaryChips" :key="chip.type" :class="`identity-chip-${chip.type}`">
+                <i v-if="chip.icon" class="identity-chip-icon" aria-hidden="true">{{ chip.icon }}</i>
                 <b>{{ chip.caption }}</b>{{ chip.label }}
               </span>
             </div>
@@ -252,6 +253,7 @@ import WeatherPanel from "./components/WeatherPanel.vue";
 import BookPanel from "./components/BookPanel.vue";
 import MemoryPanel from "./components/MemoryPanel.vue";
 import { buildMemoryDashboard } from "./utils/memory.dashboard";
+import { getKeywordIcon } from "../../constants/keywordIcons.js";
 
 export default {
   name: "MypageView",
@@ -322,18 +324,24 @@ export default {
       return this.todayEmotionPayload?.representative?.label || "아직 기록 없음";
     },
     tasteSummaryChips() {
-      return [
+      const chips = [
         {
           type: "interest",
           caption: "관심 · ",
-          label: this.previewList(this.profile?.interests, "미등록"),
+          values: this.normalizeList(this.profile?.interests),
         },
         {
           type: "hobby",
           caption: "취미 · ",
-          label: this.previewList(this.profile?.hobbies, "미등록"),
+          values: this.normalizeList(this.profile?.hobbies),
         },
       ];
+
+      return chips.map((chip) => ({
+        ...chip,
+        icon: chip.values.length ? getKeywordIcon(chip.values[0], chip.type) : "",
+        label: this.previewList(chip.values, "미등록"),
+      }));
     },
     memoryDashboard() {
       return buildMemoryDashboard(this.memoryPayload);
