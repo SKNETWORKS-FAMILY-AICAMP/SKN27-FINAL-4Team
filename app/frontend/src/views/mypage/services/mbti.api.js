@@ -1,11 +1,27 @@
-export async function fetchMbtiDemoPayload(force = false) {
-  const queryParams = force ? "?force=true" : "";
-  const response = await fetch(`/api/mbti/monthly-demo/${queryParams}`, {
+export async function fetchMbtiDemoPayload(force = false, periodKey = "") {
+  const queryParams = new URLSearchParams();
+  if (force) queryParams.set("force", "true");
+  if (periodKey) queryParams.set("period_key", periodKey);
+  const queryString = queryParams.toString();
+  const response = await fetch(`/api/mbti/monthly-demo/${queryString ? `?${queryString}` : ""}`, {
     cache: "no-store",
     credentials: "include"
   });
   if (!response.ok) {
     throw new Error(`MBTI demo API failed: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function requestMbtiMonthlyAnalysis(periodKey = "") {
+  const response = await fetch("/api/mbti/monthly-analysis/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(periodKey ? { period_key: periodKey } : {})
+  });
+  if (!response.ok) {
+    throw new Error(`MBTI analysis request failed: ${response.status}`);
   }
   return response.json();
 }

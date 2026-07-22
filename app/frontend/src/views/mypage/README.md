@@ -25,6 +25,7 @@
 
 - `GET/PUT /api/myprofile/profile/`
 - `GET /api/mbti/monthly-demo/`
+- `POST /api/mbti/monthly-analysis/` (분석 작업 예약; LLM은 worker에서 실행)
 - `POST /api/mbti/onboarding/`
 - `GET /api/myweather/current/`
 - `GET /api/myweather/regions/`

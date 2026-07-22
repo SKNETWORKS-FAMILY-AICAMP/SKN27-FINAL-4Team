@@ -33,6 +33,30 @@ def list_latest_period_reports(user) -> list[dict[str, Any]]:
     return reports
 
 
+def period_report_exists(
+    *,
+    user,
+    period_type: str,
+    period_name: str,
+    target_date=None,
+    year: int | None = None,
+    month: int | None = None,
+) -> bool:
+    """Return whether the user already has a report for the resolved period."""
+    window = resolve_period_window(
+        period_type=period_type,
+        target_date=target_date,
+        year=year,
+        month=month,
+    )
+    return MindReport.objects.filter(
+        user=user,
+        report_type__startswith=period_name,
+        created_at__gte=window.start,
+        created_at__lt=window.end_exclusive,
+    ).exists()
+
+
 def save_period_report(
     *,
     user,

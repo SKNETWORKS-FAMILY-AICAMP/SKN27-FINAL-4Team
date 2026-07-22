@@ -153,9 +153,9 @@
               </ul>
             </section>
 
-            <!-- 나를 다독이는 한마디 -->
+            <!-- 당신에게 한마디 -->
             <section class="card card-comfort">
-              <h2 class="card-title"><img :src="heartIcon" alt="" aria-hidden="true" />나를 다독이는 한마디 <em>(위로 선물)</em></h2>
+              <h2 class="card-title"><img :src="heartIcon" alt="" aria-hidden="true" />당신에게 한마디 <em>(마음 선물)</em></h2>
               <p class="comfort-quote">{{ comfortMessage }}</p>
               <img class="comfort-mascot" :src="flowRedpanda" alt="" aria-hidden="true" />
             </section>
@@ -234,6 +234,7 @@ const normalizeReport = (report) => ({
   emotions: Array.isArray(report?.emotions) ? report.emotions : [],
   analysis: Array.isArray(report?.analysis) ? report.analysis : [],
   recommendations: Array.isArray(report?.recommendations) ? report.recommendations : [],
+  comfortMessage: String(report?.comfortMessage ?? report?.summary ?? '').trim(),
   is_fallback: Boolean(report?.is_fallback),
   is_safety_response: Boolean(report?.is_safety_response),
 })
@@ -377,6 +378,19 @@ const parsedAnalysis = computed(() => {
   if (hasMarker) {
     let currentCard = null
 
+    const valueAfterLabel = (line, labels) => {
+      for (const label of labels) {
+        const index = line.indexOf(label)
+        if (index >= 0) {
+          return line
+            .slice(index + label.length)
+            .replace(/^[\s:?-]*/, '')
+            .trim()
+        }
+      }
+      return null
+    }
+
     for (const raw of analysis) {
       const line = String(raw).trim()
 
@@ -387,22 +401,20 @@ const parsedAnalysis = computed(() => {
           how: '',
         }
         cards.push(currentCard)
-      } else if (line.includes('왜 추천하나요?')) {
-        if (currentCard) {
-          currentCard.reason = line
-            .split('왜 추천하나요?')[1]
-            .replace(/^[\s:?-]*/, '')
-            .trim()
-        }
-      } else if (line.includes('어떻게 시작할까요?')) {
-        if (currentCard) {
-          currentCard.how = line
-            .split('어떻게 시작할까요?')[1]
-            .replace(/^[\s:?-]*/, '')
-            .trim()
-        }
       } else if (!currentCard && line) {
         reflections.push(line)
+      } else if (currentCard) {
+        const reason = valueAfterLabel(
+          line,
+          ['왜 추천하나요?', '웹 추천 이유'],
+        )
+        const how = valueAfterLabel(
+          line,
+          ['어떻게 시작할까요?', '가볍게 시작하기'],
+        )
+
+        if (reason !== null) currentCard.reason = reason
+        if (how !== null) currentCard.how = how
       }
     }
   } else {
@@ -432,6 +444,10 @@ const hardMoments = computed(() => {
   const report = currentReport.value
   if (!report) return []
 
+  if (report.is_fallback) {
+    return ['기록이 조금 더 모이면 마음을 힘들게 한 순간도 알려드릴게요.']
+  }
+
   const causes = report.stressCauses
     .map((text) => String(text).trim())
     .filter((text) => text && text !== '기록 수집 중...')
@@ -442,24 +458,11 @@ const hardMoments = computed(() => {
 
 const suggestCards = computed(() => parsedAnalysis.value.cards.slice(0, 4))
 
-const comfortPool = [
-  '지금 이 순간도, 나는\n나의 속도로 잘 가고 있어요.',
-  '애쓴 마음을 가장 먼저 알아주는 건,\n바로 나 자신이에요.',
-  '느려도 괜찮아요.\n멈추지 않았다는 게 중요해요.',
-  '오늘의 나에게,\n작은 쉼표 하나를 선물해요.',
-  '충분히 잘하고 있어요.\n조금 더 다정해도 좋아요, 나에게.',
-]
-
-const comfortMessage = computed(() => {
-  const id = String(currentReport.value?.id ?? '')
-  let hash = 0
-
-  for (let index = 0; index < id.length; index += 1) {
-    hash = (hash + id.charCodeAt(index)) % comfortPool.length
-  }
-
-  return comfortPool[hash]
-})
+const comfortMessage = computed(() => (
+  currentReport.value?.comfortMessage
+  || currentReport.value?.summary
+  || ''
+))
 
 const FLOW_W = 640
 const FLOW_H = 150

@@ -106,6 +106,11 @@ def clean_generated_question(text: str) -> str:
     if "\n" in question:
         question = next((line.strip() for line in question.splitlines() if line.strip()), question)
 
+    # 모델이 의문문 내용은 만들었지만 문장부호를 빠뜨리는 경우가 있다.
+    # 화면에 노출되는 질문 계약을 지키도록 마지막 문장부호를 정규화한다.
+    if question and "?" not in question:
+        question = question.rstrip(".! ") + "?"
+
     return question
 
 
@@ -139,4 +144,3 @@ def generate_random_axis_mbti_question(
         "text": question_text,
         "source": "llm_generated",
     }
-

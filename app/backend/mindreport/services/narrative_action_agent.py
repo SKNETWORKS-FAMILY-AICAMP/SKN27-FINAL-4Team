@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from mindreport.services.graph_state import MindReportGraphState, append_trace
 from mindreport.services.narrative import MindReportNarrativeGenerator
+from mindreport.services.payloads import report_recipient_name
 
 
 class MindReportNarrativeActionAgent:
@@ -51,6 +52,7 @@ class MindReportNarrativeActionAgent:
             alternative_plan=alternative_plan,
             cause_result=cause_result,
             label_result=label_result,
+            recipient_name=report_recipient_name(state['user']),
             revision_instructions=state.get('revision_instructions', ()),
             ltm_context=ltm_context,
         )
