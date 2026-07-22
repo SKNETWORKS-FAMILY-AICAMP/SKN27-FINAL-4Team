@@ -165,6 +165,8 @@
           :mbti-view-mode="mbtiViewMode"
           :mbti-views="mbtiViews"
           :current-mbti-view="currentMbtiView"
+          :analysis-eligibility="mbtiAnalysisEligibility"
+          :analysis-polling="mbtiAnalysisPolling"
           @refresh="refreshMbtiDemoData"
           @set-view="setMbtiView"
           @save-mbti="saveMbti"
@@ -376,6 +378,7 @@ export default {
     }, MYPAGE_TIMING.weatherRefreshIntervalMs);
   },
   beforeUnmount() {
+    this.mbtiPollToken += 1;
     if (this.weatherRefreshTimer) window.clearInterval(this.weatherRefreshTimer);
     if (this.toastTimer) window.clearTimeout(this.toastTimer);
   },
@@ -774,31 +777,36 @@ export default {
       try {
         await saveOnboardingMbti(mbtiType);
         this.showToast("초기 MBTI가 성공적으로 저장되었습니다.");
-        await this.loadMbtiDemoData();
+        const payload = await this.loadMbtiDemoData();
+        const savedType = payload?.mbti_data?.onboarding?.type;
+        if (savedType && savedType !== "----") {
+          this.mbtiViewMode = "onboardingNext";
+        }
       } catch (e) {
         console.error(e);
         this.showToast("지원하지 않는 MBTI거나 통신 오류가 발생했습니다.");
       }
     },
-    async loadMbtiDemoData(force = false) {
+    async loadMbtiDemoData(force = false, periodKey = "") {
       try {
-        const payload = await fetchMbtiDemoPayload(force);
+        const payload = await fetchMbtiDemoPayload(force, periodKey);
         const hasMonthlyAnalysis = this.hasRenderableMonthlyMbtiData(payload.mbti_data);
         const hasOnboardingProfile = this.hasRenderableOnboardingMbtiData(payload.mbti_data);
 
         this.mbtiData = payload.mbti_data || null;
+        this.mbtiAnalysisEligibility = payload.analysis_eligibility || null;
         if (payload.mbti_data?.onboarding?.type === '----') {
           this.mbtiViewMode = "onboardingType";
-        } else if (hasMonthlyAnalysis) {
+        } else if (hasMonthlyAnalysis || hasOnboardingProfile) {
           this.mbtiViewMode = payload.mbti_view_mode
             || "onboardingNext";
-        } else if (hasOnboardingProfile) {
-          this.mbtiViewMode = "onboardingType";
         }
         this.mbtiApiStatus = payload.status || "ready";
+        return payload;
       } catch (error) {
         console.warn(error);
         this.mbtiApiStatus = "error";
+        return null;
       }
     },
     hasRenderableOnboardingMbtiData(data) {
@@ -822,24 +830,53 @@ export default {
       );
     },
     async refreshMbtiDemoData() {
+      if (this.mbtiAnalysisPolling) return;
       this.showToast("성향 분석을 요청하고 있습니다...");
       try {
         const requestPayload = await requestMbtiMonthlyAnalysis();
-        await this.loadMbtiDemoData();
-        const jobStatus = requestPayload?.analysis_job?.status;
-        const message = requestPayload.status === "not_eligible"
+        const periodKey = requestPayload?.analysis_job?.period_key || "";
+        let finalPayload = requestPayload;
+        const requestedStatus = requestPayload?.analysis_job?.status;
+
+        if (["pending", "running"].includes(requestedStatus)) {
+          this.mbtiAnalysisPolling = true;
+          const pollToken = ++this.mbtiPollToken;
+          this.showToast("분석 요청이 접수되었습니다. 결과를 만드는 중입니다...");
+          finalPayload = await this.pollMbtiAnalysis(periodKey, pollToken) || requestPayload;
+        } else {
+          finalPayload = await this.loadMbtiDemoData(false, periodKey) || requestPayload;
+        }
+
+        const jobStatus = finalPayload?.analysis_job?.status || requestedStatus;
+        const message = finalPayload.status === "not_eligible" || requestPayload.status === "not_eligible"
           ? "분석에 필요한 답변이 아직 충분하지 않습니다."
           : jobStatus === "completed"
             ? "성향 분석 결과가 최신 상태입니다."
-            : jobStatus === "failed"
+            : ["failed", "skipped"].includes(jobStatus)
               ? "분석 작업에 실패했습니다. 잠시 후 다시 시도해주세요."
-              : "분석 요청이 접수되었습니다. 완료 후 결과가 표시됩니다.";
+              : "분석이 계속 진행 중입니다. 잠시 후 다시 확인해주세요.";
         this.showToast(message);
       } catch (error) {
         console.warn(error);
         this.mbtiApiStatus = "error";
         this.showToast("분석 요청에 실패했습니다.");
+      } finally {
+        this.mbtiAnalysisPolling = false;
       }
+    },
+    async pollMbtiAnalysis(periodKey, pollToken) {
+      const maxAttempts = 30;
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 2000));
+        if (pollToken !== this.mbtiPollToken) return null;
+
+        const payload = await this.loadMbtiDemoData(false, periodKey);
+        const jobStatus = payload?.analysis_job?.status;
+        if (["completed", "failed", "skipped"].includes(jobStatus)) {
+          return payload;
+        }
+      }
+      return this.loadMbtiDemoData(false, periodKey);
     },
     applySettings() {
       document.documentElement.dataset.contrast = String(this.settings.highContrast);

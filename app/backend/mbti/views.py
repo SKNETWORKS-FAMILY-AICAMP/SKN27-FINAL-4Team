@@ -9,7 +9,11 @@ from rest_framework.response import Response
 
 from mbti.constants import EMPTY_AXIS_COUNTS, MBTI_AXES
 from mbti.services.dashboard_payload import load_latest_frontend_payload
-from mbti.services.job_service import enqueue_user_month_job, latest_job_payload
+from mbti.services.job_service import (
+    enqueue_user_month_job,
+    is_user_month_eligible,
+    latest_job_payload,
+)
 from mbti.services.mbti_utils import is_valid_mbti_type
 from mbti.services.onboarding_service import save_onboarding_mbti
 from mbti.services.qna_service import (
@@ -30,21 +34,25 @@ logger = logging.getLogger(__name__)
 @permission_classes([IsAuthenticated])
 def monthly_demo(request):
     user_id = request.user.id
-    period_key = request.query_params.get("period_key") or current_period_key()
+    requested_period_key = request.query_params.get("period_key") or None
+    active_period_key = requested_period_key or current_period_key()
 
     # 이전 클라이언트의 force=true도 동기 LLM 호출 대신 작업 큐로 보낸다.
     if request.query_params.get("force") == "true":
         try:
             enqueue_user_month_job(
                 user_id=user_id,
-                period_key=period_key,
+                period_key=active_period_key,
                 trigger_source='dashboard_on_demand',
             )
         except Exception:
             logger.exception("Failed to enqueue monthly MBTI analysis.")
 
     try:
-        payload = load_latest_frontend_payload(user_id=user_id, period_key=period_key)
+        payload = load_latest_frontend_payload(
+            user_id=user_id,
+            period_key=requested_period_key,
+        )
     except DatabaseError:
         logger.exception("Failed to load the monthly MBTI dashboard payload.")
         payload = None
@@ -53,8 +61,21 @@ def monthly_demo(request):
         return Response({"error": "Failed to load payload"}, status=500)
     payload['analysis_job'] = latest_job_payload(
         user_id=user_id,
-        period_key=period_key,
+        period_key=active_period_key,
     )
+    try:
+        eligible, reason = is_user_month_eligible(
+            user_id=user_id,
+            period_key=active_period_key,
+        )
+    except DatabaseError:
+        logger.exception("Failed to load monthly MBTI eligibility.")
+        eligible, reason = False, 'eligibility_unavailable'
+    payload['analysis_eligibility'] = {
+        'eligible': eligible,
+        'reason': reason,
+        'period_key': active_period_key,
+    }
     return Response(payload)
 
 
@@ -68,6 +89,7 @@ def request_monthly_analysis(request):
             user_id=request.user.id,
             period_key=period_key,
             trigger_source='dashboard_on_demand',
+            revive_failed=True,
         )
     except ValueError as exc:
         return Response({'error': str(exc)}, status=400)

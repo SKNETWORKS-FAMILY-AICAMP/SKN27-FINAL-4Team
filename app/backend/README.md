@@ -42,17 +42,15 @@ docker compose down -v && docker compose up -d --build
 
 ### MBTI 월간 자동 분석
 
-Docker Compose에서는 `mbti-scheduler`가 매월 1일 00:05(Asia/Seoul)에 직전 월의
-분석 후보를 `mbti_monthly_analysis_jobs`에 등록하고, `mbti-worker`가 한 번에
-하나씩 처리합니다. 컨테이너가 월초 이후 재기동되어도 시작 시 직전 월을 한 번
-확인하며, 입력 해시가 같은 작업은 다시 LLM을 호출하지 않습니다.
+기존 Django 서버 프로세스가 월간 예약과 작업 처리를 함께 담당하므로 별도 YML이나
+컨테이너가 필요하지 않습니다. 매월 1일 00:05(Asia/Seoul)에 직전 월 분석 후보를
+`mbti_monthly_analysis_jobs`에 등록하고 한 번에 하나씩 처리합니다. 서버가 월초
+이후 재기동되어도 직전 월을 다시 확인하며, 입력 해시가 같은 작업은 LLM을 중복
+호출하지 않습니다. 테스트·마이그레이션 같은 관리 명령에서는 백그라운드 서비스가
+시작되지 않습니다.
 
-```bash
-docker compose -f docker-compose.yml -f docker-compose.mbti.yml up -d --build
-```
-
-외부 cron을 사용하는 배포 환경에서는 다음 one-shot 명령을 매월 1일에 실행하고,
-worker 명령은 상시 프로세스로 운영합니다.
+외부 cron/worker 방식이 필요한 환경에서는 아래 관리 명령도 선택적으로 사용할 수
+있습니다.
 
 ```bash
 python manage.py schedule_mbti_monthly

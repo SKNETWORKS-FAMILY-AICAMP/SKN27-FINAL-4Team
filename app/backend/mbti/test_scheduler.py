@@ -210,3 +210,61 @@ class MonthlyAnalysisApiTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['status'], 'not_eligible')
         self.assertEqual(MbtiMonthlyAnalysisJob.objects.count(), 0)
+
+    def test_post_requeues_a_failed_job_for_the_same_input(self):
+        period_key = timezone.localtime().strftime('%Y-%m')
+        for index in range(5):
+            MbtiQuestionResponse.objects.create(
+                user_id=self.user.id,
+                question_text=f'질문 {index}',
+                answer_text=f'답변 {index}',
+                target_axis='IE',
+                period_key=period_key,
+                answered_at=timezone.now(),
+                created_at=timezone.now(),
+            )
+        queued = enqueue_user_month_job(
+            user_id=self.user.id,
+            period_key=period_key,
+            trigger_source='dashboard_on_demand',
+        )
+        MbtiMonthlyAnalysisJob.objects.filter(id=queued.job.id).update(
+            status='failed',
+            retry_count=3,
+            finished_at=timezone.now(),
+            error_message='provider unavailable',
+        )
+
+        response = self.client.post('/api/mbti/monthly-analysis/', {}, format='json')
+        queued.job.refresh_from_db()
+
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.data['status'], 'pending')
+        self.assertEqual(queued.job.status, 'pending')
+        self.assertEqual(queued.job.retry_count, 0)
+        self.assertIsNone(queued.job.error_message)
+
+    def test_dashboard_without_period_returns_latest_completed_month(self):
+        latest_period = previous_period_key()
+        MbtiMonthlyResultRecord.objects.create(
+            user_id=self.user.id,
+            period_key=latest_period,
+            estimated_mbti_type='ENFP',
+            status='complete',
+            analyzed_at=timezone.now(),
+            created_at=timezone.now(),
+            updated_at=timezone.now(),
+        )
+
+        dashboard = self.client.get('/api/mbti/monthly-demo/')
+        current_period = timezone.localtime().strftime('%Y-%m')
+        current_dashboard = self.client.get(
+            '/api/mbti/monthly-demo/',
+            {'period_key': current_period},
+        )
+
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertEqual(dashboard.data['period_key'], latest_period)
+        self.assertEqual(current_dashboard.status_code, 200)
+        self.assertEqual(current_dashboard.data['period_key'], current_period)
+        self.assertEqual(current_dashboard.data['status'], 'preparing')

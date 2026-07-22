@@ -77,6 +77,9 @@ export function createMypageState() {
     mbtiViews: MBTI_VIEWS,
     mbtiApiStatus: "idle",
     mbtiData: null,
+    mbtiAnalysisEligibility: null,
+    mbtiAnalysisPolling: false,
+    mbtiPollToken: 0,
     settings: { ...DEFAULT_MYPAGE_SETTINGS }
   };
 }
