@@ -86,6 +86,9 @@ ai/emotion/artifacts_ft/model.safetensors
 # 배포 스크립트 (개인 작업용 — dev 공유 제외)
 deploy/
 
+# CI/CD (배포 준비 완료 전까지 제외)
+.github/
+
 # IDE 설정
 .vscode/
 
