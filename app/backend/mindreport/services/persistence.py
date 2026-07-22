@@ -50,6 +50,7 @@ def save_period_report(
         'summary': payload['summary'],
         'stress_causes': payload['stressCauses'],
         'relief_causes': payload['reliefCauses'],
+        'cause_labels': payload['causeLabels'],
         'emotions': payload['emotions'],
         'analysis': payload['analysis'],
         'recommendations': payload['recommendations'],

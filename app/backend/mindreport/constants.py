@@ -114,6 +114,7 @@ EMOTION_STATE_ICONS = {
 FRONTEND_LIST_FIELDS = (
     'stressCauses',
     'reliefCauses',
+    'causeLabels',
     'emotions',
     'analysis',
     'recommendations',

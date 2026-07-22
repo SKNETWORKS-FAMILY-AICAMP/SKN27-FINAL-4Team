@@ -36,6 +36,15 @@ def build_report_payload_from_state(state: dict[str, Any]) -> dict[str, Any]:
         for keyword in cause_result.cause_keywords
         if keyword.cause_type == 'relief'
     ]
+    cause_labels = [
+        {
+            'keyword': label['keyword'],
+            'causeType': label['cause_type'],
+            'emphasis': label['emphasis'],
+            'displayWeight': label['display_weight'],
+        }
+        for label in state['label_result'].labels
+    ]
     emotions = []
     for score in scoring_result.emotion_scores:
         emotion_state = emotion_state_from_score(score.emotion_score)
@@ -55,6 +64,7 @@ def build_report_payload_from_state(state: dict[str, Any]) -> dict[str, Any]:
         'summary': narrative.summary,
         'stressCauses': stress_causes,
         'reliefCauses': relief_causes,
+        'causeLabels': cause_labels,
         'emotions': emotions,
         'analysis': list(narrative.analysis_sentences) + recommendations,
         'recommendations': recommendations,
@@ -118,6 +128,7 @@ def serialize_report(report: MindReport) -> dict[str, Any]:
         'summary': report.summary,
         'stressCauses': list(report.stress_causes),
         'reliefCauses': list(report.relief_causes),
+        'causeLabels': list(report.cause_labels),
         'emotions': list(report.emotions),
         'analysis': list(report.analysis),
         'recommendations': list(report.recommendations),

@@ -1,5 +1,9 @@
 # 마음리포트 LangGraph 멀티에이전트 설계 초안
 
+> 이 문서는 LangGraph 전환 전 작성된 설계 초안입니다. 현재 운영 경로는
+> `MindReportSupervisorAgent`가 직접 담당하며, 기존 `MindReportFlowService`는
+> 2026-07-22에 제거되었습니다.
+
 ## 1. 목적
 
 마음리포트의 기존 서비스 파일을 기반으로 LangGraph 멀티에이전트 흐름을 정의한다.

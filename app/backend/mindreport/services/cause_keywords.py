@@ -21,8 +21,8 @@ from mindreport.services.scoring import EmotionScore, ReportSourceMessage, _extr
 
 CAUSE_STRESS = 'stress'
 CAUSE_RELIEF = 'relief'
-LABEL_SIZE_DEFAULT = 'default'
-LABEL_SIZE_COMPACT = 'compact'
+LABEL_EMPHASIS_PRIMARY = 'primary'
+LABEL_EMPHASIS_SECONDARY = 'secondary'
 
 
 @dataclass(frozen=True)
@@ -47,8 +47,8 @@ class CauseKeywordResult:
 @dataclass(frozen=True)
 class LabelDisplayPolicy:
     emotion_flow_type: str
-    stress_label_size: str
-    relief_label_size: str
+    stress_emphasis: str
+    relief_emphasis: str
     stress_display_weight: float
     relief_display_weight: float
     rationale: str
@@ -304,20 +304,26 @@ def determine_label_display_policy(
     if emotion_flow_type == FLOW_SCORE_UPWARD:
         return LabelDisplayPolicy(
             emotion_flow_type=emotion_flow_type,
-            stress_label_size=LABEL_SIZE_COMPACT,
-            relief_label_size=LABEL_SIZE_DEFAULT,
+            stress_emphasis=LABEL_EMPHASIS_SECONDARY,
+            relief_emphasis=LABEL_EMPHASIS_PRIMARY,
             stress_display_weight=0.7,
             relief_display_weight=1.0,
-            rationale='점수 상향 흐름은 회복 구간이 있으므로 이완 원인 라벨을 기본 크기로 유지하고 스트레스 원인 라벨은 작게 표시합니다.',
+            rationale=(
+                '점수 상향 흐름은 회복 구간이 있으므로 모든 라벨의 읽기 크기는 '
+                '유지하되 이완 원인을 우선 강조하고 스트레스 원인은 보조 강조합니다.'
+            ),
         )
 
     return LabelDisplayPolicy(
         emotion_flow_type=emotion_flow_type,
-        stress_label_size=LABEL_SIZE_DEFAULT,
-        relief_label_size=LABEL_SIZE_DEFAULT,
+        stress_emphasis=LABEL_EMPHASIS_PRIMARY,
+        relief_emphasis=LABEL_EMPHASIS_PRIMARY,
         stress_display_weight=1.0,
         relief_display_weight=1.0,
-        rationale='점수 유지, 감정 변동성, 점수 하향 흐름은 스트레스 원인과 이완 원인 라벨을 같은 크기로 표시합니다.',
+        rationale=(
+            '점수 유지, 감정 변동성, 점수 하향 흐름은 스트레스 원인과 '
+            '이완 원인을 같은 읽기 크기와 강조도로 표시합니다.'
+        ),
     )
 
 
@@ -331,20 +337,20 @@ def apply_label_display_policy(
 
     for keyword in cause_keywords:
         if keyword.cause_type == CAUSE_STRESS:
-            label_size = policy.stress_label_size
+            emphasis = policy.stress_emphasis
             display_weight = policy.stress_display_weight
         elif keyword.cause_type == CAUSE_RELIEF:
-            label_size = policy.relief_label_size
+            emphasis = policy.relief_emphasis
             display_weight = policy.relief_display_weight
         else:
-            label_size = LABEL_SIZE_DEFAULT
+            emphasis = LABEL_EMPHASIS_PRIMARY
             display_weight = 1.0
 
         labels.append(
             {
                 'keyword': keyword.keyword,
                 'cause_type': keyword.cause_type,
-                'label_size': label_size,
+                'emphasis': emphasis,
                 'display_weight': display_weight,
                 'confidence': keyword.confidence,
                 'evidence_message_ids': list(keyword.evidence_message_ids),
