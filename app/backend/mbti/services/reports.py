@@ -592,6 +592,7 @@ def build_mypage_payload(
         'period_key': monthly_result.period_key,
         'status': monthly_result.status,
         'previous_estimated_mbti_type': monthly_result.previous_estimated_mbti_type,
+        'previous_period_key': monthly_result.previous_period_key,
         'estimated_mbti_type': monthly_result.estimated_mbti_type,
         'changed_axes': list(monthly_result.changed_axes),
         'axis_results': [

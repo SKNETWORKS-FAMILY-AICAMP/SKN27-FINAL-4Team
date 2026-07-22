@@ -20,7 +20,23 @@ class MindReportGenerateAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        reports = self._service().list_reports(user=request.user)
+        target_date = timezone.localdate()
+        try:
+            reports = self._service().load_reports(
+                user=request.user,
+                target_date=target_date,
+                include_monthly=self._is_last_week_of_month(target_date),
+            )
+        except MindReportError as exc:
+            response_status = (
+                status.HTTP_503_SERVICE_UNAVAILABLE
+                if exc.retryable
+                else status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+            return Response(
+                {'status': 'error', 'code': exc.code, 'message': str(exc)},
+                status=response_status,
+            )
         return Response({
             'status': 'success',
             'message': '저장된 마음 리포트를 불러왔습니다.',

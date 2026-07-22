@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from django.utils import timezone
@@ -56,12 +57,20 @@ def build_report_payload_from_state(state: dict[str, Any]) -> dict[str, Any]:
         })
 
     recommendations = list(narrative.action_recommendations)
+    recipient_name = report_recipient_name(state['user'])
     return normalize_public_payload({
         'id': f"report-{state['user'].id}-{int(timezone.now().timestamp())}",
         'type': report_period_name(state),
         'range': report_range_text(state),
         'title': narrative.title,
         'summary': narrative.summary,
+        '_recipientName': recipient_name,
+        'comfortMessage': select_comfort_message(
+            summary=narrative.summary,
+            analysis=narrative.analysis_sentences,
+            recommendations=recommendations,
+            recipient_name=recipient_name,
+        ),
         'stressCauses': stress_causes,
         'reliefCauses': relief_causes,
         'causeLabels': cause_labels,
@@ -92,6 +101,7 @@ def payload_from_graph_state(state: dict[str, Any]) -> dict[str, Any]:
 
 def normalize_public_payload(payload: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(payload)
+    recipient_name = str(normalized.pop('_recipientName', '') or '').strip()
     missing_text_fields = [
         field
         for field in FRONTEND_REQUIRED_TEXT_FIELDS
@@ -106,6 +116,12 @@ def normalize_public_payload(payload: dict[str, Any]) -> dict[str, Any]:
     for field in FRONTEND_LIST_FIELDS:
         value = normalized.get(field)
         normalized[field] = list(value) if isinstance(value, (list, tuple)) else []
+    normalized['comfortMessage'] = select_comfort_message(
+        summary=normalized['summary'],
+        analysis=normalized['analysis'],
+        recommendations=normalized['recommendations'],
+        recipient_name=recipient_name,
+    )
     normalized['is_fallback'] = bool(normalized.get('is_fallback', False))
     normalized['is_safety_response'] = bool(
         normalized.get('is_safety_response', False)
@@ -120,12 +136,19 @@ def serialize_report(report: MindReport) -> dict[str, Any]:
         prefix = f'safety-{prefix}'
     elif report.is_fallback:
         prefix = f'fallback-{prefix}'
+    recipient_name = report_recipient_name(report.user)
     return {
         'id': f'{prefix}-{report.id}',
         'type': report.report_type,
         'range': report.range_text,
         'title': report.title,
         'summary': report.summary,
+        'comfortMessage': select_comfort_message(
+            summary=report.summary,
+            analysis=report.analysis,
+            recommendations=report.recommendations,
+            recipient_name=recipient_name,
+        ),
         'stressCauses': list(report.stress_causes),
         'reliefCauses': list(report.relief_causes),
         'causeLabels': list(report.cause_labels),
@@ -135,6 +158,57 @@ def serialize_report(report: MindReport) -> dict[str, Any]:
         'is_fallback': report.is_fallback,
         'is_safety_response': report.is_safety_response,
     }
+
+
+def select_comfort_message(
+    *,
+    summary: str,
+    analysis,
+    recommendations,
+    recipient_name: str = '',
+) -> str:
+    """Select a natural comfort line from fields already stored on the report."""
+    clean_summary = str(summary or '').strip()
+    recommendation_set = {
+        str(item or '').strip()
+        for item in recommendations or []
+        if str(item or '').strip()
+    }
+    candidates = [
+        str(item or '').strip()
+        for item in analysis or []
+        if str(item or '').strip()
+        and str(item or '').strip() not in recommendation_set
+        and not str(item or '').strip().startswith('✅')
+        and '왜 추천하나요?' not in str(item)
+        and '어떻게 시작할까요?' not in str(item)
+    ]
+    if not candidates:
+        return clean_summary
+
+    for candidate in reversed(candidates):
+        sentences = [
+            sentence.strip()
+            for sentence in re.split(r'(?<=[.!?。])\s+', candidate)
+            if sentence.strip()
+        ]
+        for sentence in reversed(sentences):
+            compact_length = len(re.sub(r'\s+', '', sentence))
+            has_recipient_name = (
+                recipient_name in sentence
+                if recipient_name
+                else bool(re.search(r'[^\s,]{1,30}님(?:은|는|이|가|에게|의|께)', sentence))
+            )
+            if 20 <= compact_length <= 60 and has_recipient_name:
+                return sentence
+    return clean_summary
+
+
+def report_recipient_name(user) -> str:
+    nickname = str(getattr(user, 'nickname', '') or '').strip()
+    if not nickname:
+        nickname = '회원'
+    return nickname if nickname.endswith('님') else f'{nickname}님'
 
 
 def report_period_name(state: dict[str, Any]) -> str:

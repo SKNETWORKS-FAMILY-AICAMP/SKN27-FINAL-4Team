@@ -56,6 +56,28 @@ def _llm(temperature: float = 0.7, max_tokens: int = 300):
     return get_llm(temperature=temperature, max_tokens=max_tokens)
 
 
+def _mbti_answer_check_llm(*, max_tokens: int):
+    """MBTI 채점 계열과 같은 OpenAI 모델을 쓰는 짧은 의미 판별기.
+
+    일반 대화용 Groq 추론 모델은 짧은 yes/no 작업에서도 reasoning 토큰을
+    과도하게 쓰거나 명확한 답변을 no로 오분류한 실측 사례가 있어 분리한다.
+    """
+    from langchain_openai import ChatOpenAI
+    from mbti.constants import DEFAULT_OPENAI_SCORING_MODEL
+
+    model = (
+        os.environ.get('MBTI_ANSWER_CHECK_MODEL')
+        or os.environ.get('MBTI_OPENAI_SCORING_MODEL')
+        or DEFAULT_OPENAI_SCORING_MODEL
+    )
+    return ChatOpenAI(
+        model=model,
+        temperature=0,
+        max_tokens=max_tokens,
+        max_retries=0,
+    )
+
+
 # ── [MBTI pending 분기] ─────────────────────────────────────
 
 def mbti_check_node(state: ChatState) -> dict:
@@ -63,7 +85,8 @@ def mbti_check_node(state: ChatState) -> dict:
     question = state.get('mbti_question_text', '')
     message = state.get('user_message', '')
     try:
-        resp = _llm(temperature=0, max_tokens=5).invoke([
+        max_tokens = int(os.environ.get('MBTI_ANSWER_CHECK_MAX_TOKENS', '128'))
+        resp = _mbti_answer_check_llm(max_tokens=max_tokens).invoke([
             ('system',
              "사용자에게 다음 질문을 던진 상태입니다:\n"
              f"질문: {question}\n\n"
@@ -101,16 +124,22 @@ def mbti_save_node(state: ChatState) -> dict:
         try:
             from django.utils.timezone import now as tz_now
             from mbti.models import MbtiQuestionResponse
-            from ai.agents.mbti import question_text as mbti_question_text
+            from ai.agents.mbti import question_text as fallback_question_text
 
             current_time = tz_now()
             # 코드 앞 2글자가 target_axis (예: 'IE_1' → 'IE')
             target_axis = question_code[:2] if len(question_code) >= 2 else 'unknown'
+            # 사용자가 실제로 본 동적 질문을 그대로 저장해야 채점 근거와 화면이
+            # 일치한다. 과거 세션처럼 상태에 문장이 없을 때만 고정 문항을 쓴다.
+            asked_question_text = (
+                state.get('mbti_question_text')
+                or fallback_question_text(question_code)
+            )
 
             MbtiQuestionResponse.objects.create(
                 user_id=user_id,
                 conversation_id=state.get('session_id'),      # 챗봇 세션 ID 매핑
-                question_text=mbti_question_text(question_code),
+                question_text=asked_question_text,
                 answer_text=answer_text,
                 target_axis=target_axis,
                 period_key=current_time.strftime('%Y-%m'),    # 예: '2026-07'
@@ -121,16 +150,18 @@ def mbti_save_node(state: ChatState) -> dict:
             print(f'[mbti_save_node] MbtiQuestionResponse 연동 저장 실패 (무시): {e}')
 
     # LLM 확인 응답 생성 (흐름도 MBTIRESP)
+    fallback_ack = '얘기해줘서 고마워! 덕분에 너를 조금 더 알아가는 기분이야 ㅎㅎ'
     try:
-        resp = _llm(temperature=0.7, max_tokens=100).invoke([
+        max_tokens = int(os.environ.get('MBTI_ANSWER_ACK_MAX_TOKENS', '256'))
+        resp = _llm(temperature=0.7, max_tokens=max_tokens).invoke([
             ('system',
              f"{COMMON_RULES}\n\n사용자가 방금 성향 질문에 답해줬습니다. "
              "짧게(1~2문장) 고마움을 표현하고 자연스럽게 대화를 이어가는 확인 응답만 하세요."),
             ('user', state.get('user_message', '')),
         ])
-        text = resp.content.strip()
+        text = resp.content.strip() or fallback_ack
     except Exception:
-        text = '얘기해줘서 고마워! 덕분에 너를 조금 더 알아가는 기분이야 ㅎㅎ'
+        text = fallback_ack
     out['final_response'] = text
     return out
 

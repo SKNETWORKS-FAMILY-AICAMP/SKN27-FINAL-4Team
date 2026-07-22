@@ -14,6 +14,7 @@ if str(settings.PROJECT_ROOT) not in sys.path:
     sys.path.append(str(settings.PROJECT_ROOT))
 
 from ai.agents.web_agent import FallbackWebAgent
+from mindreport.services.payloads import report_recipient_name
 
 class FallbackReportService:
     @staticmethod
@@ -58,9 +59,7 @@ class FallbackReportService:
         )
         
         # 4. 프론트엔드 ReportView.vue 구조에 맞게 JSON(Dict) 조립
-        analysis_lines = [
-            "아직 마음 리포트를 보여드리기에는 대화 기록이 조금 부족해요. 대화가 더 모이면 실제 기록을 바탕으로 마음의 흐름을 살펴볼게요.",
-        ]
+        analysis_lines = []
         
         recommendations_names = []
         if recommendations:
@@ -83,17 +82,21 @@ class FallbackReportService:
 
             analysis_lines.append(f"✅ {act}")
             if reason:
-                analysis_lines.append(f"  - 웹 추천 이유: {reason}")
+                analysis_lines.append(f"  - 왜 추천하나요?: {reason}")
             if how_to:
-                analysis_lines.append(f"  - 가볍게 시작하기: {how_to}")
+                analysis_lines.append(f"  - 어떻게 시작할까요?: {how_to}")
             recommendations_names.append(act)
+
+        analysis_lines.append(
+            f"기록이 아직 적어도, {report_recipient_name(user)}은 마음을 천천히 알아갈 충분한 시간이 있어요."
+        )
                 
         report_data = {
             "id": f"fallback-{user.id}",
             "type": f"{report_type} (데이터 부족)",
             "range": range_text,
             "title": f"마음 리포트 분석 대기 중",
-            "summary": "실제 대화 기록을 더 수집하고 있어요. 아직 감정이나 원인을 분석한 결과는 없습니다.",
+            "summary": "아직 대화 기록이 조금 부족해요. 기록이 더 모이면 실제 대화를 바탕으로 마음의 흐름을 살펴볼게요.",
             "stressCauses": [],
             "reliefCauses": [],
             "emotions": [], # 데이터가 없으므로 비움

@@ -137,6 +137,7 @@ def run_monthly_mbti_pipeline(
         period_key=batch.period_key,
         axis_results=final_axes,
         previous_estimated_mbti_type=resolved_previous_estimated_mbti_type,
+        previous_period_key=resolved_previous_period_key,
     )
     evidence = select_report_evidence(
         batch=batch,

@@ -128,12 +128,16 @@ def generate_question(user, recent_history=None):
     fallback = _CODE2TEXT.get(code, '')
     intent = _AXIS_INTENT.get(code, '')
     try:
+        import os
         from ai.agents.llm import get_llm
         convo = '\n'.join(
             f"{'사용자' if m.get('role') == 'user' else '나'}: {m.get('content', '')}"
             for m in (recent_history or [])[-6:]
         )
-        resp = get_llm(temperature=0.8, max_tokens=80).invoke([
+        # 추론형 모델은 짧은 질문을 출력하기 전 reasoning 토큰을 사용하므로
+        # 80토큰에서는 content가 비어 정적 문항으로만 폴백할 수 있다.
+        max_tokens = int(os.environ.get('MBTI_CHAT_QUESTION_MAX_TOKENS', '320'))
+        resp = get_llm(temperature=0.8, max_tokens=max_tokens).invoke([
             ('system',
              "너는 사용자의 진짜 친한 친구다. 방금 나눈 대화에 자연스럽게 이어서, "
              "아래 [알아볼 성향]을 슬쩍 떠보는 질문 '하나만' 만들어라.\n"
