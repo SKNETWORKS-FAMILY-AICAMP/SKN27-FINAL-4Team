@@ -180,7 +180,7 @@
           :error="weatherError"
           :location="weatherLocation"
           :regions="weatherRegions"
-          @refresh="loadWeatherData({ force: true })"
+          @refresh="loadWeatherData({ force: true, rotateHobby: true })"
           @change-region="setWeatherRegion"
           @close="closePanel"
         />
@@ -668,7 +668,7 @@ export default {
         return fallback;
       }
     },
-    async loadWeatherData({ force = false, refreshLocation = false } = {}) {
+    async loadWeatherData({ force = false, refreshLocation = false, rotateHobby = false } = {}) {
       const hasFreshPayload = this.weatherPayload
         && Date.now() - this.weatherLastFetchedAt < MYPAGE_TIMING.weatherFreshnessMs;
       if (!force && (hasFreshPayload || this.weatherLoading)) return;
@@ -681,7 +681,7 @@ export default {
         const requestLocation = location.mode === "auto"
           ? { lat: location.lat, lon: location.lon, region: location.region }
           : { region: location.region || DEFAULT_WEATHER_REGION };
-        const payload = await fetchCurrentWeather(requestLocation);
+        const payload = await fetchCurrentWeather(requestLocation, { rotateHobby });
         if (requestId !== this.weatherRequestId) return;
         this.weatherPayload = payload;
         this.weatherLastFetchedAt = Date.now();
@@ -713,8 +713,6 @@ export default {
       await this.loadWeatherData({ force: true });
     },
     async loadBookData(force = false) {
-      this.bookLoading = true;
-      this.bookError = "";
       let forceBool = false;
       let themeParam = null;
       if (typeof force === "object" && force !== null) {
@@ -723,6 +721,10 @@ export default {
       } else {
         forceBool = Boolean(force);
       }
+      if (!forceBool && this.bookPayload) return;
+
+      this.bookLoading = true;
+      this.bookError = "";
       try {
         this.bookPayload = await fetchBookRecommendation(forceBool, themeParam);
       } catch (error) {

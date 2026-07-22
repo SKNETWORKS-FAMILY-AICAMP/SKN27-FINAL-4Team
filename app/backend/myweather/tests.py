@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+from threading import Barrier
 from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
 
@@ -7,7 +8,10 @@ from django.core.cache import cache
 from django.test import SimpleTestCase
 
 from .agent import WeatherWebAgent
-from .service.insight_cache_service import get_or_create_weather_insight
+from .service.insight_cache_service import (
+    get_or_create_weather_insight,
+    select_weather_hobby,
+)
 from .service.life_index_service import fetch_uv_index
 from .services import (
     _request_kma_json,
@@ -74,6 +78,33 @@ class WeatherInsightCacheServiceTests(SimpleTestCase):
         self.assertTrue(second_cache_hit)
         self.assertEqual(first, second)
         analyzer.assert_called_once_with(weather, profile)
+
+    def test_hobby_rotation_advances_only_on_explicit_refresh(self):
+        profile = {
+            "hobbies": ["산책", "사진 찍기", "요리", "산책"],
+            "today_emotion": "평온",
+        }
+
+        first = select_weather_hobby(7, profile)
+        unchanged = select_weather_hobby(7, profile)
+        second = select_weather_hobby(7, profile, rotate=True)
+        third = select_weather_hobby(7, profile, rotate=True)
+        wrapped = select_weather_hobby(7, profile, rotate=True)
+
+        self.assertEqual(first["hobbies"], ["산책"])
+        self.assertEqual(unchanged["hobbies"], ["산책"])
+        self.assertEqual(second["hobbies"], ["사진 찍기"])
+        self.assertEqual(third["hobbies"], ["요리"])
+        self.assertEqual(wrapped["hobbies"], ["산책"])
+        self.assertEqual(profile["hobbies"], ["산책", "사진 찍기", "요리", "산책"])
+
+    def test_hobby_rotation_recovers_when_saved_hobby_was_removed(self):
+        select_weather_hobby(9, {"hobbies": ["산책", "요리"]}, rotate=True)
+
+        selected = select_weather_hobby(9, {"hobbies": ["사진 찍기", "독서"]})
+
+        self.assertEqual(selected["selected_hobby"], "사진 찍기")
+        self.assertEqual(selected["hobbies"], ["사진 찍기"])
 
 
 class WeatherLocationResolutionTests(SimpleTestCase):
@@ -191,6 +222,31 @@ class WeatherExternalProcessingTests(SimpleTestCase):
         self.assertIn('주간예보를 요약', prompt)
         self.assertIn('민간 검색 결과와 다르면 API허브를 우선', prompt)
 
+    def test_openai_prompt_uses_only_the_selected_hobby(self):
+        weather = {
+            'condition': '맑음',
+            'temperature': 24,
+            'humidity': 50,
+            'rainfall_1h': 0,
+            'wind_speed': 1,
+            'location': {'name': '서울'},
+        }
+        profile = {
+            'hobbies': ['사진 찍기'],
+            'selected_hobby': '사진 찍기',
+            'today_emotion': '평온',
+        }
+
+        prompt = WeatherWebAgent._build_prompt(
+            weather,
+            profile,
+            {'answer': '공개 날씨 요약'},
+            WeatherWebAgent._calculate_weather_indices(weather),
+        )
+
+        self.assertIn("이번 회차에 선택된 취미 '사진 찍기'만", prompt)
+        self.assertIn('다른 취미로 바꾸거나 여러 취미를 섞지 마세요', prompt)
+
     def test_indices_use_deterministic_observations_and_explicit_scales(self):
         weather = {
             'base_date': '20260715',
@@ -218,7 +274,13 @@ class WeatherExternalProcessingTests(SimpleTestCase):
             ['기준 미만', '관심', '주의', '경고', '위험'],
         )
         self.assertEqual(indices['식중독지수']['value'], 67.7)
-        self.assertEqual(indices['식중독지수']['level'], '주의')
+        self.assertEqual(indices['식중독지수']['level'], '관심')
+        self.assertEqual(indices['식중독지수']['scale_max'], 300)
+        self.assertTrue(indices['식중독지수']['available'])
+        self.assertTrue(indices['식중독지수']['derived'])
+        self.assertFalse(indices['식중독지수']['capped'])
+        self.assertEqual(indices['식중독지수']['raw_value'], 67.7)
+        self.assertIn('기온·습도', indices['식중독지수']['method'])
         self.assertEqual(indices['자외선지수']['value'], 9.0)
         self.assertEqual(indices['자외선지수']['level'], '매우 높음')
         self.assertFalse(indices['자외선지수']['derived'])
@@ -226,6 +288,61 @@ class WeatherExternalProcessingTests(SimpleTestCase):
         self.assertNotIn('습도', indices)
         self.assertNotIn('풍속', indices)
         self.assertNotIn('감기가능지수', indices)
+
+    def test_food_poisoning_index_accepts_supplied_values_and_scaled_boundaries(self):
+        cases = (
+            (164.9, '관심'),
+            (165, '주의'),
+            (212.9, '주의'),
+            (213, '경고'),
+            (257.9, '경고'),
+            (258, '위험'),
+            (300, '위험'),
+        )
+        for value, expected_level in cases:
+            with self.subTest(value=value):
+                index = WeatherWebAgent._calculate_weather_indices({
+                    'food_poisoning_index': {
+                        'status': 'available',
+                        'value': value,
+                        'method': '외부 시험값',
+                        'source_url': 'https://example.test/supplied',
+                    },
+                })['식중독지수']
+                self.assertTrue(index['available'])
+                self.assertFalse(index['derived'])
+                self.assertFalse(index['capped'])
+                self.assertEqual(index['value'], value)
+                self.assertEqual(index['level'], expected_level)
+                self.assertLessEqual(index['value'], index['scale_max'])
+                self.assertGreaterEqual(index['value'], index['scale_min'])
+                self.assertLessEqual(index['gauge_percent'], 100)
+
+    def test_food_poisoning_index_preserves_derived_value_within_300_scale(self):
+        index = WeatherWebAgent._calculate_weather_indices({
+            'temperature': 40,
+            'humidity': 100,
+        })['식중독지수']
+
+        self.assertTrue(index['available'])
+        self.assertTrue(index['derived'])
+        self.assertFalse(index['capped'])
+        self.assertEqual(index['value'], 294.9)
+        self.assertEqual(index['raw_value'], 294.9)
+        self.assertEqual(index['scale_max'], 300)
+        self.assertEqual(index['gauge_percent'], 98.3)
+        self.assertEqual(index['level'], '위험')
+
+    def test_food_poisoning_index_is_unavailable_without_value_or_observations(self):
+        index = WeatherWebAgent._calculate_weather_indices({
+            'food_poisoning_index': {'status': 'available', 'value': 300.1},
+        })['식중독지수']
+
+        self.assertFalse(index['available'])
+        self.assertIsNone(index['value'])
+        self.assertIsNone(index['raw_value'])
+        self.assertFalse(index['capped'])
+        self.assertEqual(index['severity'], 'unavailable')
 
     def test_uv_index_has_no_calculated_or_dummy_fallback(self):
         official = WeatherWebAgent._calculate_weather_indices({
@@ -341,6 +458,9 @@ class WeatherExternalProcessingTests(SimpleTestCase):
         self.assertEqual(normalized['conditionGuide'][0]['value'], 81.4)
         self.assertEqual(normalized['conditionGuide'][2]['label'], '식중독지수')
         self.assertEqual(normalized['conditionGuide'][2]['value'], 67.7)
+        self.assertTrue(normalized['conditionGuide'][2]['available'])
+        self.assertTrue(normalized['conditionGuide'][2]['derived'])
+        self.assertFalse(normalized['conditionGuide'][2]['capped'])
 
     def test_fallback_preserves_tavily_sources(self):
         context = {
@@ -467,6 +587,48 @@ class KmaRateLimitTests(SimpleTestCase):
 
 
 class KmaApiHubUnificationTests(SimpleTestCase):
+    @patch.dict(os.environ, {'KMA_API_HUB_AUTH_KEY': 'hub-key'})
+    @patch('myweather.services.fetch_uv_index')
+    @patch('myweather.services.fetch_weather_warnings')
+    @patch('myweather.services.fetch_weekly_forecast')
+    @patch('myweather.services.fetch_sky_forecast')
+    @patch('myweather.services._cached_payload')
+    def test_supplemental_weather_sources_start_concurrently(
+        self,
+        cached_payload,
+        fetch_sky_forecast,
+        fetch_weekly_forecast,
+        fetch_weather_warnings,
+        fetch_uv_index_mock,
+    ):
+        cached_payload.return_value = {
+            '_observation_base_date': '20260722',
+            '_observation_base_time': '1200',
+            'temperature': 28,
+            'humidity': 70,
+            'wind_speed': 2,
+            'condition': '맑음',
+        }
+        start_barrier = Barrier(4, timeout=2)
+
+        def concurrently(value):
+            start_barrier.wait()
+            return value
+
+        fetch_sky_forecast.side_effect = lambda *_: concurrently({})
+        fetch_weekly_forecast.side_effect = lambda *_: concurrently({'days': []})
+        fetch_weather_warnings.side_effect = lambda *_: concurrently({
+            'status': 'none', 'items': [],
+        })
+        fetch_uv_index_mock.side_effect = lambda *_: concurrently({
+            'status': 'available', 'value': 5,
+        })
+
+        result = fetch_current_weather(region='서울')
+
+        self.assertEqual(result['provider'], 'KMA API Hub')
+        self.assertEqual(result['uv_index']['value'], 5)
+
     @patch.dict(os.environ, {'KMA_API_HUB_AUTH_KEY': 'hub-key'})
     @patch(
         'myweather.services.fetch_uv_index',
