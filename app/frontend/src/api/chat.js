@@ -68,13 +68,6 @@ export const chatApi = {
     return unwrap(await http.get(`/tts/${taskId}/`))
   },
 
-  /** MBTI 질문 요청 (10초 유휴 타이머에서 호출) */
-  async mbtiNextQuestion(sessionId) {
-    return unwrap(await http.get('/mbti/next-question/', {
-      params: { session_id: sessionId },
-    }))
-  },
-
   /** 세션 종료 (시크릿 캐시 즉시 파기) */
   async endSession(sessionId) {
     return unwrap(await http.post('/session/end/', { session_id: sessionId }))
