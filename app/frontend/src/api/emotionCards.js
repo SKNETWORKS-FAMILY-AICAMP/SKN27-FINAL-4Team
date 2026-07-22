@@ -19,5 +19,4 @@ export const emotionCardsApi = {
   getCard: async (cardId) => (await http.get(`/${cardId}/`)).data,
   feedback: async (cardId, payload) => (await http.post(`/${cardId}/feedback/`, payload)).data,
   today: async () => (await http.get('/today/')).data,
-  resetTodayUsage: async () => (await http.post('/today/reset/')).data,
 }

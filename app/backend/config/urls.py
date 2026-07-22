@@ -9,7 +9,6 @@ urlpatterns = [
     path('api/mypage/', include('wellness.urls')),
     path('api/mymemory/', include('memorystorage.urls')),
     path('api/', include('checkin.urls')),
-    path('api/mycard/', include('mycard.urls')),
     path('api/emotion-cards/', include('emotion_cards.urls')),
     path('api/', include('chat.urls')),            # 챗봇: /api/session/, /api/chat/, /api/tts/, /api/mbti/
     path('api/myprofile/', include('myprofile.urls')),

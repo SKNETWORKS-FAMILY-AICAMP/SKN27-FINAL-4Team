@@ -1,7 +1,7 @@
 from datetime import date
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from user.models import User
@@ -82,3 +82,14 @@ class DailyMajorRevealViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotIn('daily_fortune', response.data)
         save_daily_major.assert_not_called()
+
+    @override_settings(DEBUG=False)
+    @patch('game.tarot_api.views.get_or_create_daily_major_fortune')
+    def test_production_rejects_anonymous_daily_tarot_before_generation(self, get_daily_major):
+        response = self.client.get(
+            '/api/tarot/daily-major/',
+            HTTP_X_BINTEUMSAI_CLIENT_ID='must-not-create-a-user',
+        )
+
+        self.assertIn(response.status_code, (401, 403))
+        get_daily_major.assert_not_called()
