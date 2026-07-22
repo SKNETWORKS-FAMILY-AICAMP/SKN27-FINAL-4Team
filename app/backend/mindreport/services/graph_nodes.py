@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from datetime import timedelta
-from typing import Any
-
 from django.utils import timezone
 
 from mindreport.services.cause_keyword_agent import MindReportCauseKeywordAgent
@@ -11,6 +8,11 @@ from mindreport.services.emotion_analysis_agent import MindReportEmotionAnalysis
 from mindreport.services.fallback_service import FallbackReportService
 from mindreport.services.graph_state import MindReportGraphState, append_trace
 from mindreport.services.narrative_action_agent import MindReportNarrativeActionAgent
+from mindreport.services.payloads import (
+    build_report_payload_from_state,
+    report_period_name as _period_name,
+    report_range_text as _range_text,
+)
 from mindreport.services.validation_agent import MindReportValidationAgent
 
 
@@ -128,73 +130,14 @@ def fallback_report_node(state: MindReportGraphState) -> MindReportGraphState:
     )
 
 
-def build_report_payload_from_state(
-    state: MindReportGraphState,
-) -> dict[str, Any]:
-    scoring_result = state['scoring_result']
-    emotion_flow = state['emotion_flow']
-    cause_result = state['cause_result']
-    narrative = state['narrative_result'].narrative
-
-    stress_causes = [
-        keyword.keyword
-        for keyword in cause_result.cause_keywords
-        if keyword.cause_type == 'stress'
-    ]
-    relief_causes = [
-        keyword.keyword
-        for keyword in cause_result.cause_keywords
-        if keyword.cause_type == 'relief'
-    ]
-    emotions = [
-        {
-            'day': f'{score.source_date.day:02d}일',
-            'icon': _emotion_icon(score.emotion_state),
-            'emotion_state': score.emotion_state,
-        }
-        for score in scoring_result.emotion_scores
-    ]
-    analysis_sentences = list(narrative.analysis_sentences)
-    action_recommendations = list(narrative.action_recommendations)
-
-    return {
-        'id': f"report-{state['user'].id}-{int(timezone.now().timestamp())}",
-        'type': _period_name(state),
-        'range': _range_text(state),
-        'title': narrative.title,
-        'summary': narrative.summary,
-        'stressCauses': stress_causes,
-        'reliefCauses': relief_causes,
-        'emotions': emotions,
-        'analysis': analysis_sentences + action_recommendations,
-        'recommendations': action_recommendations,
-        'is_fallback': False,
-    }
-
-
-def _period_name(state: MindReportGraphState) -> str:
-    if state.get('period_name'):
-        return state['period_name']
-    if state['period_type'] == 'month':
-        return '월간'
-    return '주간'
-
-
-def _range_text(state: MindReportGraphState) -> str:
-    if state['period_type'] == 'month':
-        now = timezone.now()
-        year = state.get('year') or now.year
-        month = state.get('month') or now.month
-        return f'{year}.{month:02d} 월간 결산'
-    target_date = state.get('target_date') or timezone.now().date()
-    start_date = target_date - timedelta(days=target_date.weekday())
-    end_date = start_date + timedelta(days=6)
-    return f'{start_date:%Y.%m.%d} ~ {end_date:%Y.%m.%d}'
-
-
-def _emotion_icon(emotion_state: str) -> str:
-    if emotion_state == 'positive':
-        return '😊'
-    if emotion_state == 'negative':
-        return '😢'
-    return '😐'
+__all__ = [
+    'collect_and_check_criteria_node',
+    'score_and_analyze_emotion_node',
+    'extract_and_classify_causes_node',
+    'generate_narrative_and_actions_node',
+    'validate_report_node',
+    'safety_response_node',
+    'format_report_node',
+    'fallback_report_node',
+    'build_report_payload_from_state',
+]

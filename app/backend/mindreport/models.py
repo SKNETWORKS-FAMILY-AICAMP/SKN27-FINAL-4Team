@@ -15,6 +15,7 @@ class MindReport(models.Model):
     summary = models.TextField()
     stress_causes = models.JSONField(default=list)
     relief_causes = models.JSONField(default=list)
+    cause_labels = models.JSONField(default=list)
     emotions = models.JSONField(default=list)
     analysis = models.JSONField(default=list)
     recommendations = models.JSONField(default=list)

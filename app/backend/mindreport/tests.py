@@ -1,15 +1,20 @@
 from dataclasses import replace
 from datetime import date, datetime, timedelta
+import importlib
+import os
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
+from django.apps import apps as django_apps
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from chat.models import ChatMessage, ChatSession
+from mindreport.services.alternatives import build_alternative_plan
 from mindreport.services.cause_keywords import (
     FLOW_SCORE_UPWARD,
+    build_cause_keyword_payload,
     determine_label_display_policy,
 )
 from mindreport.services.cause_keyword_agent import MindReportCauseKeywordAgent
@@ -19,26 +24,7 @@ from mindreport.services.criteria_agent import (
     GENERATION_ROUTE,
     MindReportGenerationCriteriaAgent,
 )
-from mindreport.services.flow import (
-    STEP_ANALYSIS_ACTION,
-    STEP_CAUSE_KEYWORDS,
-    STEP_DATA_COLLECTION,
-    STEP_DATA_SHORTAGE_SUPPORT,
-    STEP_EMOTION_PATTERN,
-    STEP_EMOTION_SCORING,
-    STEP_FLOW_ALTERNATIVES,
-    STEP_GENERATION_CRITERIA,
-    STEP_KEYWORD_CANDIDATES,
-    STEP_LABEL_EQUAL,
-    STEP_LABEL_DISPLAY,
-    STEP_LABEL_UPWARD,
-    STEP_SCORE_DOWNWARD,
-    STEP_SCORE_MAINTENANCE,
-    STEP_SCORE_UPWARD,
-    STEP_SCORE_VOLATILE,
-    STEP_TIME_SERIES_FLOW,
-    MindReportFlowService,
-)
+from mindreport.services.fallback_service import FallbackReportService
 from mindreport.services.emotion_flow import (
     FLOW_SCORE_DOWNWARD,
     FLOW_SCORE_UPWARD as FLOW_SCORE_UPWARD_FROM_FLOW,
@@ -46,6 +32,10 @@ from mindreport.services.emotion_flow import (
     analyze_emotion_flow,
 )
 from mindreport.services.emotion_analysis_agent import MindReportEmotionAnalysisAgent
+from mindreport.services.keyword_candidates import (
+    KeywordCandidate,
+    build_keyword_candidate_payload,
+)
 from mindreport.services.narrative_action_agent import MindReportNarrativeActionAgent
 from mindreport.services.validation_agent import (
     VALIDATION_ROUTE_CAUSE,
@@ -59,6 +49,7 @@ from mindreport.services.validation_agent import (
 from mindreport.services.scoring import (
     AFFECT_SCORING_METHOD,
     LABEL_GROUNDED_AFFECT_SCORING_METHOD,
+    KCELECTRA_SCORING_METHOD,
     SCORING_ROUTE_LABEL_GROUNDED,
     SCORING_ROUTE_LLM_FALLBACK,
     EmotionScore,
@@ -71,6 +62,102 @@ from mindreport.services.scoring import (
 from mindreport.services.graph_state import build_initial_mindreport_state
 from mindreport.services.graph_flow import MindReportSupervisorAgent
 from mindreport.models import MindReport
+from ai.agents.web_agent import FallbackWebAgent
+
+
+class MindReportFallbackSafetyTests(SimpleTestCase):
+    @patch.dict(
+        os.environ,
+        {'OPENAI_API_KEY': '', 'TAVILY_API_KEY': ''},
+    )
+    def test_web_fallback_does_not_return_static_dummy_recommendations(self):
+        recommendations = FallbackWebAgent.get_trendy_contents(
+            age=20,
+            gender='여성',
+            hobbies=['독서'],
+            interests=['전시'],
+        )
+
+        self.assertEqual(recommendations, [])
+
+    @patch(
+        'mindreport.services.fallback_service.FallbackWebAgent.get_trendy_contents',
+        return_value=[],
+    )
+    def test_waiting_report_keeps_status_but_has_no_fake_analysis_data(
+        self,
+        _get_trendy_contents,
+    ):
+        report = FallbackReportService.generate_fallback_report(
+            SimpleNamespace(id=7),
+            report_type='주간',
+            range_text='2026.07.20 ~ 2026.07.26',
+        )
+
+        self.assertEqual(report['stressCauses'], [])
+        self.assertEqual(report['reliefCauses'], [])
+        self.assertEqual(report['emotions'], [])
+        self.assertEqual(report['recommendations'], [])
+        self.assertIn('분석 대기 중', report['title'])
+        self.assertTrue(any('계속 수집' in line for line in report['analysis']))
+
+    @patch(
+        'mindreport.services.fallback_service.FallbackWebAgent.get_trendy_contents',
+        return_value=[{
+            'activity': '검색 근거 활동',
+            'reason': 'Tavily 결과에 소개된 활동입니다.',
+            'how_to': '공식 안내를 먼저 확인해보세요.',
+        }],
+    )
+    def test_web_suggestion_is_explicitly_not_conversation_analysis(
+        self,
+        _get_trendy_contents,
+    ):
+        report = FallbackReportService.generate_fallback_report(
+            SimpleNamespace(id=8),
+            report_type='주간',
+        )
+
+        self.assertEqual(report['recommendations'], ['검색 근거 활동'])
+        self.assertTrue(
+            any('대화에서 분석한 결과가 아니라' in line for line in report['analysis'])
+        )
+
+
+class LegacyFallbackSanitizationTests(TestCase):
+    def test_migration_clears_unverifiable_fallback_data_but_keeps_status(self):
+        user = get_user_model().objects.create_user(
+            email='legacy-fallback@example.com',
+            password='password',
+            nickname='기존 폴백 사용자',
+        )
+        report = MindReport.objects.create(
+            user=user,
+            report_type='주간 (데이터 부족)',
+            range_text='2026.07.13 ~ 2026.07.19',
+            title='마음 리포트 분석 대기 중',
+            summary='근거가 확인되지 않는 추천 요약',
+            stress_causes=['기록 수집 중...'],
+            relief_causes=['기록 수집 중...'],
+            emotions=[{'day': '14일', 'icon': '😐'}],
+            analysis=['근거가 확인되지 않는 활동 추천'],
+            recommendations=['근거가 확인되지 않는 활동'],
+            is_fallback=True,
+        )
+        migration = importlib.import_module(
+            'mindreport.migrations.0003_sanitize_legacy_fallback_reports'
+        )
+
+        migration.sanitize_legacy_fallback_reports(django_apps, None)
+
+        report.refresh_from_db()
+        self.assertEqual(report.title, '마음 리포트 분석 대기 중')
+        self.assertEqual(report.range_text, '2026.07.13 ~ 2026.07.19')
+        self.assertEqual(report.stress_causes, [])
+        self.assertEqual(report.relief_causes, [])
+        self.assertEqual(report.emotions, [])
+        self.assertEqual(report.recommendations, [])
+        self.assertTrue(any('과거 폴백 추천' in line for line in report.analysis))
 
 
 class MindReportV2GraphCollectionTests(SimpleTestCase):
@@ -792,6 +879,28 @@ class MindReportScoringServiceTests(TestCase):
             VALIDATION_ROUTE_EMOTION,
         )
 
+        first_score = complete_state['scoring_result'].emotion_scores[0]
+        invalid_scoring = replace(
+            complete_state['scoring_result'],
+            emotion_scores=(
+                replace(first_score, emotion_score=80.0, emotion_state='neutral'),
+                *complete_state['scoring_result'].emotion_scores[1:],
+            ),
+        )
+        score_state_result = MindReportValidationAgent().run({
+            **complete_state,
+            'scoring_result': invalid_scoring,
+        })
+        score_state_codes = {
+            issue['code']
+            for issue in score_state_result['validation_result']['issues']
+        }
+        self.assertIn('emotion_state_score_mismatch', score_state_codes)
+        self.assertEqual(
+            score_state_result['revision_target'],
+            VALIDATION_ROUTE_EMOTION,
+        )
+
         first_keyword = complete_state['cause_result'].cause_keywords[0]
         invalid_keyword = replace(
             first_keyword,
@@ -824,6 +933,22 @@ class MindReportScoringServiceTests(TestCase):
         self.assertEqual(len(result.emotion_scores), 1)
         self.assertEqual(result.emotion_scores[0].emotion_score, 50.0)
         self.assertEqual(result.emotion_scores[0].total_message_count, 5)
+
+    @patch('mindreport.services.electra_scorer.ElectraEmotionScorer')
+    def test_default_scoring_blocks_when_kcelectra_model_is_unavailable(
+        self,
+        scorer_class,
+    ):
+        self._create_user_messages(5)
+        scorer_class.return_value.model = None
+
+        result = MindReportScoringService().run(
+            user=self.user,
+            period_type='week',
+        )
+
+        self.assertEqual(result.status, 'scoring_model_unavailable')
+        self.assertEqual(result.emotion_scores, ())
 
     def test_source_message_uses_only_immediately_following_assistant_label(self):
         first_user = ChatMessage.objects.create(
@@ -979,180 +1104,125 @@ class MindReportScoringServiceTests(TestCase):
         self.assertIn('negative_affect', schema)
         self.assertNotIn('emotion_score', schema)
 
-    def test_flow_classifies_pattern_and_enters_score_maintenance_with_rule_analysis(self):
+    def test_supervisor_classifies_maintenance_and_prepares_alternatives(self):
         self._create_user_messages(5)
 
-        result = MindReportFlowService(
+        result = MindReportSupervisorAgent().run(
+            user=self.user,
+            period_type='week',
             score_client=FakeEmotionScoreClient(),
             keyword_client=FakeKeywordCandidateClient(),
             cause_client=FakeCauseKeywordClient(),
             narrative_client=FakeNarrativeClient(),
-        ).run(user=self.user, period_type='week')
+        )
 
-        steps = {step.step: step for step in result.steps}
-        self.assertEqual(steps[STEP_DATA_COLLECTION].status, 'completed')
-        self.assertEqual(steps[STEP_DATA_COLLECTION].payload['source_message_count'], 5)
-        self.assertEqual(steps[STEP_GENERATION_CRITERIA].status, 'passed')
-        self.assertEqual(steps[STEP_DATA_SHORTAGE_SUPPORT].status, 'skipped')
-        self.assertEqual(steps[STEP_EMOTION_SCORING].status, 'completed')
-        self.assertEqual(steps[STEP_TIME_SERIES_FLOW].status, 'completed')
+        self.assertEqual(result['status'], 'completed')
+        self.assertEqual(len(result['collection_result'].source_messages), 5)
         self.assertEqual(
-            steps[STEP_TIME_SERIES_FLOW].payload['detected_by'],
+            result['emotion_flow'].detected_by,
             'insufficient_repeated_observations',
         )
-        self.assertEqual(steps[STEP_EMOTION_PATTERN].status, 'completed')
         self.assertEqual(
-            steps[STEP_EMOTION_PATTERN].payload['flow_type'],
+            result['emotion_flow'].flow_type,
             'score_maintenance',
         )
-        self.assertEqual(steps[STEP_SCORE_MAINTENANCE].status, 'entered')
         self.assertEqual(
-            steps[STEP_SCORE_MAINTENANCE].payload['maintenance_flow']['maintenance_type'],
+            result['emotion_flow'].maintenance_type,
             'maintenance_insufficient',
         )
-        self.assertEqual(steps[STEP_FLOW_ALTERNATIVES].status, 'completed')
         self.assertEqual(
-            steps[STEP_FLOW_ALTERNATIVES].payload['candidates'][0]['category'],
+            result['alternative_plan'].candidates[0].category,
             'low_burden_refresh',
         )
 
-    def test_flow_enters_upward_branch_before_keyword_extraction(self):
+    def test_supervisor_enters_upward_flow_before_keyword_extraction(self):
         self._create_weekly_user_messages(5)
 
-        result = MindReportFlowService(
+        result = MindReportSupervisorAgent().run(
+            user=self.user,
+            period_type='week',
+            target_date=date(2026, 7, 10),
             score_client=FakeDailyEmotionScoreClient((40.0, 45.0, 52.0, 60.0, 68.0)),
             keyword_client=FakeKeywordCandidateClient(),
             cause_client=FakeCauseKeywordClient(),
             narrative_client=FakeNarrativeClient(),
-        ).run(user=self.user, period_type='week', target_date=date(2026, 7, 10))
+        )
 
-        steps = {step.step: step for step in result.steps}
-        self.assertEqual(steps[STEP_SCORE_UPWARD].status, 'entered')
-        self.assertEqual(steps[STEP_SCORE_UPWARD].payload['flow']['flow_type'], 'score_upward')
-        self.assertEqual(steps[STEP_SCORE_MAINTENANCE].status, 'skipped')
-        self.assertEqual(steps[STEP_SCORE_VOLATILE].status, 'skipped')
-        self.assertEqual(steps[STEP_SCORE_DOWNWARD].status, 'skipped')
-        self.assertEqual(steps[STEP_FLOW_ALTERNATIVES].status, 'completed')
+        self.assertEqual(result['status'], 'completed')
+        self.assertEqual(result['emotion_flow'].flow_type, 'score_upward')
         self.assertEqual(
-            steps[STEP_FLOW_ALTERNATIVES].payload['candidates'][0]['category'],
+            result['alternative_plan'].candidates[0].category,
             'recovery_maintenance',
         )
-        self.assertEqual(steps[STEP_KEYWORD_CANDIDATES].status, 'completed')
-        self.assertEqual(steps[STEP_LABEL_UPWARD].status, 'entered')
-        self.assertEqual(steps[STEP_LABEL_UPWARD].payload['stress_label_size'], 'compact')
-        self.assertEqual(steps[STEP_LABEL_EQUAL].status, 'skipped')
+        self.assertEqual(result['keyword_result'].status, 'extracted')
+        self.assertEqual(result['label_result'].policy.stress_emphasis, 'secondary')
+        self.assertEqual(
+            result['report_payload']['causeLabels'],
+            [{
+                'keyword': '발표 준비',
+                'causeType': 'stress',
+                'emphasis': 'secondary',
+                'displayWeight': 0.7,
+            }],
+        )
 
-    def test_flow_enters_volatile_branch_before_keyword_extraction(self):
+    def test_supervisor_enters_volatile_flow_before_keyword_extraction(self):
         self._create_weekly_user_messages(5)
 
-        result = MindReportFlowService(
+        result = MindReportSupervisorAgent().run(
+            user=self.user,
+            period_type='week',
+            target_date=date(2026, 7, 10),
             score_client=FakeDailyEmotionScoreClient((70.0, 35.0, 75.0, 30.0, 68.0)),
             keyword_client=FakeKeywordCandidateClient(),
             cause_client=FakeCauseKeywordClient(),
             narrative_client=FakeNarrativeClient(),
-        ).run(user=self.user, period_type='week', target_date=date(2026, 7, 10))
+        )
 
-        steps = {step.step: step for step in result.steps}
-        self.assertEqual(steps[STEP_SCORE_UPWARD].status, 'skipped')
-        self.assertEqual(steps[STEP_SCORE_MAINTENANCE].status, 'skipped')
-        self.assertEqual(steps[STEP_SCORE_VOLATILE].status, 'entered')
-        self.assertEqual(steps[STEP_SCORE_VOLATILE].payload['flow']['flow_type'], 'score_volatile')
-        self.assertEqual(steps[STEP_SCORE_DOWNWARD].status, 'skipped')
+        self.assertEqual(result['status'], 'completed')
+        self.assertEqual(result['emotion_flow'].flow_type, 'score_volatile')
         self.assertEqual(
-            steps[STEP_FLOW_ALTERNATIVES].payload['candidates'][0]['category'],
+            result['alternative_plan'].candidates[0].category,
             'rhythm_stabilization',
         )
-        self.assertEqual(steps[STEP_KEYWORD_CANDIDATES].status, 'completed')
-        self.assertEqual(steps[STEP_LABEL_UPWARD].status, 'skipped')
-        self.assertEqual(steps[STEP_LABEL_EQUAL].status, 'entered')
-        self.assertEqual(steps[STEP_LABEL_EQUAL].payload['stress_label_size'], 'default')
+        self.assertEqual(result['keyword_result'].status, 'extracted')
+        self.assertEqual(result['label_result'].policy.stress_emphasis, 'primary')
 
-    def test_flow_enters_downward_branch_before_keyword_extraction(self):
+    def test_supervisor_enters_downward_flow_before_keyword_extraction(self):
         self._create_weekly_user_messages(5)
 
-        result = MindReportFlowService(
+        result = MindReportSupervisorAgent().run(
+            user=self.user,
+            period_type='week',
+            target_date=date(2026, 7, 10),
             score_client=FakeDailyEmotionScoreClient((70.0, 62.0, 54.0, 45.0, 38.0)),
             keyword_client=FakeKeywordCandidateClient(),
             cause_client=FakeCauseKeywordClient(),
             narrative_client=FakeNarrativeClient(),
-        ).run(user=self.user, period_type='week', target_date=date(2026, 7, 10))
+        )
 
-        steps = {step.step: step for step in result.steps}
-        self.assertEqual(steps[STEP_SCORE_UPWARD].status, 'skipped')
-        self.assertEqual(steps[STEP_SCORE_MAINTENANCE].status, 'skipped')
-        self.assertEqual(steps[STEP_SCORE_VOLATILE].status, 'skipped')
-        self.assertEqual(steps[STEP_SCORE_DOWNWARD].status, 'entered')
-        self.assertEqual(steps[STEP_SCORE_DOWNWARD].payload['flow']['flow_type'], 'score_downward')
+        self.assertEqual(result['status'], 'completed')
+        self.assertEqual(result['emotion_flow'].flow_type, 'score_downward')
         self.assertEqual(
-            steps[STEP_FLOW_ALTERNATIVES].payload['candidates'][0]['category'],
+            result['alternative_plan'].candidates[0].category,
             'burden_reduction',
         )
-        self.assertEqual(steps[STEP_KEYWORD_CANDIDATES].status, 'completed')
-        self.assertEqual(steps[STEP_LABEL_UPWARD].status, 'skipped')
-        self.assertEqual(steps[STEP_LABEL_EQUAL].status, 'entered')
-        self.assertEqual(steps[STEP_LABEL_EQUAL].payload['relief_label_size'], 'default')
-
-    def test_flow_stops_after_generation_criteria_when_data_is_insufficient(self):
-        self._create_user_messages(4)
-
-        result = MindReportFlowService(
-            score_client=FakeEmotionScoreClient(),
-            keyword_client=FakeKeywordCandidateClient(),
-            cause_client=FakeCauseKeywordClient(),
-            narrative_client=FakeNarrativeClient(),
-        ).run(user=self.user, period_type='week')
-
-        steps = {step.step: step for step in result.steps}
-        self.assertEqual(steps[STEP_DATA_COLLECTION].status, 'completed')
-        self.assertEqual(steps[STEP_DATA_COLLECTION].payload['source_message_count'], 4)
-        self.assertEqual(steps[STEP_GENERATION_CRITERIA].status, 'blocked')
-        self.assertEqual(steps[STEP_DATA_SHORTAGE_SUPPORT].status, 'not_implemented')
-        self.assertEqual(steps[STEP_DATA_SHORTAGE_SUPPORT].payload, {})
-        self.assertEqual(steps[STEP_EMOTION_SCORING].status, 'blocked')
-        self.assertEqual(steps[STEP_TIME_SERIES_FLOW].status, 'blocked')
-        self.assertEqual(steps[STEP_EMOTION_PATTERN].status, 'blocked')
-        self.assertEqual(steps[STEP_FLOW_ALTERNATIVES].status, 'blocked')
-        self.assertEqual(steps[STEP_KEYWORD_CANDIDATES].status, 'blocked')
+        self.assertEqual(result['keyword_result'].status, 'extracted')
+        self.assertEqual(result['label_result'].policy.relief_emphasis, 'primary')
 
     def test_single_day_positive_score_does_not_create_green_trend(self):
-        self._create_user_messages(5)
+        flow = analyze_emotion_flow((self._emotion_score(1, 100.0, 'positive'),))
 
-        result = MindReportFlowService(
-            score_client=FakeEmotionScoreClient(
-                emotion_score=1.0,
-                emotion_state='positive',
-                emotion_label='joy',
-            ),
-            keyword_client=FakeKeywordCandidateClient(),
-            narrative_client=FakeNarrativeClient(),
-        ).run(user=self.user, period_type='week')
-
-        maintenance = {
-            step.step: step for step in result.steps
-        }[STEP_SCORE_MAINTENANCE].payload['maintenance_flow']
-        self.assertEqual(maintenance['maintenance_type'], 'maintenance_insufficient')
-        self.assertIsNone(maintenance['tone_color'])
-        self.assertFalse(maintenance['suggestions'])
+        self.assertEqual(flow.maintenance_type, 'maintenance_insufficient')
+        self.assertIsNone(flow.tone_color)
+        self.assertFalse(flow.suggestions)
 
     def test_single_day_negative_score_does_not_create_red_trend(self):
-        self._create_user_messages(5)
+        flow = analyze_emotion_flow((self._emotion_score(1, 0.0, 'negative'),))
 
-        result = MindReportFlowService(
-            score_client=FakeEmotionScoreClient(
-                emotion_score=-1.0,
-                emotion_state='negative',
-                emotion_label='sadness',
-            ),
-            keyword_client=FakeKeywordCandidateClient(),
-            narrative_client=FakeNarrativeClient(),
-        ).run(user=self.user, period_type='week')
-
-        maintenance = {
-            step.step: step for step in result.steps
-        }[STEP_SCORE_MAINTENANCE].payload['maintenance_flow']
-        self.assertEqual(maintenance['maintenance_type'], 'maintenance_insufficient')
-        self.assertIsNone(maintenance['tone_color'])
-        self.assertFalse(maintenance['suggestions'])
+        self.assertEqual(flow.maintenance_type, 'maintenance_insufficient')
+        self.assertIsNone(flow.tone_color)
+        self.assertFalse(flow.suggestions)
 
     def test_rule_flow_analysis_detects_future_pattern_types(self):
         upward = analyze_emotion_flow(
@@ -1188,23 +1258,107 @@ class MindReportScoringServiceTests(TestCase):
         self.assertEqual(volatile.flow_type, FLOW_SCORE_VOLATILE)
         self.assertEqual(upward.detected_by, 'rule_time_series')
 
+    def test_kcelectra_flow_recomputes_state_from_weighted_score(self):
+        flow = analyze_emotion_flow((
+            replace(
+                self._emotion_score(14, 57.36, 'negative'),
+                emotion_label='슬픔',
+                scoring_method=KCELECTRA_SCORING_METHOD,
+            ),
+        ))
+
+        self.assertEqual(flow.daily_summaries[0].emotion_state, 'positive')
+
+    def test_same_direction_kcelectra_jumps_are_upward_not_volatile(self):
+        flow = analyze_emotion_flow((
+            self._emotion_score(13, 24.64, 'negative'),
+            self._emotion_score(14, 22.92, 'negative'),
+            self._emotion_score(15, 57.36, 'positive'),
+            self._emotion_score(16, 99.94, 'positive'),
+            self._emotion_score(17, 99.40, 'positive'),
+        ))
+
+        self.assertEqual(flow.metrics['large_positive_jump_count'], 2)
+        self.assertEqual(flow.metrics['large_negative_jump_count'], 0)
+        self.assertEqual(flow.metrics['direction_change_count'], 0)
+        self.assertEqual(flow.flow_type, FLOW_SCORE_UPWARD_FROM_FLOW)
+
+    def test_kcelectra_context_reaches_keyword_and_cause_payloads(self):
+        scores = (
+            replace(
+                self._emotion_score(14, 75.0, 'positive'),
+                emotion_label='기쁨',
+                scoring_method=KCELECTRA_SCORING_METHOD,
+            ),
+        )
+        messages = (
+            ReportSourceMessage(
+                message_id=14,
+                source_date=date(2026, 7, 14),
+                content='합격 소식 덕분에 기뻤어.',
+                emotion_label=None,
+            ),
+        )
+        flow = analyze_emotion_flow(scores)
+        alternative_plan = build_alternative_plan(flow)
+        keyword_payload = build_keyword_candidate_payload(
+            source_messages=messages,
+            emotion_scores=scores,
+            emotion_flow=flow,
+            alternative_plan=alternative_plan,
+        )
+
+        self.assertEqual(
+            keyword_payload['messages'][0]['model_emotion']['label'],
+            '기쁨',
+        )
+        self.assertEqual(
+            keyword_payload['scoring_context']['daily_results'][0][
+                'scoring_method'
+            ],
+            KCELECTRA_SCORING_METHOD,
+        )
+
+        candidate = KeywordCandidate(
+            keyword='합격 소식',
+            confidence=0.9,
+            evidence_message_ids=(14,),
+            evidence_dates=('2026-07-14',),
+            rationale='기쁨의 이유로 명시됐습니다.',
+            evidence_type='explicit_causal',
+            relationship='합격 소식 때문에 기뻤다고 표현했습니다.',
+        )
+        cause_payload = build_cause_keyword_payload(
+            candidates=(candidate,),
+            emotion_scores=scores,
+            emotion_flow=flow,
+            source_messages=messages,
+        )
+        self.assertEqual(
+            cause_payload['scoring_context']['daily_results'][0][
+                'emotion_label'
+            ],
+            '기쁨',
+        )
+
     def test_keyword_candidate_extraction_runs_after_score_maintenance(self):
         self._create_user_messages(5)
         keyword_client = FakeKeywordCandidateClient()
 
-        result = MindReportFlowService(
+        initial_state = build_initial_mindreport_state(
+            user=self.user,
+            period_type='week',
             score_client=FakeEmotionScoreClient(),
             keyword_client=keyword_client,
             cause_client=FakeCauseKeywordClient(),
-            narrative_client=FakeNarrativeClient(),
-        ).run(user=self.user, period_type='week')
+        )
+        criteria_state = MindReportGenerationCriteriaAgent().run(initial_state)
+        emotion_state = MindReportEmotionAnalysisAgent().run(criteria_state)
+        result = MindReportCauseKeywordAgent().run(emotion_state)
 
-        keyword_step = {
-            step.step: step for step in result.steps
-        }[STEP_KEYWORD_CANDIDATES]
-        self.assertEqual(keyword_step.status, 'completed')
-        self.assertEqual(keyword_step.payload['candidate_count'], 1)
-        self.assertEqual(keyword_step.payload['candidates'][0]['keyword'], '발표 준비')
+        self.assertEqual(result['keyword_result'].status, 'extracted')
+        self.assertEqual(len(result['keyword_result'].candidates), 1)
+        self.assertEqual(result['keyword_result'].candidates[0].keyword, '발표 준비')
         self.assertNotIn('alternative_plan', keyword_client.last_payload)
         self.assertNotIn('daily_scores', keyword_client.last_payload)
         self.assertNotIn('emotion_flow', keyword_client.last_payload)
@@ -1212,7 +1366,9 @@ class MindReportScoringServiceTests(TestCase):
     def test_cause_keyword_llm_classifies_supported_stress_evidence(self):
         self._create_user_messages(5)
 
-        result = MindReportFlowService(
+        initial_state = build_initial_mindreport_state(
+            user=self.user,
+            period_type='week',
             score_client=FakeEmotionScoreClient(
                 emotion_score=-1.0,
                 emotion_state='negative',
@@ -1220,22 +1376,24 @@ class MindReportScoringServiceTests(TestCase):
             ),
             keyword_client=FakeKeywordCandidateClient(keyword='진로 고민'),
             cause_client=FakeCauseKeywordClient(cause_type='stress'),
-            narrative_client=FakeNarrativeClient(),
-        ).run(user=self.user, period_type='week')
+        )
+        criteria_state = MindReportGenerationCriteriaAgent().run(initial_state)
+        emotion_state = MindReportEmotionAnalysisAgent().run(criteria_state)
+        result = MindReportCauseKeywordAgent().run(emotion_state)
 
-        cause_step = {
-            step.step: step for step in result.steps
-        }[STEP_CAUSE_KEYWORDS]
-        self.assertEqual(cause_step.status, 'completed')
-        self.assertEqual(cause_step.payload['cause_keyword_count'], 1)
-        self.assertEqual(cause_step.payload['cause_keywords'][0]['keyword'], '진로 고민')
-        self.assertEqual(cause_step.payload['cause_keywords'][0]['cause_type'], 'stress')
-        self.assertEqual(cause_step.payload['cause_keywords'][0]['classified_by'], 'llm')
+        cause_keywords = result['cause_result'].cause_keywords
+        self.assertEqual(result['cause_result'].status, 'classified')
+        self.assertEqual(len(cause_keywords), 1)
+        self.assertEqual(cause_keywords[0].keyword, '진로 고민')
+        self.assertEqual(cause_keywords[0].cause_type, 'stress')
+        self.assertEqual(cause_keywords[0].classified_by, 'llm')
 
     def test_cause_keyword_llm_classifies_supported_relief_evidence(self):
         self._create_user_messages(5)
 
-        result = MindReportFlowService(
+        initial_state = build_initial_mindreport_state(
+            user=self.user,
+            period_type='week',
             score_client=FakeEmotionScoreClient(
                 emotion_score=1.0,
                 emotion_state='positive',
@@ -1243,41 +1401,45 @@ class MindReportScoringServiceTests(TestCase):
             ),
             keyword_client=FakeKeywordCandidateClient(keyword='산책'),
             cause_client=FakeCauseKeywordClient(cause_type='relief'),
-            narrative_client=FakeNarrativeClient(),
-        ).run(user=self.user, period_type='week')
+        )
+        criteria_state = MindReportGenerationCriteriaAgent().run(initial_state)
+        emotion_state = MindReportEmotionAnalysisAgent().run(criteria_state)
+        result = MindReportCauseKeywordAgent().run(emotion_state)
 
-        cause_step = {
-            step.step: step for step in result.steps
-        }[STEP_CAUSE_KEYWORDS]
-        self.assertEqual(cause_step.status, 'completed')
-        self.assertEqual(cause_step.payload['cause_keyword_count'], 1)
-        self.assertEqual(cause_step.payload['cause_keywords'][0]['keyword'], '산책')
-        self.assertEqual(cause_step.payload['cause_keywords'][0]['cause_type'], 'relief')
-        self.assertEqual(cause_step.payload['cause_keywords'][0]['classified_by'], 'llm')
+        cause_keywords = result['cause_result'].cause_keywords
+        self.assertEqual(result['cause_result'].status, 'classified')
+        self.assertEqual(len(cause_keywords), 1)
+        self.assertEqual(cause_keywords[0].keyword, '산책')
+        self.assertEqual(cause_keywords[0].cause_type, 'relief')
+        self.assertEqual(cause_keywords[0].classified_by, 'llm')
 
     def test_cause_keyword_classification_uses_llm_client_for_neutral_evidence(self):
         self._create_user_messages(5)
 
-        result = MindReportFlowService(
+        initial_state = build_initial_mindreport_state(
+            user=self.user,
+            period_type='week',
             score_client=FakeEmotionScoreClient(),
             keyword_client=FakeKeywordCandidateClient(keyword='카페 방문'),
             cause_client=FakeCauseKeywordClient(cause_type='relief'),
-            narrative_client=FakeNarrativeClient(),
-        ).run(user=self.user, period_type='week')
+        )
+        criteria_state = MindReportGenerationCriteriaAgent().run(initial_state)
+        emotion_state = MindReportEmotionAnalysisAgent().run(criteria_state)
+        result = MindReportCauseKeywordAgent().run(emotion_state)
 
-        cause_step = {
-            step.step: step for step in result.steps
-        }[STEP_CAUSE_KEYWORDS]
-        self.assertEqual(cause_step.status, 'completed')
-        self.assertEqual(cause_step.payload['cause_keyword_count'], 1)
-        self.assertEqual(cause_step.payload['cause_keywords'][0]['keyword'], '카페 방문')
-        self.assertEqual(cause_step.payload['cause_keywords'][0]['cause_type'], 'relief')
-        self.assertEqual(cause_step.payload['cause_keywords'][0]['classified_by'], 'llm')
+        cause_keywords = result['cause_result'].cause_keywords
+        self.assertEqual(result['cause_result'].status, 'classified')
+        self.assertEqual(len(cause_keywords), 1)
+        self.assertEqual(cause_keywords[0].keyword, '카페 방문')
+        self.assertEqual(cause_keywords[0].cause_type, 'relief')
+        self.assertEqual(cause_keywords[0].classified_by, 'llm')
 
     def test_label_display_uses_equal_size_for_current_maintenance_flow(self):
         self._create_user_messages(5)
 
-        result = MindReportFlowService(
+        initial_state = build_initial_mindreport_state(
+            user=self.user,
+            period_type='week',
             score_client=FakeEmotionScoreClient(
                 emotion_score=-1.0,
                 emotion_state='negative',
@@ -1285,31 +1447,32 @@ class MindReportScoringServiceTests(TestCase):
             ),
             keyword_client=FakeKeywordCandidateClient(keyword='진로 고민'),
             cause_client=FakeCauseKeywordClient(cause_type='stress'),
-            narrative_client=FakeNarrativeClient(),
-        ).run(user=self.user, period_type='week')
+        )
+        criteria_state = MindReportGenerationCriteriaAgent().run(initial_state)
+        emotion_state = MindReportEmotionAnalysisAgent().run(criteria_state)
+        result = MindReportCauseKeywordAgent().run(emotion_state)
 
-        steps = {step.step: step for step in result.steps}
-        label_step = steps[STEP_LABEL_DISPLAY]
-        self.assertEqual(label_step.status, 'completed')
-        self.assertEqual(label_step.payload['emotion_flow_type'], 'score_maintenance')
-        self.assertEqual(label_step.payload['stress_label_size'], 'default')
-        self.assertEqual(label_step.payload['relief_label_size'], 'default')
-        self.assertEqual(label_step.payload['labels'][0]['label_size'], 'default')
-        self.assertEqual(steps[STEP_LABEL_UPWARD].status, 'skipped')
-        self.assertEqual(steps[STEP_LABEL_EQUAL].status, 'entered')
+        label_result = result['label_result']
+        self.assertEqual(label_result.status, 'applied')
+        self.assertEqual(label_result.policy.emotion_flow_type, 'score_maintenance')
+        self.assertEqual(label_result.policy.stress_emphasis, 'primary')
+        self.assertEqual(label_result.policy.relief_emphasis, 'primary')
+        self.assertEqual(label_result.labels[0]['emphasis'], 'primary')
 
     def test_label_display_policy_keeps_future_upward_flow_ready(self):
         policy = determine_label_display_policy(emotion_flow_type=FLOW_SCORE_UPWARD)
 
-        self.assertEqual(policy.stress_label_size, 'compact')
-        self.assertEqual(policy.relief_label_size, 'default')
+        self.assertEqual(policy.stress_emphasis, 'secondary')
+        self.assertEqual(policy.relief_emphasis, 'primary')
         self.assertLess(policy.stress_display_weight, policy.relief_display_weight)
 
     def test_analysis_and_action_generation_runs_after_label_display(self):
         self._create_user_messages(5)
         narrative_client = FakeNarrativeClient()
 
-        result = MindReportFlowService(
+        initial_state = build_initial_mindreport_state(
+            user=self.user,
+            period_type='week',
             score_client=FakeEmotionScoreClient(
                 emotion_score=-1.0,
                 emotion_state='negative',
@@ -1318,14 +1481,16 @@ class MindReportScoringServiceTests(TestCase):
             keyword_client=FakeKeywordCandidateClient(keyword='진로 고민'),
             cause_client=FakeCauseKeywordClient(cause_type='stress'),
             narrative_client=narrative_client,
-        ).run(user=self.user, period_type='week')
+        )
+        criteria_state = MindReportGenerationCriteriaAgent().run(initial_state)
+        emotion_state = MindReportEmotionAnalysisAgent().run(criteria_state)
+        cause_state = MindReportCauseKeywordAgent().run(emotion_state)
+        result = MindReportNarrativeActionAgent().run(cause_state)
 
-        narrative_step = {
-            step.step: step for step in result.steps
-        }[STEP_ANALYSIS_ACTION]
-        self.assertEqual(narrative_step.status, 'completed')
-        self.assertEqual(len(narrative_step.payload['analysis_sentences']), 3)
-        self.assertEqual(len(narrative_step.payload['action_recommendations']), 2)
+        narrative = result['narrative_result'].narrative
+        self.assertEqual(result['narrative_result'].status, 'generated')
+        self.assertEqual(len(narrative.analysis_sentences), 3)
+        self.assertEqual(len(narrative.action_recommendations), 2)
         self.assertEqual(
             narrative_client.last_payload['cause_keywords'][0]['keyword'],
             '진로 고민',
@@ -1364,6 +1529,14 @@ class MindReportGraphAPIViewTests(TestCase):
             password='password',
             nickname='리포트 API 테스트',
         )
+        self.client.force_login(self.user)
+
+    def test_authentication_is_required(self):
+        self.client.logout()
+
+        response = self.client.get('/api/report/generate/')
+
+        self.assertIn(response.status_code, (401, 403))
 
     @patch(
         'mindreport.views.MindReportGenerateAPIView._is_last_week_of_month',
@@ -1386,6 +1559,7 @@ class MindReportGraphAPIViewTests(TestCase):
         report = response.json()['reports'][0]
         self.assertEqual(report['title'], '테스트 마음 리포트')
         self.assertEqual(report['stressCauses'], ['회의 준비'])
+        self.assertEqual(report['causeLabels'][0]['emphasis'], 'secondary')
         self.assertEqual(report['recommendations'], ['10분 쉬기'])
         self.assertFalse(report['is_fallback'])
         self.assertFalse(report['is_safety_response'])
@@ -1407,6 +1581,7 @@ class MindReportGraphAPIViewTests(TestCase):
             'title': '지금은 안전을 먼저 확인할 시간이에요',
             'stressCauses': [],
             'reliefCauses': [],
+            'causeLabels': [],
             'is_safety_response': True,
         })
         supervisor_class.return_value.run.return_value = {
@@ -1421,6 +1596,27 @@ class MindReportGraphAPIViewTests(TestCase):
         self.assertTrue(report['is_safety_response'])
         self.assertFalse(report['is_fallback'])
         self.assertTrue(report['id'].startswith('safety-weekly-'))
+
+    @patch(
+        'mindreport.views.MindReportGenerateAPIView._is_last_week_of_month',
+        return_value=False,
+    )
+    @patch('mindreport.views.MindReportSupervisorAgent')
+    def test_invalid_graph_payload_is_not_persisted(
+        self,
+        supervisor_class,
+        _is_last_week,
+    ):
+        supervisor_class.return_value.run.return_value = {
+            'status': 'completed',
+            'report_payload': {'type': '주간'},
+        }
+
+        response = self.client.post('/api/report/generate/')
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json()['code'], 'MINDREPORT_INVALID_PAYLOAD')
+        self.assertFalse(MindReport.objects.filter(user=self.user).exists())
 
     @patch('mindreport.views.MindReportSupervisorAgent')
     def test_get_returns_stored_reports_without_running_graph(self, supervisor_class):
@@ -1442,6 +1638,7 @@ class MindReportGraphAPIViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['reports'][0]['id'], f'weekly-{stored_report.id}')
         self.assertEqual(response.json()['reports'][0]['title'], '저장된 마음 리포트')
+        self.assertEqual(response.json()['reports'][0]['causeLabels'], [])
         supervisor_class.assert_not_called()
 
     def test_get_shows_only_latest_report_for_each_period(self):
@@ -1503,6 +1700,12 @@ class MindReportGraphAPIViewTests(TestCase):
             'summary': '테스트 요약',
             'stressCauses': ['회의 준비'],
             'reliefCauses': ['산책'],
+            'causeLabels': [{
+                'keyword': '회의 준비',
+                'causeType': 'stress',
+                'emphasis': 'secondary',
+                'displayWeight': 0.7,
+            }],
             'emotions': [{'day': '14일', 'icon': '😐'}],
             'analysis': ['근거 문장'],
             'recommendations': ['10분 쉬기'],

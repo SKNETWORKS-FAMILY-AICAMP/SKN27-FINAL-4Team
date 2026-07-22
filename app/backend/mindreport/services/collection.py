@@ -1,16 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Any
 
-from django.utils import timezone
-
+from mindreport.constants import PERIOD_MONTH, PERIOD_WEEK, SUPPORTED_PERIODS
 from mindreport.services.criteria_service import ReportCriteriaService
+from mindreport.services.periods import resolve_period_window
 from mindreport.services.scoring import (
-    PERIOD_MONTH,
-    PERIOD_WEEK,
-    SUPPORTED_PERIODS,
     ReportSourceMessage,
     load_source_messages,
 )
@@ -26,39 +23,19 @@ class MindReportCollectionResult:
     ltm_context: str = ""
 
 
-def _week_range(target_date: date) -> tuple[datetime, datetime]:
-    start_date = target_date - timedelta(days=target_date.weekday())
-    end_date = start_date + timedelta(days=6)
-    return (
-        timezone.make_aware(datetime.combine(start_date, datetime.min.time())),
-        timezone.make_aware(datetime.combine(end_date, datetime.max.time())),
-    )
-
-
-def _month_range(year: int, month: int) -> tuple[datetime, datetime]:
-    start = timezone.make_aware(datetime(year, month, 1))
-    if month == 12:
-        end = timezone.make_aware(datetime(year + 1, 1, 1)) - timedelta(microseconds=1)
-    else:
-        end = timezone.make_aware(datetime(year, month + 1, 1)) - timedelta(microseconds=1)
-    return start, end
-
-
 def _get_period_range(
     period_type: str,
     target_date: date | None = None,
     year: int | None = None,
     month: int | None = None,
 ) -> tuple[datetime, datetime]:
-    if period_type == PERIOD_WEEK:
-        return _week_range(target_date or timezone.now().date())
-    elif period_type == PERIOD_MONTH:
-        now = timezone.now()
-        resolved_year = year or now.year
-        resolved_month = month or now.month
-        return _month_range(resolved_year, resolved_month)
-    else:
-        raise ValueError(f'Unsupported mindreport period_type: {period_type}')
+    window = resolve_period_window(
+        period_type=period_type,
+        target_date=target_date,
+        year=year,
+        month=month,
+    )
+    return window.start, window.end_inclusive
 
 
 def collect_source_messages(

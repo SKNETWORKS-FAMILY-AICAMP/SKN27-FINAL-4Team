@@ -5,6 +5,11 @@ import json
 import os
 from typing import Any, Mapping, Protocol, Sequence
 
+from mindreport.constants import (
+    MINDREPORT_KEYWORD_MAX_TOKENS,
+    MINDREPORT_KEYWORD_MODEL,
+    MINDREPORT_LLM_TEMPERATURE,
+)
 from mindreport.services.alternatives import AlternativePlanResult
 from mindreport.services.emotion_flow import EmotionFlowResult
 from mindreport.services.scoring import EmotionScore, ReportSourceMessage, _extract_json_object
@@ -41,14 +46,46 @@ def build_keyword_candidate_payload(
     emotion_flow: EmotionFlowResult,
     alternative_plan: AlternativePlanResult,
 ) -> dict[str, Any]:
+    score_by_date = {
+        score.source_date: score
+        for score in emotion_scores
+    }
     return {
         'task': 'mind_report_keyword_candidate_extraction',
+        'scoring_context': {
+            'role': 'supporting affect context only; never causal evidence by itself',
+            'daily_results': [
+                {
+                    'source_date': score.source_date.isoformat(),
+                    'emotion_label': score.emotion_label,
+                    'emotion_state': score.emotion_state,
+                    'confidence': score.confidence,
+                    'scoring_method': score.scoring_method,
+                    'evidence_message_ids': list(score.evidence_message_ids),
+                }
+                for score in emotion_scores
+            ],
+            'flow_type': emotion_flow.flow_type,
+            'trend_eligible': emotion_flow.metrics.get('trend_eligible', False),
+        },
         'messages': [
             {
                 'message_id': message.message_id,
                 'source_date': message.source_date.isoformat(),
                 'content': message.content,
                 'current_emotion_label': message.emotion_label,
+                'model_emotion': (
+                    {
+                        'label': score_by_date[message.source_date].emotion_label,
+                        'state': score_by_date[message.source_date].emotion_state,
+                        'confidence': score_by_date[message.source_date].confidence,
+                        'scoring_method': score_by_date[
+                            message.source_date
+                        ].scoring_method,
+                    }
+                    if message.source_date in score_by_date
+                    else None
+                ),
             }
             for message in source_messages
         ],
@@ -58,6 +95,7 @@ def build_keyword_candidate_payload(
             '후보 키워드는 짧은 명사구로 작성한다.',
             '사용자가 해당 소재 때문에 부담 또는 편안함을 느꼈다고 표현했거나, 같은 소재가 여러 메시지에서 비슷한 감정 맥락과 함께 반복된 경우에만 후보로 인정한다.',
             '같은 날짜에 등장했다는 사실만으로 감정 원인 후보로 판단하지 않는다.',
+            'KcELECTRA의 일별 감정 라벨과 상태는 후보 탐색을 돕는 보조 정보이며, 원인 관계의 단독 근거로 사용하지 않는다.',
             '단순 일정, 장소, 인물, 사물의 언급은 원인 후보가 아니다.',
             '후보 개수를 채우지 말고 충분한 근거가 없으면 candidates를 빈 배열로 반환한다.',
             '반드시 유효한 JSON 객체만 반환한다.',
@@ -101,9 +139,9 @@ class LangChainKeywordCandidateClient:
             ]
         )
         llm = ChatOpenAI(
-            model=os.getenv('MINDREPORT_KEYWORD_MODEL', 'gpt-5.4-mini'),
-            temperature=0,
-            max_tokens=1200,
+            model=MINDREPORT_KEYWORD_MODEL,
+            temperature=MINDREPORT_LLM_TEMPERATURE,
+            max_tokens=MINDREPORT_KEYWORD_MAX_TOKENS,
         )
         message = (prompt | llm).invoke(
             {'keyword_payload': json.dumps(payload, ensure_ascii=False)}
