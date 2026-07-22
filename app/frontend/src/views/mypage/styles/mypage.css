@@ -1,0 +1,18 @@
+/* Import order preserves the original mypage cascade. */
+@import "./sections/01-shell-home.css";
+@import "./sections/02-room.css";
+@import "./sections/03-modal-layout.css";
+@import "./sections/04-character.css";
+@import "./sections/05-weather.css";
+@import "./sections/06-wardrobe.css";
+@import "./sections/07-cards-picker.css";
+@import "./sections/08-profile-forms.css";
+@import "./sections/09-taste-log.css";
+@import "./sections/10-mbti.css";
+@import "./sections/11-settings.css";
+@import "./sections/12-navigation-confirm.css";
+@import "./sections/13-feedback.css";
+@import "./sections/14-typography-overrides.css";
+@import "./sections/15-responsive.css";
+@import "./sections/16-ux-overrides.css";
+@import "./sections/17-responsive-overrides.css";

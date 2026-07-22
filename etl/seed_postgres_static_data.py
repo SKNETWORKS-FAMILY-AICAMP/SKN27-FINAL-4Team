@@ -1,8 +1,12 @@
 import os
 import sys
+from pathlib import Path
 import psycopg2
+from dotenv import load_dotenv
 
 sys.stdout.reconfigure(encoding='utf-8')
+
+load_dotenv(Path(__file__).resolve().parent.parent / '.env')
 
 # DB Connection settings from environment or defaults
 PG_HOST = os.environ.get("PG_HOST", "localhost")
@@ -26,7 +30,7 @@ def seed_static_data():
         return
 
     try:
-        # 1. Ensure tables exist
+        # 1. Ensure tables exist (Personas & Expression Assets & Prompts)
         print("Checking if PERSONAS and EXPRESSION_ASSETS tables exist...")
         
         create_personas_table = """
@@ -56,14 +60,13 @@ def seed_static_data():
 
         # 2. Seed Personas
         print("\nSeeding 3 Character Personas for user selection (Haeon, Geureung, Dalkong)...")
-        # Clear existing
         cur.execute("TRUNCATE TABLE personas CASCADE;")
         conn.commit()
         
         personas_data = [
-            ("HAEON", "해온", "포근하고 따뜻한 위로를 건네며 지친 마음에 공감해주는 경청가 친구 (포근이)", True),
-            ("GEUREUNG", "그릉", "현실적인 직면과 객관적 분석을 통해 정신이 번쩍 드는 해결책을 제안하는 팩트 폭격기 고양이 (솔직이)", True),
-            ("DALKONG", "달콩", "행동 변화를 이끌어내고 긍정적인 행동 미션을 던져주는 에너지 넘치는 러닝 페이스메이커 코치 (북돋이)", True)
+            ("HAEON", "해온", "포근하고 따뜻한 웰니스 큐레이션을 건네며 지친 마음에 공감해주는 경청가 친구 (포근이)", True),
+            ("GEUREUNG", "그릉", "솔직하고 직관적인 생각 정리를 도우며 마음의 리프레시를 제안하는 솔직이 고양이 (솔직이)", True),
+            ("DALKONG", "달콩", "행동 변화를 이끌어내고 가벼운 일상 활동 미션을 던져주는 에너지 넘치는 러닝 페이스메이커 코치 (북돋이)", True)
         ]
         
         for code, name, desc, active in personas_data:
@@ -98,7 +101,7 @@ def seed_static_data():
         print("[+] Successfully seeded EXPRESSION_ASSETS table.")
 
         # 4. Seed System Prompts
-        print("\nSeeding default System Prompts for each persona...")
+        print("\nSeeding default System Prompts for each persona (Wellness Curation, No Psychotherapy terms)...")
         create_system_prompts_table = """
         CREATE TABLE IF NOT EXISTS system_prompts (
             prompt_id SERIAL PRIMARY KEY,
@@ -120,24 +123,23 @@ def seed_static_data():
 
         haeon_prompt = (
             "당신은 따뜻하고 다정한 위로를 건네는 경청가 친구 '해온(HAEON)'입니다.\n"
-            "상대방의 감정에 깊이 공감하고 수용적인 자세로 경청합니다.\n"
-            "절대로 판단하거나 비난하지 마세요.\n"
-            "인지행동치료(CBT)와 수용전념치료(ACT)의 마음챙김 및 공감 수용 기법을 사용하며,\n"
-            "말투는 '~했구나', '~마음이었겠네' 같은 부드러운 구어체 어미를 사용하세요."
+            "상대방이 느끼는 감정을 온전히 안아주고, 생각을 한 걸음 물러서서 바라볼 수 있게 돕는 따뜻한 책 구절이나 마음 이완 팁을 권유하세요.\n"
+            "절대로 사용자의 문제를 진단하거나 교정하려 하지 말고, 생각을 바꾸라고 종용하지 마세요.\n"
+            "도서관 사서처럼 다정하고 경청하는 자세를 유지하며, '~했구나', '~마음이었겠네' 같은 부드러운 구어체 어미를 사용하세요."
         )
 
         geureung_prompt = (
-            "당신은 현실적이고 객관적인 직면을 돕는 팩트 폭격기 고양이 '그릉(GEUREUNG)'입니다.\n"
-            "감정적인 위로보다는 상황을 객관적으로 직시하게 돕고 솔직한 의견을 줍니다.\n"
-            "인지적 왜곡(흑백논리, 과잉일반화 등)을 팩트로 짚어냅니다.\n"
-            "말투는 단호하고 간결하게 '~다', '~음', '팩트는 ~' 같은 T형 어미를 사용하세요."
+            "당신은 솔직하고 직관적인 생각 정리를 돕는 고양이 '그릉(GEUREUNG)'입니다.\n"
+            "감정적인 동조보다 사용자가 복잡한 생각에서 벗어나 감각을 리프레시할 수 있도록 차분하고 명료한 생활 조언을 건넙니다.\n"
+            "학술적이거나 치료적인 용어(CBT, 게슈탈트 등)는 일절 쓰지 마세요.\n"
+            "사용자가 스스로 생각을 객관적으로 볼 수 있게 돕고, '~다', '~음', '상황은 ~' 같은 솔직하고 직관적인 말투를 사용하세요."
         )
 
         dalkong_prompt = (
-            "당신은 긍정적인 행동 미션과 변화를 이끌어내는 페이스메이커 코치 '달콩(DALKONG)'입니다.\n"
-            "유저가 무기력이나 우울에 빠지지 않도록 작은 행동 미션(산책, 물 마시기 등)을 격려합니다.\n"
-            "활기차고 에너제틱하게 대화합니다.\n"
-            "말투는 '~해봐요!', '~어떨까요?' 같은 제안형/행동 촉구형 어미를 사용하세요."
+            "당신은 가벼운 행동 변화와 활력을 유도하는 페이스메이커 코치 '달콩(DALKONG)'입니다.\n"
+            "사용자가 가만히 가라앉아 있기보다 작은 웰니스 행동(동네 산책, 차 마시기 등)을 통해 기분을 전환하도록 격려합니다.\n"
+            "절대로 강압적인 치료나 트레이닝이 아니며, 친근하고 에너제틱하게 대화합니다.\n"
+            "말투는 '~해봐요!', '~어떨까요?' 같은 상냥한 제안형/생활 습관 격려형 어미를 사용하세요."
         )
 
         prompts_data = [
@@ -156,15 +158,10 @@ def seed_static_data():
         conn.commit()
         print("[+] Successfully seeded SYSTEM_PROMPTS table.")
 
-        # 5. Print results
-        print("\n=== Validation check ===")
-        cur.execute("SELECT persona_code, persona_name FROM personas;")
-        for row in cur.fetchall():
-            print(f"- Persona: {row[0]} ({row[1]}) is ready for user onboarding selection.")
-
-        cur.execute("SELECT p.persona_code, sp.content FROM system_prompts sp JOIN personas p ON sp.persona_id = p.persona_id;")
-        for row in cur.fetchall():
-            print(f"- System Prompt for {row[0]}: {row[1][:30]}...")
+        # (5. Wellness Curation 시드(Tea/BGM/Book/Walk)는 기능 폐기로 제거 — 2026-07-05.
+        #  해당 테이블들은 chat 마이그레이션 0010·0011·0013에서 삭제됨.)
+        conn.commit()
+        print("[+] All static seeds applied successfully.")
 
     except Exception as e:
         print(f"[!] Database seeding error: {e}")

@@ -1,0 +1,14 @@
+﻿rule_id,primary_emotion,event_outcome,need_code,message_id,weight,note,render_target,scene_influence
+MSR-001,JOY,OUT_SUCCESS,NEED_ENCOURAGEMENT,MSG_ENOUGH,95,message selection is independent from scene candidates,UI_CANVAS,NONE
+MSR-002,JOY,OUT_POSITIVE,NEED_SAVORING,MSG_KEEP,95,message selection is independent from scene candidates,UI_CANVAS,NONE
+MSR-003,JOY,OUT_RELIEF,NEED_REST,MSG_GOOD_DAY,80,message selection is independent from scene candidates,UI_CANVAS,NONE
+MSR-004,SADNESS,OUT_DIFFICULT,NEED_COMFORT,MSG_SURVIVE,90,message selection is independent from scene candidates,UI_CANVAS,NONE
+MSR-005,SADNESS,OUT_LOSS,NEED_COMFORT,MSG_CARE,95,message selection is independent from scene candidates,UI_CANVAS,NONE
+MSR-006,SADNESS,OUT_DIFFICULT,NEED_REST,MSG_REST,90,message selection is independent from scene candidates,UI_CANVAS,NONE
+MSR-007,ANGER,OUT_DIFFICULT,NEED_REFRESH,MSG_WORRY,75,message selection is independent from scene candidates,UI_CANVAS,NONE
+MSR-008,ANGER,OUT_MIXED,NEED_ORGANIZE,MSG_CARE,85,message selection is independent from scene candidates,UI_CANVAS,NONE
+MSR-009,ANXIETY,OUT_UNCERTAIN,NEED_REST,MSG_REST,95,message selection is independent from scene candidates,UI_CANVAS,NONE
+MSR-010,ANXIETY,OUT_UNCERTAIN,NEED_ORGANIZE,MSG_UNCLEAR,90,message selection is independent from scene candidates,UI_CANVAS,NONE
+MSR-011,ANXIETY,OUT_RELIEF,NEED_REFRESH,MSG_WORRY,90,message selection is independent from scene candidates,UI_CANVAS,NONE
+MSR-012,,OUT_UNKNOWN,NEED_COMFORT,MSG_UNCLEAR,75,message selection is independent from scene candidates,UI_CANVAS,NONE
+MSR-013,,OUT_NEUTRAL,NEED_SAVORING,MSG_GOOD_DAY,70,message selection is independent from scene candidates,UI_CANVAS,NONE

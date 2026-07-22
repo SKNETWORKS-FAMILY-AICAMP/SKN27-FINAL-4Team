@@ -1,425 +1,357 @@
 <template>
-    <main class="app-shell">
-      <section class="room-stage">
-        <nav class="legend" aria-label="기능 바로가기">
-          <button type="button" @click="openPanel('profile')">{{ t.profile }}</button>
-          <button type="button" @click="openPanel('mbti')">{{ t.mbti }}</button>
-          <button type="button" @click="openPanel('taste')">{{ t.taste }}</button>
-          <button type="button" @click="openPanel('reports')">{{ t.reports }}</button>
-          <button type="button" @click="openPanel('settings')">{{ t.settings }}</button>
+  <main class="app-shell">
+    <section class="mypage-home" aria-label="마이페이지 홈">
+      <aside class="home-left-panel" aria-label="마이홈 대시보드">
+        <article class="identity-card">
+          <div class="identity-avatar-block">
+            <div class="identity-avatar">
+              <img :src="`/characters/${currentCharacter.id}/default.png`" :alt="currentCharacter.name" />
+            </div>
+            <small class="identity-character-name">{{ currentCharacter.name }}</small>
+          </div>
+          <div class="identity-copy">
+            <span class="dashboard-kicker">나의 오늘</span>
+            <h1>{{ displayName }}님의 공간</h1>
+            <div class="identity-chips" aria-label="나의 관심사와 취미">
+              <span class="identity-chip-mbti">{{ profileMbtiLabel }}</span>
+              <span v-for="chip in tasteSummaryChips" :key="chip.type" :class="`identity-chip-${chip.type}`">
+                <i v-if="chip.icon" class="identity-chip-icon" aria-hidden="true">{{ chip.icon }}</i>
+                <b>{{ chip.caption }}</b>{{ chip.label }}
+              </span>
+            </div>
+          </div>
+        </article>
+
+        <nav class="quick-actions" aria-label="마이룸 기능 메뉴">
+          <div class="quick-actions-heading">
+            <div>
+              <span class="dashboard-kicker">내 공간 살펴보기</span>
+              <strong>마이룸 기능</strong>
+            </div>
+            <span class="quick-actions-count">5</span>
+          </div>
+          <button type="button" @click="openPanel('mbti')">
+            <span class="menu-index">01</span>
+            <span class="menu-object" aria-hidden="true">◑</span>
+            <span class="menu-copy"><strong>MBTI 분석</strong><small>월간 성향과 변화 확인</small></span>
+            <span class="menu-arrow" aria-hidden="true">→</span>
+          </button>
+          <button type="button" @click="openPanel('weather')">
+            <span class="menu-index">02</span>
+            <span class="menu-object" aria-hidden="true">⌑</span>
+            <span class="menu-copy"><strong>날씨 정보</strong><small>현재 날씨와 활동 제안</small></span>
+            <span class="menu-arrow" aria-hidden="true">→</span>
+          </button>
+          <button type="button" @click="openPanel('book')">
+            <span class="menu-index">03</span>
+            <span class="menu-object" aria-hidden="true">▤</span>
+            <span class="menu-copy"><strong>오늘의 책 추천</strong><small>프로필 기반 추천 도서</small></span>
+            <span class="menu-arrow" aria-hidden="true">→</span>
+          </button>
+          <button class="memory-action" type="button" @click="openPanel('memory')">
+            <span class="menu-index">04</span>
+            <span class="menu-object" aria-hidden="true">◇</span>
+            <span class="menu-copy"><strong>기억 보관함</strong><small>저장된 대화 기억 관리</small></span>
+            <span class="menu-arrow" aria-hidden="true">→</span>
+          </button>
+          <button class="character-action" type="button" @click="openPanel('character')">
+            <span class="menu-index">05</span>
+            <span class="menu-object" aria-hidden="true">●</span>
+            <span class="menu-copy"><strong>캐릭터 정보</strong><small>캐릭터 선택 및 정보 확인</small></span>
+            <span class="menu-arrow" aria-hidden="true">→</span>
+          </button>
         </nav>
-        <div class="room-canvas">
-          <img class="room-image" src="../../assets/UI 신버전4.png" alt="야간 톤 MindRoom 방 일러스트" />
-          <button class="hotspot profile" type="button" :aria-label="t.profile" @click="openPanel('profile')"></button>
-          <button class="hotspot mbti" type="button" :aria-label="t.mbti" @click="openPanel('mbti')"></button>
-          <button class="hotspot taste" type="button" :aria-label="t.taste" @click="openPanel('taste')"></button>
-          <button class="hotspot reports" type="button" :aria-label="t.reports" @click="openPanel('reports')"></button>
-          <button class="hotspot settings" type="button" :aria-label="t.settings" @click="openPanel('settings')"></button>
-        </div>
 
-        <transition name="fade">
-          <section v-if="activePanel" class="modal-backdrop" @click.self="closePanel">
-            <article class="modal" :class="activePanel + '-modal'" role="dial og" aria-modal="true" :aria-label="currentPanelTitle">
-              <header class="modal-header">
-                <div class="modal-title">
-                  <h2>{{ currentPanelTitle }}</h2>
-                  <p>{{ currentPanelDescription }}</p>
-                </div>
-                <button class="close-button" type="button" aria-label="닫기" @click="closePanel">×</button>
-              </header>
-
-              <div class="panel-body" v-if="activePanel === 'profile'">
-                <div class="grid-2">
-                  <section class="card avatar-card" aria-label="캐릭터 미리보기">
-                    <div class="character" :data-kind="selectedCharacter">
-                      <span class="hair"></span>
-                      <span class="face"></span>
-                      <span class="bang one"></span>
-                      <span class="bang two"></span>
-                      <span class="bang three"></span>
-                      <span class="eye left"></span>
-                      <span class="eye right"></span>
-                      <span class="cheek left"></span>
-                      <span class="cheek right"></span>
-                      <span class="mouth"></span>
-                      <span class="neck"></span>
-                      <span class="body"></span>
-                      <span class="collar left"></span>
-                      <span class="collar right"></span>
-                    </div>
-                    <div class="character-name">
-                      {{ currentCharacter.name }} · {{ currentCharacter.desc }}
-                    </div>
-                    <button class="secondary-button" type="button" @click="showCharacterPicker = true">캐릭터 교체</button>
-                  </section>
-
-                  <section class="card">
-                    <h3>프로필 정보</h3>
-                    <div class="form-grid two">
-                      <div class="field">
-                        <label for="profile-name">이름</label>
-                        <input id="profile-name" v-model="profile.name" :readonly="!profileEdit" />
-                      </div>
-                      <div class="field">
-                        <label for="profile-mbti">MBTI</label>
-                        <select id="profile-mbti" v-model="profile.mbti" :disabled="!profileEdit">
-                          <option>INFP</option><option>ENFP</option><option>INFJ</option><option>ISFJ</option><option>INTP</option>
-                        </select>
-                      </div>
-                      <div class="field">
-                        <label for="profile-gender">성별</label>
-                        <select id="profile-gender" v-model="profile.gender" :disabled="!profileEdit">
-                          <option>여성</option><option>남성</option><option>선택 안 함</option>
-                        </select>
-                      </div>
-                      <div class="field">
-                        <label for="profile-age">나이</label>
-                        <input id="profile-age" type="number" min="14" max="99" v-model.number="profile.age" :readonly="!profileEdit" />
-                      </div>
-                    </div>
-                <div class="form-grid" style="margin-top:8px">
-                      <div class="field">
-                        <label for="profile-status">현재 상태</label>
-                        <textarea id="profile-status" v-model="profile.status" :readonly="!profileEdit"></textarea>
-                      </div>
-                      <div class="field">
-                        <label for="profile-keywords">키워드</label>
-                        <input id="profile-keywords" v-model="profile.keywords" :readonly="!profileEdit" />
-                      </div>
-                      <div class="field">
-                        <label for="profile-interests">관심 분야</label>
-                        <input id="profile-interests" v-model="profile.interests" :readonly="!profileEdit" />
-                      </div>
-                      <div class="field">
-                        <label for="profile-hobbies">취미</label>
-                        <input id="profile-hobbies" v-model="profile.hobbies" :readonly="!profileEdit" />
-                      </div>
-                    </div>
-                    <div class="actions">
-                      <button class="primary-button" type="button" @click="toggleProfileEdit">{{ profileEdit ? '완료' : '수정' }}</button>
-                    </div>
-                    <p v-if="profileSavedAt" class="notice">마지막 저장 시각: {{ profileSavedAt }}</p>
-                  </section>
-                </div>
-
-                <transition name="fade">
-                  <section v-if="showCharacterPicker" class="character-picker" @click.self="showCharacterPicker = false">
-                    <div class="picker-dialog" role="dialog" aria-modal="true" aria-label="캐릭터 교체">
-                      <div class="picker-head">
-                        <h3>대화 대상 캐릭터 선택</h3>
-                        <button class="close-button" type="button" aria-label="닫기" @click="showCharacterPicker = false">×</button>
-                      </div>
-                      <div class="character-options">
-                        <button class="character-option" type="button" v-for="character in characters" :key="character.id"
-                          :class="{ active: selectedCharacter === character.id }" @click="chooseCharacter(character.id)">
-                          <div class="character-mini" :class="'mini-' + character.id"
-                            :style="{ '--hair': character.id === 'sol' ? '#5b4636' : character.id === 'luna' ? '#3b2b5f' : character.id === 'on' ? '#68422a' : '#2f4858',
-                                      '--cloth': character.id === 'sol' ? '#b7ccff' : character.id === 'luna' ? '#f0abfc' : character.id === 'on' ? '#86efac' : '#fdba74' }"></div>
-                          {{ character.name }}
-                        </button>
-                      </div>
-                    </div>
-                  </section>
-                </transition>
-              </div>
-
-              <div class="panel-body" v-if="activePanel === 'mbti'">
-                <div class="mbti-dashboard">
-                  <section class="mbti-result-board">
-                    <div>
-                      <div class="mbti-type">{{ mbtiData.type }}</div>
-                      <div class="mbti-confidence">신뢰도 {{ mbtiData.confidence }}% · {{ mbtiData.period }}</div>
-                    </div>
-                  </section>
-                  <section class="card">
-                    <h3>MBTI 4축 점수그래프</h3>
-                    <div class="axis-list">
-                      <div class="axis-item" v-for="axis in mbtiData.axes" :key="axis.pair">
-                        <div class="axis-head">
-                          <span>{{ axis.pair }} 중 {{ axis.label }} 우세</span>
-                          <span>{{ axis.score }}%</span>
-                        </div>
-                        <div class="meter"><span :style="{ width: axis.score + '%' }"></span></div>
-                      </div>
-                    </div>
-                  </section>
-                </div>
-                <section class="card report-panel">
-                  <h3>근거 리포트</h3>
-                  <ol class="report-lines">
-                    <li v-for="line in mbtiData.report" :key="line">{{ line }}</li>
-                  </ol>
-                  <p class="notice">비의료 참고 정보이며, 최근 대화량과 표현 방식에 따라 결과가 달라질 수 있습니다.</p>
-                  <div class="actions">
-                    <button class="primary-button" type="button" @click="randomizeMbti">분석 다시 실행</button>
-                  </div>
-                </section>
-              </div>
-
-              <div class="panel-body" v-if="activePanel === 'taste'">
-                <div class="log-summary">
-                  <div class="log-pill">
-                    <span>조회 기간</span>
-                    <strong>{{ taste.period }}</strong>
-                  </div>
-                  <div class="log-pill">
-                    <span>반영 대화</span>
-                    <strong>{{ taste.conversationCount }}건</strong>
-                  </div>
-                  <div class="log-pill">
-                    <span>반영 발화</span>
-                    <strong>{{ taste.messageCount }}개</strong>
-                  </div>
-                  <div class="log-pill">
-                    <span>표시 기준</span>
-                    <strong>{{ taste.threshold }}</strong>
+        <aside class="home-sidebar" aria-labelledby="home-summary-title">
+          <header class="panel-caption memory-dashboard-caption">
+            <div>
+              <h2 id="home-summary-title">오늘의 기억 요약</h2>
+              <small v-if="memoryDashboard.count">많이 언급된 항목 TOP 3</small>
+            </div>
+            <button type="button" @click="openMemoryPanel()">보관함 열기 <span aria-hidden="true">→</span></button>
+          </header>
+          <section class="memory-dashboard" aria-label="기억을 구조화한 오늘의 요약">
+            <div v-if="memoryLoading && !memoryDashboard.count" class="memory-dashboard-state">기억을 차분히 정리하고 있어요...</div>
+            <template v-else>
+              <div
+                v-if="memoryDashboard.events.length || memoryDashboard.people.length || memoryDashboard.preferences.length"
+                class="memory-dashboard-facts"
+              >
+                <div v-if="memoryDashboard.events.length">
+                  <span>사건</span>
+                  <div class="memory-dashboard-tags">
+                    <strong v-for="event in memoryDashboard.events" :key="event">{{ event }}</strong>
                   </div>
                 </div>
-                <div class="taste-layout taste-keyword-layout">
-                  <section class="card taste-wide">
-                    <h3>기준 충족 키워드</h3>
-                    <div class="keyword-table">
-                      <div class="keyword-row keyword-head">
-                        <span>키워드</span>
-                        <span>유형</span>
-                        <span>등장</span>
-                        <span>대화 맥락</span>
-                        <span>최근</span>
-                      </div>
-                      <div class="keyword-row" v-for="item in taste.keywords" :key="item.text">
-                        <strong>{{ item.text }}</strong>
-                        <span class="keyword-kind">{{ item.kind }}</span>
-                        <span>{{ item.count }}회</span>
-                        <span>{{ item.source }}</span>
-                        <span>{{ item.lastSeen }}</span>
-                      </div>
-                    </div>
-                    <div class="actions">
-                      <button class="primary-button" type="button" @click="refreshTaste">키워드 다시 추출</button>
-                    </div>
-                  </section>
-                  <section class="data-note">
-                    <h3>안내</h3>
-                    <p v-for="notice in taste.notices" :key="notice">{{ notice }}</p>
-                    <p>업데이트: {{ taste.updated }}</p>
-                  </section>
+                <div v-if="memoryDashboard.people.length">
+                  <span>인물</span>
+                  <div class="memory-dashboard-tags">
+                    <strong v-for="person in memoryDashboard.people" :key="person">{{ person }}</strong>
+                  </div>
+                </div>
+                <div v-if="memoryDashboard.preferences.length">
+                  <span>취향</span>
+                  <div class="memory-dashboard-tags">
+                    <strong v-for="preference in memoryDashboard.preferences" :key="preference">{{ preference }}</strong>
+                  </div>
                 </div>
               </div>
 
-              <div class="panel-body" v-if="activePanel === 'reports'">
-                <section class="card">
-                  <h3>리포트 보관함 더미</h3>
-                  <div class="insight-list">
-                    <article class="insight" v-for="report in reports" :key="report.title">
-                      <div class="insight-icon">R</div>
-                      <div>
-                        <strong>{{ report.title }}</strong>
-                        <span>{{ report.date }} · 마음리포트 모듈 연결 예정</span>
-                      </div>
-                      <div class="trend">{{ report.state }}</div>
-                    </article>
-                  </div>
-                  <p class="notice">이 영역은 별도 담당 모듈과 연결될 진입 화면만 표현했습니다.</p>
-                </section>
-              </div>
-
-              <div class="panel-body" v-if="activePanel === 'settings'">
-                <section class="card">
-                  <h3>계정 기본 정보</h3>
-                  <div class="account-grid">
-                    <div class="account-item"><span>이메일</span><strong>{{ account.email }}</strong></div>
-                    <div class="account-item"><span>로그인 방식</span><strong>{{ account.provider }}</strong></div>
-                    <div class="account-item"><span>가입일</span><strong>{{ account.joinedAt }}</strong></div>
-                    <div class="account-item"><span>최근 접속</span><strong>{{ account.lastLogin }}</strong></div>
-                    <div class="account-item"><span>현재 세션</span><strong>{{ account.session }}</strong></div>
-                    <div class="account-item"><span>이용 상태</span><strong>{{ account.plan }}</strong></div>
-                  </div>
-                </section>
-                <section class="card settings-grid" style="margin-top:10px">
-                  <h3>화면 설정</h3>
-                  <div class="setting-row">
-                    <div>
-                      <strong>언어</strong>
-                      <p>서비스 주요 문구의 표시 언어를 전환합니다.</p>
-                    </div>
-                    <select v-model="settings.language">
-                      <option value="ko">한국어</option>
-                      <option value="en">English</option>
-                    </select>
-                  </div>
-                  <div class="setting-row">
-                    <div>
-                      <strong data-disabled-theme-setting-label></strong>
-                      <p>밝은 화면과 어두운 화면을 즉시 적용합니다.</p>
-                    </div>
-                    <select data-disabled-theme-setting>
-                      <option value="light">라이트</option>
-                      <option value="dark">다크</option>
-                    </select>
-                  </div>
-                  <div class="setting-row">
-                    <div>
-                      <strong>글자 크기</strong>
-                      <p>전체 화면의 기본 글자 크기를 조정합니다.</p>
-                    </div>
-                    <input class="range" type="range" min="0.9" max="1.18" step="0.02" v-model.number="settings.fontScale" />
-                  </div>
-                  <div class="setting-row">
-                    <div>
-                      <strong>고대비</strong>
-                      <p>테두리와 주요 색의 대비를 높입니다.</p>
-                    </div>
-                    <label class="switch">
-                      <input type="checkbox" v-model="settings.highContrast" />
-                      <span></span>
-                    </label>
-                  </div>
-                  <div class="actions">
-                    <button class="primary-button" type="button" @click="showToast('설정 변경 로그가 저장된 것처럼 기록되었습니다.')">설정 저장</button>
-                    <button class="secondary-button" type="button" @click="resetSettings">기본값 복원</button>
-                  </div>
-                </section>
-              </div>
-            </article>
+              <button v-if="memoryDashboard.latest" class="memory-dashboard-latest" type="button" @click="openMemoryPanel(memoryDashboard.latest.id)">
+                <span>가장 최근 기억</span>
+                <strong>{{ memoryDashboard.latest.title }}</strong>
+                <small>{{ memoryDashboard.latest.savedAt || '대화에서 저장됨' }}</small>
+              </button>
+              <button v-else class="memory-dashboard-empty-action" type="button" @click="goToChat">
+                오늘 기억된 내용이 없어요 · 대화하러 가기 <span aria-hidden="true">→</span>
+              </button>
+            </template>
           </section>
-        </transition>
-      </section>
+        </aside>
+      </aside>
 
-      <transition name="fade">
-        <div v-if="toast" class="toast" role="status">{{ toast }}</div>
-      </transition>
-    </main>
+      <section class="room-section" aria-label="내 공간">
+        <header class="room-section-heading">
+          <div>
+            <span class="dashboard-kicker">나의 공간</span>
+            <h2>{{ displayName }}님의 미니룸</h2>
+          </div>
+          <button class="dashboard-primary room-profile-button" type="button" @click="openPanel('profile')">
+            프로필 관리
+            <span aria-hidden="true">↗</span>
+          </button>
+        </header>
+        <MypageRoom
+          :labels="t"
+          :current-character="currentCharacter"
+          :focus-target="roomFocusTarget"
+          :move-key="roomMoveKey"
+          @open-panel="openPanelFromRoom"
+          @open-chat="goToChat"
+          @open-report="goToReport"
+          @arrived="activatePanelAfterRoomMove"
+          @movement-interrupted="cancelPendingRoomAction"
+        />
+      </section>
+    </section>
+
+    <MypageModal
+        :active-panel="activePanel"
+        :title="currentPanelTitle"
+        :description="currentPanelDescription"
+        @close="closePanel"
+      >
+        <ProfilePanel
+          v-if="activePanel === 'profile'"
+          :profile="profile"
+          :profile-edit="profileEdit"
+          :profile-saved-at="profileSavedAt"
+          :current-character="currentCharacter"
+          @toggle-profile-edit="toggleProfileEdit"
+          @cancel-profile-edit="cancelProfileEdit"
+          @update-profile-keywords="updateProfileKeywords"
+        />
+
+        <CharacterPanel
+          v-if="activePanel === 'character'"
+          :selected-character="selectedCharacter"
+          :current-character="currentCharacter"
+          :characters="characters"
+          @choose-character="chooseCharacter"
+        />
+
+        <MbtiPanel
+          v-if="activePanel === 'mbti'"
+          :mbti-data="mbtiData"
+          :mbti-view-mode="mbtiViewMode"
+          :mbti-views="mbtiViews"
+          :current-mbti-view="currentMbtiView"
+          :analysis-eligibility="mbtiAnalysisEligibility"
+          :analysis-polling="mbtiAnalysisPolling"
+          @refresh="refreshMbtiDemoData"
+          @set-view="setMbtiView"
+          @save-mbti="saveMbti"
+        />
+
+        <WeatherPanel
+          v-if="activePanel === 'weather'"
+          :payload="weatherPayload"
+          :loading="weatherLoading"
+          :error="weatherError"
+          :location="weatherLocation"
+          :regions="weatherRegions"
+          @refresh="loadWeatherData({ force: true, rotateHobby: true })"
+          @change-region="setWeatherRegion"
+          @close="closePanel"
+        />
+
+        <BookPanel
+          v-if="activePanel === 'book'"
+          :payload="bookPayload"
+          :loading="bookLoading"
+          :error="bookError"
+          @refresh="loadBookData"
+          @close="closePanel"
+        />
+
+        <MemoryPanel
+          v-if="activePanel === 'memory'"
+          :payload="memoryPayload"
+          :loading="memoryLoading"
+          :error="memoryError"
+          :notice="memoryNotice"
+          :initial-selected-id="memorySelectedId"
+          @refresh="loadMemoryData(true)"
+          @delete-memory="deleteMemoryItems([$event])"
+          @delete-selected="deleteMemoryItems"
+        />
+
+    </MypageModal>
+
+    <transition name="fade">
+      <div v-if="toast" class="toast" role="status">{{ toast }}</div>
+    </transition>
+
+    <section
+      v-if="navigationConfirm"
+      class="navigation-confirm-backdrop"
+      role="presentation"
+      @click.self="cancelNavigationConfirm"
+    >
+      <article class="navigation-confirm" role="dialog" aria-modal="true" :aria-label="navigationConfirm.title">
+        <h2>{{ navigationConfirm.title }}</h2>
+        <p>{{ navigationConfirm.message }}</p>
+        <div class="navigation-confirm-actions">
+          <button class="navigation-cancel-button" type="button" @click="cancelNavigationConfirm">취소</button>
+          <button class="navigation-confirm-button" type="button" @click="confirmNavigation">
+            이동하기
+          </button>
+        </div>
+      </article>
+    </section>
+  </main>
 </template>
 
 <script>
-const i18n = {
-  ko: {
-    subtitle: "대화와 분석 결과를 조용히 정리하는 개인 공간",
-    roomTitle: "마이페이지 메인",
-    hint: "방 안의 오브젝트에 커서를 올리거나 클릭해 기능을 열어보세요.",
-    user: "서마음",
-    profile: "프로필 조회",
-    mbti: "MBTI 분석",
-    taste: "취향 분석",
-    reports: "리포트 보관함",
-    settings: "설정"
-  },
-  en: {
-    subtitle: "A personal room for conversations and self-insight",
-    roomTitle: "My Page",
-    hint: "Hover or click room objects to open each feature.",
-    user: "Maeum Seo",
-    profile: "Profile",
-    mbti: "MBTI Analysis",
-    taste: "Taste Analysis",
-    reports: "Report Archive",
-    settings: "Settings"
-  }
-};
+import { fetchCurrentWeather, fetchMbtiDemoPayload, requestMbtiMonthlyAnalysis, fetchMyProfile, fetchTodayEmotion, updateMyProfile, saveOnboardingMbti, fetchBookRecommendation, fetchMemoryVault, deleteMemoryVaultItem, fetchWeatherRegions } from "./mypage.api";
+import { LOCATION_CONSENT_VERSION } from "../../constants/consentVersions";
+import { createMypageState, i18n } from "./state/mypage.state";
+import {
+  DEFAULT_WEATHER_REGION,
+  MOVABLE_PANEL_IDS,
+  MYPAGE_STORAGE_KEYS,
+  MYPAGE_TIMING,
+  NAVIGATION_CONFIRM_OPTIONS,
+  PANEL_DESCRIPTIONS,
+} from "./config/mypage.constants";
+import CharacterPanel from "./components/CharacterPanel.vue";
+import MbtiPanel from "./components/MbtiPanel.vue";
+import MypageModal from "./components/MypageModal.vue";
+import MypageRoom from "./components/MypageRoom.vue";
+import ProfilePanel from "./components/ProfilePanel.vue";
+import WeatherPanel from "./components/WeatherPanel.vue";
+import BookPanel from "./components/BookPanel.vue";
+import MemoryPanel from "./components/MemoryPanel.vue";
+import { buildMemoryDashboard } from "./utils/memory.dashboard";
+import { getKeywordIcon } from "../../constants/keywordIcons.js";
 
 export default {
-
+  name: "MypageView",
+  components: {
+    CharacterPanel,
+    MbtiPanel,
+    MypageModal,
+    MypageRoom,
+    ProfilePanel,
+    WeatherPanel,
+    BookPanel,
+    MemoryPanel
+  },
+  async beforeRouteEnter(to, from, next) {
+    try {
+      const profilePayload = await fetchMyProfile();
+      next((view) => view.applyProfilePayload(profilePayload));
+    } catch (e) {
+      next("/login");
+    }
+  },
   data() {
-    return {
-      activePanel: null,
-      toast: "",
-      showCharacterPicker: false,
-      profileSavedAt: "",
-      profileEdit: false,
-      selectedCharacter: "sol",
-      characters: [
-        { id: "sol", name: "솔", desc: "차분하게 들어주는 기록형 대화 상대" },
-        { id: "luna", name: "루나", desc: "감정을 부드럽게 정리해주는 공감형 대화 상대" },
-        { id: "on", name: "온", desc: "루틴과 실행을 도와주는 코치형 대화 상대" },
-        { id: "nari", name: "나리", desc: "생각의 방향을 같이 찾아주는 탐색형 대화 상대" }
-      ],
-      profile: {
-        name: "서마음",
-        mbti: "INFP",
-        gender: "여성",
-        age: 24,
-        status: "요즘은 차분한 루틴을 다시 세우는 중",
-        keywords: "공감형, 느린 집중, 감성 기록, 안정 선호",
-        interests: "음악, 산책, 기록, 작은 식물",
-        hobbies: "플레이리스트 만들기, 짧은 에세이 읽기, 방 정리"
-      },
-      mbtiData: {
-        type: "INFP",
-        confidence: 72,
-        period: "최근 30일 대화 기반",
-        axes: [
-          { label: "I", pair: "I / E", score: 68 },
-          { label: "N", pair: "N / S", score: 61 },
-          { label: "F", pair: "F / T", score: 57 },
-          { label: "P", pair: "P / J", score: 64 }
-        ],
-        report: [
-          "혼자 정리한 뒤 대화에 참여할 때 표현의 밀도가 높아집니다.",
-          "미래 가능성, 의미 연결, 상상 기반 표현이 반복적으로 나타납니다.",
-          "결정 근거에서 관계의 분위기와 상대 감정을 자주 고려합니다.",
-          "계획을 고정하기보다 선택지를 열어두고 상황에 맞춰 조정합니다."
-        ]
-      },
-      taste: {
-        updated: "오늘 14:20",
-        period: "최근 30일",
-        messageCount: 128,
-        conversationCount: 18,
-        threshold: "5회 이상",
-        keywords: [
-          { text: "로파이 음악", kind: "최근 관심사", count: 14, source: "휴식, 집중 관련 대화", lastSeen: "06.22" },
-          { text: "감정 기록", kind: "간접 취향 신호", count: 11, source: "하루 정리, 메모 관련 대화", lastSeen: "06.21" },
-          { text: "실내 식물", kind: "최근 관심사", count: 8, source: "공간 안정감, 책상 꾸미기 대화", lastSeen: "06.19" },
-          { text: "짧은 산책", kind: "간접 취향 신호", count: 7, source: "회복 루틴 제안 대화", lastSeen: "06.18" },
-          { text: "밤 루틴", kind: "간접 취향 신호", count: 6, source: "취침 전 정리 대화", lastSeen: "06.17" },
-          { text: "선택지 줄이기", kind: "대화 선호", count: 5, source: "추천 방식 관련 대화", lastSeen: "06.16" }
-        ],
-        notices: [
-          "저장된 대화 로그의 맥락에서 일정 기준 이상 반복된 키워드만 표시합니다.",
-          "직접 말한 취향이 아니어도 반복 맥락이 충분한 경우 간접 취향 신호로 분류합니다."
-        ]
-      },
-      reports: [
-        { title: "이번 주 마음 요약", date: "2026.06.21", state: "더미" },
-        { title: "대화 기반 성향 카드", date: "2026.06.18", state: "더미" },
-        { title: "회복 루틴 제안", date: "2026.06.12", state: "더미" }
-      ],
-      account: {
-        email: "maeum@example.com",
-        provider: "Kakao",
-        joinedAt: "2026.05.12",
-        lastLogin: "2026.06.22 14:05",
-        session: "Chrome Windows 현재 세션",
-        plan: "Free"
-      },
-      settings: {
-        language: "ko",
-        fontScale: 1,
-        highContrast: false
-      }
-    };
+    return createMypageState();
   },
   computed: {
     t() {
       return i18n[this.settings.language];
+    },
+    currentMbtiView() {
+      return this.mbtiViews.find(view => view.key === this.mbtiViewMode) || this.mbtiViews[0];
     },
     currentPanelTitle() {
       if (!this.activePanel) return "";
       return this.t[this.activePanel];
     },
     currentPanelDescription() {
-      const descriptions = {
-        profile: "프로필 정보를 조회하고 필요할 때만 수정합니다.",
-        mbti: "최근 대화 더미 데이터를 기준으로 4축 성향과 근거 리포트를 보여줍니다.",
-        taste: "저장된 대화 로그의 반복 맥락에서 나타난 최근 관심사와 간접 취향 키워드를 표시합니다.",
-        reports: "다른 모듈에서 연결될 영역이라 임시 목록만 표시합니다.",
-        settings: "계정 기본 정보와 언어, 접근성 설정을 관리합니다."
-      };
-      return descriptions[this.activePanel] || "";
+      if (this.activePanel === "memory") {
+        return "대화에서 저장된 기억을 확인하고 직접 관리할 수 있어요.";
+      }
+      return PANEL_DESCRIPTIONS[this.activePanel] || "";
     },
     currentCharacter() {
-      return this.characters.find(character => character.id === this.selectedCharacter);
-    }
+      const found = this.characters.find(character => character.id === this.selectedCharacter);
+      return found || this.characters[0];
+    },
+    displayName() {
+      return this.profile?.name || this.profile?.nickname || "사용자";
+    },
+    profileMbtiLabel() {
+      const current = this.mbtiData?.current?.type;
+      const onboarding = this.mbtiData?.onboarding?.type;
+      const profileType = this.profile?.mbti;
+      return [current, onboarding, profileType].find(type => type && type !== "----") || "미등록";
+    },
+    mbtiSummaryText() {
+      const previous = this.mbtiData?.previous?.type;
+      if (this.profileMbtiLabel === "미등록") return "설정 필요";
+      if (previous && previous !== "----" && previous !== this.profileMbtiLabel) {
+        return `${previous} -> ${this.profileMbtiLabel}`;
+      }
+      return this.mbtiData?.current?.type && this.mbtiData.current.type !== "----"
+        ? "최근 월간 분석 기준"
+        : "온보딩 기준";
+    },
+    todayEmotionLabel() {
+      if (this.todayEmotionLoading) return "확인 중";
+      if (this.todayEmotionError) return "확인 불가";
+      return this.todayEmotionPayload?.representative?.label || "아직 기록 없음";
+    },
+    tasteSummaryChips() {
+      const chips = [
+        {
+          type: "interest",
+          caption: "관심 · ",
+          values: this.normalizeList(this.profile?.interests),
+        },
+        {
+          type: "hobby",
+          caption: "취미 · ",
+          values: this.normalizeList(this.profile?.hobbies),
+        },
+      ];
+
+      return chips.map((chip) => ({
+        ...chip,
+        icon: chip.values.length ? getKeywordIcon(chip.values[0], chip.type) : "",
+        label: this.previewList(chip.values, "미등록"),
+      }));
+    },
+    memoryDashboard() {
+      return buildMemoryDashboard(this.memoryPayload);
+    },
+    interestPreview() {
+      return this.previewList(this.profile?.interests, "관심사 미등록");
+    },
+    hobbyPreview() {
+      return this.previewList(this.profile?.hobbies, "취미 미등록");
+    },
   },
   watch: {
     settings: {
@@ -430,1217 +362,546 @@ export default {
     }
   },
   mounted() {
-    const saved = localStorage.getItem("mindroom-settings");
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      this.settings = {
-        ...this.settings,
-        language: parsed.language || this.settings.language,
-        fontScale: parsed.fontScale || this.settings.fontScale,
-        highContrast: Boolean(parsed.highContrast)
-      };
+    try {
+      const saved = localStorage.getItem(MYPAGE_STORAGE_KEYS.settings);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        this.settings = {
+          ...this.settings,
+          language: parsed.language || this.settings.language,
+          fontScale: parsed.fontScale || this.settings.fontScale,
+          highContrast: Boolean(parsed.highContrast)
+        };
+      }
+    } catch (error) {
+      console.warn("Failed to restore mypage settings:", error);
     }
     this.applySettings();
+    this.loadTodayEmotion();
+    this.loadMbtiDemoData();
+    this.loadMemoryData();
+    this.loadWeatherRegions();
+    this.weatherRefreshTimer = window.setInterval(() => {
+      if (this.activePanel === "weather") this.loadWeatherData();
+    }, MYPAGE_TIMING.weatherRefreshIntervalMs);
+  },
+  beforeUnmount() {
+    this.mbtiPollToken += 1;
+    if (this.weatherRefreshTimer) window.clearInterval(this.weatherRefreshTimer);
+    if (this.toastTimer) window.clearTimeout(this.toastTimer);
   },
   methods: {
+    async loadTodayEmotion() {
+      this.todayEmotionLoading = true;
+      this.todayEmotionError = "";
+      try {
+        this.todayEmotionPayload = await fetchTodayEmotion();
+      } catch (error) {
+        console.warn("Failed to load today's emotion:", error);
+        this.todayEmotionPayload = null;
+        this.todayEmotionError = error.message || "오늘의 감정을 불러오지 못했습니다.";
+      } finally {
+        this.todayEmotionLoading = false;
+      }
+    },
+    normalizeList(value) {
+      if (Array.isArray(value)) return value.filter(Boolean);
+      if (!value) return [];
+      return String(value)
+        .split(",")
+        .map(item => item.trim())
+        .filter(Boolean);
+    },
+    previewList(value, fallback) {
+      const list = this.normalizeList(value);
+      if (!list.length) return fallback;
+      const visible = list.slice(0, 2).join(", ");
+      return list.length > 2 ? `${visible} 외 ${list.length - 2}` : visible;
+    },
+    goToReport() {
+      this.pendingPanel = null;
+      this.pendingChatNavigation = false;
+      this.pendingReportNavigation = true;
+      this.roomFocusTarget = "wardrobe";
+      this.roomMoveKey += 1;
+    },
+    goToChat() {
+      this.pendingPanel = null;
+      this.pendingReportNavigation = false;
+      this.pendingChatNavigation = true;
+      this.roomFocusTarget = "door";
+      this.roomMoveKey += 1;
+    },
+    completeReportNavigation() {
+      this.pendingPanel = null;
+      this.pendingReportNavigation = false;
+      this.closePanel();
+      this.requestNavigationConfirm("report");
+    },
+    completeChatNavigation() {
+      this.pendingPanel = null;
+      this.pendingChatNavigation = false;
+      this.pendingReportNavigation = false;
+      this.closePanel();
+      this.requestNavigationConfirm("chat");
+    },
+    requestNavigationConfirm(type) {
+      this.navigationConfirm = NAVIGATION_CONFIRM_OPTIONS[type] || null;
+    },
+    cancelNavigationConfirm() {
+      this.navigationConfirm = null;
+    },
+    confirmNavigation() {
+      if (!this.navigationConfirm?.path) return;
+      const path = this.navigationConfirm.path;
+      this.navigationConfirm = null;
+      this.$router.push(path);
+    },
+    async loadWeatherRegions() {
+      try {
+        const regions = await fetchWeatherRegions();
+        if (Array.isArray(regions) && regions.length > 0) {
+          this.weatherRegions = regions;
+        }
+      } catch (error) {
+        console.error("Failed to load weather regions:", error);
+      }
+    },
+    applyProfilePayload(data) {
+      if (!data?.profile) return;
+      this.profile = { ...this.profile, ...data.profile };
+      if (data.profile.selectedCharacter) {
+        this.selectedCharacter = data.profile.selectedCharacter;
+      }
+    },
     openPanel(panel) {
+      this.pendingPanel = null;
+      this.pendingChatNavigation = false;
+      this.pendingReportNavigation = false;
+      this.activatePanel(panel);
+    },
+    openPanelFromRoom(panel) {
+      this.pendingChatNavigation = false;
+      this.pendingReportNavigation = false;
+      if (this.shouldMoveBeforeOpen(panel)) {
+        this.pendingPanel = panel;
+        this.roomFocusTarget = panel;
+        this.roomMoveKey += 1;
+        return;
+      }
+      this.activatePanel(panel);
+    },
+    openMemoryPanel(memoryId = "") {
+      this.memorySelectedId = memoryId;
+      this.pendingPanel = null;
+      this.pendingChatNavigation = false;
+      this.pendingReportNavigation = false;
+      this.activatePanel("memory");
+    },
+    cancelPendingRoomAction() {
+      this.pendingPanel = null;
+      this.pendingChatNavigation = false;
+      this.pendingReportNavigation = false;
+    },
+    shouldMoveBeforeOpen(panel) {
+      return MOVABLE_PANEL_IDS.includes(panel);
+    },
+    activatePanel(panel) {
+      this.pendingPanel = null;
+      this.pendingChatNavigation = false;
+      this.pendingReportNavigation = false;
       this.activePanel = panel;
-      this.showCharacterPicker = false;
+      if (panel === "mbti") {
+        this.loadMbtiDemoData();
+      }
+      if (panel === "weather") {
+        this.loadWeatherData();
+      }
+      if (panel === "book") {
+        this.loadBookData();
+      }
+      if (panel === "memory") {
+        this.loadMemoryData();
+      }
+    },
+    activatePanelAfterRoomMove(panel) {
+      if (this.pendingChatNavigation && panel === "door") {
+        this.completeChatNavigation();
+        return;
+      }
+      if (this.pendingReportNavigation && panel === "wardrobe") {
+        this.completeReportNavigation();
+        return;
+      }
+      if (!this.pendingPanel || panel !== this.pendingPanel) return;
+      this.activatePanel(panel);
     },
     closePanel() {
-      this.activePanel = null;
-      this.showCharacterPicker = false;
-    },
-    toggleProfileEdit() {
-      if (this.profileEdit) {
-        this.profileSavedAt = new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
-        this.showToast("프로필 수정 내용이 저장된 것처럼 반영되었습니다.");
+      if (this.activePanel === "profile" && this.profileEdit) {
+        this.cancelProfileEdit();
       }
-      this.profileEdit = !this.profileEdit;
+      this.activePanel = null;
+      this.memorySelectedId = "";
     },
-    chooseCharacter(id) {
+    async toggleProfileEdit() {
+      if (!this.profileEdit) {
+        this.profileSnapshot = JSON.parse(JSON.stringify(this.profile));
+        this.profileEdit = true;
+        return;
+      }
+      if (this.profileEdit) {
+        try {
+          const res = await updateMyProfile({
+            ...this.profile,
+            selectedCharacter: this.selectedCharacter
+          });
+          if (res && res.profile) {
+            this.profile = { ...this.profile, ...res.profile };
+            if (res.profile.selectedCharacter) {
+              this.selectedCharacter = res.profile.selectedCharacter;
+            }
+          }
+          this.profileSavedAt = new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+          this.bookPayload = null;
+          this.showToast("프로필 수정 내용이 정상적으로 반영되었습니다.");
+          this.profileSnapshot = null;
+        } catch (e) {
+          console.error("Failed to update profile", e);
+          this.showToast("프로필 저장에 실패했습니다.");
+          return;
+        }
+      }
+      this.profileEdit = false;
+    },
+    cancelProfileEdit() {
+      if (this.profileSnapshot) {
+        this.profile = JSON.parse(JSON.stringify(this.profileSnapshot));
+      }
+      this.profileSnapshot = null;
+      this.profileEdit = false;
+    },
+    updateProfileKeywords({ type, values }) {
+      if (!this.profileEdit) return;
+      if (type === 'hobby') {
+        this.profile.hobbies = values;
+      } else if (type === 'interest') {
+        this.profile.interests = values;
+      }
+    },
+    async chooseCharacter(id) {
+      const oldChar = this.selectedCharacter;
       this.selectedCharacter = id;
-      this.showCharacterPicker = false;
-      this.showToast("대화 대상 캐릭터가 교체되었습니다.");
+      try {
+        await updateMyProfile({ selectedCharacter: id });
+        localStorage.setItem(MYPAGE_STORAGE_KEYS.character, JSON.stringify({ characterId: id }));
+        this.showToast("대화 대상 캐릭터가 교체되었습니다.");
+      } catch (e) {
+        console.error(e);
+        this.selectedCharacter = oldChar;
+        this.showToast("캐릭터 교체에 실패했습니다.");
+      }
     },
-    randomizeMbti() {
-      const variants = [
-        { type: "INFP", axes: [68, 61, 57, 64], confidence: 72 },
-        { type: "ENFP", axes: [59, 66, 62, 70], confidence: 76 },
-        { type: "INFJ", axes: [72, 64, 58, 54], confidence: 69 }
-      ];
-      const next = variants[Math.floor(Math.random() * variants.length)];
-      this.mbtiData.type = next.type;
-      this.mbtiData.confidence = next.confidence;
-      this.mbtiData.axes = this.mbtiData.axes.map((axis, index) => ({ ...axis, score: next.axes[index], label: next.type[index] }));
-      this.showToast("MBTI 분석 더미 데이터가 갱신되었습니다.");
+    getSavedWeatherLocation() {
+      try {
+        const sessionLocation = JSON.parse(
+          sessionStorage.getItem(MYPAGE_STORAGE_KEYS.weatherAutoLocation) || "null"
+        );
+        if (sessionLocation?.mode === "auto") return sessionLocation;
+        const saved = JSON.parse(
+          localStorage.getItem(MYPAGE_STORAGE_KEYS.weatherLocation) || "null"
+        );
+        return saved;
+      } catch (error) {
+        return null;
+      }
     },
-    refreshTaste() {
-      this.taste.updated = new Date().toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-      this.taste.keywords = this.taste.keywords.map(item => ({
-        ...item,
-        count: Math.max(1, item.count + Math.round(Math.random() * 2 - 1))
-      })).sort((a, b) => b.count - a.count);
-      this.showToast("저장된 대화 로그에서 키워드를 다시 추출했습니다.");
+    saveWeatherLocation(location) {
+      this.weatherLocation = location;
+      if (location?.mode === "auto") {
+        sessionStorage.setItem(MYPAGE_STORAGE_KEYS.weatherAutoLocation, JSON.stringify(location));
+        localStorage.removeItem(MYPAGE_STORAGE_KEYS.weatherLocation);
+        return;
+      }
+      sessionStorage.removeItem(MYPAGE_STORAGE_KEYS.weatherAutoLocation);
+      localStorage.setItem(MYPAGE_STORAGE_KEYS.weatherLocation, JSON.stringify(location));
     },
-    resetSettings() {
-      this.settings = {
-        language: "ko",
-        fontScale: 1,
-        highContrast: false
-      };
-      this.showToast("설정이 기본값으로 복원되었습니다.");
+    getBrowserLocation() {
+      return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+          reject(new Error("geolocation unavailable"));
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          (position) => resolve({
+            mode: "auto",
+            region: "현재 위치",
+            lat: position.coords.latitude,
+            lon: position.coords.longitude
+          }),
+          reject,
+          {
+            enableHighAccuracy: false,
+            timeout: MYPAGE_TIMING.geolocationTimeoutMs,
+            maximumAge: MYPAGE_TIMING.geolocationMaximumAgeMs
+          }
+        );
+      });
+    },
+    async resolveWeatherLocation(force = false) {
+      const saved = this.getSavedWeatherLocation();
+      if (!force && saved) {
+        this.weatherLocation = saved;
+        return saved;
+      }
+      if (!force) {
+        const fallback = { mode: "manual", region: DEFAULT_WEATHER_REGION };
+        this.saveWeatherLocation(fallback);
+        return fallback;
+      }
+      try {
+        const browserLocation = await this.getBrowserLocation();
+        this.saveWeatherLocation(browserLocation);
+        return browserLocation;
+      } catch (error) {
+        const fallback = saved || { mode: "manual", region: DEFAULT_WEATHER_REGION };
+        this.saveWeatherLocation(fallback);
+        return fallback;
+      }
+    },
+    async loadWeatherData({ force = false, refreshLocation = false, rotateHobby = false } = {}) {
+      const hasFreshPayload = this.weatherPayload
+        && Date.now() - this.weatherLastFetchedAt < MYPAGE_TIMING.weatherFreshnessMs;
+      if (!force && (hasFreshPayload || this.weatherLoading)) return;
+
+      const requestId = ++this.weatherRequestId;
+      this.weatherLoading = true;
+      this.weatherError = "";
+      try {
+        const location = await this.resolveWeatherLocation(refreshLocation);
+        const requestLocation = location.mode === "auto"
+          ? { lat: location.lat, lon: location.lon, region: location.region }
+          : { region: location.region || DEFAULT_WEATHER_REGION };
+        const payload = await fetchCurrentWeather(requestLocation, { rotateHobby });
+        if (requestId !== this.weatherRequestId) return;
+        this.weatherPayload = payload;
+        this.weatherLastFetchedAt = Date.now();
+      } catch (error) {
+        if (requestId !== this.weatherRequestId) return;
+        console.error(error);
+        this.weatherError = error.message || "날씨 정보를 불러오지 못했습니다.";
+      } finally {
+        if (requestId === this.weatherRequestId) this.weatherLoading = false;
+      }
+    },
+    async setWeatherRegion(region) {
+      if (region === "현재 위치") {
+        const consentKey = `mindroom-location-consent-${LOCATION_CONSENT_VERSION}`;
+        const hasConsent = localStorage.getItem(consentKey) === "true";
+        if (!hasConsent) {
+          const confirmed = window.confirm(
+            "현재 위치의 위도·경도를 날씨 조회에 사용합니다. 좌표는 서버에 저장하지 않고 현재 브라우저 탭에서만 보관하며, 기상청 예보 격자 변환에 사용합니다. 계속할까요?"
+          );
+          if (!confirmed) return;
+          localStorage.setItem(consentKey, "true");
+        }
+        localStorage.removeItem(MYPAGE_STORAGE_KEYS.weatherLocation);
+        await this.loadWeatherData({ force: true, refreshLocation: true });
+        return;
+      }
+      localStorage.removeItem(`mindroom-location-consent-${LOCATION_CONSENT_VERSION}`);
+      this.saveWeatherLocation({ mode: "manual", region });
+      await this.loadWeatherData({ force: true });
+    },
+    async loadBookData(force = false) {
+      let forceBool = false;
+      let themeParam = null;
+      if (typeof force === "object" && force !== null) {
+        forceBool = Boolean(force.force);
+        themeParam = force.theme || null;
+      } else {
+        forceBool = Boolean(force);
+      }
+      if (!forceBool && this.bookPayload) return;
+
+      this.bookLoading = true;
+      this.bookError = "";
+      try {
+        this.bookPayload = await fetchBookRecommendation(forceBool, themeParam);
+      } catch (error) {
+        console.error(error);
+        this.bookError = error.message || "책 추천 정보를 불러오지 못했습니다.";
+      } finally {
+        this.bookLoading = false;
+      }
+    },
+    async loadMemoryData(force = false) {
+      this.memoryLoading = true;
+      this.memoryError = "";
+      this.memoryNotice = "";
+      try {
+        const payload = await fetchMemoryVault(force);
+        this.memoryPayload = payload || { memories: [] };
+      } catch (error) {
+        console.warn(error);
+        if (!this.memoryPayload) {
+          this.memoryPayload = { memories: [] };
+        }
+        this.memoryError = error.message || "기억 정보를 불러오지 못했습니다.";
+      } finally {
+        this.memoryLoading = false;
+      }
+    },
+    async deleteMemoryItems(ids = []) {
+      const targetIds = ids.filter(Boolean).map(String);
+      if (!targetIds.length) return;
+      const previousPayload = this.memoryPayload;
+      const idSet = new Set(targetIds);
+      const currentMemories = Array.isArray(this.memoryPayload)
+        ? this.memoryPayload
+        : this.memoryPayload?.memories || this.memoryPayload?.items || [];
+
+      if (Array.isArray(this.memoryPayload)) {
+        this.memoryPayload = currentMemories.filter(item => !idSet.has(String(item.id || item.memory_id || item.key)));
+      } else {
+        this.memoryPayload = {
+          ...(this.memoryPayload || {}),
+          memories: currentMemories.filter(item => !idSet.has(String(item.id || item.memory_id || item.key)))
+        };
+      }
+
+      this.memoryNotice = "";
+      try {
+        await Promise.all(targetIds.map(id => deleteMemoryVaultItem(id)));
+        this.showToast(`${targetIds.length}개의 기억을 삭제했습니다.`);
+      } catch (error) {
+        console.warn(error);
+        this.memoryPayload = previousPayload;
+        this.memoryError = "삭제 API 호출에 실패했습니다. 잠시 후 다시 시도해주세요.";
+      }
+    },
+
+    setMbtiView(viewKey) {
+      this.mbtiViewMode = viewKey;
+    },
+    async saveMbti(mbtiType) {
+      try {
+        await saveOnboardingMbti(mbtiType);
+        this.showToast("초기 MBTI가 성공적으로 저장되었습니다.");
+        const payload = await this.loadMbtiDemoData();
+        const savedType = payload?.mbti_data?.onboarding?.type;
+        if (savedType && savedType !== "----") {
+          this.mbtiViewMode = "onboardingNext";
+        }
+      } catch (e) {
+        console.error(e);
+        this.showToast("지원하지 않는 MBTI거나 통신 오류가 발생했습니다.");
+      }
+    },
+    async loadMbtiDemoData(force = false, periodKey = "") {
+      try {
+        const payload = await fetchMbtiDemoPayload(force, periodKey);
+        const hasMonthlyAnalysis = this.hasRenderableMonthlyMbtiData(payload.mbti_data);
+        const hasOnboardingProfile = this.hasRenderableOnboardingMbtiData(payload.mbti_data);
+
+        this.mbtiData = payload.mbti_data || null;
+        this.mbtiAnalysisEligibility = payload.analysis_eligibility || null;
+        if (payload.mbti_data?.onboarding?.type === '----') {
+          this.mbtiViewMode = "onboardingType";
+        } else if (hasMonthlyAnalysis || hasOnboardingProfile) {
+          this.mbtiViewMode = payload.mbti_view_mode
+            || "onboardingNext";
+        }
+        this.mbtiApiStatus = payload.status || "ready";
+        return payload;
+      } catch (error) {
+        console.warn(error);
+        this.mbtiApiStatus = "error";
+        return null;
+      }
+    },
+    hasRenderableOnboardingMbtiData(data) {
+      return Boolean(
+        data &&
+        data.onboarding?.type &&
+        Array.isArray(data.onboarding.report) &&
+        data.onboarding.report.length > 0
+      );
+    },
+    hasRenderableMonthlyMbtiData(data) {
+      return Boolean(
+        data &&
+        data.onboarding?.type &&
+        data.previous?.type &&
+        data.current?.type &&
+        Array.isArray(data.current.axes) &&
+        data.current.axes.length > 0 &&
+        Array.isArray(data.report) &&
+        data.report.length > 0
+      );
+    },
+    async refreshMbtiDemoData() {
+      if (this.mbtiAnalysisPolling) return;
+      this.showToast("성향 분석을 요청하고 있습니다...");
+      try {
+        const requestPayload = await requestMbtiMonthlyAnalysis();
+        const periodKey = requestPayload?.analysis_job?.period_key || "";
+        let finalPayload = requestPayload;
+        const requestedStatus = requestPayload?.analysis_job?.status;
+
+        if (["pending", "running"].includes(requestedStatus)) {
+          this.mbtiAnalysisPolling = true;
+          const pollToken = ++this.mbtiPollToken;
+          this.showToast("분석 요청이 접수되었습니다. 결과를 만드는 중입니다...");
+          finalPayload = await this.pollMbtiAnalysis(periodKey, pollToken) || requestPayload;
+        } else {
+          finalPayload = await this.loadMbtiDemoData(false, periodKey) || requestPayload;
+        }
+
+        const jobStatus = finalPayload?.analysis_job?.status || requestedStatus;
+        const message = finalPayload.status === "not_eligible" || requestPayload.status === "not_eligible"
+          ? "분석에 필요한 답변이 아직 충분하지 않습니다."
+          : jobStatus === "completed"
+            ? "성향 분석 결과가 최신 상태입니다."
+            : ["failed", "skipped"].includes(jobStatus)
+              ? "분석 작업에 실패했습니다. 잠시 후 다시 시도해주세요."
+              : "분석이 계속 진행 중입니다. 잠시 후 다시 확인해주세요.";
+        this.showToast(message);
+      } catch (error) {
+        console.warn(error);
+        this.mbtiApiStatus = "error";
+        this.showToast("분석 요청에 실패했습니다.");
+      } finally {
+        this.mbtiAnalysisPolling = false;
+      }
+    },
+    async pollMbtiAnalysis(periodKey, pollToken) {
+      const maxAttempts = 30;
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 2000));
+        if (pollToken !== this.mbtiPollToken) return null;
+
+        const payload = await this.loadMbtiDemoData(false, periodKey);
+        const jobStatus = payload?.analysis_job?.status;
+        if (["completed", "failed", "skipped"].includes(jobStatus)) {
+          return payload;
+        }
+      }
+      return this.loadMbtiDemoData(false, periodKey);
     },
     applySettings() {
       document.documentElement.dataset.contrast = String(this.settings.highContrast);
       document.documentElement.style.setProperty("--font-scale", this.settings.fontScale);
-      localStorage.setItem("mindroom-settings", JSON.stringify(this.settings));
+      localStorage.setItem(MYPAGE_STORAGE_KEYS.settings, JSON.stringify(this.settings));
     },
     showToast(message) {
       this.toast = message;
       window.clearTimeout(this.toastTimer);
       this.toastTimer = window.setTimeout(() => {
         this.toast = "";
-      }, 2400);
+      }, MYPAGE_TIMING.toastDurationMs);
     }
   }
 };
 </script>
 
-<style scoped>
-.app-shell {
-  --ink: #f4efff;
-  --mut: #b9acd8;
-  --bd: #4d3a82;
-  --gray: #241b4b;
-  --teal: #8ea7ff;
-  --tealbg: #202969;
-  --blue: #5167e8;
-  --bluebg: #202969;
-  --amber: #f3a86b;
-  --amberbg: #3a2440;
-  --red: #ff6d9e;
-  --redbg: #3b1737;
-  --pur: #9c5bff;
-  --purbg: #2a1a62;
-  --canvas: #0b1238;
-  --soft: #171044;
-  --bg: var(--canvas);
-  --surface: #171044;
-  --surface-soft: #21165a;
-  --text: var(--ink);
-  --muted: var(--mut);
-  --line: var(--bd);
-  --primary: var(--pur);
-  --primary-soft: var(--purbg);
-  --accent: var(--blue);
-  --success: #10b981;
-  --danger: var(--red);
-  --warning: var(--amber);
-  --shadow: 0 20px 60px rgba(4, 7, 28, 0.46);
-  --font-scale: 1;
-}
-
-.app-shell[data-contrast="true"] {
-  --primary: #d7b7ff;
-  --accent: #8fa0ff;
-  --line: #d7b7ff;
-}
-
-.app-shell button, .app-shell input, .app-shell select, .app-shell textarea { font: inherit; }
-.app-shell button { cursor: pointer; }
-
-.app-shell {
-  min-height: 100vh;
-  padding: 12px;
-  overflow: auto;
-  background: transparent;
-  color: var(--text);
-  font-family: Pretendard, "Noto Sans KR", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: calc(16px * var(--font-scale));
-  box-sizing: border-box;
-}
-.app-shell *, .app-shell *::before, .app-shell *::after { box-sizing: border-box; }
-
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  max-width: 1280px;
-  margin: 0 auto 10px;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(23, 16, 68, 0.9);
-  backdrop-filter: blur(10px);
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-
-.brand-mark {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  place-items: center;
-  border-radius: 10px;
-  background: linear-gradient(135deg, var(--pur), var(--blue));
-  color: #fff;
-  font-weight: 900;
-  box-shadow: 0 10px 22px rgba(156, 91, 255, 0.28);
-}
-
-.brand h1 {
-  margin: 0;
-  font-size: 20px;
-  line-height: 1.2;
-  letter-spacing: 0;
-  color: var(--primary);
-}
-
-.brand p {
-  margin: 2px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.user-chip {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: rgba(33, 22, 90, 0.9);
-  white-space: nowrap;
-}
-
-.mini-avatar {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 50% 38%, #fef8dd 0 12%, #e1f5ee 13% 36%, #0f6e56 37% 100%);
-  border: 2px solid #fff;
-  box-shadow: 0 0 0 1px var(--line);
-}
-
-.room-stage {
-  position: relative;
-  width: min(1560px, 100%, calc((100vh - 96px) * 16 / 9));
-  height: auto;
-  margin: 0 auto;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(23, 16, 68, 0.96);
-  box-shadow: 0 18px 42px rgba(4, 7, 28, 0.42);
-  overflow: hidden;
-}
-
-.room-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 42px;
-  padding: 9px 16px;
-  border-bottom: 1px solid var(--line);
-  background: rgba(23, 16, 68, 0.96);
-}
-
-.room-toolbar strong {
-  font-size: 16px;
-  color: var(--primary);
-}
-
-.status-text {
-  color: var(--muted);
-  font-size: 13px;
-  text-align: right;
-}
-
-.room-canvas {
-  position: relative;
-  width: 100%;
-  background: var(--canvas);
-}
-
-.room-canvas::before {
-  content: "";
-  display: block;
-  aspect-ratio: 16 / 9;
-}
-
-.room-image {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-  user-select: none;
-}
-
-.hotspot {
-  position: absolute;
-  border: 2px solid rgba(156, 91, 255, 0);
-  border-radius: 8px;
-  background: rgba(156, 91, 255, 0);
-  outline: 0;
-  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
-}
-
-.hotspot:focus-visible,
-.hotspot:hover {
-  transform: translateY(-2px);
-  border-color: rgba(182, 120, 255, 0.98);
-  background: rgba(156, 91, 255, 0.22);
-  box-shadow: 0 0 0 4px rgba(17, 24, 82, 0.78), 0 16px 30px rgba(81, 103, 232, 0.25);
-}
-
-.hotspot::after {
-  content: attr(aria-label);
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 8px);
-  z-index: 5;
-  transform: translateX(-50%) translateY(6px);
-  min-width: max-content;
-  padding: 7px 10px;
-  border-radius: 999px;
-  background: rgba(44, 44, 42, 0.92);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 700;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 160ms ease, transform 160ms ease;
-  white-space: nowrap;
-}
-
-.hotspot:focus-visible::after,
-.hotspot:hover::after {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-
-/* Coordinates are tuned to the 16:9 new main-room image. */
-.hotspot.profile { left: 13.56%; top: 39.96%; width: 17.34%; height: 55.79%; border-radius: 10px; }
-.hotspot.mbti { left: 71.30%; top: 6.10%; width: 14.54%; height: 25.13%; }
-.hotspot.taste { left: 34.44%; top: 46.31%; width: 21.41%; height: 49.20%; border-radius: 10px; }
-.hotspot.reports { left: 54.66%; top: 4.35%; width: 13.76%; height: 32.09%; }
-.hotspot.settings { left: 58.35%; top: 39.70%; width: 26.50%; height: 33.79%; }
-
-.legend {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--line);
-  background: rgba(23, 16, 68, 0.98);
-}
-
-.legend button {
-  min-height: 36px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: linear-gradient(180deg, #2a1a62, #202969);
-  color: #f4efff;
-  font-weight: 700;
-}
-
-.legend button:hover,
-.legend button:focus-visible {
-  border-color: var(--primary);
-  background: linear-gradient(180deg, #3a2380, #25317a);
-  color: var(--primary);
-}
-
-.modal-backdrop {
-  position: absolute;
-  inset: 0;
-  z-index: 20;
-  display: grid;
-  place-items: start center;
-  padding: 10px;
-  background: rgba(44, 44, 42, 0.48);
-}
-
-.modal {
-  width: min(1040px, 100%);
-  max-height: none;
-  overflow: visible;
-  transform: scale(var(--modal-fit-scale, 0.88));
-  transform-origin: top center;
-  border-radius: 8px;
-  background: rgba(23, 16, 68, 0.98);
-  box-shadow: var(--shadow);
-  border: 1px solid var(--line);
-}
-
-.modal.profile-modal,
-.modal.settings-modal { --modal-fit-scale: 0.82; }
-
-.modal.taste-modal,
-.modal.mbti-modal { --modal-fit-scale: 0.9; }
-
-.modal-header {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  min-height: 56px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--line);
-  background: #151142;
-}
-
-.modal-title h2 {
-  margin: 0;
-  font-size: 18px;
-  letter-spacing: 0;
-  color: var(--primary);
-}
-
-.modal-title p {
-  margin: 2px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.close-button {
-  width: 34px;
-  height: 34px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #21165a;
-  color: var(--text);
-  font-size: 24px;
-  line-height: 1;
-}
-
-.panel-body { padding: 12px; }
-
-.grid-2 {
-  display: grid;
-  grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
-  gap: 12px;
-}
-
-.grid-3 {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.card {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #171044;
-  padding: 12px;
-}
-
-.card.soft { background: #21165a; }
-
-.card h3 {
-  margin: 0 0 12px;
-  font-size: 15px;
-  letter-spacing: 0;
-  color: var(--ink);
-}
-
-.avatar-card {
-  display: grid;
-  gap: 8px;
-  place-items: center;
-  min-height: 312px;
-  background: linear-gradient(180deg, var(--primary-soft), var(--surface));
-}
-
-.character {
-  position: relative;
-  width: 220px;
-  height: 260px;
-  transform: scale(0.72);
-  transform-origin: center;
-  margin: -34px 0;
-}
-
-.character .hair {
-  position: absolute;
-  left: 36px;
-  top: 16px;
-  width: 148px;
-  height: 128px;
-  border-radius: 60px 60px 42px 42px;
-  background: var(--hair);
-  box-shadow: inset -14px -10px 0 rgba(0, 0, 0, 0.14);
-}
-
-.character .face {
-  position: absolute;
-  left: 50px;
-  top: 48px;
-  width: 120px;
-  height: 116px;
-  border-radius: 45% 45% 48% 48%;
-  background: var(--skin);
-  border: 2px solid #d59465;
-}
-
-.character .bang {
-  position: absolute;
-  top: 38px;
-  width: 42px;
-  height: 50px;
-  border-radius: 50%;
-  background: var(--hair);
-}
-
-.character .bang.one { left: 58px; transform: rotate(24deg); }
-.character .bang.two { left: 94px; transform: rotate(-10deg); }
-.character .bang.three { left: 126px; transform: rotate(-28deg); }
-
-.character .eye {
-  position: absolute;
-  top: 98px;
-  width: 12px;
-  height: 16px;
-  border-radius: 50%;
-  background: #2f2a26;
-}
-
-.character .eye.left { left: 82px; }
-.character .eye.right { right: 82px; }
-
-.character .cheek {
-  position: absolute;
-  top: 119px;
-  width: 18px;
-  height: 10px;
-  border-radius: 50%;
-  background: rgba(244, 114, 182, 0.45);
-}
-
-.character .cheek.left { left: 66px; }
-.character .cheek.right { right: 66px; }
-
-.character .mouth {
-  position: absolute;
-  left: 100px;
-  top: 134px;
-  width: 20px;
-  height: 10px;
-  border-bottom: 3px solid #7c3f1d;
-  border-radius: 0 0 20px 20px;
-}
-
-.character .neck {
-  position: absolute;
-  left: 96px;
-  top: 157px;
-  width: 28px;
-  height: 25px;
-  background: var(--skin);
-  border-left: 2px solid #d59465;
-  border-right: 2px solid #d59465;
-}
-
-.character .body {
-  position: absolute;
-  left: 44px;
-  bottom: 12px;
-  width: 132px;
-  height: 94px;
-  border-radius: 34px 34px 22px 22px;
-  background: linear-gradient(180deg, var(--cloth), var(--cloth-dark));
-  border: 2px solid rgba(31, 41, 55, 0.24);
-}
-
-.character .collar {
-  position: absolute;
-  top: 176px;
-  width: 42px;
-  height: 28px;
-  background: #fff;
-  border-radius: 0 0 18px 18px;
-}
-
-.character .collar.left { left: 68px; transform: rotate(20deg); }
-.character .collar.right { right: 68px; transform: rotate(-20deg); }
-
-.character[data-kind="sol"] { --hair: #5b4636; --skin: #ffdca8; --cloth: #b7ccff; --cloth-dark: #8b9fe8; }
-.character[data-kind="luna"] { --hair: #3b2b5f; --skin: #ffe1b5; --cloth: #f0abfc; --cloth-dark: #c084fc; }
-.character[data-kind="on"] { --hair: #68422a; --skin: #f8c99a; --cloth: #86efac; --cloth-dark: #34d399; }
-.character[data-kind="nari"] { --hair: #2f4858; --skin: #ffe0c2; --cloth: #fdba74; --cloth-dark: #fb923c; }
-
-.character-name {
-  text-align: center;
-  color: var(--muted);
-  font-weight: 700;
-}
-
-.character-picker {
-  position: fixed;
-  inset: 0;
-  z-index: 35;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgba(44, 44, 42, 0.42);
-}
-
-.picker-dialog {
-  width: min(760px, 100%);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-  box-shadow: var(--shadow);
-  padding: 14px;
-}
-
-.picker-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
-.picker-head h3 { margin: 0; }
-
-.character-options {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.character-option {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface-soft);
-  padding: 10px;
-  color: var(--text);
-  font-weight: 800;
-}
-
-.character-option.active {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(156, 91, 255, 0.24);
-}
-
-.character-mini {
-  position: relative;
-  width: 70px;
-  height: 86px;
-  margin: 0 auto 8px;
-}
-
-.character-mini::before {
-  content: "";
-  position: absolute;
-  left: 18px;
-  top: 4px;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: var(--hair);
-}
-
-.character-mini::after {
-  content: "";
-  position: absolute;
-  left: 14px;
-  bottom: 0;
-  width: 42px;
-  height: 42px;
-  border-radius: 18px 18px 12px 12px;
-  background: var(--cloth);
-}
-
-.form-grid {
-  display: grid;
-  gap: 8px;
-}
-
-.form-grid.two {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.field {
-  display: grid;
-  gap: 4px;
-}
-
-.field label {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.field input,
-.field select,
-.field textarea {
-  width: 100%;
-  min-height: 34px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 6px 9px;
-  background: #171044;
-  color: var(--text);
-}
-
-.field input[readonly],
-.field textarea[readonly],
-.field select:disabled {
-  background: #21165a;
-  color: var(--text);
-  opacity: 1;
-}
-
-.field textarea {
-  min-height: 56px;
-  resize: vertical;
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.primary-button,
-.secondary-button,
-.ghost-button {
-  min-height: 34px;
-  border-radius: 8px;
-  padding: 0 12px;
-  font-weight: 800;
-}
-
-.primary-button {
-  border: 1px solid var(--primary);
-  background: linear-gradient(135deg, var(--pur), var(--blue));
-  color: #fff;
-  box-shadow: 0 8px 18px rgba(156, 91, 255, 0.3);
-}
-
-.secondary-button {
-  border: 1px solid var(--line);
-  background: #202969;
-  color: var(--text);
-}
-
-.secondary-button:hover,
-.secondary-button:focus-visible {
-  border-color: var(--primary);
-  color: var(--primary);
-  background: #2a1a62;
-}
-
-.ghost-button {
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--primary);
-}
-
-.tag-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.tag {
-  display: inline-flex;
-  align-items: center;
-  min-height: 30px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: #2a1a62;
-  color: #d7b7ff;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.taste-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(260px, 0.8fr);
-  gap: 12px;
-}
-
-.taste-main {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.taste-side {
-  display: grid;
-  gap: 10px;
-}
-
-.taste-wide {
-  grid-column: 1 / -1;
-}
-
-.taste-keyword-layout {
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.32fr);
-  align-items: start;
-}
-
-.taste-keyword-layout .taste-wide {
-  grid-column: auto;
-}
-
-.keyword-table {
-  display: grid;
-  gap: 7px;
-}
-
-.keyword-row {
-  display: grid;
-  grid-template-columns: minmax(112px, 0.8fr) 112px 58px minmax(0, 1.5fr) 58px;
-  gap: 10px;
-  align-items: center;
-  min-height: 42px;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #202969;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.keyword-row strong {
-  color: #f4efff;
-  font-size: 14px;
-}
-
-.keyword-kind {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 24px;
-  padding: 3px 7px;
-  border-radius: 999px;
-  background: #2a1a62;
-  color: #d7b7ff;
-  font-size: 11px;
-  font-weight: 900;
-}
-
-.keyword-head {
-  min-height: 34px;
-  background: #2a1a62;
-  color: #d7b7ff;
-  font-weight: 900;
-}
-
-.log-summary {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.log-pill {
-  padding: 8px 9px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #202969;
-}
-
-.log-pill span {
-  display: block;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 800;
-  margin-bottom: 3px;
-}
-
-.log-pill strong {
-  color: var(--text);
-  font-size: 13px;
-}
-
-.signal-list {
-  display: grid;
-  gap: 8px;
-}
-
-.signal-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  padding: 9px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #202969;
-}
-
-.signal-card strong {
-  display: block;
-  margin-bottom: 3px;
-  color: #f4efff;
-  font-size: 14px;
-}
-
-.signal-card span {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.signal-badge {
-  align-self: start;
-  min-width: 48px;
-  padding: 4px 7px;
-  border-radius: 999px;
-  background: #2a1a62;
-  color: #d7b7ff;
-  text-align: center;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.quote-list {
-  display: grid;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.quote-log {
-  padding: 8px 9px;
-  border: 1px solid #4d3a82;
-  border-radius: 8px;
-  background: rgba(42, 26, 98, 0.62);
-}
-
-.quote-log strong {
-  display: block;
-  margin-bottom: 3px;
-  color: #f4efff;
-  font-size: 12px;
-}
-
-.quote-log span {
-  display: block;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.data-note {
-  padding: 9px 10px;
-  border: 1px solid #5d48a0;
-  border-radius: 8px;
-  background: #1b1550;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.data-note h3 {
-  margin-bottom: 6px;
-  font-size: 13px;
-}
-
-.data-note p {
-  margin: 3px 0;
-}
-
-.mbti-dashboard {
-  display: grid;
-  grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.2fr);
-  gap: 12px;
-}
-
-.mbti-result-board {
-  display: grid;
-  place-items: center;
-  min-height: 150px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: linear-gradient(180deg, #2a1a62, #151142);
-  text-align: center;
-}
-
-.mbti-type {
-  font-size: 44px;
-  font-weight: 950;
-  color: var(--primary);
-  line-height: 1;
-}
-
-.mbti-confidence {
-  margin-top: 8px;
-  color: var(--muted);
-  font-weight: 800;
-  font-size: 12px;
-}
-
-.axis-list {
-  display: grid;
-  gap: 8px;
-}
-
-.axis-item {
-  display: grid;
-  gap: 5px;
-}
-
-.axis-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.meter {
-  height: 9px;
-  border-radius: 999px;
-  background: var(--gray);
-  overflow: hidden;
-}
-
-.meter span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--blue), var(--pur));
-}
-
-.report-panel {
-  margin-top: 12px;
-}
-
-.report-lines {
-  margin: 0;
-  padding-left: 18px;
-  color: var(--text);
-  line-height: 1.75;
-  font-size: 14px;
-}
-
-.notice {
-  margin-top: 12px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: var(--amberbg);
-  color: var(--amber);
-  border: 1px solid #ead7ab;
-  font-size: 12px;
-}
-
-.insight-list {
-  display: grid;
-  gap: 8px;
-}
-
-.insight {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  padding: 9px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #171044;
-}
-
-.insight-icon {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border-radius: 8px;
-  background: #2a1a62;
-  color: #d7b7ff;
-  font-weight: 900;
-}
-
-.insight strong {
-  display: block;
-  margin-bottom: 2px;
-  font-size: 14px;
-}
-
-.insight span {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.trend {
-  color: var(--success);
-  font-weight: 900;
-}
-
-.trend.down { color: var(--danger); }
-
-.settings-grid {
-  display: grid;
-  gap: 8px;
-}
-
-.account-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.account-item {
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #21165a;
-}
-
-.account-item span {
-  display: block;
-  margin-bottom: 5px;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.account-item strong { font-size: 13px; }
-
-.setting-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.setting-row:has(select[data-disabled-theme-setting]) {
-  display: none;
-}
-
-.setting-row:last-child { border-bottom: 0; }
-
-.setting-row p {
-  margin: 4px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.switch {
-  position: relative;
-  flex: 0 0 auto;
-  width: 54px;
-  height: 28px;
-}
-
-.switch input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.switch span {
-  position: absolute;
-  inset: 0;
-  border-radius: 999px;
-  background: #cbd5e1;
-  transition: background 160ms ease;
-}
-
-.switch span::after {
-  content: "";
-  position: absolute;
-  top: 4px;
-  left: 4px;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: #f4efff;
-  transition: transform 160ms ease;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.2);
-}
-
-.switch input:checked + span { background: var(--primary); }
-.switch input:checked + span::after { transform: translateX(24px); }
-
-.range {
-  width: 160px;
-  accent-color: var(--primary);
-}
-
-.toast {
-  position: fixed;
-  right: 24px;
-  bottom: 24px;
-  z-index: 40;
-  max-width: 360px;
-  padding: 13px 15px;
-  border-radius: 8px;
-  background: var(--ink);
-  color: #fff;
-  box-shadow: var(--shadow);
-  font-weight: 700;
-}
-
-.fade-enter-active,
-.fade-leave-active { transition: opacity 140ms ease; }
-.fade-enter-from,
-.fade-leave-to { opacity: 0; }
-
-@media (max-width: 860px) {
-  .app-shell { padding: 14px; }
-  .topbar,
-  .room-toolbar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .status-text { text-align: left; }
-  .legend,
-  .grid-3,
-  .character-options,
-  .account-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .grid-2,
-  .mbti-dashboard,
-  .taste-layout,
-  .taste-main { grid-template-columns: 1fr; }
-  .taste-keyword-layout .taste-wide { grid-column: 1 / -1; }
-  .modal-backdrop { padding: 10px; }
-  .panel-body,
-  .modal-header { padding: 16px; }
-}
-
-@media (max-width: 560px) {
-  .legend,
-  .grid-3,
-  .character-options,
-  .account-grid,
-  .form-grid.two,
-  .log-summary { grid-template-columns: 1fr 1fr; }
-  .room-canvas::before { aspect-ratio: 16 / 10; }
-  .room-image {
-    object-fit: contain;
-    background: var(--canvas);
-  }
-  .keyword-row {
-    grid-template-columns: minmax(0, 1fr) 72px;
-  }
-  .keyword-row span:nth-child(3),
-  .keyword-row span:nth-child(4),
-  .keyword-row span:nth-child(5) {
-    grid-column: 1 / -1;
-  }
-  .setting-row {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-}
-</style>
+<style src="./styles/mypage.css"></style>

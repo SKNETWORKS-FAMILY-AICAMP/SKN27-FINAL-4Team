@@ -1,0 +1,174 @@
+@media (max-width: 960px) {
+  .character-panel-layout,
+  .weather-panel-layout,
+  .mbti-dashboard,
+  .mbti-combined-grid,
+  .taste-layout,
+  .taste-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .taste-keyword-layout .taste-wide {
+    grid-column: 1 / -1;
+  }
+
+  .weather-modal .modal-content {
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .weather-modal .weather-panel-body,
+  .weather-modal .weather-panel-layout {
+    height: auto;
+    overflow: visible;
+  }
+
+  .modal.weather-modal {
+    height: auto;
+  }
+}
+
+@media (max-width: 860px) {
+  .mypage-home { grid-template-columns: minmax(0, 1fr); }
+  .room-section { order: -1; }
+  .room-section-heading {
+    align-items: center;
+    flex-direction: row;
+  }
+  .modal-backdrop {
+    align-items: start;
+    padding: 12px;
+    overflow-y: auto;
+  }
+  .modal,
+  .modal.profile-modal,
+  .modal.settings-modal,
+  .modal.character-modal,
+  .modal.weather-modal,
+  .modal.book-modal,
+  .modal.wardrobe-modal,
+  .modal.taste-modal,
+  .modal.mbti-modal,
+  .modal.memory-modal {
+    width: 100%;
+    max-height: calc(100dvh - 24px);
+    overflow: hidden;
+  }
+  .modal-content { scrollbar-gutter: auto; }
+  .memory-modal .modal-content { overflow-y: auto; }
+  .memory-modal .memory-panel { min-height: 520px; }
+  .weather-modal .weather-panel-body {
+    height: auto;
+    overflow: visible;
+  }
+  .book-modal .modal-content {
+    display: block;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  .book-modal .book-panel-body {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+  .book-modal .book-layout { grid-template-rows: none; }
+  .book-modal .recommendation-card {
+    height: auto;
+    overflow: visible;
+  }
+  .book-modal .book-copy {
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+@media (max-width: 560px) {
+  .app-shell { padding: 8px; }
+  .home-left-panel { padding: 9px; }
+  .identity-card {
+    grid-template-columns: 64px minmax(0, 1fr);
+    padding: 14px;
+  }
+  .identity-avatar { width: 64px; height: 64px; }
+  .dashboard-primary { grid-column: 2; }
+  .room-profile-button { grid-column: auto; }
+  .quick-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .quick-actions .character-action { grid-column: 1 / -1; }
+  .quick-actions button { min-height: 82px; padding: 10px; }
+  .quick-actions .menu-copy strong,
+  .quick-actions .menu-copy small { white-space: normal; }
+  .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .summary-card { border-right: 1px solid rgba(215, 183, 255, 0.12); }
+  .summary-card:nth-child(even) { border-right: 0; }
+  .summary-card:nth-last-child(-n + 2) { border-bottom: 0; }
+  .room-section-heading { padding: 10px 12px; }
+  .room-section-heading p { font-size: 12px; }
+  .room-interaction-guide { padding: 8px 12px; font-size: 12px; }
+  .modal-backdrop { padding: 6px; }
+  .modal,
+  .modal.profile-modal,
+  .modal.settings-modal,
+  .modal.character-modal,
+  .modal.weather-modal,
+  .modal.book-modal,
+  .modal.wardrobe-modal,
+  .modal.taste-modal,
+  .modal.mbti-modal,
+  .modal.memory-modal {
+    max-height: calc(100dvh - 12px);
+    border-radius: 14px;
+  }
+  .modal-header { padding: 14px; }
+  .modal-title h2 { font-size: 19px; }
+  .modal-title p { margin-top: 4px; font-size: 13px; }
+  .panel-body,
+  .mbti-modal .panel-body { padding: 12px; }
+  .modal-content > .panel-body { padding: 12px; }
+  .book-modal .recommendation-card { min-height: 0; }
+  .toast {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    max-width: none;
+    padding: 12px 14px;
+    font-size: 14px;
+  }
+}
+
+/* 정보량이 많은 패널은 기존 0.82 대비 약 15% 넓게 표시한다. */
+.modal.book-modal,
+.modal.weather-modal,
+.modal.mbti-modal {
+  --modal-fit-scale: 0.94;
+  transform: scale(var(--modal-fit-scale));
+  transform-origin: center;
+}
+
+/* 2026-07-19 기준 캐릭터 정보 모달 크기. */
+.modal.character-modal {
+  --viewport-fit-scale: 0.82;
+  width: min(1040px, 100%);
+  height: auto;
+  max-height: none;
+  overflow: hidden;
+  transform: scale(var(--viewport-fit-scale));
+  transform-origin: center;
+}
+
+.character-modal .modal-content {
+  flex: 0 0 auto;
+  overflow: visible;
+  scrollbar-gutter: auto;
+}
+
+.character-modal .character-panel-body,
+.character-modal .character-panel-layout {
+  height: auto;
+  min-height: 0;
+}
+
+@media (min-width: 861px) {
+  .character-modal .character-panel-layout {
+    grid-template-columns: minmax(300px, 0.86fr) minmax(0, 1.14fr);
+  }
+}

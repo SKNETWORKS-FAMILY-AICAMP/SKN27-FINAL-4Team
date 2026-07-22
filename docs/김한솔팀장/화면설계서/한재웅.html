@@ -1,0 +1,268 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>화면설계서 — 마이페이지 · 웹</title>
+<style>
+  :root{--ink:#2c2c2a;--mut:#6b6b66;--bd:#d2d2cc;--gray:#e9e9e6;--teal:#0f6e56;--tealbg:#e1f5ee;--bluebg:#e6f1fb;--blue:#185fa5;--amber:#9a610f;--amberbg:#fbf3df;--red:#e24b4a;--redbg:#fdeceb;--canvas:#edecea;--soft:#f7f6f3;--pur:#534ab7;--purbg:#eeedfe;--cor:#993c1d;--corbg:#faece7;}
+  *{box-sizing:border-box} body{margin:0;background:#f4f3f0;color:var(--ink);font-family:"맑은 고딕","Malgun Gothic",system-ui,sans-serif;padding:24px;-webkit-font-smoothing:antialiased;}
+  .doc-title{max-width:1200px;margin:0 auto 14px;font-size:18px;font-weight:700;}
+  .sec{max-width:1200px;margin:28px auto 12px;font-size:15px;font-weight:700;color:var(--teal);border-left:4px solid var(--teal);padding:7px 13px;background:var(--tealbg);border-radius:6px;}
+  .sheet{max-width:1200px;margin:0 auto 18px;background:#fff;border:1px solid var(--bd);border-radius:8px;padding:14px;break-inside:avoid;}
+  table.meta{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px;} table.meta td{border:1px solid var(--bd);padding:6px 8px;} table.meta td.l{background:var(--gray);font-weight:600;text-align:center;white-space:nowrap;width:86px;}
+  .grid{display:flex;gap:14px;align-items:flex-start;}
+  .canvas{flex:1.72;min-width:0;background:var(--canvas);border:1px solid var(--bd);border-radius:6px;padding:16px 24px;}
+  .browser{background:#fff;border:1px solid var(--bd);border-radius:9px;overflow:visible;box-shadow:0 3px 12px rgba(0,0,0,.07);}
+  .bbar{background:#e4e3df;display:flex;align-items:center;gap:7px;padding:8px 11px;border-bottom:1px solid var(--bd);border-radius:8px 8px 0 0;}
+  .dot{width:11px;height:11px;border-radius:50%} .url{flex:1;background:#fff;border:1px solid var(--bd);border-radius:6px;font-size:11px;color:var(--mut);padding:4px 10px;margin-left:6px}
+  .row{position:relative} .m{position:absolute;width:25px;height:25px;border-radius:50%;background:var(--red);color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.3);z-index:50;}
+  .nav{display:flex;align-items:center;gap:18px;padding:11px 18px;border-bottom:1px solid var(--bd);font-size:13px;} .logo{font-weight:700;color:var(--teal);font-size:15px;} .nav a{color:var(--mut);} .nav a.on{color:var(--ink);font-weight:600;} .nav .me{margin-left:auto;font-size:12px;color:var(--mut);}
+  .panel{flex:1;min-width:236px}.ph{background:var(--gray);font-weight:700;text-align:center;font-size:13px;padding:6px;border:1px solid var(--bd);}
+  ol.desc{list-style:none;margin:0 0 12px;padding:10px 12px;border:1px solid var(--bd);border-top:none;font-size:12px;line-height:1.45;} ol.desc li{margin-bottom:6px;} ol.desc .n{color:var(--red);font-weight:700;} ol.desc b{font-weight:600;}
+  ul.cp{list-style:none;margin:0;padding:9px 12px;border:1px solid var(--bd);border-top:none;font-size:11.5px;line-height:1.5;} ul.cp li{margin-bottom:4px;} ul.cp li::before{content:"· ";color:var(--mut);}
+  .screen-fit .browser{min-height:0}.screen-fit .body{padding:13px}.screen-fit .nav{padding:9px 14px}.screen-fit .bbar{padding:7px 10px}.screen-fit .scrhd{margin-bottom:9px}.screen-fit .t th,.screen-fit .t td{padding:4px 6px}.spec-note{font-size:10.5px;color:var(--mut);line-height:1.45}.status-off{display:inline-block;border:1px solid #d8c08b;background:var(--amberbg);color:var(--amber);border-radius:999px;padding:2px 8px;font-size:10.5px;font-weight:700}.status-on{display:inline-block;border:1px solid #bfe3d6;background:var(--tealbg);color:var(--teal);border-radius:999px;padding:2px 8px;font-size:10.5px;font-weight:700}
+  /* 챗봇 (김한솔) */
+  .main{display:flex;min-height:330px;}
+  .left{flex:0 0 38%;border-right:1px solid var(--bd);padding:18px;display:flex;flex-direction:column;align-items:center;background:var(--soft);}
+  .char{width:120px;height:120px;border-radius:24px;background:var(--tealbg);color:var(--teal);display:flex;align-items:center;justify-content:center;font-size:46px;margin-top:6px;}
+  .cname{font-weight:700;font-size:16px;margin:12px 0 2px;} .faces{font-size:13px;color:var(--mut);margin-bottom:14px;}
+  .opener{background:#fff;border:1px solid var(--bd);border-radius:12px;padding:9px 12px;font-size:12.5px;color:var(--teal);text-align:center;max-width:230px;} .opener small{display:block;color:var(--mut);font-size:10.5px;margin-top:3px}
+  .ctrls{margin-top:auto;width:100%;padding-top:14px;}
+  .fr{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mut);margin-bottom:10px;}
+  .bar{flex:1;height:7px;border-radius:4px;background:#f4c0d1;position:relative} .bar i{position:absolute;left:0;top:0;height:7px;width:60%;border-radius:4px;background:#d4537e}
+  .btns{display:flex;gap:8px} .btn{flex:1;text-align:center;font-size:12px;border:1px solid var(--bd);border-radius:8px;padding:8px 4px;color:var(--ink);background:#fff;} .btn.tg{color:var(--mut)}
+  .right{flex:1;min-width:0;padding:16px 18px;display:flex;flex-direction:column;gap:11px;background:#fafaf8;}
+  .bub{font-size:12.5px;border-radius:13px;padding:8px 12px;max-width:74%;line-height:1.45;}
+  .b-user{background:var(--bluebg);color:var(--blue);align-self:flex-end;} .b-char{background:#fff;border:1px solid var(--bd);align-self:flex-start;}
+  .tag{display:inline-block;font-size:10.5px;background:var(--tealbg);color:var(--teal);border-radius:6px;padding:1px 7px;margin-bottom:4px;}
+  .tea{align-self:flex-start;background:#fff;border:1px solid var(--bd);border-radius:13px;padding:10px 13px;max-width:78%;} .tea b{font-size:12.5px;} .tea .e{font-size:11px;color:var(--mut);margin:3px 0 7px;} .tea .bgm{font-size:12px;color:var(--blue);}
+  .typing{align-self:flex-start;font-size:14px;color:var(--mut);letter-spacing:3px;background:#fff;border:1px solid var(--bd);border-radius:13px;padding:3px 13px;}
+  .inputzone{border-top:1px solid var(--bd);padding:11px 18px 14px;}
+  .inbar{display:flex;align-items:center;gap:11px;font-size:14px;color:var(--mut)} .field{flex:1;background:#f0efec;border:1px solid var(--bd);border-radius:10px;padding:9px 13px;font-size:12.5px} .send{background:var(--teal);color:#fff;border-radius:9px;padding:9px 16px;font-size:13px;}
+  .recbtns{display:flex;gap:8px;width:100%;margin:12px 0 0;}
+  .rbtn{flex:1;text-align:center;font-size:12px;border:1px solid var(--bd);border-radius:8px;padding:8px 4px;background:#fff;color:var(--amber);}
+  .suggest{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:10px 18px;border-top:1px solid var(--bd);background:#fbfbf9;}
+  .slab{font-size:11px;color:var(--mut);font-weight:600;}
+  .qchip{font-size:11.5px;border:1px solid var(--teal);border-radius:999px;padding:4px 12px;color:var(--teal);background:#fff;}
+  .ic-hd{background:var(--purbg);color:var(--pur);font-weight:700;font-size:14px;text-align:center;padding:11px;border-bottom:1px solid var(--bd);}
+  .stage{display:flex;gap:12px;padding:16px 18px;justify-content:center;background:var(--soft);}
+  .agent{flex:1;max-width:170px;text-align:center;} .face{width:64px;height:64px;border-radius:18px;margin:0 auto 6px;display:flex;align-items:center;justify-content:center;font-size:28px;}
+  .agent .rn{font-weight:700;font-size:13px;} .agent .role{font-size:11px;color:var(--mut);margin-bottom:6px;}
+  .talk{font-size:11.5px;border-radius:11px;padding:7px 9px;line-height:1.4;text-align:left;}
+  .thread{padding:8px 18px 14px;display:flex;flex-direction:column;gap:8px;background:#fafaf8;}
+  .sum{background:#fff;border:1px dashed var(--pur);border-radius:12px;padding:11px 13px;font-size:12.5px;color:var(--pur);}
+  .ctrlbar{display:flex;gap:10px;align-items:center;border-top:1px solid var(--bd);padding:12px 18px;}
+  .in{flex:1;background:#f0efec;border:1px solid var(--bd);border-radius:10px;padding:9px 12px;font-size:12px;color:var(--mut);}
+  .b1{background:var(--pur);color:#fff;border-radius:9px;padding:9px 14px;font-size:12.5px;} .b2{background:#fff;border:1px solid var(--bd);border-radius:9px;padding:9px 14px;font-size:12.5px;color:var(--mut)}
+  .note{font-size:11px;color:var(--mut);text-align:center;padding:6px;background:var(--soft);border-top:1px solid var(--bd);}
+  .scnote{width:100%;margin-top:12px;font-size:11.5px;color:var(--mut);border:1px dashed var(--bd);border-radius:8px;padding:8px 10px;text-align:center;}
+  .toggle{display:inline-flex;align-items:center;gap:6px;font-size:12px;background:#2c2c2a;color:#fff;border-radius:999px;padding:5px 12px;}
+  .warn{background:#3a3a38;color:#fff;font-size:12px;text-align:center;padding:9px 12px;} .warn b{color:#ffe;}
+  .sc-main{display:flex;min-height:240px;}
+  .sc-left{flex:0 0 36%;border-right:1px solid var(--bd);padding:16px;text-align:center;background:#efeeec;}
+  .sc-char{width:90px;height:90px;border-radius:20px;background:#d9d9d4;color:#777;display:flex;align-items:center;justify-content:center;font-size:34px;margin:6px auto 8px;}
+  .sc-right{flex:1;padding:16px;display:flex;flex-direction:column;gap:10px;background:#f3f2f0;}
+  .paused{font-size:11px;color:var(--mut);border:1px dashed var(--bd);border-radius:8px;padding:6px 8px;}
+  .scbar{display:flex;align-items:center;gap:10px;border-top:1px solid var(--bd);padding:11px 16px;font-size:13px;color:var(--mut)} .scbar .f{flex:1;background:#e8e7e4;border:1px solid var(--bd);border-radius:10px;padding:8px 12px;font-size:12px}
+  /* 마이페이지 (한재웅) */
+  .room{margin:16px 16px 0 28px;border:1px solid var(--bd);background:#f3f1ec;border-radius:6px;position:relative;height:300px;overflow:visible;}
+  .wall{position:absolute;inset:0;background:repeating-linear-gradient(0deg,#efede8,#efede8 1px,transparent 1px,transparent 26px);}
+  .floor{position:absolute;left:0;right:0;bottom:0;height:40%;background:#e6e2d8;border-top:1px solid #cfcabb;transform:perspective(500px) rotateX(34deg);transform-origin:bottom;}
+  .art{position:absolute;width:30px;height:30px;border-radius:7px;background:#fff;border:1px solid var(--bd);box-shadow:0 1px 3px rgba(0,0,0,.1);display:flex;align-items:center;justify-content:center;font-size:15px;}
+  .desk{position:absolute;left:50%;bottom:14%;transform:translateX(-50%);width:200px;height:54px;background:#dcc7a8;border:1px solid #c3ac82;border-radius:8px 8px 4px 4px;}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;padding:12px 16px;margin:14px 16px 16px;border:1px solid var(--bd);border-radius:8px;background:#fbfbf9;font-size:12px;}
+  .lg{display:flex;align-items:center;gap:6px;} .lgn{width:19px;height:19px;border-radius:50%;background:var(--red);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+  .body{padding:18px;}
+  .scrhd{font-size:13px;font-weight:700;color:var(--ink);margin:0 0 12px;padding-bottom:7px;border-bottom:1px solid var(--bd);} .scrhd small{font-weight:400;color:var(--mut);margin-left:6px;font-size:11px;}
+  .twocol{display:flex;gap:14px;align-items:flex-start;}
+  .kv .r{display:flex;align-items:center;gap:10px;padding:6px 10px;border:1px solid var(--bd);border-radius:7px;margin-bottom:6px;font-size:12px;background:#fff;} .kv .k{width:68px;color:var(--mut);font-weight:600;} .kv .v{flex:1;color:var(--ink);} .edit{font-size:11px;color:var(--teal);border:1px solid var(--bd);border-radius:6px;padding:2px 9px;background:#fff;}
+  .radar{width:140px;height:140px;border-radius:50%;border:1px dashed var(--bd);background:radial-gradient(circle,#fff 38%,var(--tealbg) 39%,#fff 40%,var(--tealbg) 64%,#fff 65%);display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:11px;text-align:center;}
+  .conf{display:inline-block;font-size:12px;background:var(--tealbg);color:var(--teal);border-radius:999px;padding:2px 11px;font-weight:600;}
+  .evid{font-size:11.5px;line-height:1.7;color:var(--ink);border:1px solid var(--bd);border-radius:8px;padding:10px 12px;background:var(--soft);}
+  .cols{display:flex;gap:10px;} .col{flex:1;border:1px solid var(--bd);border-radius:8px;padding:10px;background:var(--soft);} .col h5{margin:0 0 7px;font-size:11.5px;color:var(--mut);} .chip{display:inline-block;font-size:11px;padding:3px 9px;border-radius:999px;margin:0 4px 5px 0;border:1px solid var(--bd);background:#fff;color:var(--ink);} .chip.neg{background:var(--redbg);color:var(--red);border-color:#f3c4c1;} .chip.pos{background:var(--tealbg);color:var(--teal);border-color:#bfe3d6;}
+  .trd{font-size:11.5px;line-height:1.8;} .up{color:var(--teal);font-weight:600;} .down{color:var(--red);font-weight:600;}
+  .setwrap{display:flex;border:1px solid var(--bd);border-radius:8px;overflow:hidden;min-height:260px;}
+  .setnav{width:120px;background:var(--soft);border-right:1px solid var(--bd);} .setnav .it{padding:9px 11px;font-size:11.5px;border-bottom:1px solid var(--bd);color:var(--mut);} .setnav .it.on{background:#fff;color:var(--teal);font-weight:700;}
+  .setbody{flex:1;padding:13px 15px;}
+  table.t{width:100%;border-collapse:collapse;font-size:11.5px;} .t th,.t td{border:1px solid var(--bd);padding:5px 8px;text-align:left;} .t th{background:var(--gray);font-weight:600;} .t td.c,.t th.c{text-align:center;}
+  .bg{display:inline-block;font-size:10.5px;border-radius:999px;padding:1px 8px;border:1px solid var(--bd);} .bg.ok{background:var(--tealbg);color:var(--teal);border-color:#bfe3d6;} .bg.warn{background:var(--redbg);color:var(--red);border-color:#f3c4c1;} .bg.hold{background:var(--amberbg);color:var(--amber);border-color:#f0dcae;}
+  .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:11px;} .search{flex:1;border:1px solid var(--bd);border-radius:7px;padding:7px 11px;font-size:11.5px;color:var(--mut);background:#fff;} .pbtn{font-size:11.5px;border:1px solid var(--teal);background:var(--teal);color:#fff;border-radius:7px;padding:7px 13px;} .pbtn.gh{background:#fff;color:var(--teal);}
+  .form .fi{border:1px solid var(--bd);border-radius:7px;padding:8px 11px;font-size:11.5px;color:var(--mut);background:#fff;margin-bottom:8px;} .form .ta{min-height:74px;}
+  .kpis{display:flex;gap:10px;margin-bottom:13px;} .kpi{flex:1;background:var(--soft);border:1px solid var(--bd);border-radius:8px;padding:10px;text-align:center;} .kpi b{font-size:19px;display:block;color:var(--ink);} .kpi small{font-size:10.5px;color:var(--mut);}
+  .cwrap{display:flex;border:1px solid var(--bd);border-radius:8px;overflow:hidden;min-height:300px;} .clist{width:180px;border-right:1px solid var(--bd);background:var(--soft);} .clist .ci{padding:9px 11px;border-bottom:1px solid var(--bd);font-size:11.5px;color:var(--mut);} .clist .ci.on{background:#fff;color:var(--ink);font-weight:600;} .clist .ci small{display:block;font-size:10px;color:var(--mut);font-weight:400;}
+  .cthread{flex:1;display:flex;flex-direction:column;background:#fafaf8;min-width:0;} .cthd{font-size:12px;font-weight:600;padding:9px 13px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:8px;} .cthd .rt{margin-left:auto;font-size:11px;color:var(--mut);font-weight:400;}
+  .cmsgs{flex:1;padding:13px;display:flex;flex-direction:column;gap:9px;} .msg{font-size:11.5px;border-radius:11px;padding:6px 10px;max-width:74%;line-height:1.4;} .msg.me{align-self:flex-end;background:var(--bluebg);color:var(--blue);} .msg.you{align-self:flex-start;background:#fff;border:1px solid var(--bd);} .msg .tm{display:block;font-size:9.5px;color:var(--mut);margin-top:3px;}
+  .safein{font-size:11px;color:var(--mut);text-align:center;padding:7px 10px;background:var(--amberbg);border-top:1px solid #f0dcae;} .cbar{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--bd);font-size:12px;color:var(--mut);align-items:center;} .cbar .f{flex:1;background:#eceae6;border:1px solid var(--bd);border-radius:9px;padding:8px 11px;}
+  .snote{font-size:11px;color:var(--mut);padding:8px 12px;background:var(--soft);border:1px dashed var(--bd);border-radius:8px;margin-top:10px;}
+  .my-stage{position:relative;min-height:360px;background:linear-gradient(180deg,#161243,#23165c);color:#f4efff;overflow:hidden;}
+  .my-legend{position:absolute;left:14px;top:14px;z-index:3;display:flex;gap:8px;flex-wrap:wrap}.my-legend span{border:1px solid rgba(215,183,255,.38);border-radius:999px;padding:5px 10px;background:rgba(23,16,68,.74);font-size:11px;font-weight:700}.my-legend .off{opacity:.44;text-decoration:line-through}
+  .my-room{position:absolute;left:28px;right:28px;top:54px;bottom:24px;border:1px solid rgba(215,183,255,.28);border-radius:12px;background:linear-gradient(180deg,#2a1a62 0 54%,#1c184f 54% 100%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.03)}
+  .my-room:before{content:"";position:absolute;left:0;right:0;top:0;height:54%;background:repeating-linear-gradient(0deg,rgba(255,255,255,.05),rgba(255,255,255,.05) 1px,transparent 1px,transparent 26px)}
+  .my-furniture{position:absolute;border:1px solid rgba(215,183,255,.35);background:#21165a;border-radius:8px}.my-desk{left:37%;bottom:20%;width:26%;height:58px;background:#5f4a7f}.my-rug{left:18%;bottom:10%;width:52%;height:44px;border-radius:50%;background:#263875}.my-art{width:42px;height:42px;display:grid;place-items:center;color:#d7b7ff;font-size:20px}.my-art.p1{left:12%;top:24%}.my-art.p2{left:28%;top:18%}.my-art.p3{right:25%;top:25%;opacity:.45}.my-art.p4{right:12%;bottom:26%;opacity:.45}
+  .my-hotspot{position:absolute;width:28px;height:28px;border-radius:50%;background:var(--red);color:#fff;border:2px solid #fff;display:grid;place-items:center;font-size:13px;font-weight:800;box-shadow:0 2px 7px rgba(0,0,0,.35)}
+  .my-cardgrid{display:grid;grid-template-columns:.76fr 1.24fr;gap:12px}.my-card{border:1px solid var(--bd);border-radius:8px;background:var(--soft);padding:12px}.my-card h4{margin:0 0 8px;font-size:12px;color:var(--mut)}.my-avatar{min-height:230px;display:grid;place-items:center;text-align:center;background:linear-gradient(180deg,#eeedfe,#fff)}.my-avatar>div{width:100%;display:grid;justify-items:center;gap:7px}
+  .my-person{position:relative;width:112px;height:142px;margin:0 auto}.my-person:before{content:"";position:absolute;left:20px;top:6px;width:72px;height:72px;border-radius:32px 32px 28px 28px;background:#5b4636}.my-person:after{content:"";position:absolute;left:16px;bottom:0;width:80px;height:72px;border-radius:28px 28px 18px 18px;background:#b7ccff;border:2px solid #8b9fe8}.my-face{position:absolute;left:28px;top:34px;width:56px;height:58px;border-radius:44%;background:#ffdca8;border:2px solid #d59465;z-index:2}.my-face:after{content:"";position:absolute;left:17px;top:30px;width:18px;height:9px;border-bottom:2px solid #7c3f1d;border-radius:0 0 16px 16px}
+  .my-fieldset{display:grid;grid-template-columns:1fr 1fr;gap:7px}.my-fi{min-height:34px;border:1px solid var(--bd);border-radius:7px;background:#fff;padding:6px 9px;font-size:11.5px}.my-fi b{display:block;color:var(--mut);font-size:10.5px;margin-bottom:2px}.my-full{grid-column:1/-1}.my-chiprow{display:flex;flex-wrap:wrap;gap:5px}.my-chip{border:1px solid #bfe3d6;border-radius:999px;background:var(--tealbg);color:var(--teal);padding:3px 8px;font-size:10.5px;font-weight:700}
+  .my-modal{margin:16px;border:1px solid var(--bd);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);overflow:hidden;background:#fff}.my-modal-h{display:flex;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--bd);background:#fbfbf9}.my-modal-h b{font-size:13px}.my-modal-h small{display:block;color:var(--mut);font-size:10.5px;margin-top:2px}.my-close{width:27px;height:27px;border-radius:50%;display:grid;place-items:center;background:#2c2c2a;color:#fff}
+  .my-picker{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:14px}.my-option{border:1px solid var(--bd);border-radius:8px;background:var(--soft);padding:10px;text-align:center;font-size:11.5px;font-weight:700}.my-option.on{border-color:var(--pur);box-shadow:0 0 0 3px rgba(83,74,183,.18)}
+  .my-mbti{display:grid;grid-template-columns:.7fr 1.3fr;gap:12px}.my-type{display:grid;place-items:center;min-height:210px;border:1px solid var(--bd);border-radius:8px;background:linear-gradient(180deg,#2a1a62,#151142);color:#d7b7ff;text-align:center}.my-type b{display:block;font-size:46px;line-height:1;color:#fff}.my-report{border:1px solid var(--bd);border-radius:8px;background:var(--soft);padding:12px;font-size:11.5px;line-height:1.65}
+  .my-axis{display:grid;gap:7px}.my-axis-row{display:grid;gap:4px;font-size:11.5px}.my-axis-row div{display:flex;justify-content:space-between}.my-meter{height:8px;border-radius:999px;background:#ddd;overflow:hidden}.my-meter i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--blue),var(--pur))}
+  .my-app{background:#0b1238;color:#f4efff;border-color:#4d3a82}.my-topchips{display:flex;gap:8px;flex-wrap:wrap;padding:10px 12px;background:#171044}.my-topchips span{border:1px solid rgba(215,183,255,.38);border-radius:999px;padding:5px 10px;background:#21165a;font-size:11px;font-weight:700}.my-realroom{position:relative;margin:0;background:#111744;aspect-ratio:1672/941;min-height:0;overflow:visible}.my-realroom img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}.my-hot{position:absolute;border-radius:8px;border:2px solid rgba(255,255,255,.9);background:rgba(255,109,158,.18);box-shadow:0 0 0 1px rgba(255,109,158,.58),0 6px 14px rgba(0,0,0,.22)}.my-hot b{position:absolute;left:-10px;top:-12px;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#ff5d7e;color:#fff;border:2px solid #fff;font-size:12px}.my-hot.profile{left:13.55%;top:38.9%;width:17.05%;height:56.6%}.my-hot.mbti{left:71.15%;top:5.2%;width:15.1%;height:24.8%}.my-modal-mini{margin:12px;border:1px solid var(--bd);border-radius:10px;background:#fff;box-shadow:0 8px 20px rgba(0,0,0,.16);overflow:hidden}.my-modal-mini .head{display:flex;justify-content:space-between;gap:12px;padding:10px 12px;border-bottom:1px solid var(--bd);background:#fbfbf9}.my-modal-mini .head b{font-size:13px}.my-modal-mini .head small{display:block;color:var(--mut);font-size:10.5px}.my-modal-mini .x{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#2c2c2a;color:#fff}
+  /* Legacy card/report styles */
+  .rbody{display:flex;gap:14px;padding:30px;}
+  .rleft{flex:1;display:flex;flex-direction:column;gap:14px;min-width:0;}
+  .rright{flex:1.9;border:1px solid var(--bd);border-radius:10px;padding:16px 18px;background:#fff;min-width:0;}
+  .card{border:1px solid var(--bd);border-radius:10px;padding:12px 14px;background:var(--soft);}
+  .card h4{margin:0 0 8px;font-size:12.5px;color:var(--mut);font-weight:600;}
+  .plist{list-style:none;margin:0;padding:0;font-size:12px;}
+  .plist li{padding:7px 9px;border:1px solid var(--bd);border-radius:7px;background:#fff;margin-bottom:6px;color:var(--mut);}
+  .plist li.on{border-color:var(--teal);background:var(--tealbg);color:var(--teal);font-weight:600;}
+  .emorow{display:flex;border:1px solid var(--bd);border-radius:8px;overflow:hidden;background:#fff;}
+  .emo{flex:1;text-align:center;padding:9px 0;font-size:17px;border-right:1px solid var(--bd);} .emo:last-child{border-right:none;} .emo small{display:block;font-size:9px;color:var(--mut);margin-top:2px;}
+  .rtitle{font-size:15px;font-weight:700;color:var(--ink);padding-bottom:8px;border-bottom:1px solid var(--bd);margin-bottom:12px;}
+  .kwbox{margin-bottom:12px;font-size:12px;}
+  .kwlab{color:var(--mut);font-weight:600;margin-bottom:5px;}
+  .llm{font-size:12px;line-height:1.65;color:var(--ink);background:var(--soft);border:1px solid var(--bd);border-radius:9px;padding:12px 14px;}
+  .expbar{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;}
+  .ebtn{font-size:12px;padding:7px 14px;border-radius:8px;border:1px solid var(--teal);background:var(--teal);color:#fff;font-weight:600;}
+  .ebtn.gh{background:#fff;color:var(--teal);}
+</style>
+</head>
+<body>
+
+<div class="doc-title">화면설계서 · 웹 · 빈틈사이 4team — 한재웅 마이페이지</div>
+
+<div class="sec">담당: 한재웅 — PAGE 1 / 마이페이지 (PAGE-MY · 2026.06.26)</div>
+
+<!-- F-MY-001 마이페이지 메인 -->
+<div class="sheet screen-fit">
+  <table class="meta">
+    <tr><td class="l">Page Title</td><td>마이페이지 메인 (My Room)</td><td class="l">Screen ID</td><td>F-MY-001</td><td class="l">Author</td><td>한재웅</td><td class="l">Date</td><td>2026.06.26</td></tr>
+    <tr><td class="l">Screen Path</td><td colspan="7">마이페이지 &gt; 방 일러스트 메인 &nbsp;|&nbsp; mypage.vue 기준: 프로필·MBTI 활성</td></tr>
+  </table>
+  <div class="grid">
+    <div class="canvas">
+      <div class="browser my-app">
+        <div class="bbar"><span class="dot" style="background:#ec6a5e"></span><span class="dot" style="background:#f3bf4f"></span><span class="dot" style="background:#61c454"></span><span class="url">mindroom.app / mypage</span></div>
+        <div class="my-topchips"><span>프로필 조회</span><span>MBTI 분석</span></div>
+        <div class="my-realroom row">
+          <img src="../../../app/frontend/src/assets/UI%20%EC%8B%A0%EB%B2%84%EC%A0%844.png" alt="마이페이지 방 일러스트">
+          <span class="my-hot profile"><b>1</b></span>
+          <span class="my-hot mbti"><b>2</b></span>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="ph">Description</div>
+      <ol class="desc">
+        <li><span class="n">①</span> <b>프로필 핫스팟</b> — 방 이미지 좌측 캐릭터 영역 클릭 시 프로필 모달 오픈</li>
+        <li><span class="n">②</span> <b>MBTI 핫스팟</b> — 우측 상단 오브젝트 클릭 시 MBTI 분석 모달 오픈</li>
+        <li><span class="n">③</span> <b>화면 크기</b> — 방 이미지는 한 화면 안에 맞추고 기능명은 상단 칩으로 분리</li>
+      </ol>
+      <div class="ph">Check Point</div>
+      <ul class="cp"><li>현재 구현과 동일하게 활성 기능은 프로필/MBTI만 노출</li><li>방 일러스트 위에는 숫자 콜아웃만 얹어 화면이 스크롤 없이 보이도록 구성</li></ul>
+    </div>
+  </div>
+</div>
+
+<!-- F-MY-002 프로필 조회 -->
+<div class="sheet screen-fit">
+  <table class="meta">
+    <tr><td class="l">Page Title</td><td>프로필 조회/수정 모달</td><td class="l">Screen ID</td><td>F-MY-002</td><td class="l">Author</td><td>한재웅</td><td class="l">Date</td><td>2026.06.26</td></tr>
+    <tr><td class="l">Screen Path</td><td colspan="7">마이페이지 메인 &gt; 프로필 조회 &nbsp;|&nbsp; 캐릭터 미리보기 + 온보딩/확장 프로필 통합 조회</td></tr>
+  </table>
+  <div class="grid">
+    <div class="canvas">
+      <div class="browser">
+        <div class="bbar"><span class="dot" style="background:#ec6a5e"></span><span class="dot" style="background:#f3bf4f"></span><span class="dot" style="background:#61c454"></span><span class="url">mindroom.app / mypage # profile-modal</span></div>
+        <div class="my-modal-mini">
+          <div class="head row"><span class="m" style="left:8px;top:8px">1</span><div><b>프로필 조회</b><small>사전 정보 입력 화면의 기본 정보와 관심분야 키워드 조회/수정</small></div><span class="x">×</span></div>
+          <div class="body">
+            <div class="my-cardgrid">
+              <section class="my-card my-avatar row"><span class="m" style="left:-10px;top:-8px">2</span><div><div class="my-person"><span class="my-face"></span></div><b>솔 · 차분하게 들어주는 기록형 대화 상대</b><br><span class="edit">캐릭터 교체</span></div></section>
+              <section class="my-card row"><span class="m" style="left:-10px;top:-8px">3</span>
+                <h4>프로필 정보</h4>
+                <div class="my-fieldset">
+                  <div class="my-fi"><b>이름</b>서마음</div><div class="my-fi"><b>MBTI</b>INFP</div>
+                  <div class="my-fi"><b>성별</b>여성</div><div class="my-fi"><b>나이</b>24</div>
+                  <div class="my-fi"><b>생일</b>06.23</div><div class="my-fi"><b>직업/상황</b>프로젝트 준비 중</div>
+                  <div class="my-fi my-full"><b>현재 상태</b>교류하고 싶음</div>
+                  <div class="my-fi my-full"><b>키워드</b>공감형, 느린 집중, 감성 기록, 안정 선호</div>
+                  <div class="my-fi my-full"><b>관심 분야</b><span class="my-chip">산책</span><span class="my-chip">음악</span><span class="my-chip">관계</span></div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="ph">Description</div>
+      <ol class="desc">
+        <li><span class="n">①</span> <b>모달 헤더</b> — 현재 패널명, 설명, 닫기 버튼을 고정 배치</li>
+        <li><span class="n">②</span> <b>캐릭터 카드</b> — 선택 캐릭터 미리보기와 캐릭터 교체 진입</li>
+        <li><span class="n">③</span> <b>프로필 입력군</b> — 이름, MBTI, 성별, 나이, 생일, 직업/상황, 상태, 키워드, 관심 분야, 취미</li>
+      </ol>
+      <div class="ph">Check Point</div>
+      <ul class="cp"><li>수정 버튼 전에는 readonly/disabled 상태 유지</li><li>저장 시 토스트와 마지막 저장 시각 표시</li><li>온보딩 원천 정보와 마이페이지 확장 정보를 한 화면에서 확인</li></ul>
+    </div>
+  </div>
+</div>
+
+<!-- F-MY-004 MBTI 분석 -->
+<div class="sheet screen-fit">
+  <table class="meta">
+    <tr><td class="l">Page Title</td><td>MBTI 분석 모달</td><td class="l">Screen ID</td><td>F-MY-004</td><td class="l">Author</td><td>한재웅</td><td class="l">Date</td><td>2026.06.26</td></tr>
+    <tr><td class="l">Screen Path</td><td colspan="7">마이페이지 메인 &gt; MBTI 분석 &nbsp;|&nbsp; 온보딩 자기보고 MBTI / 월간 대화 기반 추정 비교</td></tr>
+  </table>
+  <div class="grid">
+    <div class="canvas">
+      <div class="browser">
+        <div class="bbar"><span class="dot" style="background:#ec6a5e"></span><span class="dot" style="background:#f3bf4f"></span><span class="dot" style="background:#61c454"></span><span class="url">mindroom.app / mypage # mbti-modal</span></div>
+        <div class="my-modal-mini">
+          <div class="head row"><span class="m" style="left:8px;top:8px">1</span><div><b>MBTI 분석</b><small>지난 한 달 대화 기반 추정값과 온보딩 입력값을 비교</small></div><span class="x">×</span></div>
+          <div class="body">
+            <div class="my-mbti">
+              <div class="my-type row"><span class="m" style="left:-10px;top:-8px">2</span><div><small>전달(5월) 기준</small><b>INFP</b><span class="conf">전전달 ENFP 대비 I 지표 우세</span></div></div>
+              <div class="my-report row"><span class="m" style="left:-10px;top:-8px">3</span>
+                <div class="my-axis">
+                  <div class="my-axis-row"><div><b>I / E</b><span>68%</span></div><div class="my-meter"><i style="width:68%"></i></div></div>
+                  <div class="my-axis-row"><div><b>N / S</b><span>61%</span></div><div class="my-meter"><i style="width:61%"></i></div></div>
+                  <div class="my-axis-row"><div><b>F / T</b><span>57%</span></div><div class="my-meter"><i style="width:57%"></i></div></div>
+                  <div class="my-axis-row"><div><b>P / J</b><span>64%</span></div><div class="my-meter"><i style="width:64%"></i></div></div>
+                </div>
+                <hr style="border:0;border-top:1px solid var(--bd);margin:10px 0">
+                <b>근거 리포트</b><br>전전달 ENFP와 비교해 혼자 회복하는 표현이 늘어 I 지표가 우세해졌다. 성격 확정이 아니라 해당 월 관찰 경향으로 안내한다.
+              </div>
+            </div>
+            <div class="actions mbti-switch-actions" style="margin-top:10px"><span class="edit">1-1 온보딩 유형</span><span class="edit">1-2/1-4 통합 비교</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="ph">Description</div>
+      <ol class="desc">
+        <li><span class="n">①</span> <b>모달 헤더</b> — 패널 설명과 닫기 버튼</li>
+        <li><span class="n">②</span> <b>현재 추정 유형</b> — 전달 기준 MBTI와 전전달/온보딩 유형 비교</li>
+        <li><span class="n">③</span> <b>축별 그래프·근거</b> — 4개 선호 지표 비율과 근거 리포트 표시</li>
+      </ol>
+      <div class="ph">Check Point</div>
+      <ul class="cp"><li>공식 성격검사가 아닌 보조 분석 결과로 표기</li><li>초기 자기보고 MBTI에는 점수/근거를 붙이지 않음</li><li>데이터 부족 시 분석 불가 사유와 갱신 조건 표시</li></ul>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 1 체크리스트 -->
+<div class="sheet screen-fit">
+  <table class="meta"><tr><td class="l">Page Title</td><td>요구사항 반영 체크리스트 — 마이페이지</td><td class="l">Screen ID</td><td>PAGE-MY</td><td class="l">Author</td><td>한재웅</td><td class="l">Date</td><td>2026.06.26</td></tr></table>
+  <table class="t">
+    <tr><th style="width:130px">ID</th><th>기능명</th><th>반영 위치</th><th style="width:110px">구현 상태</th></tr>
+    <tr><td>F-MY-001</td><td>방 일러스트 기반 마이페이지 메인</td><td>실제 UI 신버전4.png + 프로필/MBTI 핫스팟</td><td><span class="status-on">활성</span></td></tr>
+    <tr><td>F-MY-002</td><td>프로필 조회/수정</td><td>캐릭터 카드 + 프로필 폼 + 관심 키워드 칩</td><td><span class="status-on">활성</span></td></tr>
+    <tr><td>F-MY-004</td><td>MBTI 성향 추정 및 경향 분석</td><td>온보딩 유형/월간 비교 전환, 축별 그래프, 근거 리포트</td><td><span class="status-on">활성</span></td></tr>
+  </table>
+</div>
+
+</body>
+</html>

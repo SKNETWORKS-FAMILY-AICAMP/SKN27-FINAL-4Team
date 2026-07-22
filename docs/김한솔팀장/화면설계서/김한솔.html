@@ -1,0 +1,225 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+<base href="file:///C:/Users/Playdata/Desktop/%ED%99%94%EB%A9%B4%EC%84%A4%EA%B3%84%EC%84%9C/">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>화면설계서 통합 — 챗봇·마이페이지·커뮤니티·관리자·마음 리포트 · 웹</title>
+<style>
+  :root{--ink:#2c2c2a;--mut:#6b6b66;--bd:#d2d2cc;--gray:#e9e9e6;--teal:#0f6e56;--tealbg:#e1f5ee;--bluebg:#e6f1fb;--blue:#185fa5;--amber:#9a610f;--amberbg:#fbf3df;--red:#e24b4a;--redbg:#fdeceb;--canvas:#edecea;--soft:#f7f6f3;--pur:#534ab7;--purbg:#eeedfe;--cor:#993c1d;--corbg:#faece7;}
+  *{box-sizing:border-box} body{margin:0;background:#f4f3f0;color:var(--ink);font-family:"맑은 고딕","Malgun Gothic",system-ui,sans-serif;padding:24px;-webkit-font-smoothing:antialiased;}
+  .doc-title{max-width:1200px;margin:0 auto 16px;font-size:18px;font-weight:700;}
+  .sec{max-width:1200px;margin:34px auto 14px;font-size:15px;font-weight:700;color:var(--teal);border-left:4px solid var(--teal);padding:7px 13px;background:var(--tealbg);border-radius:6px;}
+  .sheet{max-width:1200px;margin:0 auto 28px;background:#fff;border:1px solid var(--bd);border-radius:10px;padding:22px;}
+  table.meta{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px;} table.meta td{border:1px solid var(--bd);padding:8px 10px;} table.meta td.l{background:var(--gray);font-weight:600;text-align:center;white-space:nowrap;width:90px;}
+  .grid{display:flex;gap:20px;align-items:flex-start;}
+  .canvas{flex:1.7;min-width:0;background:var(--canvas);border:1px solid var(--bd);border-radius:8px;padding:22px 40px;}
+  .browser{background:#fff;border:1px solid var(--bd);border-radius:9px;overflow:visible;box-shadow:0 3px 12px rgba(0,0,0,.07);}
+  .bbar{background:#e4e3df;display:flex;align-items:center;gap:7px;padding:8px 11px;border-bottom:1px solid var(--bd);border-radius:8px 8px 0 0;}
+  .dot{width:11px;height:11px;border-radius:50%} .url{flex:1;background:#fff;border:1px solid var(--bd);border-radius:6px;font-size:11px;color:var(--mut);padding:4px 10px;margin-left:6px}
+  .row{position:relative} .m{position:absolute;width:25px;height:25px;border-radius:50%;background:var(--red);color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.3);z-index:50;}
+  .nav{display:flex;align-items:center;gap:18px;padding:11px 18px;border-bottom:1px solid var(--bd);font-size:13px;} .logo{font-weight:700;color:var(--teal);font-size:15px;} .nav a{color:var(--mut);} .nav a.on{color:var(--ink);font-weight:600;} .nav .me{margin-left:auto;font-size:12px;color:var(--mut);}
+  .panel{flex:1;min-width:240px} .ph{background:var(--gray);font-weight:700;text-align:center;font-size:14px;padding:7px;border:1px solid var(--bd);}
+  ol.desc{list-style:none;margin:0 0 18px;padding:12px 14px;border:1px solid var(--bd);border-top:none;font-size:12.5px;line-height:1.5;} ol.desc li{margin-bottom:8px;} ol.desc .n{color:var(--red);font-weight:700;} ol.desc b{font-weight:600;}
+  ul.cp{list-style:none;margin:0;padding:11px 14px;border:1px solid var(--bd);border-top:none;font-size:12px;line-height:1.6;} ul.cp li{margin-bottom:4px;} ul.cp li::before{content:"· ";color:var(--mut);}
+  /* 챗봇 (김한솔) */
+  .main{display:flex;min-height:330px;}
+  .left{flex:0 0 38%;border-right:1px solid var(--bd);padding:18px;display:flex;flex-direction:column;align-items:center;background:var(--soft);}
+  .char{width:120px;height:120px;border-radius:24px;background:var(--tealbg);color:var(--teal);display:flex;align-items:center;justify-content:center;font-size:46px;margin-top:6px;}
+  .cname{font-weight:700;font-size:16px;margin:12px 0 2px;} .faces{font-size:13px;color:var(--mut);margin-bottom:14px;}
+  .opener{background:#fff;border:1px solid var(--bd);border-radius:12px;padding:9px 12px;font-size:12.5px;color:var(--teal);text-align:center;max-width:230px;} .opener small{display:block;color:var(--mut);font-size:10.5px;margin-top:3px}
+  .ctrls{margin-top:auto;width:100%;padding-top:14px;}
+  .fr{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mut);margin-bottom:10px;}
+  .bar{flex:1;height:7px;border-radius:4px;background:#f4c0d1;position:relative} .bar i{position:absolute;left:0;top:0;height:7px;width:60%;border-radius:4px;background:#d4537e}
+  .btns{display:flex;gap:8px} .btn{flex:1;text-align:center;font-size:12px;border:1px solid var(--bd);border-radius:8px;padding:8px 4px;color:var(--ink);background:#fff;} .btn.tg{color:var(--mut)}
+  .right{flex:1;min-width:0;padding:16px 18px;display:flex;flex-direction:column;gap:11px;background:#fafaf8;}
+  .bub{font-size:12.5px;border-radius:13px;padding:8px 12px;max-width:74%;line-height:1.45;}
+  .b-user{background:var(--bluebg);color:var(--blue);align-self:flex-end;} .b-char{background:#fff;border:1px solid var(--bd);align-self:flex-start;}
+  .tag{display:inline-block;font-size:10.5px;background:var(--tealbg);color:var(--teal);border-radius:6px;padding:1px 7px;margin-bottom:4px;}
+  .tea{align-self:flex-start;background:#fff;border:1px solid var(--bd);border-radius:13px;padding:10px 13px;max-width:78%;} .tea b{font-size:12.5px;} .tea .e{font-size:11px;color:var(--mut);margin:3px 0 7px;} .tea .bgm{font-size:12px;color:var(--blue);}
+  .typing{align-self:flex-start;font-size:14px;color:var(--mut);letter-spacing:3px;background:#fff;border:1px solid var(--bd);border-radius:13px;padding:3px 13px;}
+  .inputzone{border-top:1px solid var(--bd);padding:11px 18px 14px;}
+  .inbar{display:flex;align-items:center;gap:11px;font-size:14px;color:var(--mut)} .field{flex:1;background:#f0efec;border:1px solid var(--bd);border-radius:10px;padding:9px 13px;font-size:12.5px} .send{background:var(--teal);color:#fff;border-radius:9px;padding:9px 16px;font-size:13px;}
+  .recbtns{display:flex;gap:8px;width:100%;margin:12px 0 0;}
+  .rbtn{flex:1;text-align:center;font-size:12px;border:1px solid var(--bd);border-radius:8px;padding:8px 4px;background:#fff;color:var(--amber);}
+  .suggest{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:10px 18px;border-top:1px solid var(--bd);background:#fbfbf9;}
+  .slab{font-size:11px;color:var(--mut);font-weight:600;}
+  .qchip{font-size:11.5px;border:1px solid var(--teal);border-radius:999px;padding:4px 12px;color:var(--teal);background:#fff;}
+  .ic-hd{background:var(--purbg);color:var(--pur);font-weight:700;font-size:14px;text-align:center;padding:11px;border-bottom:1px solid var(--bd);}
+  .stage{display:flex;gap:12px;padding:16px 18px;justify-content:center;background:var(--soft);}
+  .agent{flex:1;max-width:170px;text-align:center;} .face{width:64px;height:64px;border-radius:18px;margin:0 auto 6px;display:flex;align-items:center;justify-content:center;font-size:28px;}
+  .agent .rn{font-weight:700;font-size:13px;} .agent .role{font-size:11px;color:var(--mut);margin-bottom:6px;}
+  .talk{font-size:11.5px;border-radius:11px;padding:7px 9px;line-height:1.4;text-align:left;}
+  .thread{padding:8px 18px 14px;display:flex;flex-direction:column;gap:8px;background:#fafaf8;}
+  .sum{background:#fff;border:1px dashed var(--pur);border-radius:12px;padding:11px 13px;font-size:12.5px;color:var(--pur);}
+  .ctrlbar{display:flex;gap:10px;align-items:center;border-top:1px solid var(--bd);padding:12px 18px;}
+  .in{flex:1;background:#f0efec;border:1px solid var(--bd);border-radius:10px;padding:9px 12px;font-size:12px;color:var(--mut);}
+  .b1{background:var(--pur);color:#fff;border-radius:9px;padding:9px 14px;font-size:12.5px;} .b2{background:#fff;border:1px solid var(--bd);border-radius:9px;padding:9px 14px;font-size:12.5px;color:var(--mut)}
+  .note{font-size:11px;color:var(--mut);text-align:center;padding:6px;background:var(--soft);border-top:1px solid var(--bd);}
+  .scnote{width:100%;margin-top:12px;font-size:11.5px;color:var(--mut);border:1px dashed var(--bd);border-radius:8px;padding:8px 10px;text-align:center;}
+  .toggle{display:inline-flex;align-items:center;gap:6px;font-size:12px;background:#2c2c2a;color:#fff;border-radius:999px;padding:5px 12px;}
+  .warn{background:#3a3a38;color:#fff;font-size:12px;text-align:center;padding:9px 12px;} .warn b{color:#ffe;}
+  .sc-main{display:flex;min-height:240px;}
+  .sc-left{flex:0 0 36%;border-right:1px solid var(--bd);padding:16px;text-align:center;background:#efeeec;}
+  .sc-char{width:90px;height:90px;border-radius:20px;background:#d9d9d4;color:#777;display:flex;align-items:center;justify-content:center;font-size:34px;margin:6px auto 8px;}
+  .sc-right{flex:1;padding:16px;display:flex;flex-direction:column;gap:10px;background:#f3f2f0;}
+  .paused{font-size:11px;color:var(--mut);border:1px dashed var(--bd);border-radius:8px;padding:6px 8px;}
+  .scbar{display:flex;align-items:center;gap:10px;border-top:1px solid var(--bd);padding:11px 16px;font-size:13px;color:var(--mut)} .scbar .f{flex:1;background:#e8e7e4;border:1px solid var(--bd);border-radius:10px;padding:8px 12px;font-size:12px}
+  /* 마이페이지·커뮤니티·관리자 (한재웅) */
+  .room{margin:16px 16px 0 28px;border:1px solid var(--bd);background:#f3f1ec;border-radius:6px;position:relative;height:300px;overflow:visible;}
+  .wall{position:absolute;inset:0;background:repeating-linear-gradient(0deg,#efede8,#efede8 1px,transparent 1px,transparent 26px);}
+  .floor{position:absolute;left:0;right:0;bottom:0;height:40%;background:#e6e2d8;border-top:1px solid #cfcabb;transform:perspective(500px) rotateX(34deg);transform-origin:bottom;}
+  .art{position:absolute;width:30px;height:30px;border-radius:7px;background:#fff;border:1px solid var(--bd);box-shadow:0 1px 3px rgba(0,0,0,.1);display:flex;align-items:center;justify-content:center;font-size:15px;}
+  .desk{position:absolute;left:50%;bottom:14%;transform:translateX(-50%);width:200px;height:54px;background:#dcc7a8;border:1px solid #c3ac82;border-radius:8px 8px 4px 4px;}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;padding:12px 16px;margin:14px 16px 16px;border:1px solid var(--bd);border-radius:8px;background:#fbfbf9;font-size:12px;}
+  .lg{display:flex;align-items:center;gap:6px;} .lgn{width:19px;height:19px;border-radius:50%;background:var(--red);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+  .body{padding:18px;}
+  .scrhd{font-size:13px;font-weight:700;color:var(--ink);margin:0 0 12px;padding-bottom:7px;border-bottom:1px solid var(--bd);} .scrhd small{font-weight:400;color:var(--mut);margin-left:6px;font-size:11px;}
+  .twocol{display:flex;gap:14px;align-items:flex-start;}
+  .kv .r{display:flex;align-items:center;gap:10px;padding:6px 10px;border:1px solid var(--bd);border-radius:7px;margin-bottom:6px;font-size:12px;background:#fff;} .kv .k{width:68px;color:var(--mut);font-weight:600;} .kv .v{flex:1;color:var(--ink);} .edit{font-size:11px;color:var(--teal);border:1px solid var(--bd);border-radius:6px;padding:2px 9px;background:#fff;}
+  .radar{width:140px;height:140px;border-radius:50%;border:1px dashed var(--bd);background:radial-gradient(circle,#fff 38%,var(--tealbg) 39%,#fff 40%,var(--tealbg) 64%,#fff 65%);display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:11px;text-align:center;}
+  .conf{display:inline-block;font-size:12px;background:var(--tealbg);color:var(--teal);border-radius:999px;padding:2px 11px;font-weight:600;}
+  .evid{font-size:11.5px;line-height:1.7;color:var(--ink);border:1px solid var(--bd);border-radius:8px;padding:10px 12px;background:var(--soft);}
+  .cols{display:flex;gap:10px;} .col{flex:1;border:1px solid var(--bd);border-radius:8px;padding:10px;background:var(--soft);} .col h5{margin:0 0 7px;font-size:11.5px;color:var(--mut);} .chip{display:inline-block;font-size:11px;padding:3px 9px;border-radius:999px;margin:0 4px 5px 0;border:1px solid var(--bd);background:#fff;color:var(--ink);} .chip.neg{background:var(--redbg);color:var(--red);border-color:#f3c4c1;} .chip.pos{background:var(--tealbg);color:var(--teal);border-color:#bfe3d6;}
+  .trd{font-size:11.5px;line-height:1.8;} .up{color:var(--teal);font-weight:600;} .down{color:var(--red);font-weight:600;}
+  .setwrap{display:flex;border:1px solid var(--bd);border-radius:8px;overflow:hidden;min-height:260px;}
+  .setnav{width:120px;background:var(--soft);border-right:1px solid var(--bd);} .setnav .it{padding:9px 11px;font-size:11.5px;border-bottom:1px solid var(--bd);color:var(--mut);} .setnav .it.on{background:#fff;color:var(--teal);font-weight:700;}
+  .setbody{flex:1;padding:13px 15px;}
+  table.t{width:100%;border-collapse:collapse;font-size:11.5px;} .t th,.t td{border:1px solid var(--bd);padding:5px 8px;text-align:left;} .t th{background:var(--gray);font-weight:600;} .t td.c,.t th.c{text-align:center;}
+  .bg{display:inline-block;font-size:10.5px;border-radius:999px;padding:1px 8px;border:1px solid var(--bd);} .bg.ok{background:var(--tealbg);color:var(--teal);border-color:#bfe3d6;} .bg.warn{background:var(--redbg);color:var(--red);border-color:#f3c4c1;} .bg.hold{background:var(--amberbg);color:var(--amber);border-color:#f0dcae;}
+  .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:11px;} .search{flex:1;border:1px solid var(--bd);border-radius:7px;padding:7px 11px;font-size:11.5px;color:var(--mut);background:#fff;} .pbtn{font-size:11.5px;border:1px solid var(--teal);background:var(--teal);color:#fff;border-radius:7px;padding:7px 13px;} .pbtn.gh{background:#fff;color:var(--teal);}
+  .form .fi{border:1px solid var(--bd);border-radius:7px;padding:8px 11px;font-size:11.5px;color:var(--mut);background:#fff;margin-bottom:8px;} .form .ta{min-height:74px;}
+  .kpis{display:flex;gap:10px;margin-bottom:13px;} .kpi{flex:1;background:var(--soft);border:1px solid var(--bd);border-radius:8px;padding:10px;text-align:center;} .kpi b{font-size:19px;display:block;color:var(--ink);} .kpi small{font-size:10.5px;color:var(--mut);}
+  .cwrap{display:flex;border:1px solid var(--bd);border-radius:8px;overflow:hidden;min-height:300px;} .clist{width:180px;border-right:1px solid var(--bd);background:var(--soft);} .clist .ci{padding:9px 11px;border-bottom:1px solid var(--bd);font-size:11.5px;color:var(--mut);} .clist .ci.on{background:#fff;color:var(--ink);font-weight:600;} .clist .ci small{display:block;font-size:10px;color:var(--mut);font-weight:400;}
+  .cthread{flex:1;display:flex;flex-direction:column;background:#fafaf8;min-width:0;} .cthd{font-size:12px;font-weight:600;padding:9px 13px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:8px;} .cthd .rt{margin-left:auto;font-size:11px;color:var(--mut);font-weight:400;}
+  .cmsgs{flex:1;padding:13px;display:flex;flex-direction:column;gap:9px;} .msg{font-size:11.5px;border-radius:11px;padding:6px 10px;max-width:74%;line-height:1.4;} .msg.me{align-self:flex-end;background:var(--bluebg);color:var(--blue);} .msg.you{align-self:flex-start;background:#fff;border:1px solid var(--bd);} .msg .tm{display:block;font-size:9.5px;color:var(--mut);margin-top:3px;}
+  .safein{font-size:11px;color:var(--mut);text-align:center;padding:7px 10px;background:var(--amberbg);border-top:1px solid #f0dcae;} .cbar{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--bd);font-size:12px;color:var(--mut);align-items:center;} .cbar .f{flex:1;background:#eceae6;border:1px solid var(--bd);border-radius:9px;padding:8px 11px;}
+  .snote{font-size:11px;color:var(--mut);padding:8px 12px;background:var(--soft);border:1px dashed var(--bd);border-radius:8px;margin-top:10px;}
+  /* 마음 리포트 (박송원) */
+  .rbody{display:flex;gap:14px;padding:30px;}
+  .rleft{flex:1;display:flex;flex-direction:column;gap:14px;min-width:0;}
+  .rright{flex:1.9;border:1px solid var(--bd);border-radius:10px;padding:16px 18px;background:#fff;min-width:0;}
+  .card{border:1px solid var(--bd);border-radius:10px;padding:12px 14px;background:var(--soft);}
+  .card h4{margin:0 0 8px;font-size:12.5px;color:var(--mut);font-weight:600;}
+  .plist{list-style:none;margin:0;padding:0;font-size:12px;}
+  .plist li{padding:7px 9px;border:1px solid var(--bd);border-radius:7px;background:#fff;margin-bottom:6px;color:var(--mut);}
+  .plist li.on{border-color:var(--teal);background:var(--tealbg);color:var(--teal);font-weight:600;}
+  .emorow{display:flex;border:1px solid var(--bd);border-radius:8px;overflow:hidden;background:#fff;}
+  .emo{flex:1;text-align:center;padding:9px 0;font-size:17px;border-right:1px solid var(--bd);} .emo:last-child{border-right:none;} .emo small{display:block;font-size:9px;color:var(--mut);margin-top:2px;}
+  .rtitle{font-size:15px;font-weight:700;color:var(--ink);padding-bottom:8px;border-bottom:1px solid var(--bd);margin-bottom:12px;}
+  .kwbox{margin-bottom:12px;font-size:12px;}
+  .kwlab{color:var(--mut);font-weight:600;margin-bottom:5px;}
+  .llm{font-size:12px;line-height:1.65;color:var(--ink);background:var(--soft);border:1px solid var(--bd);border-radius:9px;padding:12px 14px;}
+  .expbar{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;}
+  .ebtn{font-size:12px;padding:7px 14px;border-radius:8px;border:1px solid var(--teal);background:var(--teal);color:#fff;font-weight:600;}
+  .ebtn.gh{background:#fff;color:var(--teal);}
+</style>
+</head>
+<body>
+
+<div class="doc-title">화면설계서 (통합) · 웹 · 빈틈사이 4team — 김한솔 · 한재웅 · 박송원</div>
+
+<div class="sec">담당: 김한솔 — 챗봇 대화 (SCR-003 대화방 · SCR-003-S 시크릿챗)</div>
+
+<!-- 1) SCR-003 대화방 -->
+<div class="sheet">
+  <table class="meta">
+    <tr><td class="l">Page Title</td><td>캐릭터 대화방 (Chat Room)</td><td class="l">Screen ID</td><td>SCR-003</td><td class="l">Author</td><td>김한솔</td><td class="l">Date</td><td>2026.06.21</td></tr>
+    <tr><td class="l">Screen Path</td><td colspan="7">2 홈 &gt; 2.1 캐릭터 대화 (SCR-003) &nbsp;|&nbsp; REQ-CHAT-001~016 · 반응형 웹</td></tr>
+  </table>
+  <div class="grid">
+    <div class="canvas">
+      <div class="browser">
+        <div class="bbar"><span class="dot" style="background:#ec6a5e"></span><span class="dot" style="background:#f3bf4f"></span><span class="dot" style="background:#61c454"></span><span class="url">binteumsai.app / chat</span></div>
+        <div class="nav row"><span class="m" style="left:-12px;top:9px">1</span><span class="logo">빈틈사이</span><a>홈</a><a class="on">대화</a><a>마음 리포트</a><a>마이페이지</a><a>설정</a><span class="me">○ 사용자</span></div>
+        <div class="main">
+          <div class="left row"><span class="m" style="left:-12px;top:14px">2</span>
+            <div class="char">◠‿◠</div><div class="cname">해온이</div><div class="faces">표정 4분기 : 응원·속상·화남·계획</div>
+            <div class="opener">오늘 서울 비 온대~ 우산 챙겼어?<small>opener · 운세/날씨 (기억 있으면 안부)</small></div>
+            <div class="recbtns row"><span class="m" style="left:-26px;top:14px">3</span><span class="rbtn">🍵 힐링 차 추천</span><span class="rbtn">🎵 BGM 추천</span></div>
+            <div class="ctrls row"><span class="m" style="left:-26px;top:18px">4</span>
+              <div class="fr">♥ 친밀도 <span class="bar"><i></i></span></div>
+              <div class="btns"><span class="btn tg">🔒 시크릿챗</span><span class="btn">대화 저장</span></div>
+            </div>
+          </div>
+          <div class="right row"><span class="m" style="right:-12px;top:8px">5</span>
+            <div class="bub b-user">오늘 팀장님한테 또 깨졌어…</div>
+            <div class="bub b-char">저런… 오늘 진짜 속상했겠다. 네 잘못 아닌 것 같은데, 무슨 일이 있었는지 더 말해줄래?</div>
+            <div class="tea"><b>🍵 캐모마일 차</b><div class="e">긴장 완화 · 수면 도움 · 카페인 없음</div><div class="bgm">▶ 마음 달래는 BGM 들으러 가기</div></div>
+            <div class="typing">· · ·</div>
+          </div>
+        </div>
+        <div class="suggest row"><span class="m" style="left:-12px;top:10px">6</span><span class="slab">💡 이런 얘기 어때요?</span><span class="qchip">오늘 회사에서 무슨 일 있었어?</span><span class="qchip">요즘 제일 힘든 게 뭐야?</span><span class="qchip">그냥 가볍게 수다 떨까?</span></div>
+        <div class="inputzone row"><span class="m" style="right:-12px;top:18px">7</span><div class="inbar">🎤 <div class="field">메시지 입력… (최대 300자)</div> 📋 계획 <div class="send">전송 ➤</div></div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="ph">Description</div>
+      <ol class="desc">
+        <li><span class="n">①</span> <b>글로벌 내비게이션</b> — 로고 + 홈·대화·마음 리포트·마이페이지·설정 탭</li>
+        <li><span class="n">②</span> <b>대표 캐릭터 영역</b> — 큰 일러스트 + 표정 4분기, 진입 시 메모리 있으면 안부·없으면 운세/날씨 opener</li>
+        <li><span class="n">③</span> <b>차·BGM 추천 버튼</b> — 사용자가 직접 눌러 정서 매핑 힐링 차 / 유튜브 BGM 추천을 요청 (4대 공감 출력 시 자동으로도 카드 표시). 차 추천 시 카페인·알레르기 필터를 거침</li>
+        <li><span class="n">④</span> <b>친밀도·세션 컨트롤</b> — 친밀도 게이지(톤 변화), 시크릿챗 토글, 대화 저장 상태 표시</li>
+        <li><span class="n">⑤</span> <b>대화 스레드 (공감 4모드)</b> — 4턴 이후 감정분석 결과로 응원·속상·화남·계획 중 하나로 <b>자동 분기</b>, 모드마다 표정·말투·행동이 달라짐. 1~3턴은 '같이 찾아주는 질문', 위기 시 외부연결 없이 위로만</li>
+        <li><span class="n">⑥</span> <b>추천 질문</b> — 입력 전에 탭할 수 있는 상황별 추천 질문 3개. RAG가 대화 맥락에 따라 갱신 (상황 칩 대신)</li>
+        <li><span class="n">⑦</span> <b>입력바</b> — 최대 300자, STT 마이크, 계획 모드(웹검색), 전송</li>
+      </ol>
+      <div class="ph">공감 4모드 (자동 분기)</div>
+      <ul class="cp">
+        <li><b>응원</b> — 잘하고 있다고 힘 실어주기</li>
+        <li><b>속상</b> — 같이 속상해하며 경청</li>
+        <li><b>화남</b> — 사용자 대신 화내주기 (대리 분노)</li>
+        <li><b>계획</b> — 같이 해결책·다음 행동 짜기 (CBT)</li>
+      </ul>
+      <div class="ph">Check Point</div>
+      <ul class="cp"><li>턴 게이팅: 1~3턴 유예 / 4턴~ 분석·6척도</li><li>공감 모드는 사용자가 고르는 게 아니라 감정분석으로 자동 결정</li><li>토큰: 10턴 윈도우, max_tokens 250</li></ul>
+    </div>
+  </div>
+</div>
+
+<!-- 2) SCR-003-S 시크릿챗 -->
+<div class="sheet">
+  <table class="meta">
+    <tr><td class="l">Page Title</td><td>시크릿챗 모드 (Secret Chat)</td><td class="l">Screen ID</td><td>SCR-003-S</td><td class="l">Author</td><td>김한솔</td><td class="l">Date</td><td>2026.06.21</td></tr>
+    <tr><td class="l">Screen Path</td><td colspan="7">2 홈 &gt; 2.1 캐릭터 대화 (시크릿 토글 ON) &nbsp;|&nbsp; REQ-CHAT-012 · 비저장 세션 (대화방과 동일 레이아웃, 친밀도·저장 컨트롤 제외)</td></tr>
+  </table>
+  <div class="grid">
+    <div class="canvas">
+      <div class="browser">
+        <div class="bbar"><span class="dot" style="background:#ec6a5e"></span><span class="dot" style="background:#f3bf4f"></span><span class="dot" style="background:#61c454"></span><span class="url">binteumsai.app / chat?secret=on</span></div>
+        <div class="nav"><span class="logo">빈틈사이</span><a>홈</a><a class="on">대화</a><a>마음 리포트</a><a>마이페이지</a><a>설정</a><span class="me row"><span class="m" style="right:-12px;top:-4px">1</span><span class="toggle">🔒 시크릿챗 ON</span></span></div>
+        <div class="warn row"><span class="m" style="left:-12px;top:8px">2</span>🔒 <b>시크릿챗</b> — 이 대화와 분석은 <b>저장되지 않으며</b>, 종료 시 마음 카드·리포트가 생성되지 않습니다.</div>
+        <div class="main">
+          <div class="left">
+            <div class="char">◠‿◠</div><div class="cname">해온이</div><div class="faces">표정 4분기 : 응원·속상·화남·계획</div>
+            <div class="opener">여긴 아무 기록도 안 남아. 편하게 다 털어놔도 돼.<small>opener · 비저장 안내</small></div>
+            <div class="recbtns row"><span class="m" style="left:-26px;top:14px">3</span><span class="rbtn">🍵 힐링 차 추천</span><span class="rbtn">🎵 BGM 추천</span></div>
+            <div class="scnote">🔒 비저장 모드 — 친밀도·메모리 적립 정지<br>(저장·개인화 컨트롤 비활성)</div>
+          </div>
+          <div class="right row"><span class="m" style="right:-12px;top:8px">4</span>
+            <div class="bub b-user">아무한테도 말 못한 얘긴데…</div>
+            <div class="bub b-char">괜찮아, 여긴 아무 기록도 안 남아. 천천히 말해줘.</div>
+            <div class="typing">· · ·</div>
+          </div>
+        </div>
+        <div class="suggest row"><span class="m" style="left:-12px;top:10px">5</span><span class="slab">💡 이런 얘기 어때요?</span><span class="qchip">털어놓고 싶은 비밀이 있어</span><span class="qchip">요즘 너무 지쳐</span><span class="qchip">그냥 들어줘</span></div>
+        <div class="inputzone row"><span class="m" style="right:-12px;top:18px">6</span><div class="inbar">🎤 <div class="field">메시지 입력… (종료 시 전부 파기)</div> 📋 계획 <div class="send">전송 ➤</div></div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="ph">Description</div>
+      <ol class="desc">
+        <li><span class="n">①</span> <b>시크릿챗 ON 표시</b> — 토글을 켜면 비저장 세션으로 분기 (대화방과 동일 레이아웃, 단 <b>친밀도·저장 컨트롤 제거</b>)</li>
+        <li><span class="n">②</span> <b>비저장 경고 배너</b> — 저장 안 됨·종료 시 카드/리포트 미생성 명시</li>
+        <li><span class="n">③</span> <b>차·BGM 추천</b> — 대화방과 동일 제공 (비저장이라 기록만 안 남음)</li>
+        <li><span class="n">④</span> <b>대화 스레드</b> — 일반 대화와 동일. 대화·분석 큐 DB 미기록. 단 <b>위기 탐지는 익명으로 100% 작동</b></li>
+        <li><span class="n">⑤</span> <b>추천 질문</b> — 대화방과 동일 (입력 전 탭)</li>
+        <li><span class="n">⑥</span> <b>입력바</b> — 동일 기능, 종료 시 서버 메모리에서 즉시 영구 파기 → 홈 리다이렉트</li>
+      </ol>
+      <div class="ph">Check Point</div>
+      <ul class="cp"><li>친밀도·메모리(LTM) 적립 정지</li><li>대화·분석 DB 삽입 차단, 종료 시 RAM 영구 파기</li><li>카드·리포트 미생성, 홈 즉시 이동</li><li>위기 감지는 익명 이벤트(건수만)로 작동 — 안전 예외</li></ul>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

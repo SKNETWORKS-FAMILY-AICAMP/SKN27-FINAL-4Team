@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-감정 데이터 병합 — JSON 원본만으로 6감정 학습셋(jsonl) 생성
+감정 데이터 병합 — JSON 원본만으로 4감정 학습셋(jsonl) 생성
 
 입력 (둘 다 JSON, CSV 안 거침)
   1) AI Hub 감성대화 말뭉치 (JSON)  : 감성대화말뭉치(원천)_Training.json 등
@@ -8,14 +8,14 @@
   2) KOTE (Korean Online Text Emotion, JSON) : raw.json (문장 + 43감정 다중 태그)
 
 출력
-  kcelectra_train_clean.jsonl   (각 줄: {"text": ..., "emotion": <6감정>})
-  6감정 = 분노 / 슬픔 / 불안 / 상처 / 당황 / 기쁨
+  kcelectra_train_clean.jsonl   (각 줄: {"text": ..., "emotion": <4감정>})
+  4감정 = 기쁨 / 슬픔 / 분노 / 일반   (6감정으로 수집 후 v5.3 4감정으로 축약)
 
 사용
   python build_emotion_dataset.py \
-      --aihub ../../data/raw/감성대화_Training.json \
-      --kote  ../../data/raw/kote_raw.json \
-      --out   ../../data/kcelectra_train_clean.jsonl
+      --aihub ../../etl/data/raw/감성대화_Training.json \
+      --kote  ../../etl/data/raw/kote_raw.json \
+      --out   ../../etl/data/kcelectra_train_clean.jsonl
 
 원본 키 구조가 버전마다 달라서, 자동 탐지 + --*-key 옵션으로 덮어쓸 수 있게 했음.
 """
@@ -23,6 +23,18 @@ import argparse, json, os, re, sys
 from collections import Counter
 
 SIX = ["분노", "슬픔", "불안", "상처", "당황", "기쁨"]
+
+# 6감정으로 수집한 뒤 v5.3 4감정으로 축약 (normal=일반 정의)
+#  - 슬픔 ← 슬픔·상처 (서러움·수치심 = 슬픔 계열, 공감 위로 레인)
+#  - 분노 ← 분노·불안 (고각성 부정 = 진정·환기 레인)
+#  - 일반 ← 당황 (경미·일시, 정서 개입 낮음) + (선택) 중립 코퍼스
+FOUR = ["기쁨", "슬픔", "분노", "일반"]
+SIX_TO_FOUR = {
+    "기쁨": "기쁨",
+    "슬픔": "슬픔", "상처": "슬픔",
+    "분노": "분노", "불안": "분노",
+    "당황": "일반",
+}
 
 # ── AI Hub 감성대화: 감정은 E코드(E10~E69)로 라벨링됨 → 6감정 ────────────────
 # 종합기획안 5.1.2 매핑과 동일: E1x=분노 E2x=슬픔 E3x=불안 E4x=상처 E5x=당황 E6x=기쁨
@@ -107,30 +119,42 @@ def map_label(raw, table):
 
 
 def load_aihub(path, text_key, label_key):
-    data = json.load(open(path, encoding="utf-8"))
-    items = data if isinstance(data, list) else data.get("data", data)
+    import glob
+    if os.path.isdir(path):
+        files = glob.glob(os.path.join(path, "**", "*.json"), recursive=True)
+    else:
+        files = [path]
+    
     out = []
     text_cands = {text_key, "발화", "sentence", "talk", "HS01", "내용", "text", "human"}
     label_cands = {label_key, "emotion", "감정_대분류", "상황", "emotion_category", "label", "type"}
-    for it in (items if isinstance(items, list) else []):
-        # 텍스트
-        t = None
-        # 감성대화는 talk.content.HS01 형태가 흔함 → deep_find로 흡수
-        if isinstance(it, dict) and "talk" in it:
-            t = deep_find(it["talk"], {"HS01", "HS02", "HS03", "content", "sentence"})
-        t = t or deep_find(it, text_cands)
-        # 라벨
-        lab = None
-        if isinstance(it, dict) and "profile" in it:
-            lab = deep_find(it["profile"], label_cands)
-        lab = lab or deep_find(it, label_cands)
-        # 라벨: E코드(E10~E69) 우선, 없으면 한글 대분류, 그래도 없으면 아이템 전체에서 E코드 탐색
-        six = ecode_to_six(lab) or (map_label(lab, AIHUB_MAP) if lab else None)
-        if not six:
-            six = ecode_to_six(json.dumps(it, ensure_ascii=False))
-        if not t or not six:
-            continue
-        out.append({"text": clean(t), "emotion": six, "src": "aihub"})
+    
+    for fpath in files:
+        print(f"[aihub] Loading file: {fpath}")
+        try:
+            data = json.load(open(fpath, encoding="utf-8"))
+            items = data if isinstance(data, list) else data.get("data", data)
+            for it in (items if isinstance(items, list) else []):
+                # 텍스트
+                t = None
+                # 감성대화는 talk.content.HS01 형태가 흔함 → deep_find로 흡수
+                if isinstance(it, dict) and "talk" in it:
+                    t = deep_find(it["talk"], {"HS01", "HS02", "HS03", "content", "sentence"})
+                t = t or deep_find(it, text_cands)
+                # 라벨
+                lab = None
+                if isinstance(it, dict) and "profile" in it:
+                    lab = deep_find(it["profile"], label_cands)
+                lab = lab or deep_find(it, label_cands)
+                # 라벨: E코드(E10~E69) 우선, 없으면 한글 대분류, 그래도 없으면 아이템 전체에서 E코드 탐색
+                six = ecode_to_six(lab) or (map_label(lab, AIHUB_MAP) if lab else None)
+                if not six:
+                    six = ecode_to_six(json.dumps(it, ensure_ascii=False))
+                if not t or not six:
+                    continue
+                out.append({"text": clean(t), "emotion": six, "src": "aihub"})
+        except Exception as e:
+            print(f"[aihub] Error loading {fpath}: {e}")
     return out
 
 
@@ -143,17 +167,38 @@ def load_kote(path):
             continue
         t = it.get("text") or it.get("sentence") or deep_find(it, {"text", "sentence"})
         tags = it.get("emotions") or it.get("labels") or it.get("emotion") or []
-        if isinstance(tags, str):
+        if isinstance(tags, dict):
+            flat_tags = []
+            for val in tags.values():
+                if isinstance(val, list):
+                    flat_tags.extend(val)
+                elif isinstance(val, str):
+                    flat_tags.append(val)
+            tags = flat_tags
+        elif isinstance(tags, str):
             tags = [tags]
         if not t or not tags:
             continue
-        six = None
-        for tag in tags:  # 가장 우세한(먼저 매칭) 1개
+        mapped_emotions = []
+        for tag in tags:
             six = map_label(tag, KOTE_TO_SIX)
             if six:
-                break
-        if six:
-            out.append({"text": clean(t), "emotion": six, "src": "kote"})
+                mapped_emotions.append(six)
+        if mapped_emotions:
+            most_common_emo = Counter(mapped_emotions).most_common(1)[0][0]
+            out.append({"text": clean(t), "emotion": most_common_emo, "src": "kote"})
+    return out
+
+
+def load_neutral(path):
+    """중립/일상 코퍼스(선택) → 모두 '일반' 라벨. JSON 리스트(문자열 또는 {text})."""
+    data = json.load(open(path, encoding="utf-8"))
+    items = data.values() if isinstance(data, dict) else data
+    out = []
+    for it in items:
+        t = it if isinstance(it, str) else (it.get("text") or it.get("sentence") if isinstance(it, dict) else None)
+        if t and str(t).strip():
+            out.append({"text": clean(t), "emotion": "일반", "src": "neutral"})
     return out
 
 
@@ -161,6 +206,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--aihub", help="AI Hub 감성대화 JSON 경로")
     ap.add_argument("--kote", help="KOTE raw.json 경로")
+    ap.add_argument("--neutral", help="중립/일상 문장 JSON 경로(선택) → 일반 라벨")
     ap.add_argument("--out", default="../../data/kcelectra_train_clean.jsonl")
     ap.add_argument("--text-key", default="발화")
     ap.add_argument("--label-key", default="감정_대분류")
@@ -177,6 +223,9 @@ def main():
     if args.kote:
         r = load_kote(args.kote)
         print(f"[kote ] {len(r)}건"); rows += r
+    if args.neutral:
+        r = load_neutral(args.neutral)
+        print(f"[neutral] {len(r)}건"); rows += r
 
     # 정제: 길이 필터 + text 중복 제거
     seen, merged = set(), []
@@ -185,18 +234,19 @@ def main():
         if len(t) < args.min_len or t in seen:
             continue
         seen.add(t)
-        merged.append({"text": t, "emotion": x["emotion"]})
+        # 6감정 → 4감정 축약 (이미 '일반'이면 그대로)
+        merged.append({"text": t, "emotion": SIX_TO_FOUR.get(x["emotion"], x["emotion"])})
 
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
         for x in merged:
             f.write(json.dumps(x, ensure_ascii=False) + "\n")
 
-    print(f"\n✅ 저장: {os.path.abspath(args.out)}  총 {len(merged)}건 (중복 제거 후)")
-    print("6감정 분포:", dict(Counter(x["emotion"] for x in merged)))
-    miss = [s for s in SIX if s not in {x['emotion'] for x in merged}]
+    print(f"\n[SUCCESS] Saved: {os.path.abspath(args.out)}  Total {len(merged)} items (after deduplication)")
+    print("4 Emotion Distribution:", dict(Counter(x["emotion"] for x in merged)))
+    miss = [s for s in FOUR if s not in {x['emotion'] for x in merged}]
     if miss:
-        print("⚠️ 매핑 0건 감정:", miss, "→ 위 매핑 테이블 보강 필요")
+        print("[WARN] 0 items mapped for emotions:", miss, "-> check mapping tables")
 
 
 if __name__ == "__main__":

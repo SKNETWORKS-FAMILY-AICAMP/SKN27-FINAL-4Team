@@ -7,7 +7,12 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      // 생성된 마음카드 이미지(/media/emotion_cards/...)를 백엔드에서 받아오기 위한 프록시
+      '/media': {
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
     },

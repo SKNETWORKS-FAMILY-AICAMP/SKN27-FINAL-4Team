@@ -1,0 +1,936 @@
+/*  HomeView.vue  */
+
+.home-view h1 {
+  font-family: var(--font-display) !important;
+  font-weight: 400 !important;
+  letter-spacing: 0 !important;
+}
+
+.hero-copy {
+  font-family: var(--font-soft);
+}
+
+.content-action {
+  border: 0;
+  cursor: pointer;
+}
+
+.content-action:hover {
+  transform: translateY(-2px);
+}
+
+.hero-copy {
+  max-width: 590px;
+  margin-bottom: 28px;
+  color: rgba(255, 247, 241, 0.88);
+  font-size: 21px;
+  line-height: 1.72;
+}
+
+.home-view {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 720px) minmax(260px, 1fr);
+  align-items: center;
+  padding: 44px 58px 208px;
+}
+
+.home-copy-zone {
+  max-width: 700px;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.content-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(210px, 1fr));
+  gap: 12px;
+  max-width: 560px;
+  margin-bottom: 20px;
+}
+
+.content-action {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 82px;
+  padding: 14px 16px;
+  border-radius: 24px;
+  color: white;
+  text-align: left;
+}
+
+.content-action strong,
+.content-action small {
+  display: block;
+}
+
+.content-action small {
+  margin-top: 4px;
+  color: var(--muted);
+  line-height: 1.45;
+  white-space: pre-line;
+}
+
+.stat-strip {
+  width: max-content;
+  max-width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(132px, 1fr));
+  overflow: hidden;
+  border-radius: 24px;
+}
+
+.stat-item {
+  display: grid;
+  gap: 3px;
+  padding: 15px 18px;
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.stat-item:last-child {
+  border-right: 0;
+}
+
+.stat-item strong {
+  color: white;
+  font-size: 21px;
+}
+
+.stat-item span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mascot-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 520px;
+  margin-top: 18px;
+  color: var(--muted);
+}
+
+.mascot-note p {
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px 18px 18px 6px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.feature-dock {
+  position: absolute;
+  left: 58px;
+  bottom: 34px;
+  width: min(820px, calc(100% - 116px));
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+  border-radius: 30px;
+}
+
+@media (max-width: 1180px) {
+
+  .home-view {
+    grid-template-columns: 1fr;
+    padding-bottom: 44px;
+  }
+
+  .feature-dock {
+    position: static;
+    width: 100%;
+    margin-top: 30px;
+  }
+}
+
+@media (max-height: 820px) and (min-width: 1181px) {
+
+  .hero-copy {
+    font-size: 18px;
+    line-height: 1.62;
+  }
+
+  .home-view {
+    grid-template-columns: minmax(0, 760px);
+    align-items: start;
+    padding: 32px 50px 42px;
+  }
+
+  .feature-dock {
+    grid-column: 1;
+    position: static;
+    width: min(780px, 100%);
+    margin-top: 22px;
+  }
+}
+
+@media (max-width: 720px) {
+
+  .home-view {
+    padding: 18px;
+  }
+
+  .hero-copy {
+    font-size: 18px;
+  }
+
+  .hero-actions,
+.content-actions,
+.stat-strip,
+.feature-dock {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .hero-actions .btn {
+    width: 100%;
+  }
+
+  .stat-item {
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  .stat-item:last-child {
+    border-bottom: 0;
+  }
+
+  .feature-dock {
+    padding: 12px;
+  }
+}
+
+.home-view {
+  box-sizing: border-box;
+  max-width: var(--bt-page-max);
+  margin-inline: auto;
+}
+
+.home-copy-zone h1 {
+  color: #fff2df !important;
+  letter-spacing: 0 !important;
+}
+
+@media (max-width: 1180px) {
+  .home-view {
+    width: min(100%, calc(100vw - 32px)) !important;
+  }
+}
+
+.feature-dock,
+.content-action {
+  border-color: rgba(231, 62, 101, 0.34) !important;
+  background:
+    linear-gradient(145deg, rgba(50, 24, 73, 0.9), rgba(147, 22, 114, 0.34)),
+    rgba(20, 9, 31, 0.68) !important;
+  box-shadow:
+    0 26px 70px rgba(20, 9, 31, 0.34),
+    inset 0 1px 0 rgba(255, 245, 238, 0.12) !important;
+  backdrop-filter: blur(18px) saturate(135%);
+}
+
+.home-view {
+  background:
+    linear-gradient(90deg, rgba(20, 9, 31, 0.82), rgba(20, 9, 31, 0.24) 54%, rgba(20, 9, 31, 0.46)),
+    transparent;
+}
+
+.home-copy-zone h1 {
+  color: #fff2df !important;
+  text-shadow: 0 8px 34px rgba(231, 62, 101, 0.22);
+}
+
+.home-view {
+  max-width: var(--bt-page-max) !important;
+  box-sizing: border-box !important;
+  margin-inline: auto !important;
+  overflow-x: hidden !important;
+}
+
+.home-view {
+  width: min(var(--bt-page-max), calc(100% - (var(--bt-page-x) * 2))) !important;
+}
+
+.content-action {
+  word-break: keep-all;
+}
+
+@media (max-width: 1180px) {
+  .home-view {
+    width: min(100%, calc(100vw - 32px)) !important;
+  }
+}
+
+.home-view {
+  width: min(var(--bt-content-max), calc(100% - (var(--bt-stage-x) * 2))) !important;
+  max-width: var(--bt-content-max) !important;
+  margin: var(--bt-stage-y) auto !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.home-view {
+  min-height: calc(100vh - var(--bt-header-h) - (var(--bt-stage-y) * 2)) !important;
+  padding: clamp(34px, 5vh, 62px) 0 28px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  overflow: visible !important;
+}
+
+.home-copy-zone {
+  width: min(760px, 46vw) !important;
+  max-width: 760px !important;
+}
+
+.home-view .feature-dock {
+  width: min(1060px, 100%) !important;
+  margin-top: clamp(18px, 2.4vh, 28px) !important;
+}
+
+@media (max-width: 1180px) {
+  .home-view {
+    width: min(100%, calc(100vw - 32px)) !important;
+  }
+
+  .home-copy-zone {
+    width: min(100%, 760px) !important;
+  }
+}
+
+#app .home-view {
+  width: min(var(--bt-page-max), calc(100% - (var(--bt-page-x) * 2))) !important;
+  max-width: var(--bt-page-max) !important;
+  min-height: calc(100vh - var(--bt-header-h)) !important;
+  margin: 0 auto !important;
+  padding: var(--bt-page-y) 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  overflow-x: hidden !important;
+}
+
+#app .home-view {
+  display: grid !important;
+  grid-template-columns: minmax(0, 760px) minmax(420px, 1fr) !important;
+  align-content: center !important;
+  align-items: center !important;
+  column-gap: clamp(40px, 5vw, 88px) !important;
+}
+
+#app .home-copy-zone {
+  grid-column: 1;
+  width: min(760px, 46vw) !important;
+  max-width: 760px !important;
+}
+
+#app .home-copy-zone h1 {
+  max-width: 720px;
+  font-size: clamp(46px, 3.25vw, 60px) !important;
+  line-height: 1.12 !important;
+}
+
+#app .home-view .hero-copy {
+  max-width: 620px;
+  font-size: clamp(17px, 1.05vw, 20px) !important;
+  line-height: 1.58 !important;
+}
+
+#app .home-view .tarot-only-actions,
+#app .home-view .feature-dock {
+  width: 100% !important;
+  max-width: 760px !important;
+}
+
+#app .home-view .feature-dock {
+  grid-column: 1;
+  margin-top: clamp(20px, 3vh, 32px) !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 16px !important;
+}
+
+#app .home-view .feature-card {
+  grid-template-columns: 56px minmax(0, 1fr) !important;
+}
+
+#app .home-view .feature-card .feature-icon {
+  grid-column: 1 !important;
+  grid-row: 1 / span 2 !important;
+  width: 52px !important;
+  height: 52px !important;
+  display: block !important;
+  object-fit: contain !important;
+  align-self: center !important;
+  justify-self: center !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+@media (max-height: 760px) {
+  #app .home-view .feature-card {
+    grid-template-columns: 44px minmax(0, 1fr) !important;
+  }
+
+  #app .home-view .feature-card .feature-icon {
+    width: 40px !important;
+    height: 40px !important;
+  }
+}
+
+#app .home-view .feature-card strong,
+#app .home-view .feature-card small {
+  grid-column: 2 !important;
+  grid-row: auto !important;
+  align-self: auto !important;
+  min-width: 0 !important;
+}
+
+#app .home-view .feature-card strong {
+  font-size: clamp(17px, 1.05vw, 20px) !important;
+  line-height: 1.2 !important;
+}
+
+#app .home-view .feature-card small {
+  margin-top: 0 !important;
+  font-size: 13px !important;
+  line-height: 1.38 !important;
+}
+
+#app .home-view .feature-card::after {
+  display: none !important;
+}
+
+#app .content-action {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1439px) {
+
+  #app .home-view {
+    width: min(100%, calc(100% - 48px)) !important;
+  }
+
+  #app .home-view {
+    grid-template-columns: minmax(0, 680px) minmax(220px, 1fr) !important;
+  }
+
+  #app .home-copy-zone {
+    width: min(680px, 58vw) !important;
+  }
+}
+
+@media (max-width: 1023px) {
+
+  #app .home-view {
+    grid-template-columns: 1fr !important;
+  }
+
+  #app .home-copy-zone,
+#app .home-view .tarot-only-actions,
+#app .home-view .feature-dock {
+    width: min(100%, 760px) !important;
+    max-width: 760px !important;
+  }
+}
+
+@media (max-width: 767px) {
+
+  #app .home-view {
+    width: min(100%, calc(100% - 24px)) !important;
+    padding: 18px 0 !important;
+  }
+
+  #app .home-view .feature-dock {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+#app .content-action {
+  border-color: var(--ref-panel-border) !important;
+  border-radius: var(--ref-panel-radius) !important;
+  background:
+    linear-gradient(135deg, rgba(72, 28, 94, 0.48), rgba(28, 11, 54, 0.62)),
+    var(--ref-panel-bg) !important;
+  box-shadow:
+    0 18px 56px rgba(10, 3, 30, 0.24),
+    inset 0 1px 0 rgba(255, 245, 250, 0.12) !important;
+  backdrop-filter: blur(20px) saturate(128%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(128%) !important;
+}
+
+#app .home-view {
+  width: min(var(--ref-stage-max), calc(100% - (var(--ref-page-x) * 2))) !important;
+  max-width: var(--ref-stage-max) !important;
+  min-height: calc(100dvh - var(--ref-nav-h)) !important;
+  margin: 0 auto !important;
+  padding: var(--ref-page-y) 0 !important;
+  overflow-x: hidden !important;
+}
+
+#app .home-view {
+  grid-template-columns: minmax(0, min(680px, 48vw)) minmax(360px, 1fr) !important;
+  column-gap: clamp(34px, 5vw, 78px) !important;
+  align-content: center !important;
+  align-items: center !important;
+}
+
+#app .home-copy-zone,
+#app .home-view .tarot-only-actions,
+#app .home-view .feature-dock {
+  width: min(680px, 48vw) !important;
+  max-width: 680px !important;
+}
+
+#app .home-copy-zone h1 {
+  max-width: 640px !important;
+  margin-bottom: clamp(14px, 2dvh, 22px) !important;
+  font-size: clamp(42px, 4.2vw, 64px) !important;
+  line-height: 1.12 !important;
+}
+
+#app .home-view .eyebrow {
+  min-height: clamp(34px, 4.2dvh, 44px) !important;
+  margin-bottom: clamp(16px, 2.4dvh, 24px) !important;
+  padding-inline: 18px !important;
+  font-size: 14px !important;
+}
+
+#app .home-view .hero-copy {
+  max-width: 560px !important;
+  margin-bottom: clamp(16px, 2.5dvh, 26px) !important;
+  font-size: clamp(16px, 1.16vw, 18px) !important;
+  line-height: 1.6 !important;
+}
+
+#app .home-view .hero-actions {
+  gap: clamp(16px, 2vw, 24px) !important;
+  margin-bottom: clamp(16px, 2.4dvh, 24px) !important;
+}
+
+#app .home-view .hero-actions .btn {
+  min-width: clamp(220px, 17vw, 280px) !important;
+  min-height: clamp(50px, 6.1dvh, 62px) !important;
+  border-radius: 18px !important;
+  font-size: clamp(16px, 1.2vw, 19px) !important;
+}
+
+#app .home-view .tarot-game-action {
+  min-height: clamp(136px, 19dvh, 174px) !important;
+  grid-template-columns: clamp(128px, 13vw, 188px) minmax(0, 1fr) 42px !important;
+  gap: clamp(16px, 2vw, 26px) !important;
+  padding: clamp(18px, 2.4dvh, 26px) clamp(20px, 2vw, 28px) !important;
+}
+
+#app .home-view .tarot-game-action .sticker-icon {
+  width: clamp(126px, 13vw, 188px) !important;
+  height: clamp(84px, 13dvh, 124px) !important;
+  background-size: clamp(58px, 6vw, 84px) auto, clamp(58px, 6vw, 84px) auto, clamp(58px, 6vw, 84px) auto !important;
+}
+
+#app .home-view .tarot-game-action strong {
+  font-size: clamp(24px, 2vw, 30px) !important;
+}
+
+#app .home-view .tarot-game-action small {
+  margin-top: 8px !important;
+  font-size: clamp(14px, 1.05vw, 17px) !important;
+  line-height: 1.45 !important;
+}
+
+#app .home-view .feature-dock {
+  margin-top: clamp(16px, 2.4dvh, 26px) !important;
+  gap: clamp(16px, 1.6vw, 22px) !important;
+}
+
+#app .home-view .feature-card {
+  min-height: clamp(104px, 15dvh, 140px) !important;
+  padding: clamp(16px, 2dvh, 24px) !important;
+  grid-template-columns: clamp(48px, 5vw, 72px) minmax(0, 1fr) !important;
+}
+
+#app .home-view .feature-card .sticker-icon {
+  width: clamp(48px, 5vw, 72px) !important;
+  height: clamp(48px, 5vw, 72px) !important;
+}
+
+#app .home-view .feature-card strong {
+  font-size: clamp(18px, 1.55vw, 24px) !important;
+}
+
+#app .home-view .feature-card small {
+  font-size: clamp(13px, 1vw, 15px) !important;
+  line-height: 1.42 !important;
+}
+
+@media (max-height: 760px) {
+
+  #app .home-view {
+    width: min(1480px, calc(100% - 72px)) !important;
+    padding-block: 18px !important;
+  }
+
+  #app .home-copy-zone h1 {
+    font-size: clamp(36px, 3.5vw, 48px) !important;
+    margin-bottom: 12px !important;
+  }
+
+  #app .home-view .eyebrow {
+    min-height: 34px !important;
+    margin-bottom: 12px !important;
+  }
+
+  #app .home-view .hero-copy {
+    margin-bottom: 14px !important;
+    font-size: 15px !important;
+    line-height: 1.5 !important;
+  }
+
+  #app .home-view .hero-actions {
+    margin-bottom: 14px !important;
+  }
+
+  #app .home-view .hero-actions .btn {
+    min-height: 50px !important;
+    font-size: 16px !important;
+  }
+
+  #app .home-view .tarot-game-action {
+    min-height: 132px !important;
+    padding: 16px 20px !important;
+  }
+
+  #app .home-view .feature-dock {
+    margin-top: 14px !important;
+  }
+
+  #app .home-view .feature-card {
+    min-height: 104px !important;
+    padding: 16px !important;
+  }
+}
+
+@media (max-height: 700px) {
+  #app .home-view .tarot-game-action {
+    min-height: 124px !important;
+  }
+
+  #app .home-view .feature-card {
+    min-height: 96px !important;
+  }
+
+  #app .home-view .feature-card small {
+    font-size: 12px !important;
+  }
+}
+
+@media (max-width: 900px) {
+  #app .home-view {
+    grid-template-columns: 1fr !important;
+  }
+
+  #app .home-copy-zone,
+#app .home-view .tarot-only-actions,
+#app .home-view .feature-dock {
+    width: min(100%, 680px) !important;
+    max-width: 680px !important;
+  }
+}
+
+@media (max-height: 760px) {
+  #app .home-view {
+    min-height: calc(100dvh - var(--ref-nav-h) - 1px) !important;
+    height: calc(100dvh - var(--ref-nav-h) - 1px) !important;
+    row-gap: 12px !important;
+    grid-template-columns: minmax(0, min(640px, 46vw)) minmax(360px, 1fr) !important;
+  }
+
+  #app .home-copy-zone,
+#app .home-view .tarot-only-actions,
+#app .home-view .feature-dock {
+    width: min(640px, 46vw) !important;
+    max-width: 640px !important;
+  }
+
+  #app .home-view .tarot-game-action {
+    min-height: 118px !important;
+    padding: 14px 18px !important;
+  }
+
+  #app .home-view .tarot-game-action h2 {
+    font-size: 22px !important;
+    line-height: 1.18 !important;
+  }
+
+  #app .home-view .tarot-game-action p {
+    font-size: 13px !important;
+    line-height: 1.4 !important;
+  }
+
+  #app .home-view .feature-dock {
+    gap: 10px !important;
+    margin-top: 0 !important;
+  }
+
+  #app .home-view .feature-card {
+    grid-template-columns: 38px minmax(0, 1fr) !important;
+    align-items: center !important;
+    min-height: 96px !important;
+    height: 96px !important;
+    padding: 10px !important;
+    gap: 6px 9px !important;
+    overflow: hidden !important;
+  }
+
+  #app .home-view .feature-card .sticker-icon {
+    width: 38px !important;
+    height: 38px !important;
+  }
+
+  #app .home-view .feature-card strong {
+    font-size: 16px !important;
+    line-height: 1.16 !important;
+  }
+
+  #app .home-view .feature-card small {
+    display: -webkit-box !important;
+    overflow: hidden !important;
+    -webkit-box-orient: vertical !important;
+    -webkit-line-clamp: 2 !important;
+    font-size: 11px !important;
+    line-height: 1.25 !important;
+  }
+}
+
+#app .home-view .tarot-game-action::after {
+  content: none !important;
+}
+
+/* Two primary content routes: tarot on the left, today's check-in on the right. */
+#app .home-view .tarot-only-actions {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: clamp(12px, 1.2vw, 18px) !important;
+  width: min(680px, 48vw) !important;
+  max-width: 680px !important;
+}
+
+#app .home-view .tarot-game-action {
+  min-width: 0 !important;
+  min-height: clamp(132px, 16dvh, 168px) !important;
+  grid-template-columns: clamp(68px, 7vw, 96px) minmax(0, 1fr) 30px !important;
+  gap: clamp(10px, 1.2vw, 18px) !important;
+  padding: clamp(16px, 1.8vw, 24px) clamp(14px, 1.6vw, 22px) !important;
+  border-radius: 22px !important;
+}
+
+#app .home-view .tarot-game-action .sticker-icon {
+  width: clamp(68px, 7vw, 96px) !important;
+  height: clamp(78px, 9dvh, 112px) !important;
+  background-size: clamp(48px, 4.5vw, 72px) auto, clamp(48px, 4.5vw, 72px) auto, clamp(48px, 4.5vw, 72px) auto !important;
+}
+
+#app .home-view .tarot-game-action.checkin-action .sticker-icon {
+  border-radius: 18px !important;
+  background:
+    linear-gradient(145deg, rgba(255, 214, 157, 0.24), rgba(238, 87, 143, 0.24)),
+    url("/characters/redpanda/joy.png") center bottom / contain no-repeat !important;
+  filter: drop-shadow(0 10px 12px rgba(255, 111, 124, 0.22));
+}
+
+#app .home-view .tarot-game-action.fortune-action {
+  grid-column: 1;
+  order: 1;
+}
+
+#app .home-view .tarot-game-action.mycard-action {
+  grid-column: 2;
+  order: 2;
+}
+
+#app .home-view .tarot-game-action.mycard-action .sticker-icon {
+  border-radius: 18px !important;
+  background:
+    linear-gradient(145deg, rgba(255, 214, 157, 0.12), rgba(238, 87, 143, 0.18)),
+    url("../icons/my-card-feature.png") center / cover no-repeat !important;
+  box-shadow: 0 10px 22px rgba(21, 7, 35, 0.35) !important;
+}
+
+#app .home-view .tarot-game-action.memory-game-action {
+  grid-column: 1 / -1 !important;
+}
+
+#app .home-view .tarot-game-action.memory-game-action .sticker-icon {
+  border-radius: 18px !important;
+  background:
+    linear-gradient(145deg, rgba(255, 214, 157, 0.16), rgba(238, 87, 143, 0.22)),
+    url("../games/memory/back/card-back.webp") center / cover no-repeat !important;
+  box-shadow: 0 10px 22px rgba(21, 7, 35, 0.35) !important;
+}
+
+#app .home-view .tarot-game-action > span:nth-child(2) {
+  min-width: 0 !important;
+  display: grid !important;
+  align-content: center !important;
+  gap: 7px !important;
+  padding-right: 32px !important;
+}
+
+#app .home-view .tarot-game-action strong {
+  overflow: visible !important;
+  font-size: clamp(18px, 1.48vw, 24px) !important;
+  line-height: 1.2 !important;
+  letter-spacing: -0.03em !important;
+  text-overflow: clip !important;
+  white-space: normal !important;
+  word-break: keep-all !important;
+}
+
+#app .home-view .tarot-game-action small {
+  display: -webkit-box !important;
+  overflow: hidden !important;
+  margin-top: 0 !important;
+  color: rgba(255, 235, 230, 0.7) !important;
+  font-size: clamp(12px, 0.95vw, 15px) !important;
+  line-height: 1.45 !important;
+  white-space: normal !important;
+  word-break: keep-all !important;
+  overflow-wrap: anywhere !important;
+  -webkit-box-orient: vertical !important;
+  -webkit-line-clamp: 3 !important;
+}
+
+#app .home-view .tarot-game-action > span:last-child::after {
+  right: 14px !important;
+  width: 32px !important;
+  height: 32px !important;
+  font-size: 24px !important;
+}
+
+@media (max-width: 720px) {
+  #app .home-view .tarot-only-actions {
+    grid-template-columns: 1fr !important;
+    width: 100% !important;
+  }
+
+  #app .home-view .tarot-game-action {
+    min-height: 118px !important;
+    grid-template-columns: 76px minmax(0, 1fr) 28px !important;
+  }
+
+  #app .home-view .tarot-game-action.fortune-action,
+  #app .home-view .tarot-game-action.mycard-action {
+    grid-column: auto;
+  }
+
+  #app .home-view .tarot-game-action .sticker-icon {
+    width: 76px !important;
+    height: 84px !important;
+    background-size: 58px auto, 58px auto, 58px auto !important;
+  }
+
+  #app .home-view .tarot-game-action.checkin-action .sticker-icon {
+    background-size: contain !important;
+  }
+}
+
+
+/* --- feature card inner layout (feature-copy wrapper aware) --- */
+#app .home-view .feature-card {
+  grid-template-columns: 56px minmax(0, 1fr) 40px !important;
+  grid-template-rows: auto auto !important;
+  row-gap: 6px !important;
+}
+
+#app .home-view .feature-card .feature-copy {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  min-width: 0 !important;
+  display: grid !important;
+  gap: 6px !important;
+  text-align: left !important;
+}
+
+#app .home-view .feature-card .feature-copy strong,
+#app .home-view .feature-card .feature-copy small {
+  display: block !important;
+  white-space: pre-line !important;
+}
+
+#app .home-view .feature-card .feature-meta {
+  grid-column: 2 !important;
+  grid-row: 2 !important;
+  justify-self: start !important;
+  color: #ffcf9e !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+  white-space: nowrap !important;
+}
+
+#app .home-view .feature-card .feature-arrow {
+  grid-column: 3 !important;
+  grid-row: 1 / span 2 !important;
+  width: 38px !important;
+  height: 38px !important;
+  display: grid !important;
+  place-items: center !important;
+  align-self: center !important;
+  border: 1px solid rgba(255, 245, 238, 0.24) !important;
+  border-radius: 50% !important;
+  color: rgba(255, 245, 238, 0.85) !important;
+  font-size: 22px !important;
+}
+
+#app .home-view .feature-card .feature-icon {
+  grid-row: 1 / span 2 !important;
+}
+
+
+/* --- final: match target mockup --- */
+#app .home-copy-zone h1 {
+  max-width: 880px !important;
+  font-size: clamp(40px, 3vw, 52px) !important;
+}
+
+#app .home-view .tarot-only-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  width: 100% !important;
+  max-width: none !important;
+}
+
+#app .home-view .tarot-game-action {
+  grid-column: auto !important;
+}
+
+
+/* --- final order/spans: 마음카드, 캐릭터카드, 카드운세 one row --- */
+#app .home-view .tarot-game-action.mycard-action {
+  grid-column: auto !important;
+  order: 1 !important;
+}
+
+#app .home-view .tarot-game-action.memory-game-action {
+  grid-column: auto !important;
+  order: 2 !important;
+}
+
+#app .home-view .tarot-game-action.fortune-action {
+  grid-column: auto !important;
+  order: 3 !important;
+}
+
+#app .home-copy-zone h1 {
+  font-size: clamp(38px, 2.6vw, 46px) !important;
+}

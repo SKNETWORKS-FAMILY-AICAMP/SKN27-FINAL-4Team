@@ -1,0 +1,1018 @@
+/*  CalendarView.vue  */
+
+.calendar-grid,
+.calendar-legend {
+  font-family: var(--font-ui);
+}
+
+.calendar-heading h2,
+.calendar-detail h3 {
+  font-family: var(--font-display) !important;
+  font-weight: 400 !important;
+  letter-spacing: 0 !important;
+}
+
+.calendar-empty-note,
+.empty-detail-card p,
+.daily-summary p {
+  font-family: var(--font-soft);
+}
+
+.calendar-day,
+.weekday,
+.month-title-button {
+  font-family: var(--font-ui);
+}
+
+.calendar-board,
+.calendar-detail {
+  min-height: 0;
+  overflow: hidden;
+  padding: 24px;
+}
+
+.daily-summary p {
+  color: var(--muted);
+  line-height: 1.62;
+  white-space: pre-line;
+}
+
+.calendar-view {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+}
+
+.calendar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.calendar-legend span,
+.calendar-legend button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.calendar-legend button {
+  cursor: pointer;
+}
+
+.calendar-legend button.active {
+  color: white;
+  border-color: rgba(238, 93, 95, 0.62);
+  background: linear-gradient(135deg, rgba(231, 62, 101, 0.32), rgba(238, 93, 95, 0.16));
+  box-shadow: 0 10px 24px rgba(231, 62, 101, 0.2);
+}
+
+.calendar-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.calendar-legend .mood { background: var(--mint); }
+
+.calendar-legend .fortune { background: var(--orange); }
+
+.calendar-legend .multi { background: var(--pink); }
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.weekday {
+  color: var(--faint);
+  font-size: 12px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.calendar-day {
+  min-height: 86px;
+  display: grid;
+  align-content: space-between;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.07);
+  color: white;
+  cursor: pointer;
+  text-align: left;
+}
+
+.calendar-day strong {
+  font-size: 16px;
+}
+
+.calendar-day span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.calendar-day.mood { background: rgba(158, 230, 208, 0.11); }
+
+.calendar-day.fortune { background: rgba(255, 173, 98, 0.12); }
+
+.calendar-day.multi { background: rgba(246, 95, 168, 0.13); }
+
+.calendar-day.selected {
+  border-color: rgba(255, 188, 226, 0.7);
+  box-shadow: 0 14px 28px rgba(246, 95, 168, 0.18);
+}
+
+.calendar-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.daily-summary {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.daily-summary p {
+  margin-bottom: 0;
+}
+
+.weekly-card {
+  margin-top: auto;
+}
+
+.mini-week-chart {
+  height: 150px;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  align-items: end;
+}
+
+.mini-week-chart span {
+  height: 100%;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.mini-week-chart i {
+  display: block;
+  height: var(--height);
+  border-radius: 999px 999px 8px 8px;
+  background: linear-gradient(180deg, var(--orange), var(--pink), var(--lavender));
+}
+
+@media (max-width: 1180px) {
+
+  .calendar-view {
+    grid-template-columns: 1fr;
+  }
+
+  .calendar-detail {
+    min-height: 360px;
+  }
+}
+
+@media (max-width: 720px) {
+
+  .calendar-board,
+.calendar-detail {
+    padding: 18px;
+  }
+
+  .calendar-grid {
+    gap: 6px;
+  }
+
+  .calendar-day {
+    min-height: 74px;
+    padding: 8px;
+    border-radius: 14px;
+  }
+
+  .calendar-day span {
+    font-size: 10px;
+  }
+}
+
+.calendar-view {
+  box-sizing: border-box;
+  max-width: var(--bt-page-max);
+  margin-inline: auto;
+}
+
+.calendar-board,
+.calendar-detail {
+  border: 1px solid var(--bt-line) !important;
+  border-radius: 28px !important;
+  background:
+    radial-gradient(circle at 78% 0%, rgba(231, 62, 101, 0.16), transparent 36%),
+    linear-gradient(145deg, rgba(50, 24, 73, 0.72), rgba(147, 22, 114, 0.22)),
+    var(--bt-panel) !important;
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 245, 238, 0.12) !important;
+  backdrop-filter: blur(18px) saturate(135%);
+  -webkit-backdrop-filter: blur(18px) saturate(135%);
+}
+
+.calendar-day.selected {
+  color: #fff !important;
+  border-color: rgba(231, 126, 110, 0.72) !important;
+  background: var(--bt-primary) !important;
+  box-shadow:
+    0 18px 44px rgba(231, 62, 101, 0.3),
+    inset 0 1px 0 rgba(255, 245, 238, 0.32) !important;
+}
+
+.month-title-button,
+.calendar-nav-buttons button,
+.calendar-legend button {
+  border-color: rgba(231, 62, 101, 0.3) !important;
+  background:
+    linear-gradient(145deg, rgba(255, 245, 238, 0.08), rgba(231, 62, 101, 0.05)),
+    rgba(50, 24, 73, 0.48) !important;
+}
+
+.calendar-board h2 {
+  color: #fff2df !important;
+  letter-spacing: 0 !important;
+}
+
+@media (max-width: 1180px) {
+  .calendar-view {
+    width: min(100%, calc(100vw - 32px)) !important;
+  }
+}
+
+.calendar-board,
+.calendar-detail,
+.daily-summary {
+  border-color: rgba(231, 62, 101, 0.34) !important;
+  background:
+    linear-gradient(145deg, rgba(50, 24, 73, 0.9), rgba(147, 22, 114, 0.34)),
+    rgba(20, 9, 31, 0.68) !important;
+  box-shadow:
+    0 26px 70px rgba(20, 9, 31, 0.34),
+    inset 0 1px 0 rgba(255, 245, 238, 0.12) !important;
+  backdrop-filter: blur(18px) saturate(135%);
+}
+
+.calendar-day.selected,
+.calendar-legend button.active {
+  color: #fff !important;
+  border-color: rgba(231, 126, 110, 0.72) !important;
+  background: linear-gradient(135deg, #e73e65 0%, #ee5d5f 52%, #e77e6e 100%) !important;
+  box-shadow:
+    0 18px 44px rgba(231, 62, 101, 0.3),
+    0 0 30px rgba(238, 93, 95, 0.18),
+    inset 0 1px 0 rgba(255, 245, 238, 0.32) !important;
+}
+
+.calendar-legend button,
+.month-title-button {
+  color: rgba(255, 245, 238, 0.92) !important;
+  border-color: rgba(231, 62, 101, 0.3) !important;
+  background:
+    linear-gradient(145deg, rgba(255, 245, 238, 0.08), rgba(231, 62, 101, 0.05)),
+    rgba(50, 24, 73, 0.48) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 245, 238, 0.1) !important;
+}
+
+.month-title-button:hover,
+.calendar-day:hover {
+  border-color: rgba(238, 93, 95, 0.68) !important;
+  box-shadow:
+    0 16px 36px rgba(231, 62, 101, 0.2),
+    inset 0 1px 0 rgba(255, 245, 238, 0.16) !important;
+}
+
+.calendar-view {
+  background:
+    linear-gradient(90deg, rgba(20, 9, 31, 0.82), rgba(20, 9, 31, 0.24) 54%, rgba(20, 9, 31, 0.46)),
+    transparent;
+}
+
+.calendar-day {
+  border-color: rgba(231, 62, 101, 0.24) !important;
+  background:
+    linear-gradient(145deg, rgba(50, 24, 73, 0.62), rgba(147, 22, 114, 0.22)),
+    rgba(20, 9, 31, 0.48) !important;
+}
+
+.calendar-grid {
+  gap: 10px !important;
+}
+
+.calendar-day {
+  min-height: 94px;
+  border-radius: 18px !important;
+}
+
+.calendar-day.selected span,
+.calendar-day.selected strong {
+  color: #fff !important;
+}
+
+.calendar-detail .daily-summary:first-of-type {
+  background:
+    linear-gradient(145deg, rgba(231, 62, 101, 0.36), rgba(231, 126, 110, 0.16)),
+    rgba(50, 24, 73, 0.64) !important;
+}
+
+.calendar-view {
+  max-width: var(--bt-page-max) !important;
+  box-sizing: border-box !important;
+  margin-inline: auto !important;
+  overflow-x: hidden !important;
+}
+
+.calendar-view {
+  width: min(var(--bt-page-max), calc(100% - (var(--bt-page-x) * 2))) !important;
+}
+
+.calendar-day {
+  word-break: keep-all;
+}
+
+@media (max-width: 1180px) {
+  .calendar-view {
+    width: min(100%, calc(100vw - 32px)) !important;
+  }
+}
+
+.calendar-view {
+  width: min(var(--bt-content-max), calc(100% - (var(--bt-stage-x) * 2))) !important;
+  max-width: var(--bt-content-max) !important;
+  margin: var(--bt-stage-y) auto !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.calendar-view {
+  width: min(1520px, calc(100% - (var(--bt-stage-x) * 2))) !important;
+}
+
+@media (max-width: 1180px) {
+  .calendar-view {
+    width: min(100%, calc(100vw - 32px)) !important;
+  }
+}
+
+#app .calendar-board,
+#app .calendar-detail {
+  border: 1px solid var(--bt-panel-border) !important;
+  border-radius: 28px !important;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.035)),
+    var(--bt-panel-bg) !important;
+  box-shadow: var(--bt-panel-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.13) !important;
+  backdrop-filter: blur(18px) saturate(132%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(132%) !important;
+}
+
+#app .calendar-view {
+  width: min(var(--bt-page-max), calc(100% - (var(--bt-page-x) * 2))) !important;
+  max-width: var(--bt-page-max) !important;
+  min-height: calc(100vh - var(--bt-header-h)) !important;
+  margin: 0 auto !important;
+  padding: var(--bt-page-y) 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  overflow-x: hidden !important;
+}
+
+#app .calendar-view {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 420px !important;
+  gap: 24px !important;
+  align-items: stretch !important;
+}
+
+#app .calendar-board,
+#app .calendar-detail {
+  min-width: 0 !important;
+  padding: clamp(28px, 3vw, 44px) !important;
+}
+
+#app .calendar-grid {
+  grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+}
+
+#app .calendar-day {
+  min-height: 112px !important;
+  border-radius: 18px !important;
+}
+
+#app .calendar-day {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1439px) {
+
+  #app .calendar-view {
+    width: min(100%, calc(100% - 48px)) !important;
+  }
+
+  #app .calendar-view {
+    grid-template-columns: minmax(0, 1fr) 340px !important;
+  }
+}
+
+@media (max-width: 1023px) {
+
+  #app .calendar-view {
+    grid-template-columns: 1fr !important;
+  }
+
+  #app .calendar-detail {
+    min-height: 0 !important;
+  }
+}
+
+@media (max-width: 767px) {
+
+  #app .calendar-view {
+    width: min(100%, calc(100% - 24px)) !important;
+    padding: 18px 0 !important;
+  }
+
+  #app .calendar-board,
+#app .calendar-detail {
+    padding: 18px !important;
+  }
+
+  #app .calendar-day {
+    min-height: 74px !important;
+  }
+}
+
+#app .calendar-board,
+#app .calendar-detail {
+  border-color: var(--ref-panel-border) !important;
+  border-radius: var(--ref-panel-radius) !important;
+  background:
+    linear-gradient(135deg, rgba(72, 28, 94, 0.48), rgba(28, 11, 54, 0.62)),
+    var(--ref-panel-bg) !important;
+  box-shadow:
+    0 18px 56px rgba(10, 3, 30, 0.24),
+    inset 0 1px 0 rgba(255, 245, 250, 0.12) !important;
+  backdrop-filter: blur(20px) saturate(128%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(128%) !important;
+}
+
+#app .calendar-day.selected {
+  background: var(--ref-primary) !important;
+  box-shadow: 0 12px 28px rgba(242, 76, 160, 0.24) !important;
+}
+
+#app .calendar-view {
+  width: min(var(--ref-stage-max), calc(100% - (var(--ref-page-x) * 2))) !important;
+  max-width: var(--ref-stage-max) !important;
+  min-height: calc(100dvh - var(--ref-nav-h)) !important;
+  margin: 0 auto !important;
+  padding: var(--ref-page-y) 0 !important;
+  overflow-x: hidden !important;
+}
+
+#app .calendar-view {
+  width: min(1500px, calc(100% - (var(--ref-page-x) * 2))) !important;
+  grid-template-columns: minmax(760px, 1fr) clamp(360px, 26vw, 420px) !important;
+}
+
+#app .calendar-board,
+#app .calendar-detail {
+  padding: clamp(26px, 4dvh, 44px) !important;
+}
+
+#app .calendar-board h2 {
+  font-size: clamp(36px, 3.3vw, 52px) !important;
+}
+
+#app .calendar-grid {
+  gap: clamp(7px, 1dvh, 10px) !important;
+}
+
+#app .calendar-day {
+  min-height: clamp(68px, 11.6dvh, 100px) !important;
+  padding: clamp(8px, 1.4dvh, 12px) !important;
+}
+
+#app .calendar-day strong {
+  font-size: clamp(20px, 1.7vw, 27px) !important;
+}
+
+#app .calendar-day span {
+  font-size: clamp(12px, 1vw, 15px) !important;
+}
+
+@media (max-height: 760px) {
+
+  #app .calendar-view {
+    width: min(1480px, calc(100% - 72px)) !important;
+    padding-block: 18px !important;
+  }
+
+  #app .calendar-day {
+    min-height: 68px !important;
+  }
+}
+
+@media (max-height: 700px) {
+
+  #app .calendar-day {
+    min-height: 62px !important;
+  }
+}
+
+@media (max-width: 1200px) {
+  #app .calendar-view {
+    grid-template-columns: minmax(0, 1fr) clamp(300px, 30vw, 360px) !important;
+  }
+}
+
+@media (max-width: 900px) {
+  #app .calendar-view {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-height: 760px) {
+  #app .calendar-view {
+    min-height: calc(100dvh - var(--ref-nav-h) - 1px) !important;
+    height: calc(100dvh - var(--ref-nav-h) - 1px) !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    overflow: hidden !important;
+  }
+
+  #app .calendar-view {
+    grid-template-columns: minmax(0, 70%) minmax(300px, 26%) !important;
+    gap: 16px !important;
+  }
+
+  #app .calendar-board,
+#app .calendar-detail {
+    height: calc(100dvh - var(--ref-nav-h) - 1px) !important;
+    overflow: hidden !important;
+    padding: 18px 22px !important;
+  }
+
+  #app .calendar-board .content-heading h2 {
+    font-size: 34px !important;
+    line-height: 1.1 !important;
+  }
+
+  #app .calendar-board .content-heading p {
+    font-size: 14px !important;
+    line-height: 1.42 !important;
+  }
+
+  #app .calendar-legend button {
+    min-height: 36px !important;
+    font-size: 13px !important;
+  }
+
+  #app .calendar-toolbar {
+    margin: 12px 0 10px !important;
+  }
+
+  #app .month-title-button,
+#app .calendar-nav-buttons .btn {
+    min-height: 36px !important;
+    font-size: 14px !important;
+  }
+
+  #app .calendar-grid {
+    gap: 7px !important;
+  }
+
+  #app .weekday {
+    font-size: 13px !important;
+  }
+
+  #app .calendar-view .calendar-day {
+    min-height: 56px !important;
+    padding: 8px 10px !important;
+    border-radius: 12px !important;
+  }
+
+  #app .calendar-view .calendar-day strong {
+    font-size: 18px !important;
+  }
+
+  #app .calendar-view .calendar-day span {
+    font-size: 12px !important;
+  }
+
+  #app .calendar-character-emoji,
+#app .calendar-character-emoji img {
+    width: 30px !important;
+    height: 30px !important;
+  }
+
+  #app .calendar-detail h3 {
+    font-size: 22px !important;
+    line-height: 1.2 !important;
+  }
+
+  #app .calendar-detail .daily-summary {
+    padding: 14px !important;
+    gap: 12px !important;
+  }
+
+  #app .calendar-detail .daily-summary p {
+    font-size: 13px !important;
+    line-height: 1.45 !important;
+    white-space: pre-line !important;
+  }
+}
+
+#app .selected-date-guide {
+  white-space: pre-line !important;
+}
+
+/* ===============================
+   Month / Year picker layout fix
+   - fixes overlapped year/month buttons
+   - keeps the popover above calendar stats/grid
+   =============================== */
+#app .calendar-board {
+  overflow: visible !important;
+}
+
+#app .calendar-toolbar {
+  position: relative !important;
+  z-index: 80 !important;
+  overflow: visible !important;
+}
+
+#app .month-picker-wrap {
+  position: relative !important;
+  z-index: 100 !important;
+}
+
+#app .month-title-button {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  white-space: nowrap !important;
+}
+
+#app .month-popover {
+  position: absolute !important;
+  top: calc(100% + 10px) !important;
+  left: 0 !important;
+  z-index: 999 !important;
+  width: 330px !important;
+  box-sizing: border-box !important;
+  display: block !important;
+  grid-template-columns: none !important;
+  gap: 0 !important;
+  padding: 14px !important;
+  border: 1px solid rgba(231, 62, 101, 0.46) !important;
+  border-radius: 18px !important;
+  background: rgba(38, 14, 60, 0.97) !important;
+  box-shadow: 0 22px 56px rgba(0, 0, 0, 0.38) !important;
+  backdrop-filter: blur(18px) saturate(135%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(135%) !important;
+}
+
+#app .month-popover .year-picker {
+  width: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin: 0 0 12px !important;
+}
+
+#app .month-popover .year-list {
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+#app .month-popover .month-grid {
+  width: 100% !important;
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+#app .month-popover button {
+  min-width: 0 !important;
+  min-height: 38px !important;
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 10px !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  background: rgba(255, 255, 255, 0.075) !important;
+  color: rgba(255, 245, 238, 0.78) !important;
+  font-size: 14px !important;
+  font-weight: 900 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  cursor: pointer !important;
+}
+
+#app .month-popover .year-picker > button {
+  width: 34px !important;
+  min-height: 34px !important;
+  flex: 0 0 34px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  font-size: 18px !important;
+}
+
+#app .month-popover .year-list button {
+  min-height: 34px !important;
+  font-size: 13px !important;
+}
+
+#app .month-popover .month-grid button {
+  min-height: 38px !important;
+}
+
+#app .month-popover .year-list button.active,
+#app .month-popover .month-grid button.active {
+  color: #fff !important;
+  background: linear-gradient(135deg, #e73e65 0%, #ee5d5f 52%, #e77e6e 100%) !important;
+  box-shadow: 0 10px 22px rgba(231, 62, 101, 0.24) !important;
+}
+
+#app .month-popover button:hover {
+  color: #fff !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+
+#app .month-popover .year-list button.active:hover,
+#app .month-popover .month-grid button.active:hover {
+  background: linear-gradient(135deg, #e73e65 0%, #ee5d5f 52%, #e77e6e 100%) !important;
+}
+
+@media (max-width: 480px) {
+  #app .month-popover {
+    width: min(310px, calc(100vw - 40px)) !important;
+  }
+
+  #app .month-popover .year-list,
+  #app .month-popover .month-grid {
+    gap: 6px !important;
+  }
+
+  #app .month-popover button {
+    font-size: 13px !important;
+  }
+}
+
+/* ===== Year + month picker v2 fix ===== */
+#app .calendar-board {
+  overflow: visible !important;
+}
+
+#app .month-picker-wrap {
+  position: relative !important;
+  z-index: 1000 !important;
+}
+
+#app .month-popover {
+  width: min(420px, calc(100vw - 40px)) !important;
+  display: grid !important;
+  grid-template-columns: none !important;
+  gap: 12px !important;
+  overflow: visible !important;
+}
+
+#app .month-popover .year-picker {
+  display: grid !important;
+  grid-template-columns: 34px minmax(0, 1fr) 34px !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin: 0 !important;
+}
+
+#app .month-popover .year-list {
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  gap: 6px !important;
+}
+
+#app .month-popover .month-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+#app .month-popover .year-nav {
+  width: 34px !important;
+  min-height: 34px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  font-size: 20px !important;
+  line-height: 1 !important;
+}
+
+#app .month-popover .year-list button {
+  min-height: 34px !important;
+  padding: 0 6px !important;
+  font-size: 13px !important;
+}
+
+#app .month-popover .year-list button.active,
+#app .month-popover .month-grid button.active {
+  color: #fff !important;
+  background: linear-gradient(135deg, #e73e65 0%, #ee5d5f 52%, #e77e6e 100%) !important;
+}
+
+@media (max-width: 560px) {
+  #app .month-popover {
+    width: min(330px, calc(100vw - 28px)) !important;
+  }
+
+  #app .month-popover .year-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+/* ===== Year/month picker ratio fix ===== */
+#app .month-popover {
+  width: min(370px, calc(100vw - 40px)) !important;
+  padding: 14px !important;
+  gap: 10px !important;
+}
+
+#app .month-popover .year-picker {
+  display: grid !important;
+  grid-template-columns: 32px minmax(0, 1fr) 32px !important;
+  align-items: stretch !important;
+  gap: 8px !important;
+}
+
+#app .month-popover .year-list {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 7px !important;
+}
+
+#app .month-popover .year-list button {
+  min-height: 36px !important;
+  padding: 0 8px !important;
+  border-radius: 11px !important;
+  font-size: 13.5px !important;
+  letter-spacing: -0.02em !important;
+}
+
+#app .month-popover .year-nav,
+#app .month-popover .year-picker > button {
+  width: 32px !important;
+  min-height: 36px !important;
+  flex: 0 0 32px !important;
+  padding: 0 !important;
+  border-radius: 12px !important;
+  font-size: 18px !important;
+}
+
+#app .month-popover .month-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+#app .month-popover .month-grid button {
+  min-height: 36px !important;
+  padding: 0 8px !important;
+  border-radius: 11px !important;
+  font-size: 13.5px !important;
+}
+
+@media (max-width: 480px) {
+  #app .month-popover {
+    width: min(330px, calc(100vw - 28px)) !important;
+  }
+
+  #app .month-popover .year-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  #app .month-popover .month-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+
+/* ===== Final year/month picker balance: 2x3 years + compact arrows ===== */
+#app .month-popover {
+  width: min(340px, calc(100vw - 40px)) !important;
+  padding: 14px !important;
+  gap: 10px !important;
+}
+
+#app .month-popover .year-picker {
+  display: grid !important;
+  grid-template-columns: 22px minmax(0, 1fr) 22px !important;
+  align-items: center !important;
+  gap: 7px !important;
+  margin: 0 !important;
+}
+
+#app .month-popover .year-nav,
+#app .month-popover .year-picker > button {
+  width: 22px !important;
+  min-width: 22px !important;
+  max-width: 22px !important;
+  min-height: 54px !important;
+  height: 54px !important;
+  padding: 0 !important;
+  border-radius: 10px !important;
+  font-size: 16px !important;
+  line-height: 1 !important;
+}
+
+#app .month-popover .year-list {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  grid-auto-rows: 30px !important;
+  gap: 7px !important;
+}
+
+#app .month-popover .year-list button {
+  min-height: 30px !important;
+  height: 30px !important;
+  padding: 0 7px !important;
+  border-radius: 10px !important;
+  font-size: 12.5px !important;
+  letter-spacing: -0.03em !important;
+  white-space: nowrap !important;
+}
+
+#app .month-popover .month-grid {
+  width: 94% !important;
+  margin: 0 auto !important;
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 7px !important;
+}
+
+#app .month-popover .month-grid button {
+  min-height: 34px !important;
+  height: 34px !important;
+  padding: 0 6px !important;
+  border-radius: 10px !important;
+  font-size: 13px !important;
+  letter-spacing: -0.02em !important;
+}
+
+@media (max-width: 480px) {
+  #app .month-popover {
+    width: min(320px, calc(100vw - 28px)) !important;
+  }
+
+  #app .month-popover .year-picker {
+    grid-template-columns: 20px minmax(0, 1fr) 20px !important;
+    gap: 6px !important;
+  }
+
+  #app .month-popover .year-nav,
+  #app .month-popover .year-picker > button {
+    width: 20px !important;
+    min-width: 20px !important;
+    max-width: 20px !important;
+  }
+
+  #app .month-popover .month-grid {
+    width: 96% !important;
+  }
+}

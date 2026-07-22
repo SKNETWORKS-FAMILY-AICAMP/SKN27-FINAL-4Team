@@ -1,0 +1,607 @@
+/*
+ * Desktop density alignment
+ *
+ * The reference desktop mockups were captured at 80% browser zoom. These
+ * desktop rules reproduce that density at 100% without page-wide zoom or
+ * transforms. Page content stays route-scoped, while the global navigation is
+ * shared consistently by every screen.
+ */
+
+/*
+ * Let the document own home-page scrolling. `overflow-x: hidden` was turning
+ * the nested app roots into small vertical scroll containers, so a wheel
+ * gesture could be consumed before the page itself moved. Fixed background
+ * layers are also expensive to repaint while scrolling on large desktops.
+ */
+html:has(#app.home-screen) {
+  overflow-x: clip !important;
+  overflow-y: auto !important;
+  scroll-behavior: smooth;
+}
+
+body:has(#app.home-screen),
+body:has(#app.home-screen) > #app,
+#app.home-screen {
+  overflow-x: clip !important;
+  overflow-y: visible !important;
+  background-attachment: scroll !important;
+}
+
+#app.home-screen .home-view {
+  overflow: visible !important;
+  touch-action: pan-y;
+}
+
+@media (min-width: 1200px) {
+  /* Global navigation: use the compact home navigation on every screen. */
+  #app .gnav {
+    min-height: 70.4px !important;
+    background: rgba(11, 6, 33, 0.86) !important;
+    border-bottom: 1px solid rgba(231, 62, 101, 0.28) !important;
+    backdrop-filter: blur(22px) !important;
+  }
+
+  #app .gnav-inner {
+    width: min(1123.2px, calc(100% - 76.8px)) !important;
+    height: 70.4px !important;
+    min-height: 70.4px !important;
+    gap: 25.6px !important;
+  }
+
+  #app .gnav .brand {
+    gap: 11.2px !important;
+  }
+
+  #app .gnav .brand-mark {
+    width: 38.4px !important;
+    height: 38.4px !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+
+  #app .gnav .brand-mark img {
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  #app .gnav .brand-name {
+    font-size: 24px !important;
+  }
+
+  #app .gnav .nav-links {
+    gap: 14.4px !important;
+  }
+
+  #app .gnav .nav-links a {
+    min-height: 35.2px !important;
+    padding: 9.6px 14.4px !important;
+    font-size: 12.8px !important;
+  }
+
+  #app .gnav .nav-right {
+    gap: 9.6px !important;
+  }
+
+  #app .gnav .profile-pill {
+    max-width: 192px !important;
+    gap: 8px !important;
+    padding: 5.6px 9.6px 5.6px 5.6px !important;
+  }
+
+  #app .gnav .avatar {
+    width: 36.8px !important;
+    height: 36.8px !important;
+  }
+
+  #app .gnav .profile-text strong {
+    max-width: 120px !important;
+    font-size: 11.2px !important;
+  }
+
+  #app .gnav .profile-text small {
+    max-width: 120px !important;
+    font-size: 9.6px !important;
+  }
+
+  #app .gnav .nav-login {
+    min-width: 86.4px !important;
+    min-height: 40px !important;
+    padding: 0 17.6px !important;
+    font-size: 12.8px !important;
+  }
+
+  #app .gnav .nav-logout,
+  #app .gnav .secret-toggle {
+    min-width: 76.8px !important;
+    padding: 9.6px 14.4px !important;
+    font-size: 12.8px !important;
+  }
+
+  /* Home content. */
+  #app.home-screen .home-view {
+    width: 1088px !important;
+    min-width: 1088px !important;
+    height: auto !important;
+    min-height: 680px !important;
+    margin: 19.2px auto 22.4px !important;
+    padding: 52.8px 35.2px 57.6px !important;
+  }
+
+  #app.home-screen .home-copy-zone,
+  #app.home-screen .home-view .tarot-only-actions {
+    width: 608px !important;
+    max-width: 608px !important;
+  }
+
+  #app.home-screen .home-view .eyebrow {
+    min-height: 36.8px !important;
+    gap: 9.6px !important;
+    margin-bottom: 19.2px !important;
+    padding: 0 14.4px !important;
+    font-size: 11.2px !important;
+  }
+
+  #app.home-screen .home-copy-zone h1 {
+    max-width: 720px !important;
+    margin-bottom: 17.6px !important;
+    font-size: clamp(20.8px, 1.9vw, 27.2px) !important;
+    line-height: 1.45 !important;
+  }
+
+  #app.home-screen .home-copy-zone h1 em {
+    margin-top: 8px !important;
+    font-size: clamp(41.6px, 4.2vw, 57.6px) !important;
+    line-height: 1.1 !important;
+  }
+
+  #app.home-screen .home-view .hero-copy {
+    width: 480px !important;
+    max-width: 480px !important;
+    margin-bottom: 22.4px !important;
+    font-size: 16px !important;
+    line-height: 1.65 !important;
+  }
+
+  #app.home-screen .home-view .hero-actions {
+    gap: 17.6px !important;
+    margin-bottom: 19.2px !important;
+  }
+
+  #app.home-screen .home-view .hero-actions .btn {
+    min-width: 208px !important;
+    min-height: 51.2px !important;
+    padding: 0 22.4px !important;
+    border-radius: 16px !important;
+    font-size: 16px !important;
+  }
+
+  #app.home-screen .home-view .feature-dock {
+    gap: 17.6px !important;
+    margin-top: 14.4px !important;
+    margin-bottom: 6.4px !important;
+  }
+
+  #app.home-screen .home-view .feature-card {
+    min-height: 124.8px !important;
+    height: 124.8px !important;
+    grid-template-columns: 64px minmax(0, 1fr) 32px !important;
+    row-gap: 4.8px !important;
+    column-gap: 14.4px !important;
+    padding: 17.6px 19.2px !important;
+    border-radius: 22.4px !important;
+  }
+
+  #app.home-screen .home-view .feature-card .feature-icon {
+    width: 64px !important;
+    height: 80px !important;
+  }
+
+  #app.home-screen .home-view .feature-card .feature-copy {
+    gap: 4.8px !important;
+    transform: translateY(7.2px) !important;
+  }
+
+  #app.home-screen .home-view .feature-card strong {
+    font-size: 19.2px !important;
+  }
+
+  #app.home-screen .home-view .feature-card small {
+    font-size: 11.2px !important;
+    line-height: 1.5 !important;
+  }
+
+  #app.home-screen .home-view .feature-card .feature-meta {
+    margin-left: 4.8px !important;
+    font-size: 10.4px !important;
+  }
+
+  #app.home-screen .home-view .feature-card .feature-arrow {
+    width: 30.4px !important;
+    height: 30.4px !important;
+    font-size: 17.6px !important;
+  }
+
+  #app.home-screen .home-view .tarot-only-actions {
+    width: 100% !important;
+    max-width: none !important;
+    gap: 14.4px !important;
+    margin-bottom: 17.6px !important;
+  }
+
+  #app.home-screen .home-view .tarot-game-action {
+    min-height: 124.8px !important;
+    grid-template-columns: 70.4px minmax(0, 1fr) 27.2px !important;
+    gap: 11.2px !important;
+    padding: 14.4px 12.8px !important;
+    border-radius: 22.4px !important;
+  }
+
+  #app.home-screen .home-view .tarot-game-action .sticker-icon {
+    width: 70.4px !important;
+    height: 89.6px !important;
+  }
+
+  #app.home-screen .home-view .tarot-game-action > span:nth-child(2) {
+    gap: 5.6px !important;
+    padding-right: 20.8px !important;
+  }
+
+  #app.home-screen .home-view .tarot-game-action strong {
+    font-size: clamp(14.4px, 1.48vw, 19.2px) !important;
+  }
+
+  #app.home-screen .home-view .tarot-game-action small {
+    font-size: clamp(9.6px, 1vw, 12px) !important;
+  }
+
+  #app.home-screen .home-view .tarot-game-action > span:last-child::after {
+    right: 9.6px !important;
+    width: 25.6px !important;
+    height: 25.6px !important;
+    font-size: 19.2px !important;
+  }
+
+  #app.home-screen .home-view .tarot-game-action .content-action-arrow::after {
+    font-size: 22.4px !important;
+  }
+
+  #app.home-screen .home-closing-note {
+    font-size: 12.8px !important;
+  }
+
+  /* Fortune draw: keep the navigation size, but give the three panels air. */
+  #app .tarot-draw-page {
+    padding: 18px 24px 28px !important;
+  }
+
+  #app .tarot-draw-layout {
+    width: min(100%, 1320px) !important;
+    gap: 14px !important;
+  }
+
+  #app .tarot-main-panel,
+  #app .selected-card-panel,
+  #app .tarot-result-panel {
+    padding: 22px !important;
+  }
+
+  #app .tarot-main-panel {
+    padding-inline: 27px !important;
+  }
+
+  #app .tarot-draw-header h2 {
+    font-size: 28px !important;
+  }
+
+  #app .tarot-spread-panel {
+    --card-width: 60px !important;
+    --card-height: 88px !important;
+    min-height: 382px !important;
+  }
+
+  #app .tarot-spread-panel.shuffle-idle .tarot-back-card,
+  #app .tarot-spread-panel.shuffle-deal .tarot-back-card {
+    top: calc(4px + (var(--card-row) * 95px)) !important;
+  }
+
+  #app .tarot-spread-panel.shuffle-gather .tarot-back-card {
+    top: 50% !important;
+    left: 50% !important;
+  }
+
+  #app .tarot-bottom-note {
+    width: min(100%, 1320px) !important;
+  }
+
+  /* Character setup: a slightly calmer density at 100% browser zoom. */
+  #app .character-page {
+    padding: 18px 24px 28px !important;
+  }
+
+  #app .character-layout {
+    width: min(100%, 1320px) !important;
+    grid-template-columns: minmax(0, 1fr) 386px !important;
+    gap: 20px !important;
+  }
+
+  #app .character-main-panel {
+    gap: 18px !important;
+    padding: 38px !important;
+  }
+
+  #app .character-preview-panel {
+    gap: 16px !important;
+    padding: 30px !important;
+  }
+
+  #app .setup-stepper {
+    width: min(100%, 520px) !important;
+    gap: 14px !important;
+  }
+
+  #app .setup-stepper span {
+    gap: 7px !important;
+    font-size: 13px !important;
+  }
+
+  #app .setup-stepper b {
+    width: 39px !important;
+    height: 39px !important;
+  }
+
+  #app .screen-heading h2 {
+    font-size: 42px !important;
+  }
+
+  #app .screen-heading p {
+    margin-top: 8px !important;
+    font-size: 14px !important;
+  }
+
+  #app .character-grid {
+    gap: 12px !important;
+  }
+
+  #app .character-card {
+    min-height: 240px !important;
+    grid-template-rows: 118px minmax(0, 1fr) !important;
+    gap: 10px !important;
+    padding: 12px 14px !important;
+  }
+
+  #app .character-card-image {
+    height: 118px !important;
+  }
+
+  #app .character-card-image img {
+    max-height: 108px !important;
+  }
+
+  #app .character-card-copy {
+    gap: 6px !important;
+  }
+
+  #app .character-card-copy strong {
+    font-size: 20px !important;
+  }
+
+  #app .character-card-copy small {
+    font-size: 14px !important;
+  }
+
+  #app .tag-row i {
+    padding: 6px 9px !important;
+    font-size: 11px !important;
+  }
+
+  #app .section-title-row h3 {
+    font-size: 24px !important;
+  }
+
+  #app .face-options {
+    gap: 10px !important;
+  }
+
+  #app .expression-card {
+    min-height: 112px !important;
+    grid-template-rows: 58px minmax(0, 1fr) !important;
+    gap: 6px !important;
+    padding: 10px !important;
+  }
+
+  #app .expression-image {
+    height: 58px !important;
+  }
+
+  #app .expression-image img {
+    max-width: 58px !important;
+    max-height: 58px !important;
+  }
+
+  #app .preview-image {
+    height: 200px !important;
+  }
+
+  #app .preview-image img {
+    max-height: 200px !important;
+  }
+
+  #app .preview-copy h3 {
+    font-size: 31px !important;
+  }
+
+  #app .preview-copy > span {
+    margin: 7px 0 10px !important;
+    padding: 6px 11px !important;
+  }
+
+  #app .preview-copy p {
+    margin-bottom: 12px !important;
+    font-size: 14px !important;
+  }
+
+  #app .preview-copy blockquote {
+    padding: 14px 16px !important;
+    font-size: 14px !important;
+  }
+
+  #app .save-character-button {
+    min-height: 55px !important;
+    font-size: 16px !important;
+  }
+
+  /* Standalone memory game: 8 columns x 3 rows at 100% browser zoom. */
+  #app.memory-game-screen .memory-game-view {
+    width: min(1184px, calc(100% - 32px)) !important;
+    min-height: calc(100vh - 128px) !important;
+    margin: 19.2px auto 32px !important;
+    gap: 17.6px !important;
+  }
+
+  #app.memory-game-screen .memory-game-intro {
+    width: min(704px, 100%) !important;
+    min-height: 512px !important;
+    padding: 51.2px 57.6px !important;
+    border-radius: 25.6px !important;
+  }
+
+  #app.memory-game-screen .memory-game-badge {
+    padding: 4.8px 12.8px !important;
+    margin-bottom: 12.8px !important;
+    font-size: 10.4px !important;
+  }
+
+  #app.memory-game-screen .memory-game-title {
+    margin-bottom: 14.4px !important;
+    font-size: clamp(27.2px, 3.6vw, 38.4px) !important;
+  }
+
+  #app.memory-game-screen .memory-game-desc {
+    margin-bottom: 8px !important;
+    font-size: 14.4px !important;
+  }
+
+  #app.memory-game-screen .memory-game-rule {
+    margin-bottom: 27.2px !important;
+    font-size: 12.8px !important;
+  }
+
+  #app.memory-game-screen .memory-game-back-preview {
+    margin-bottom: 28.8px !important;
+  }
+
+  #app.memory-game-screen .memory-game-back-preview span {
+    width: 102.4px !important;
+    border-radius: 11.2px !important;
+  }
+
+  #app.memory-game-screen .memory-game-back-preview span:nth-child(1) {
+    margin-right: -25.6px !important;
+  }
+
+  #app.memory-game-screen .memory-game-back-preview span:nth-child(2) {
+    transform: translateY(-4.8px) !important;
+  }
+
+  #app.memory-game-screen .memory-game-back-preview span:nth-child(3) {
+    margin-left: -25.6px !important;
+  }
+
+  #app.memory-game-screen .memory-game-status {
+    margin-bottom: 16px !important;
+    font-size: 11.6px !important;
+  }
+
+  #app.memory-game-screen .memory-game-intro-actions {
+    width: min(336px, 100%) !important;
+    gap: 11.2px !important;
+  }
+
+  #app.memory-game-screen .memory-game-intro .btn.large,
+  #app.memory-game-screen .memory-result-modal .btn.large {
+    min-height: 49.6px !important;
+    padding: 0 22.4px !important;
+    font-size: 12.8px !important;
+  }
+
+  #app.memory-game-screen .memory-game-panel {
+    padding: 22.4px 28.8px 28.8px !important;
+    border-radius: 22.4px !important;
+    gap: 19.2px !important;
+  }
+
+  #app.memory-game-screen .memory-game-toolbar {
+    gap: 11.2px !important;
+  }
+
+  #app.memory-game-screen .memory-toolbar-back {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 14.4px !important;
+  }
+
+  #app.memory-game-screen .memory-toolbar-title {
+    font-size: 14.4px !important;
+  }
+
+  #app.memory-game-screen .memory-toolbar-progress {
+    padding: 5.6px 11.2px !important;
+    font-size: 10.8px !important;
+  }
+
+  #app.memory-game-screen .memory-toolbar-timer {
+    gap: 4.8px !important;
+    padding: 5.6px 12.8px !important;
+    font-size: 11.2px !important;
+  }
+
+  #app.memory-game-screen .memory-toolbar-restart {
+    padding: 6.4px 14.4px !important;
+    font-size: 10.8px !important;
+  }
+
+  #app.memory-game-screen .memory-game-board {
+    grid-template-columns: repeat(8, minmax(0, 1fr)) !important;
+    gap: 9.6px !important;
+    max-width: 1056px !important;
+  }
+
+  #app.memory-game-screen .memory-card__face {
+    border-radius: 12.8px !important;
+  }
+
+  #app.memory-game-screen .modal {
+    padding: 25.6px 24px !important;
+    border-radius: 16px !important;
+  }
+
+  #app.memory-game-screen .memory-result-modal {
+    width: min(288px, 100%) !important;
+  }
+
+  #app.memory-game-screen .memory-result-icon {
+    margin-bottom: 4.8px !important;
+    font-size: 20.8px !important;
+  }
+
+  #app.memory-game-screen .memory-result-modal h3 {
+    margin-bottom: 8px !important;
+    font-size: 16px !important;
+  }
+
+  #app.memory-game-screen .memory-result-body {
+    margin-bottom: 8px !important;
+    font-size: 11.2px !important;
+  }
+
+  #app.memory-game-screen .memory-result-sub {
+    margin-bottom: 16px !important;
+    font-size: 10.4px !important;
+  }
+
+  #app.memory-game-screen .memory-result-actions {
+    gap: 8px !important;
+  }
+}

@@ -1,0 +1,166 @@
+@media (max-width: 860px) {
+  .app-shell { padding: 14px; }
+  .topbar,
+  .room-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .status-text { text-align: left; }
+  .grid-3,
+  .character-switcher,
+  .character-options,
+  .account-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mypage-home {
+    grid-template-columns: 1fr;
+  }
+  .quick-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .quick-actions-heading {
+    grid-column: 1 / -1;
+  }
+  .quick-actions button {
+    min-height: 72px;
+    text-align: left;
+  }
+  .quick-actions .character-action {
+    grid-column: 1 / -1;
+  }
+  .identity-card {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+  .identity-avatar {
+    width: 72px;
+    height: 72px;
+  }
+  .dashboard-primary {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .room-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .room-section {
+    min-height: 0;
+  }
+  .grid-2,
+  .character-panel-layout,
+  .weather-panel-layout,
+  .wardrobe-content,
+  .wardrobe-showcase,
+  .wardrobe-outfits,
+  .mbti-dashboard,
+  .mbti-combined-grid,
+  .taste-layout,
+  .taste-main { grid-template-columns: 1fr; }
+  .taste-keyword-layout .taste-wide { grid-column: 1 / -1; }
+  .modal-backdrop { padding: 16px; }
+  .panel-body,
+  .modal-header { padding: 16px; }
+  .wardrobe-panel {
+    height: auto;
+    min-height: 0;
+  }
+  .outfit-illustration {
+    min-height: 190px;
+  }
+  .wardrobe-copy h3 {
+    font-size: 22px;
+  }
+  .wardrobe-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 560px) {
+  .app-shell {
+    padding: 10px;
+  }
+  .home-left-panel {
+    padding: 10px;
+  }
+  .navigation-confirm-backdrop {
+    padding: 16px;
+  }
+  .navigation-confirm {
+    padding: 22px;
+    border-radius: 16px;
+  }
+  .navigation-confirm h2 {
+    font-size: 20px;
+  }
+  .grid-3,
+  .character-switcher,
+  .character-options,
+  .account-grid,
+  .form-grid.two,
+  .log-summary { grid-template-columns: 1fr 1fr; }
+  .room-canvas::before { aspect-ratio: 16 / 10; }
+  .identity-card {
+    grid-template-columns: 1fr;
+  }
+  .dashboard-primary {
+    grid-column: 1;
+  }
+  .identity-avatar {
+    width: 76px;
+    height: 76px;
+  }
+  .quick-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .quick-actions button:nth-of-type(odd) {
+    border-right: 0;
+  }
+  .quick-actions .character-action {
+    grid-column: auto;
+  }
+  .quick-actions .menu-copy strong,
+  .quick-actions .menu-copy small {
+    white-space: normal;
+  }
+  .quick-actions .menu-copy small {
+    line-height: 1.35;
+  }
+  .summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .summary-card {
+    border-right: 0;
+    border-bottom: 1px solid rgba(215, 183, 255, 0.12);
+  }
+  .summary-card:nth-child(even) { border-right: 0; }
+  .summary-card:nth-last-child(-n + 2) { border-bottom: 1px solid rgba(215, 183, 255, 0.12); }
+  .summary-card:last-child { border-bottom: 0; }
+  .panel-caption {
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .room-image {
+    object-fit: contain;
+    background: var(--canvas);
+  }
+  .keyword-row {
+    grid-template-columns: minmax(0, 1fr) 72px;
+  }
+  .keyword-row span:nth-child(3),
+  .keyword-row span:nth-child(4),
+  .keyword-row span:nth-child(5) {
+    grid-column: 1 / -1;
+  }
+  .setting-row {
+    grid-template-columns: 1fr;
+    align-items: flex-start;
+  }
+
+  .setting-control {
+    max-width: none;
+  }
+
+  .setting-row .switch {
+    justify-self: start;
+  }
+}

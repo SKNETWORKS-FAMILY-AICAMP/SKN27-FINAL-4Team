@@ -1,0 +1,78 @@
+# PostgreSQL(원본) + Neo4j(그래프 장기 기억, 선택) 구성
+# - Neo4j: NEO4J_URI 설정 시에만 앱이 사용 — 미설정이면 graph_memory.py 자동 no-op
+# - Redis 컨테이너 없음: 시크릿 모드는 서버 인메모리 캐시 사용 (ERD v6.0 §3-2)
+# DB 초기화(전체 리셋): docker compose down -v && docker compose up -d --build
+
+services:
+  db:
+    image: pgvector/pgvector:pg15
+    container_name: wellness_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ${PG_DB:-wellness_db}
+      POSTGRES_USER: ${PG_USER:-postgres}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-password}
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # GraphDB 장기 기억 (선택) — 앱은 NEO4J_URI 미설정 시 자동 no-op
+  neo4j:
+    image: neo4j:5
+    container_name: wellness_neo4j
+    restart: always
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-binteumsai_graph}
+    ports:
+      - "7474:7474"   # Browser (웹 UI)
+      - "7687:7687"   # Bolt (앱 연결)
+    volumes:
+      - neo4j_data:/data
+
+  web:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: wellness_django
+    restart: always
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py load_tarot_data &&
+             python manage.py runserver 0.0.0.0:8000 --noreload"
+    env_file:
+      - ./.env
+    volumes:
+      - ./app:/app
+      # ai/ 패키지 (에이전트·감정모델 코드) — settings.py가 / 를 sys.path에 추가하므로 /ai 로 마운트
+      - ./ai:/ai
+      - ./etl:/etl:ro
+      # 감정분류 학습 산출물 (KcELECTRA+XGBoost) — 없으면 LLM 폴백으로 동작
+      - ./ai/emotion/artifacts:/artifacts:ro
+      # HuggingFace 모델 캐시 영속화 — 재생성해도 KcELECTRA 재다운로드 안 함 (속도)
+      - hf_cache:/root/.cache/huggingface
+    ports:
+      - "8000:8000"
+    environment:
+      # Compose에서 컨테이너 내부 실행에 필요한 값만 명시합니다.
+      # OAuth/LLM/TTS secret은 ./app/backend/.env에서 읽게 둬서 빈 값으로 덮이지 않도록 합니다.
+      DJANGO_SETTINGS_MODULE: config.settings
+      EMOTION_ARTIFACT_DIR: /artifacts
+      PG_HOST: db
+      PG_PORT: "5432"
+      PG_DB: ${PG_DB:-wellness_db}
+      PG_USER: ${PG_USER:-postgres}
+      PG_PASSWORD: ${PG_PASSWORD:-password}
+      FRONTEND_BASE_URL: http://localhost:5173
+      # GraphDB 기억 — 컨테이너 내부에선 서비스명 neo4j로 연결
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-binteumsai_graph}
+    depends_on:
+      - db
+      - neo4j
+
+volumes:
+  postgres_data:
+  hf_cache:
+  neo4j_data:

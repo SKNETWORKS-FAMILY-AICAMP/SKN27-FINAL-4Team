@@ -1,0 +1,26 @@
+﻿element_type,element_id,display_name,visual_prompt,fit,compatible_weather_ids,compatible_emotions,conflict_tags,intensity,candidate_weight,is_comfort_accent,max_scene_influence
+LIGHTING,LGT_WARM_SUN,따뜻한 햇빛,warm diffused sunlight,,,JOY|SADNESS|ANGER|ANXIETY,,MEDIUM,30,False,MEDIUM
+LIGHTING,LGT_GOLDEN,황금빛 노을,golden coral sunset light,,,JOY|SADNESS|ANGER|ANXIETY,,MEDIUM,30,False,MEDIUM
+LIGHTING,LGT_MORNING,부드러운 아침빛,soft peach morning light,,,JOY|SADNESS|ANGER|ANXIETY,,MEDIUM,30,False,MEDIUM
+LIGHTING,LGT_CLOUD,구름 사이 확산광,soft diffused cloudy light,,,JOY|SADNESS|ANGER|ANXIETY,,MEDIUM,30,False,MEDIUM
+LIGHTING,LGT_LAMP,따뜻한 등불,small warm lamp glow,,,JOY|SADNESS|ANGER|ANXIETY,,MEDIUM,10,True,LOW
+LIGHTING,LGT_MOON,은은한 달빛,gentle moonlight,,,JOY|SADNESS|ANGER|ANXIETY,,MEDIUM,30,False,MEDIUM
+LIGHTING,LGT_STAR,별빛,soft sparkling starlight,,,JOY|SADNESS|ANGER|ANXIETY,,MEDIUM,30,False,MEDIUM
+LIGHTING,LGT_RIM,보호하는 테두리 빛,gentle protective rim light,,,JOY|SADNESS|ANGER|ANXIETY,,MEDIUM,30,False,MEDIUM
+LIGHTING,LGT_AFTER_RAIN,비 갠 뒤 반사광,warm reflected light after rain,,,JOY|SADNESS|ANGER|ANXIETY,,MEDIUM,30,False,MEDIUM
+LIGHTING,LGT_DAWN,차분한 새벽빛,soft lavender dawn light,,,JOY|SADNESS|ANGER|ANXIETY,,MEDIUM,30,False,MEDIUM
+LIGHTING,LGT_GAME,밝은 게임 조명,bright friendly game illustration glow,,,JOY|SADNESS|ANGER|ANXIETY,,MEDIUM,30,False,MEDIUM
+PALETTE,PAL_CORAL_GOLD,코랄·골드,coral|peach|gold|cream,,,JOY|SADNESS|ANGER|ANXIETY,,MEDIUM,30,False,MEDIUM
+PALETTE,PAL_PEACH_PINK,피치·핑크,peach|soft pink|cream,,,JOY|SADNESS|ANGER|ANXIETY,,MEDIUM,30,False,MEDIUM
+PALETTE,PAL_LAVENDER_BLUE,라벤더·블루,lavender|soft blue|cream,,,JOY|SADNESS|ANGER|ANXIETY,,MEDIUM,30,False,MEDIUM
+PALETTE,PAL_PLUM_CORAL,플럼·코랄,deep plum|coral|orange,,,JOY|SADNESS|ANGER|ANXIETY,,MEDIUM,30,False,MEDIUM
+PALETTE,PAL_BLUE_GRAY,뮤트 블루·그레이,muted blue-gray palette with low saturation and only a tiny restrained warm accent,,,JOY|SADNESS|ANGER|ANXIETY,,MEDIUM,30,False,MEDIUM
+PALETTE,PAL_CREAM_BROWN,크림·브라운,cream|warm brown|soft gold,,,JOY|SADNESS|ANGER|ANXIETY,,MEDIUM,30,False,MEDIUM
+PALETTE,PAL_MINT_SKY,민트·하늘,mint|sky blue|cream,,,JOY|SADNESS|ANGER|ANXIETY,,MEDIUM,30,False,MEDIUM
+PALETTE,PAL_ROSE_GOLD,로즈골드,rose pink|gold|plum,,,JOY|SADNESS|ANGER|ANXIETY,,MEDIUM,30,False,MEDIUM
+PALETTE,PAL_NAVY_GOLD,네이비·골드,deep navy|gold|cream,,,JOY|SADNESS|ANGER|ANXIETY,,MEDIUM,30,False,MEDIUM
+PALETTE,PAL_SUNSET_PURPLE,노을 오렌지·보라,orange|magenta|purple|plum,,,JOY|SADNESS|ANGER|ANXIETY,,MEDIUM,30,False,MEDIUM
+PALETTE,PAL_WATERCOLOR,부드러운 수채 혼합,soft peach|lavender|mint|cream,,,JOY|SADNESS|ANGER|ANXIETY,,MEDIUM,30,False,MEDIUM
+PALETTE,PAL_CANDY,밝은 파스텔,coral|pink|yellow|sky blue,,,JOY|SADNESS|ANGER|ANXIETY,,MEDIUM,30,False,MEDIUM
+LIGHTING,LGT_COOL_WINDOW,비 오는 창가의 차가운 빛,soft cool daylight entering through a rain-covered window,RAIN|SADNESS,WTH_RAIN|WTH_CLOUDY,SADNESS|ANXIETY|MIXED,,LOW,70,False,MEDIUM
+LIGHTING,LGT_OVERCAST,흐린 날의 확산광,dim diffused daylight from an overcast sky,RAIN|CLOUDY,WTH_RAIN|WTH_CLOUDY,SADNESS|ANXIETY|MIXED,,LOW,65,False,MEDIUM

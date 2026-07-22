@@ -1,0 +1,1407 @@
+/*  Cross-view responsive and reference-layout overrides.  */
+:root {
+  --bt-page-max: 1760px;
+  --bt-content-max: 1440px;
+  --bt-page-x: clamp(28px, 4vw, 72px);
+  --bt-page-y: clamp(22px, 3vw, 44px);
+  --bt-header-h: 88px;
+  --bt-panel: rgba(20, 9, 31, 0.76);
+  --bt-panel-strong: rgba(20, 9, 31, 0.88);
+  --bt-panel-soft: rgba(50, 24, 73, 0.54);
+  --bt-line: rgba(231, 62, 101, 0.36);
+  --bt-line-soft: rgba(255, 245, 238, 0.14);
+  --bt-cream: #fff1cd;
+  --bt-primary: linear-gradient(135deg, #e73e65 0%, #ee5d5f 52%, #e77e6e 100%);
+}
+html,
+body {
+  overflow-x: hidden;
+}
+body {
+  background:
+    linear-gradient(90deg, rgba(10, 4, 28, 0.86), rgba(35, 10, 55, 0.48) 48%, rgba(10, 4, 28, 0.72)),
+    linear-gradient(180deg, rgba(20, 9, 31, 0.18), rgba(20, 9, 31, 0.52)),
+    url("../bg-main.png") center center / cover fixed no-repeat,
+    #14091f !important;
+}
+.view-card {
+  width: 100%;
+  min-height: 0;
+}
+.glass-panel,
+.content-main-panel,
+.content-side-panel,
+.tarot-input-section {
+  border: 1px solid var(--bt-line) !important;
+  border-radius: 28px !important;
+  background:
+    radial-gradient(circle at 78% 0%, rgba(231, 62, 101, 0.16), transparent 36%),
+    linear-gradient(145deg, rgba(50, 24, 73, 0.72), rgba(147, 22, 114, 0.22)),
+    var(--bt-panel) !important;
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 245, 238, 0.12) !important;
+  backdrop-filter: blur(18px) saturate(135%);
+  -webkit-backdrop-filter: blur(18px) saturate(135%);
+}
+.btn.primary,
+.chip.selected,
+.keyword-chip.selected,
+.category-chip.active {
+  color: #fff !important;
+  border-color: rgba(231, 126, 110, 0.72) !important;
+  background: var(--bt-primary) !important;
+  box-shadow:
+    0 18px 44px rgba(231, 62, 101, 0.3),
+    inset 0 1px 0 rgba(255, 245, 238, 0.32) !important;
+}
+.keyword-chip,
+.chip,
+.selected-chip,
+.category-chip,
+.field input,
+.field select {
+  border-color: rgba(231, 62, 101, 0.3) !important;
+  background:
+    linear-gradient(145deg, rgba(255, 245, 238, 0.08), rgba(231, 62, 101, 0.05)),
+    rgba(50, 24, 73, 0.48) !important;
+}
+.content-heading h2 {
+  color: #fff2df !important;
+  letter-spacing: 0 !important;
+}
+.glass-panel,
+.content-main-panel,
+.content-side-panel,
+.tarot-input-section,
+.feature-card {
+  border-color: rgba(231, 62, 101, 0.34) !important;
+  background:
+    linear-gradient(145deg, rgba(50, 24, 73, 0.9), rgba(147, 22, 114, 0.34)),
+    rgba(20, 9, 31, 0.68) !important;
+  box-shadow:
+    0 26px 70px rgba(20, 9, 31, 0.34),
+    inset 0 1px 0 rgba(255, 245, 238, 0.12) !important;
+  backdrop-filter: blur(18px) saturate(135%);
+}
+.btn.primary,
+.chip.selected,
+.category-chip.active {
+  color: #fff !important;
+  border-color: rgba(231, 126, 110, 0.72) !important;
+  background: linear-gradient(135deg, #e73e65 0%, #ee5d5f 52%, #e77e6e 100%) !important;
+  box-shadow:
+    0 18px 44px rgba(231, 62, 101, 0.3),
+    0 0 30px rgba(238, 93, 95, 0.18),
+    inset 0 1px 0 rgba(255, 245, 238, 0.32) !important;
+}
+.btn.secondary,
+.chip,
+.category-chip,
+.selected-chip,
+.field input,
+.field select,
+textarea {
+  color: rgba(255, 245, 238, 0.92) !important;
+  border-color: rgba(231, 62, 101, 0.3) !important;
+  background:
+    linear-gradient(145deg, rgba(255, 245, 238, 0.08), rgba(231, 62, 101, 0.05)),
+    rgba(50, 24, 73, 0.48) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 245, 238, 0.1) !important;
+}
+.btn.secondary:hover,
+.chip:hover,
+.category-chip:hover,
+.selected-chip:hover {
+  border-color: rgba(238, 93, 95, 0.68) !important;
+  box-shadow:
+    0 16px 36px rgba(231, 62, 101, 0.2),
+    inset 0 1px 0 rgba(255, 245, 238, 0.16) !important;
+}
+.view-card,
+.auth-view {
+  background:
+    linear-gradient(90deg, rgba(20, 9, 31, 0.82), rgba(20, 9, 31, 0.24) 54%, rgba(20, 9, 31, 0.46)),
+    transparent;
+}
+.content-heading h2,
+.section-title-row h3 {
+  color: #fff2df !important;
+  text-shadow: 0 8px 34px rgba(231, 62, 101, 0.22);
+}
+.section-kicker {
+  color: #ff9f91 !important;
+}
+.keyword-chip-list {
+  overflow-y: auto;
+}
+.keyword-chip-list {
+  max-height: 260px;
+  padding-right: 4px;
+}
+.feature-card,
+.keyword-chip,
+.selected-chip,
+.category-chip,
+.btn {
+  word-break: keep-all;
+}
+:root {
+  --bt-content-max: 1520px;
+  --bt-readable-max: 1440px;
+  --bt-stage-x: clamp(56px, 7vw, 144px);
+  --bt-stage-y: clamp(28px, 4vh, 56px);
+}
+body {
+  min-height: 100vh;
+  background:
+    linear-gradient(90deg, rgba(10, 4, 28, 0.78), rgba(35, 10, 55, 0.34) 48%, rgba(10, 4, 28, 0.62)),
+    linear-gradient(180deg, rgba(20, 9, 31, 0.1), rgba(20, 9, 31, 0.46)),
+    url("../bg-main.png") center center / cover fixed no-repeat,
+    #14091f !important;
+}
+.keyword-tabs {
+  display: none !important;
+}
+:root {
+  --bt-page-max: 1760px;
+  --bt-content-max: 1520px;
+  --bt-readable-max: 1440px;
+  --bt-header-h: 88px;
+  --bt-page-x: clamp(32px, 4vw, 72px);
+  --bt-page-y: clamp(28px, 4vh, 56px);
+  --bt-panel-bg: rgba(22, 8, 42, 0.68);
+  --bt-panel-border: rgba(255, 112, 196, 0.28);
+  --bt-panel-shadow: 0 24px 80px rgba(0, 0, 0, 0.32);
+}
+html,
+body,
+#app {
+  width: 100%;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+body {
+  background:
+    linear-gradient(90deg, rgba(18, 7, 38, 0.82) 0%, rgba(31, 12, 54, 0.42) 48%, rgba(18, 7, 38, 0.7) 100%),
+    linear-gradient(180deg, rgba(20, 9, 31, 0.16), rgba(20, 9, 31, 0.54)),
+    url("../bg-main.png") center center / cover fixed no-repeat,
+    #14091f !important;
+}
+#app .glass-panel,
+#app .content-main-panel,
+#app .content-side-panel,
+#app .tarot-input-section {
+  border: 1px solid var(--bt-panel-border) !important;
+  border-radius: 28px !important;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.035)),
+    var(--bt-panel-bg) !important;
+  box-shadow: var(--bt-panel-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.13) !important;
+  backdrop-filter: blur(18px) saturate(132%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(132%) !important;
+}
+#app .content-side-panel {
+  min-width: 0 !important;
+}
+#app .fortune-lower-layout {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.86fr) !important;
+  gap: 24px !important;
+}
+#app .keyword-tabs {
+  display: none !important;
+}
+#app .keyword-chip-list {
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow-y: auto !important;
+  align-content: start !important;
+  padding-right: 6px !important;
+}
+#app .feature-card,
+#app .keyword-chip,
+#app .selected-chip,
+#app .category-chip,
+#app .btn {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 1439px) {
+
+  #app .fortune-lower-layout {
+    grid-template-columns: minmax(0, 1fr) 340px !important;
+  }
+}
+@media (max-width: 1023px) {
+
+  #app .fortune-lower-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  #app .content-side-panel {
+    min-height: 0 !important;
+  }
+}
+@media (max-width: 767px) {
+  :root {
+    --bt-page-x: 16px;
+    --bt-page-y: 18px;
+  }
+
+  #app .content-main-panel,
+#app .content-side-panel {
+    padding: 18px !important;
+  }
+}
+:root {
+  --ref-nav-h: clamp(72px, 8.2dvh, 88px);
+  --ref-page-x: clamp(42px, 4vw, 70px);
+  --ref-page-y: clamp(22px, 3.2dvh, 44px);
+  --ref-stage-max: 1560px;
+  --ref-content-max: 1440px;
+  --ref-panel-radius: 28px;
+  --ref-panel-bg: rgba(36, 14, 58, 0.58);
+  --ref-panel-border: rgba(255, 116, 190, 0.34);
+  --ref-primary: linear-gradient(135deg, #f24ca0 0%, #ff5f73 48%, #ff9d52 100%);
+}
+@media (max-height: 760px) {
+  :root {
+    --ref-nav-h: 72px;
+    --ref-page-y: 18px;
+  }
+}
+@media (max-height: 700px) {
+  :root {
+    --ref-nav-h: 68px;
+    --ref-page-y: 14px;
+  }
+}
+body {
+  background:
+    linear-gradient(90deg, rgba(13, 5, 38, 0.58) 0%, rgba(13, 5, 38, 0.24) 42%, rgba(13, 5, 38, 0.36) 100%),
+    linear-gradient(180deg, rgba(10, 4, 35, 0.22), rgba(10, 4, 35, 0.38)),
+    url("../bg-main.png") center center / cover fixed no-repeat,
+    #0e0628 !important;
+}
+#app {
+  --bt-header-h: var(--ref-nav-h);
+  --bt-page-x: var(--ref-page-x);
+  --bt-page-y: var(--ref-page-y);
+}
+#app .glass-panel,
+#app .content-main-panel,
+#app .content-side-panel,
+#app .tarot-input-section,
+#app .feature-card {
+  border-color: var(--ref-panel-border) !important;
+  border-radius: var(--ref-panel-radius) !important;
+  background:
+    linear-gradient(135deg, rgba(72, 28, 94, 0.48), rgba(28, 11, 54, 0.62)),
+    var(--ref-panel-bg) !important;
+  box-shadow:
+    0 18px 56px rgba(10, 3, 30, 0.24),
+    inset 0 1px 0 rgba(255, 245, 250, 0.12) !important;
+  backdrop-filter: blur(20px) saturate(128%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(128%) !important;
+}
+#app .btn.primary,
+#app .chip.selected,
+#app .keyword-chip.selected,
+#app .category-chip.active {
+  background: var(--ref-primary) !important;
+  box-shadow: 0 12px 28px rgba(242, 76, 160, 0.24) !important;
+}
+#app .field input,
+#app .field select {
+  min-height: clamp(44px, 5.9dvh, 56px) !important;
+  font-size: clamp(14px, 1vw, 16px) !important;
+}
+#app .keyword-chip,
+#app .chip,
+#app .category-chip,
+#app .selected-chip {
+  min-height: clamp(30px, 4.2dvh, 40px) !important;
+  padding-inline: clamp(12px, 1vw, 18px) !important;
+  font-size: clamp(13px, 1vw, 16px) !important;
+}
+@media (max-width: 900px) {
+  #app .fortune-lower-layout {
+    grid-template-columns: 1fr !important;
+  }
+}
+@media (max-height: 760px) {
+
+  #app .question-card {
+    gap: 10px !important;
+    padding: 14px !important;
+  }
+
+  #app .question-meta span {
+    font-size: 16px !important;
+  }
+
+  #app .advice-box {
+    font-size: 13px !important;
+    line-height: 1.45 !important;
+  }
+
+  #app .category-chip {
+    min-height: 30px !important;
+    padding: 0 11px !important;
+    font-size: 12px !important;
+  }
+}
+
+/* Desktop base metrics. The UI keeps these px sizes on normal desktop screens. */
+:root {
+  --stable-app-width: 0px;
+  --stable-page-y: 32px;
+  --stable-header-h: 88px;
+}
+
+html,
+body {
+  min-width: var(--stable-app-width) !important;
+  overflow-x: auto !important;
+}
+
+#app {
+  min-width: var(--stable-app-width) !important;
+  overflow-x: visible !important;
+  --bt-header-h: var(--stable-header-h) !important;
+  --ref-nav-h: var(--stable-header-h) !important;
+  --bt-page-x: 48px !important;
+  --bt-page-y: var(--stable-page-y) !important;
+  --ref-page-x: 48px !important;
+  --ref-page-y: var(--stable-page-y) !important;
+}
+
+#app .gnav {
+  min-height: var(--stable-header-h) !important;
+}
+
+#app .gnav-inner {
+  width: 1404px !important;
+  min-height: var(--stable-header-h) !important;
+  gap: 32px !important;
+}
+
+#app .brand-name {
+  display: inline !important;
+  font-size: 30px !important;
+}
+
+#app .nav-links {
+  gap: 18px !important;
+  overflow: visible !important;
+}
+
+#app .nav-links a {
+  padding: 12px 18px !important;
+  font-size: 16px !important;
+}
+
+#app .social-login-page {
+  width: 1360px !important;
+  min-width: 1360px !important;
+  min-height: calc(820px - var(--stable-header-h)) !important;
+  grid-template-columns: 720px 520px !important;
+  align-items: center !important;
+  gap: 80px !important;
+  margin: 0 auto !important;
+  padding: 56px 0 !important;
+}
+
+#app .login-card__intro {
+  grid-template-columns: 430px 250px !important;
+  column-gap: 40px !important;
+  row-gap: 24px !important;
+}
+
+#app .login-card__intro h1 {
+  width: 430px !important;
+  font-size: 58px !important;
+  line-height: 1.16 !important;
+}
+
+#app .login-card__description {
+  width: 430px !important;
+  max-width: 430px !important;
+  font-size: 19px !important;
+}
+
+#app .mascot-stage {
+  width: 250px !important;
+  min-height: 280px !important;
+  grid-column: 2 !important;
+  grid-row: 2 / 5 !important;
+}
+
+#app .mascot-stage img {
+  width: 220px !important;
+  max-height: 240px !important;
+}
+
+#app .feature-strip {
+  width: 680px !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+}
+
+#app .login-card__form {
+  width: 520px !important;
+  min-height: 610px !important;
+  padding: 54px 48px 44px !important;
+}
+
+#app .login-form__copy h2 {
+  font-size: 40px !important;
+}
+
+#app .login-form__copy p {
+  font-size: 17px !important;
+}
+
+#app .social-login-list {
+  gap: 20px !important;
+  margin-top: 24px !important;
+}
+
+#app .social-login-button {
+  height: 82px !important;
+  min-height: 82px !important;
+  border-radius: 22px !important;
+  gap: 18px !important;
+  font-size: 28px !important;
+  font-weight: 900 !important;
+  letter-spacing: 0 !important;
+}
+
+#app .social-login-button.kakao {
+  background: #fee500 !important;
+  color: #191919 !important;
+}
+
+#app .social-login-button.google {
+  background: #f1f3f4 !important;
+  border-color: transparent !important;
+  color: #222 !important;
+}
+
+#app .social-login-button.naver {
+  background: #03c75a !important;
+  color: #fff !important;
+}
+
+#app .social-login-icon,
+#app .google-login-icon {
+  width: 44px !important;
+  height: 44px !important;
+}
+
+#app .provider-loading {
+  font-size: 18px !important;
+}
+
+#app .home-view {
+  width: 1360px !important;
+  min-width: 1360px !important;
+  min-height: 850px !important;
+  display: block !important;
+  margin: 24px auto 28px !important;
+  padding: 66px 44px 72px !important;
+  overflow: visible !important;
+}
+
+#app .home-copy-zone,
+#app .home-view .tarot-only-actions {
+  width: 760px !important;
+  max-width: 760px !important;
+}
+
+#app .home-copy-zone h1 {
+  max-width: 720px !important;
+  margin-bottom: 22px !important;
+  font-size: 60px !important;
+  line-height: 1.16 !important;
+}
+
+#app .home-view .eyebrow {
+  min-height: 46px !important;
+  margin-bottom: 24px !important;
+  font-size: 14px !important;
+}
+
+#app .home-view .hero-copy {
+  width: 600px !important;
+  max-width: 600px !important;
+  margin-bottom: 28px !important;
+  font-size: 20px !important;
+  line-height: 1.65 !important;
+}
+
+#app .home-view .hero-actions {
+  gap: 22px !important;
+  margin-bottom: 24px !important;
+}
+
+#app .home-view .hero-actions .btn {
+  min-width: 260px !important;
+  min-height: 64px !important;
+  font-size: 20px !important;
+}
+
+#app .home-view .tarot-game-action {
+  min-height: 156px !important;
+  grid-template-columns: 190px minmax(0, 1fr) 48px !important;
+  gap: 26px !important;
+  padding: 24px 28px !important;
+}
+
+#app .home-view .tarot-game-action .sticker-icon {
+  width: 180px !important;
+  height: 118px !important;
+  background-size: 82px auto, 82px auto, 82px auto !important;
+}
+
+#app .home-view .tarot-game-action strong {
+  font-size: 30px !important;
+}
+
+#app .home-view .tarot-game-action small {
+  font-size: 17px !important;
+  line-height: 1.5 !important;
+}
+
+/* Keep the two home shortcuts readable after the legacy responsive rules. */
+#app .home-view .tarot-only-actions {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 18px !important;
+  width: min(760px, 100%) !important;
+  max-width: 760px !important;
+}
+
+#app .home-view .tarot-game-action {
+  min-width: 0 !important;
+  min-height: 156px !important;
+  grid-template-columns: 88px minmax(0, 1fr) 34px !important;
+  gap: 14px !important;
+  padding: 18px 16px !important;
+}
+
+#app .home-view .tarot-game-action .sticker-icon {
+  width: 88px !important;
+  height: 112px !important;
+  background-size: 52px auto, 52px auto, 52px auto !important;
+}
+
+#app .home-view .tarot-game-action.checkin-action .sticker-icon {
+  border-radius: 18px !important;
+  background:
+    linear-gradient(145deg, rgba(255, 214, 157, 0.24), rgba(238, 87, 143, 0.24)),
+    url("/characters/redpanda/joy.png") center bottom / contain no-repeat !important;
+}
+
+#app .home-view .tarot-game-action > span:nth-child(2) {
+  min-width: 0 !important;
+  display: grid !important;
+  align-content: center !important;
+  gap: 7px !important;
+  padding-right: 26px !important;
+}
+
+#app .home-view .tarot-game-action strong {
+  min-width: 0 !important;
+  overflow: visible !important;
+  font-size: clamp(18px, 1.48vw, 24px) !important;
+  line-height: 1.2 !important;
+  letter-spacing: -0.03em !important;
+  text-overflow: clip !important;
+  white-space: normal !important;
+  word-break: keep-all !important;
+}
+
+#app .home-view .tarot-game-action small {
+  display: -webkit-box !important;
+  overflow: hidden !important;
+  margin-top: 0 !important;
+  color: rgba(255, 235, 230, 0.72) !important;
+  font-size: clamp(12px, 1vw, 15px) !important;
+  line-height: 1.45 !important;
+  white-space: normal !important;
+  word-break: keep-all !important;
+  overflow-wrap: anywhere !important;
+  -webkit-box-orient: vertical !important;
+  -webkit-line-clamp: 3 !important;
+}
+
+#app .home-view .tarot-game-action > span:last-child::after {
+  right: 12px !important;
+  width: 32px !important;
+  height: 32px !important;
+  font-size: 24px !important;
+}
+
+@media (max-width: 720px) {
+  #app .home-view .tarot-only-actions {
+    grid-template-columns: 1fr !important;
+    width: 100% !important;
+  }
+
+  #app .home-view .tarot-game-action {
+    min-height: 118px !important;
+    grid-template-columns: 76px minmax(0, 1fr) 28px !important;
+    gap: 12px !important;
+  }
+
+  #app .home-view .tarot-game-action .sticker-icon {
+    width: 76px !important;
+    height: 84px !important;
+    background-size: 58px auto, 58px auto, 58px auto !important;
+  }
+
+  #app .home-view .tarot-game-action.checkin-action .sticker-icon {
+    background-size: contain !important;
+  }
+}
+
+#app .home-view .feature-dock {
+  width: 1140px !important;
+  max-width: 1140px !important;
+  grid-template-columns: repeat(3, 1fr) !important;
+  gap: 22px !important;
+  margin-top: 18px !important;
+  margin-bottom: 8px !important;
+}
+
+#app .home-view .feature-card {
+  min-height: 144px !important;
+  height: 144px !important;
+  grid-template-columns: 72px minmax(0, 1fr) 34px !important;
+  padding: 24px !important;
+}
+
+#app .home-view .feature-card .sticker-icon {
+  width: 72px !important;
+  height: 72px !important;
+}
+
+#app .home-view .feature-card strong {
+  font-size: 24px !important;
+}
+
+#app .home-view .feature-card small {
+  font-size: 15px !important;
+}
+
+#app .tarot-intro-view {
+  width: 1280px !important;
+  min-width: 1280px !important;
+  min-height: 850px !important;
+  height: auto !important;
+  gap: 22px !important;
+  margin: 0 auto !important;
+  padding: 28px 0 40px !important;
+  overflow: visible !important;
+}
+
+#app .tarot-intro-view .tarot-intro-hero {
+  min-height: 190px !important;
+  gap: 14px !important;
+}
+
+#app .tarot-intro-view .tarot-intro-hero h1 {
+  font-size: 64px !important;
+  line-height: 1.08 !important;
+}
+
+#app .tarot-intro-view .tarot-intro-hero p,
+#app .tarot-intro-view .tarot-intro-hero span {
+  font-size: 19px !important;
+}
+
+#app .tarot-intro-view .tarot-panels {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 22px !important;
+}
+
+#app .tarot-intro-view .daily-major-panel,
+#app .tarot-intro-view .situation-panel {
+  min-height: 520px !important;
+  height: auto !important;
+  padding: 56px 42px 38px !important;
+}
+
+#app .tarot-intro-view .daily-main-content {
+  grid-template-columns: 190px minmax(0, 1fr) !important;
+  gap: 28px !important;
+  text-align: left !important;
+}
+
+#app .tarot-intro-view .daily-deck-stage {
+  min-height: 300px !important;
+}
+
+#app .tarot-intro-view .daily-deck-button {
+  width: 210px !important;
+}
+
+#app .tarot-intro-view .daily-major-copy {
+  align-items: flex-start !important;
+}
+
+#app .tarot-intro-view .daily-major-copy h2,
+#app .tarot-intro-view .situation-panel h2 {
+  font-size: 34px !important;
+  line-height: 1.25 !important;
+}
+
+#app .tarot-intro-view .daily-major-copy p,
+#app .tarot-intro-view .situation-panel p {
+  font-size: 17px !important;
+  line-height: 1.6 !important;
+}
+
+#app .tarot-intro-view .intro-card-spread {
+  width: 300px !important;
+  height: 170px !important;
+}
+
+#app .tarot-intro-view .intro-card-spread span {
+  width: 104px !important;
+}
+
+#app .tarot-draw-page {
+  min-width: 1440px !important;
+  min-height: 850px !important;
+  padding: 24px 30px 40px !important;
+}
+
+#app .tarot-draw-layout {
+  width: 1440px !important;
+  min-width: 1440px !important;
+  grid-template-columns: 986px 430px !important;
+  gap: 24px !important;
+}
+
+#app .tarot-main-panel {
+  padding: 30px !important;
+}
+
+#app .tarot-result-panel {
+  width: 430px !important;
+  padding: 30px !important;
+}
+
+#app .tarot-draw-header h2 {
+  font-size: 38px !important;
+}
+
+#app .tarot-steps {
+  grid-template-columns: minmax(0, 1fr) 56px minmax(0, 1fr) 56px minmax(0, 1fr) !important;
+}
+
+#app .tarot-spread-panel {
+  --card-width: 70px !important;
+  --card-height: 104px !important;
+  min-height: 258px !important;
+  padding: 22px !important;
+}
+
+#app .selected-card-zone {
+  grid-template-columns: 220px minmax(0, 1fr) !important;
+}
+
+#app .selected-slots {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+
+#app .result-actions,
+#app .tarot-bottom-note {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+#app .tarot-bottom-note {
+  width: 1440px !important;
+  grid-template-columns: 86px minmax(0, 1fr) !important;
+}
+
+#app .calendar-view {
+  width: 1440px !important;
+  min-width: 1440px !important;
+  min-height: 820px !important;
+  grid-template-columns: 986px 430px !important;
+  gap: 24px !important;
+  align-items: stretch !important;
+  margin: 28px auto 34px !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+
+#app .calendar-board,
+#app .calendar-detail {
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  padding: 32px !important;
+}
+
+#app .calendar-heading,
+#app .calendar-toolbar {
+  display: flex !important;
+}
+
+#app .calendar-board h2 {
+  font-size: 48px !important;
+  line-height: 1.08 !important;
+}
+
+#app .calendar-stats {
+  grid-template-columns: 1.1fr 1.1fr 2fr !important;
+}
+
+#app .calendar-stats article {
+  min-height: 92px !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-bottom: 0 !important;
+}
+
+#app .calendar-grid {
+  grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+}
+
+#app .calendar-day {
+  min-height: 86px !important;
+  padding: 12px 14px !important;
+  border-radius: 12px !important;
+}
+
+#app .calendar-day strong {
+  font-size: 21px !important;
+}
+
+#app .calendar-day span {
+  font-size: 13px !important;
+}
+
+#app .calendar-detail h3 {
+  font-size: 28px !important;
+}
+
+/* Breakpoint-based responsive guard. No page-wide zoom/scale is used. */
+html,
+body,
+#app {
+  min-width: 0 !important;
+  overflow-x: hidden !important;
+}
+
+@media (min-width: 1281px) {
+  #app .gnav-inner {
+    width: min(1404px, calc(100% - 48px)) !important;
+  }
+}
+
+@media (max-width: 1280px) {
+  #app {
+    --bt-page-x: 32px !important;
+    --ref-page-x: 32px !important;
+  }
+
+  #app .gnav-inner {
+    width: calc(100% - 40px) !important;
+    gap: 20px !important;
+  }
+
+  #app .brand-name {
+    font-size: 26px !important;
+  }
+
+  #app .nav-links {
+    gap: 10px !important;
+  }
+
+  #app .nav-links a {
+    padding: 10px 12px !important;
+    font-size: 14px !important;
+  }
+
+  #app .social-login-page,
+  #app .home-view,
+  #app .tarot-intro-view,
+  #app .tarot-draw-page,
+  #app .calendar-view {
+    width: calc(100% - 48px) !important;
+    max-width: 1180px !important;
+    min-width: 0 !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+
+  #app .social-login-page {
+    grid-template-columns: minmax(0, 1.15fr) 440px !important;
+    gap: 40px !important;
+    min-height: auto !important;
+    padding: 48px 0 !important;
+  }
+
+  #app .login-card__intro {
+    grid-template-columns: minmax(0, 1fr) 210px !important;
+    column-gap: 28px !important;
+  }
+
+  #app .login-card__intro h1,
+  #app .login-card__description {
+    width: auto !important;
+    max-width: 100% !important;
+  }
+
+  #app .login-card__intro h1 {
+    font-size: 52px !important;
+  }
+
+  #app .mascot-stage {
+    width: 210px !important;
+    min-height: 240px !important;
+  }
+
+  #app .mascot-stage img {
+    width: 190px !important;
+  }
+
+  #app .feature-strip {
+    width: 100% !important;
+    max-width: 640px !important;
+  }
+
+  #app .login-card__form {
+    width: 440px !important;
+    min-height: 580px !important;
+    padding: 48px 40px 40px !important;
+  }
+
+  #app .social-login-button {
+    height: 76px !important;
+    min-height: 76px !important;
+    font-size: 24px !important;
+  }
+
+  #app .home-view {
+    min-height: 820px !important;
+    padding: 56px 34px 68px !important;
+    overflow: visible !important;
+  }
+
+  #app .home-copy-zone,
+  #app .home-view .tarot-only-actions {
+    width: min(720px, 100%) !important;
+    max-width: 720px !important;
+  }
+
+  #app .home-copy-zone h1 {
+    font-size: 54px !important;
+  }
+
+  #app .home-view .feature-dock {
+    width: 100% !important;
+    max-width: 1080px !important;
+    gap: 18px !important;
+  }
+
+  #app .tarot-intro-view {
+    min-height: auto !important;
+  }
+
+  #app .tarot-intro-view .tarot-intro-hero h1 {
+    font-size: 58px !important;
+  }
+
+  #app .tarot-intro-view .daily-major-panel,
+  #app .tarot-intro-view .situation-panel {
+    padding: 48px 34px 34px !important;
+  }
+
+  #app .tarot-draw-page {
+    min-height: auto !important;
+    padding: 24px 0 36px !important;
+  }
+
+  #app .tarot-draw-layout {
+    width: 100% !important;
+    min-width: 0 !important;
+    grid-template-columns: minmax(0, 1fr) 360px !important;
+    gap: 20px !important;
+  }
+
+  #app .tarot-result-panel {
+    width: auto !important;
+  }
+
+  #app .tarot-bottom-note {
+    width: 100% !important;
+  }
+
+  #app .calendar-view {
+    min-height: auto !important;
+    grid-template-columns: minmax(0, 1fr) 360px !important;
+    gap: 20px !important;
+  }
+
+  #app .calendar-board,
+  #app .calendar-detail {
+    padding: 28px !important;
+  }
+
+  #app .calendar-board h2 {
+    font-size: 44px !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  #app {
+    --bt-page-x: 24px !important;
+    --ref-page-x: 24px !important;
+  }
+
+  #app .social-login-page {
+    width: min(calc(100% - 40px), 780px) !important;
+    grid-template-columns: 1fr !important;
+    gap: 32px !important;
+    padding: 36px 0 !important;
+  }
+
+  #app .login-card__intro {
+    grid-template-columns: 1fr !important;
+    text-align: center !important;
+  }
+
+  #app .mascot-stage {
+    grid-column: auto !important;
+    grid-row: auto !important;
+    justify-self: center !important;
+  }
+
+  #app .login-card__form {
+    width: 100% !important;
+    min-height: 0 !important;
+  }
+
+  #app .home-view,
+  #app .tarot-intro-view,
+  #app .tarot-draw-page,
+  #app .calendar-view {
+    width: calc(100% - 40px) !important;
+    max-width: 900px !important;
+  }
+
+  #app .home-view {
+    padding: 48px 28px 64px !important;
+    overflow: visible !important;
+  }
+
+  #app .home-view .feature-dock {
+    grid-template-columns: 1fr !important;
+  }
+
+  #app .tarot-intro-view .tarot-panels,
+  #app .tarot-draw-layout,
+  #app .calendar-view {
+    grid-template-columns: 1fr !important;
+  }
+
+  #app .tarot-intro-view .daily-main-content {
+    grid-template-columns: 1fr !important;
+    text-align: center !important;
+  }
+
+  #app .tarot-intro-view .daily-major-copy {
+    align-items: center !important;
+  }
+
+  #app .calendar-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 720px) {
+  #app .gnav-inner {
+    width: calc(100% - 24px) !important;
+  }
+
+  #app .home-copy-zone h1,
+  #app .tarot-intro-view .tarot-intro-hero h1 {
+    font-size: 42px !important;
+  }
+
+  #app .login-card__intro h1 {
+    font-size: 44px !important;
+  }
+
+  #app .login-card__form {
+    padding: 36px 24px 28px !important;
+  }
+
+  #app .social-login-button {
+    height: 66px !important;
+    min-height: 66px !important;
+    font-size: 20px !important;
+    gap: 14px !important;
+  }
+
+  #app .social-login-icon,
+  #app .google-login-icon {
+    width: 34px !important;
+    height: 34px !important;
+  }
+
+  #app .home-view,
+  #app .tarot-intro-view,
+  #app .tarot-draw-page,
+  #app .calendar-view {
+    width: calc(100% - 24px) !important;
+  }
+
+  #app .calendar-stats,
+  #app .selected-card-zone,
+  #app .selected-slots,
+  #app .result-actions,
+  #app .tarot-bottom-note {
+    grid-template-columns: 1fr !important;
+  }
+
+  #app .calendar-board h2 {
+    font-size: 36px !important;
+  }
+}
+
+/* Final mobile header guard: wrapped navigation must increase header height. */
+@media (max-width: 1023px) {
+  #app .gnav-inner {
+    height: auto !important;
+    min-height: 80px !important;
+  }
+
+  #app .gnav {
+    min-height: max-content !important;
+  }
+}
+
+
+/* ===== final target-mockup alignment (2026-07) ===== */
+#app .home-copy-zone h1 {
+  max-width: 900px !important;
+  font-size: clamp(40px, 2.75vw, 48px) !important;
+  line-height: 1.2 !important;
+}
+
+#app .home-view .tarot-only-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  width: 100% !important;
+  max-width: none !important;
+}
+
+#app .home-view .tarot-game-action.mycard-action,
+#app .home-view .tarot-game-action.memory-game-action,
+#app .home-view .tarot-game-action.fortune-action {
+  grid-column: auto !important;
+}
+
+
+/* ===== 새 아이콘 세트 적용 (2026-07) ===== */
+#app .home-view .tarot-game-action .sticker-icon {
+  border-radius: 0 !important;
+  background: url("../icons/feature-card-fortune.png") center / contain no-repeat !important;
+  box-shadow: none !important;
+  filter: drop-shadow(0 8px 12px rgba(20, 4, 34, 0.35));
+}
+
+#app .home-view .tarot-game-action.mycard-action .sticker-icon {
+  background: url("../icons/feature-my-card.png") center / contain no-repeat !important;
+}
+
+#app .home-view .tarot-game-action.memory-game-action .sticker-icon {
+  background: url("../icons/feature-card-match.png") center / contain no-repeat !important;
+}
+
+
+/* ===== 홈 헤드라인 위계: 부제(문장) 작게, 서비스명 크게 (2026-07) ===== */
+#app .home-copy-zone h1 {
+  font-size: clamp(26px, 1.9vw, 34px) !important;
+  line-height: 1.45 !important;
+}
+
+#app .home-copy-zone h1 em {
+  display: block;
+  margin-top: 10px;
+  font-size: clamp(52px, 4.2vw, 72px) !important;
+  line-height: 1.1 !important;
+}
+
+
+/* ===== 2026-07 추가 수정 ===== */
+/* 콘텐츠 카드: 바깥쪽 화살표(글리프) 제거, 원 안 화살표(::after)만 유지 */
+#app .home-view .tarot-game-action .content-action-arrow {
+  color: transparent !important;
+  font-size: 0 !important;
+}
+#app .home-view .tarot-game-action .content-action-arrow::after {
+  color: #ffffff !important;
+  font-size: 28px !important;
+}
+
+/* 상단 기능 카드(마음 리포트/캘린더): 텍스트 폭 확보 → '추이를' 붙게 */
+#app .home-view .feature-card {
+  grid-template-columns: 68px minmax(0, 1fr) 40px !important;
+}
+#app .home-view .feature-card .feature-copy small {
+  white-space: pre-line !important;
+  word-break: keep-all !important;
+}
+
+
+/* 상단 기능 카드 설명 줄바꿈 개선: 텍스트폭 확보 + 폰트 축소 */
+#app .home-view .feature-card {
+  grid-template-columns: 60px minmax(0, 1fr) 38px !important;
+  gap: 16px !important;
+}
+#app .home-view .feature-card .feature-icon {
+  width: 56px !important;
+  height: 56px !important;
+}
+#app .home-view .feature-card .feature-copy small {
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  white-space: normal !important;
+  word-break: keep-all !important;
+}
+
+
+/* ===== Home shortcut icon balance (2026-07-20) ===== */
+#app .home-view .feature-dock {
+  width: 100% !important;
+  max-width: none !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+
+#app .home-view .feature-card {
+  min-height: 156px !important;
+  height: 156px !important;
+  grid-template-columns: 80px minmax(0, 1fr) 40px !important;
+  gap: 18px !important;
+  padding: 22px 24px !important;
+}
+
+#app .home-view .feature-card .feature-icon {
+  width: 80px !important;
+  height: 100px !important;
+  object-fit: contain !important;
+}
+
+#app .home-view .feature-card .feature-copy small {
+  white-space: pre-line !important;
+  word-break: keep-all !important;
+  overflow-wrap: normal !important;
+}
+
+#app .home-view .feature-card .feature-meta {
+  margin-left: 6px !important;
+}
+
+@media (max-width: 720px) {
+  #app .home-view .feature-card {
+    min-height: 132px !important;
+    height: auto !important;
+    grid-template-columns: 68px minmax(0, 1fr) 34px !important;
+    padding: 18px !important;
+  }
+
+  #app .home-view .feature-card .feature-icon {
+    width: 68px !important;
+    height: 76px !important;
+  }
+}
+
+@media (max-width: 900px) {
+  #app .home-view .feature-dock {
+    width: 100% !important;
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ===== Fortune draw three-panel result states (2026-07-20) ===== */
+#app .tarot-draw-page {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  min-height: calc(100dvh - var(--bt-header-h)) !important;
+  padding: 16px 28px 24px !important;
+}
+
+#app .tarot-draw-layout {
+  width: min(100%, 1440px) !important;
+  min-width: 0 !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+}
+
+#app .tarot-draw-header h2 {
+  font-size: 30px !important;
+}
+
+#app .tarot-main-panel,
+#app .selected-card-panel,
+#app .tarot-result-panel {
+  width: auto !important;
+  padding: 24px !important;
+}
+
+#app .tarot-main-panel {
+  padding-inline: 30px !important;
+}
+
+#app .tarot-spread-panel {
+  --card-width: 64px !important;
+  --card-height: 94px !important;
+  min-height: 414px !important;
+  padding: 0 !important;
+}
+
+#app .selected-card-panel .selected-slots {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+
+#app .tarot-bottom-note {
+  width: min(100%, 1440px) !important;
+}
+
+@media (max-width: 1180px) {
+  #app .tarot-draw-layout {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 620px) {
+  #app .selected-card-panel .selected-slots,
+  #app .selected-result-cards,
+  #app .result-actions,
+  #app .tarot-bottom-note {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Preserve the intended two-line copy in the three home shortcut cards. */
+#app .home-view .tarot-game-action small {
+  display: block !important;
+  overflow: visible !important;
+  white-space: pre-line !important;
+  word-break: keep-all !important;
+  overflow-wrap: normal !important;
+  -webkit-line-clamp: unset !important;
+}
+
+/* Vertically balance the report and calendar text within their cards. */
+#app .home-view .feature-card .feature-copy {
+  transform: translateY(9px) !important;
+}

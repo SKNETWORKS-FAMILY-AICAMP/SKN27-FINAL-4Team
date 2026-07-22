@@ -20,9 +20,10 @@ class UserManager(BaseUserManager):
 
 class User(AbstractBaseUser, PermissionsMixin):
     CHARACTER_CHOICES = [
-        ('haeon', '해온이'),
-        ('greung', '그릉이'),
-        ('dalkong', '달콩이'),
+        ('pori',  '포리'),   # 레서판다 / 밝음·응원형
+        ('kkami', '까미'),   # 고양이 / 깊음·묵직형
+        ('toto',  '토토'),   # 수달 / 장난·환기형
+        ('yeoul', '여울'),   # 뱁새 / 차분·포근형
     ]
 
     email = models.EmailField(unique=True)
@@ -40,3 +41,125 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     class Meta:
         db_table = 'users'
+
+
+class OAuthAccount(models.Model):
+    PROVIDER_CHOICES = [
+        ('kakao', 'Kakao'),
+        ('naver', 'Naver'),
+        ('google', 'Google'),
+    ]
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='oauth_accounts',
+    )
+    provider = models.CharField(max_length=20, choices=PROVIDER_CHOICES)
+    provider_user_id = models.CharField(max_length=191)
+    email = models.EmailField(blank=True)
+    raw_profile = models.JSONField(default=dict, blank=True)
+    connected_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'oauth_accounts'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['provider', 'provider_user_id'],
+                name='uniq_oauth_provider_user',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['user', 'provider'], name='oauth_user_provider_idx'),
+            models.Index(fields=['provider', 'email'], name='oauth_provider_email_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.provider}:{self.provider_user_id}'
+
+
+class UserProfile(models.Model):
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='profile',
+    )
+    birth_date = models.DateField(blank=True, null=True)
+    gender = models.CharField(max_length=20, blank=True)
+    age = models.PositiveSmallIntegerField(blank=True, null=True)
+    job = models.CharField(max_length=100, blank=True)
+    hobbies = models.JSONField(default=list, blank=True)
+    interests = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'user_profiles'
+
+    def __str__(self):
+        return f'{self.user_id} profile'
+
+
+class UserAgreementRecord(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='agreement_records',
+    )
+    terms_version = models.CharField(max_length=20)
+    privacy_version = models.CharField(max_length=20)
+    overseas_transfer_version = models.CharField(max_length=20)
+    details = models.JSONField(default=dict, blank=True)
+    agreed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'user_agreement_records'
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    'user',
+                    'terms_version',
+                    'privacy_version',
+                    'overseas_transfer_version',
+                ],
+                name='uniq_user_agreement_versions',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['user', '-agreed_at'], name='user_agreement_date_idx'),
+        ]
+
+
+class UserPreferenceKeyword(models.Model):
+    KEYWORD_TYPE_CHOICES = [
+        ('hobby', '취미'),
+        ('interest', '관심분야'),
+    ]
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='preference_keywords',
+    )
+    keyword_type = models.CharField(max_length=20, choices=KEYWORD_TYPE_CHOICES)
+    label = models.CharField(max_length=100)
+    source = models.CharField(max_length=30, default='onboarding')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'user_preference_keywords'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'keyword_type', 'label'],
+                name='uniq_user_preference_keyword',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['user', 'keyword_type'], name='user_pref_keyword_user_idx'),
+            models.Index(fields=['keyword_type', 'label'], name='user_pref_keyword_label_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.user_id} {self.keyword_type} {self.label}'

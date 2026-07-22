@@ -1,3 +1,40 @@
+# 루트 임시/테스트 파일
+googlelogin.html
+googlelogin.css
+docker-compose.yml
+
+# 개별 작업 문서 (팀 공유 제외)
+\[개별\]*
+docs/감정분류_개선실험_계획서_김한솔.md
+docs/최종_통합_흐름도_구현검증본.md
+docs/최종_통합_흐름도_김한솔.md
+docs/기억시스템_실증사례_김한솔.md
+docs/\[데이터 수집 및 저장\]*
+docs/\[데이터 처리\]*
+docs/\[모델 및 평가\]*
+docs/김한솔팀장/\[데이터 전처리\]*
+docs/김한솔팀장/\[모델링 및 평가\]*
+docs/김한솔팀장/감정분류_개선실험_계획서_김한솔.md
+docs/김한솔팀장/최종_통합_흐름도_구현검증본.md
+docs/김한솔팀장/최종_통합_흐름도_김한솔.md
+docs/김한솔팀장/기억시스템_실증사례_김한솔.md
+docs/김한솔팀장/대화.md
+docs/김한솔팀장/빈틈사이_발표대본_김한솔.md
+docs/김한솔팀장/빈틈사이_배경기획_슬라이드안_김한솔.md
+docs/김한솔팀장/빈틈사이_배경기획_조사.md
+docs/김한솔팀장/빈틈사이_출처검증표_김한솔.md
+docs/김한솔팀장/GraphDB_기억_설계.md
+docs/김한솔팀장/기억시스템_3계층_설계.md
+docs/김한솔팀장/전체_프로세스_흐름도_그림.md
+docs/김한솔팀장/데이터_정제_명세_김한솔.md
+docs/백엔드_셋업_체크리스트.md
+# 김한솔팀장 개인 문서 전체 제외
+docs/김한솔팀장/
+docs/발표_이미지/
+docs/중간발표_이미지/
+docs/빈틈사이_발표대본_김한솔.md
+docs/빈틈사이_배경기획_슬라이드안_김한솔.md
+
 # 환경 변수 및 비밀키
 .env
 .env.development
@@ -8,11 +45,40 @@
 *.bin
 *.pt
 *.pth
+*.onnx
+
+# 오디오 파일
+*.wav
+*.mp3
+*.ogg
+
+# TTS 테스트 디렉토리 (대용량 모델·오디오 포함)
+test/hansol/
 
 # 데이터베이스 캐시 및 볼륨 데이터
 postgres_data/
 neo4j_data/
-storage/
+# storage/ 폴더 내 DB 볼륨 데이터만 제외 (SQL·설정 파일은 추적)
+storage/postgres_data/
+storage/neo4j_data/
+
+# AI Hub 파생 데이터 — 재배포 금지 (etl/data/README.md 참조, 재생성: rebuild_clean_dataset.py / prepare_aug_datasets.py)
+etl/data/kcelectra_train_clean.jsonl
+etl/data/aug_voice.jsonl
+etl/data/aug_wellness.jsonl
+
+# 파인튜닝 모델: 토크나이저·설정·성적표는 깃 공유, 본체(safetensors 488MB)만 제외
+# (GitHub 100MB 하드 리밋 — 본체는 Drive 공유, 재생성: 실험2 노트북 최종 학습 셀)
+ai/emotion/artifacts_ft/model.safetensors
+
+# 배포 스크립트 (개인 작업용 — dev 공유 제외)
+deploy/
+
+# CI/CD (배포 준비 완료 전까지 제외)
+.github/
+
+# IDE 설정
+.vscode/
 
 # 파이썬 캐시 및 가상환경
 __pycache__/
@@ -36,25 +102,37 @@ take_screenshot*
 view_svgs*
 shot_dark*
 
+# 아카이브 (미사용 파일 보관소 — v6.0 정리, _archive/README.md 참조)
+_archive/
+
 # 임시 덤프 및 복사본 파일
 _tmp_*.txt
 _update_*.py
 _write_*.py
 __mount_test.txt
 
-# 데이터셋
+# 데이터셋 (AI Hub 등 원본·파생 데이터는 재배포 금지 → 커밋 제외, AI Hub에서 직접 내려받아 사용)
 *.json
+*.jsonl
+etl/data/raw/
+# 커밋 허용 예외 — 자체 제작(재배포 문제 없음) · 실험 결과 기록
+!etl/data/chat_eval_set.jsonl
+!ai/emotion/exp1_results.json
+!ai/emotion/ft_final_metrics.json
+!test_paper_implementation/*.json
+ai/emotion/artifacts/
+ai/emotion/artifacts_aihub/
+# artifacts_ft는 본체(safetensors)만 제외 — 나머지 소파일은 커밋 허용 (79행 참조)
+!ai/emotion/artifacts_ft/*.json
+!ai/emotion/artifacts_ft/vocab.txt
 
-# 개별 문서
-docs/\[개별\]*
+# 
+# RAGAS 교차 검증 전용 venv (프로젝트 venv와 분리 — 절대 커밋 금지)
+.venv-ragas/
+ragas_results.json
 
-# IDE 설정
-.vscode/
-.idea/
-
-# 프로토타입 파일 (Vue로 대체됨)
-app/frontend/src/views/mypage/mypage.html
-app/frontend/src/views/mypage/mypage.js
-app/frontend/src/views/mypage/mypage.css
-app/frontend/src/assets/b97c24d60f8306b5.png
-app/frontend/src/assets/design-system.css
+# 기타 로컬 테스트 및 대용량 원본 데이터
+app/backend/test_mindreport_e2e.py
+etl/data/018.*/
+artifacts/
+ai/emotion/evaluate_songwon.ipynb

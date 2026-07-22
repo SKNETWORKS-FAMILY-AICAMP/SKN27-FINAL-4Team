@@ -1,350 +1,395 @@
-import json
-import os
-from pathlib import Path
+# -*- coding: utf-8 -*-
+"""챗봇 API — 단일 파일 (v6.0, API_명세서_김한솔.md 기준).
 
-from django.conf import settings as django_settings
-from rest_framework.decorators import api_view, permission_classes
+■ 메인 플로우 (LangGraph)
+  session_start   POST /api/session/start/        세션 시작 (친구 첫인사)
+  chat_turn       POST /api/chat/                 대화 턴 (텍스트 즉시 + tts_task_id)
+  tts_status      GET  /api/tts/<task_id>/        TTS 오디오 폴링
+  session_end     POST /api/session/end/          세션 종료 (시크릿 캐시 파기)
+
+지원 모듈: graph/(LangGraph), tts_service, mbti, memory, secret_cache
+"""
+import os
+import re
+
+from rest_framework import status
+from rest_framework.authentication import SessionAuthentication
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from rest_framework import status
-from openai import OpenAI
 
-from .models import ChatSession, ChatMessage
-from .serializers import ChatSessionSerializer, ChatMessageSerializer
-
-PROMPT_DIR = Path(__file__).resolve().parent.parent.parent / 'prompts'
-VALID_CHARACTERS = {'haeon', 'greung', 'dalkong'}
-GROQ_MODEL = 'llama-3.3-70b-versatile'
+from ai.agents import mbti as mbti_svc
+from . import secret_cache, tts_service   # memory(요약) 은퇴 2026-07-19 · v1 죽은 임포트 제거 2026-07-21 (그래프는 memory_backend 경유만)
+from .models import ChatMessage, ChatSession
 
 
-def _client() -> OpenAI:
-    api_key = os.environ.get('GROQ_API_KEY', '').strip()
-    if not api_key:
-        raise ValueError('GROQ_API_KEY가 설정되지 않았습니다. app/backend/.env 파일을 확인하세요.')
-    return OpenAI(
-        api_key=api_key,
-        base_url=os.environ.get('GROQ_BASE_URL', 'https://api.groq.com/openai/v1'),
+class CsrfExemptSessionAuthentication(SessionAuthentication):
+    def enforce_csrf(self, request):
+        return
+
+VALID_CHARACTERS = {'pori', 'kkami', 'toto', 'yeoul'}
+
+
+# ── 공통 헬퍼 ────────────────────────────────────────────────
+
+def _ok(data, http_status=status.HTTP_200_OK):
+    return Response({'success': True, 'data': data, 'error': None}, status=http_status)
+
+
+def _err(code, message, http_status=status.HTTP_400_BAD_REQUEST):
+    return Response(
+        {'success': False, 'data': None, 'error': {'code': code, 'message': message}},
+        status=http_status,
     )
 
 
-_DEFAULT_PROMPTS = {
-    'haeon': {
-        'system_instruction': '당신은 해온이입니다. 따뜻하고 공감 능력이 뛰어난 감성 상담 캐릭터로, 사용자의 감정을 부드럽게 위로하고 공감해줍니다.',
-        'model_settings': {'max_tokens': 250, 'temperature': 0.7},
-    },
-    'greung': {
-        'system_instruction': '당신은 그릉이입니다. 현실적이고 직설적인 상담 캐릭터로, CBT 기반의 날카로운 피드백으로 사용자가 현실을 직면하도록 돕습니다.',
-        'model_settings': {'max_tokens': 250, 'temperature': 0.7},
-    },
-    'dalkong': {
-        'system_instruction': '당신은 달콩이입니다. 긍정적이고 활기찬 코칭 캐릭터로, ACT 기반의 행동 지향적 조언으로 사용자를 응원합니다.',
-        'model_settings': {'max_tokens': 250, 'temperature': 0.7},
-    },
-}
-
-def _load_prompt(character: str) -> dict:
-    prompt_file = PROMPT_DIR / f'{character}_prompt.json'
-    if prompt_file.exists():
-        with open(prompt_file, encoding='utf-8') as f:
-            return json.load(f)
-    return _DEFAULT_PROMPTS.get(character, _DEFAULT_PROMPTS['haeon'])
-
-
-def _build_system_message(prompt_data: dict) -> str:
-    parts = [prompt_data['system_instruction']]
-    if prompt_data.get('dialogue_rules'):
-        rules = '\n'.join(f'- {r}' for r in prompt_data['dialogue_rules'])
-        parts.append(f'대화 규칙:\n{rules}')
-    if prompt_data.get('safety_constraints'):
-        constraints = '\n'.join(f'- {c}' for c in prompt_data['safety_constraints'])
-        parts.append(f'안전 규칙:\n{constraints}')
-    return '\n\n'.join(parts)
-
-
-def _classify_emotion(history: list[dict], user_content: str) -> str | None:
-    system = (
-        "다음 대화를 읽고 사용자의 주요 감정 상태를 아래 4가지 중 하나로만 출력하세요.\n"
-        "출력 형식: encourage / sad / angry / plan 중 하나\n\n"
-        "- encourage: 인정받고 싶거나 잘하고 있다는 확인이 필요한 상태\n"
-        "- sad: 슬프거나 속상하거나 울고 싶은 상태\n"
-        "- angry: 화나거나 억울하거나 분한 상태\n"
-        "- plan: 해결책이나 다음 행동을 원하는 상태"
-    )
-    context = '\n'.join(
-        f"{'사용자' if m['role'] == 'user' else '캐릭터'}: {m['content']}"
-        for m in history
-    )
-    context += f'\n사용자: {user_content}'
-
-    resp = _client().chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[
-            {'role': 'system', 'content': system},
-            {'role': 'user', 'content': f'대화:\n{context}'},
-        ],
-        max_tokens=10,
-        temperature=0,
-    )
-    label = resp.choices[0].message.content.strip().lower()
-    return label if label in ('encourage', 'sad', 'angry', 'plan') else None
-
-
-# ── 세션 목록 ───────────────────────────────────────────────
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def session_list(request):
-    user = request.user if request.user.is_authenticated else None
-    sessions = ChatSession.objects.filter(user=user, is_secret=False)
-    return Response(ChatSessionSerializer(sessions, many=True).data)
-
-
-# ── 세션 생성 ───────────────────────────────────────────────
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def create_session(request):
-    character = request.data.get('character', 'haeon')
-    is_secret = bool(request.data.get('is_secret', False))
-
-    if character not in VALID_CHARACTERS:
-        return Response({'error': '유효하지 않은 캐릭터입니다.'}, status=status.HTTP_400_BAD_REQUEST)
-
-    user = request.user if request.user.is_authenticated else None
-    session = ChatSession.objects.create(user=user, character=character, is_secret=is_secret)
-    return Response(ChatSessionSerializer(session).data, status=status.HTTP_201_CREATED)
-
-
-# ── 메시지 전송 ─────────────────────────────────────────────
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def send_message(request, session_id):
+def _get_session(session_id, request=None):
+    """세션 조회 + 소유 검증 (2026-07-12 보안 보강).
+    주인 있는 세션은 그 주인만 접근 가능 — 세션 ID 추측으로 남의 대화·기억에
+    접근하는 IDOR 차단. request를 주면 검증까지, 안 주면 조회만(내부용)."""
     try:
         session = ChatSession.objects.get(id=session_id)
-    except ChatSession.DoesNotExist:
-        return Response({'error': '세션을 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+    except (ChatSession.DoesNotExist, ValueError, TypeError):
+        return None
+    if request is not None and session.user_id:
+        requester = request.user if request.user.is_authenticated else None
+        if requester is None or requester.id != session.user_id:
+            return None   # 소유 불일치 — 존재 여부도 숨김 (404와 동일 응답)
+    return session
 
-    user_content = request.data.get('content', '').strip()
-    if not user_content:
-        return Response({'error': '메시지 내용을 입력해주세요.'}, status=status.HTTP_400_BAD_REQUEST)
-    if len(user_content) > 300:
-        return Response({'error': '메시지는 300자 이내여야 합니다.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    prompt_data = _load_prompt(session.character)
-    system_msg = _build_system_message(prompt_data)
-    model_cfg = prompt_data.get('model_settings', {})
+def _session_user(request, session):
+    if request.user.is_authenticated:
+        return request.user
+    return session.user if session else None
 
-    recent = list(session.messages.order_by('-created_at')[:20])
-    recent.reverse()
-    history = [{'role': m.role, 'content': m.content} for m in recent]
 
-    messages = [{'role': 'system', 'content': system_msg}] + history
-    messages.append({'role': 'user', 'content': user_content})
+_TAG_RE = re.compile(r'\[[^\[\]]{1,30}\]')
 
-    chat_resp = _client().chat.completions.create(
-        model=GROQ_MODEL,
-        messages=messages,
-        max_tokens=model_cfg.get('max_tokens', 250),
-        temperature=model_cfg.get('temperature', 0.7),
-    )
-    assistant_content = chat_resp.choices[0].message.content
 
-    user_turn_count = sum(1 for m in recent if m.role == 'user') + 1
-    emotion_label = None
-    if user_turn_count >= 4:
-        emotion_label = _classify_emotion(history, user_content)
+def _strip_tags(text: str) -> str:
+    """[sighs] 같은 오디오 태그 제거 — 화면/DB용 깨끗한 텍스트."""
+    return re.sub(r'\s{2,}', ' ', _TAG_RE.sub('', text)).strip()
 
+
+# 페이지 안내 룰 (2026-07-12) — 사용자가 관련 얘기를 꺼냈을 때만 바로가기 칩 제안 (잔소리 방지)
+_SUGGEST_REPORT = re.compile(r'리포트|내\s*감정\s*(기록|통계|어땠|흐름)|감정\s*캘린더|이번\s*주\s*나\s*어땠|기록\s*보고')
+_SUGGEST_MYPAGE = re.compile(r'마이\s*페이지|프로필|닉네임|MBTI|엠비티아이|내\s*성향|설정\s*바꾸')
+
+
+def _page_suggestion(message: str):
+    """(page, label) 또는 (None, None) — 명시적 언급에만 반응."""
+    m = message or ''
+    if _SUGGEST_REPORT.search(m):
+        return 'report', '📊 마음 리포트 보러 가기'
+    if _SUGGEST_MYPAGE.search(m):
+        return 'mypage', '👤 마이페이지로 가기'
+    return None, None
+
+
+# ═════════════════════════════════════════════════════════════
+# 1. 세션 시작 (친구 첫인사)
+# ═════════════════════════════════════════════════════════════
+
+@api_view(['POST'])
+@authentication_classes([CsrfExemptSessionAuthentication])
+@permission_classes([AllowAny])
+def session_start(request):
+    """세션 시작 — 친구 컨셉: 감정 안 묻고 날씨·시간·닉네임으로 먼저 말 건다.
+
+    (구 콜드스타트 감정 선택지는 폐지. cold_start_done은 항상 True로 시작.)"""
+    character = request.data.get('character_id', 'pori')
+    is_secret = bool(request.data.get('is_secret', False))
+    if character not in VALID_CHARACTERS:
+        return _err('INVALID_CHARACTER', '유효하지 않은 캐릭터입니다.')
+
+    user = request.user if request.user.is_authenticated else None
+    # 감정 선택 단계가 없어졌으므로 콜드스타트는 바로 완료 상태로 시작
+    session = ChatSession.objects.create(
+        user=user, character=character, is_secret=is_secret, cold_start_done=True)
+
+    # 친구 첫인사 생성 (날씨 좌표는 프론트가 선택적으로 전달)
+    nickname = getattr(user, 'nickname', None) if user else None
+    lat = request.data.get('lat')
+    lon = request.data.get('lon')
+    from .opener_service import generate_opener
+    # 기억 기반 첫인사는 일반 모드 전용 (시크릿에서 지난 대화 언급 금지)
+    memory_uid = user.id if (user and not is_secret) else None
+    opener = generate_opener(nickname, lat, lon, user_id=memory_uid)
+
+    # 첫인사도 대화 이력에 남긴다 (다음 턴 컨텍스트 연결)
+    if is_secret:
+        secret_cache.append(session.id, 'assistant', opener)
+    else:
+        ChatMessage.objects.create(session=session, role='assistant', content=opener)
+
+    use_tts = request.data.get('tts', True)
+    use_tts = use_tts not in (False, 'false', '0', 0)
+    tts_task_id = tts_service.create_task(opener, character, 'normal') if use_tts else None
+
+    return _ok({
+        'session_id': session.id,
+        'cold_start_done': True,
+        'opener': opener,
+        'tts_task_id': tts_task_id,
+    }, status.HTTP_201_CREATED)
+
+
+# ═════════════════════════════════════════════════════════════
+# 2. 대화 턴 (LangGraph) + TTS 폴링
+# ═════════════════════════════════════════════════════════════
+
+@api_view(['POST'])
+@authentication_classes([CsrfExemptSessionAuthentication])
+@permission_classes([AllowAny])
+def chat_turn(request):
+    """대화 턴 — 텍스트 즉시 반환 + TTS는 tts_task_id로 폴링."""
+    session = _get_session(request.data.get('session_id'), request)
+    if session is None:
+        return _err('SESSION_NOT_FOUND', '세션을 찾을 수 없습니다.', status.HTTP_404_NOT_FOUND)
+    if not session.cold_start_done:
+        return _err('COLD_START_REQUIRED', '먼저 감정 선택(콜드스타트)을 완료해주세요.')
+
+    message = (request.data.get('message') or '').strip()
+    image_data_url = (request.data.get('image') or '').strip()   # 사진 첨부(data URL) · 저장 안 함
+    if not message and not image_data_url:
+        return _err('EMPTY_MESSAGE', '메시지 내용을 입력해주세요.')
+    if len(message) > 300:
+        return _err('MESSAGE_TOO_LONG', '메시지는 300자 이내여야 합니다.')
+    if image_data_url:
+        if not image_data_url.startswith('data:image/'):
+            return _err('INVALID_IMAGE', '이미지 형식이 올바르지 않습니다.')
+        if len(image_data_url) > 5_000_000:   # base64 ~3.7MB 초과 차단
+            return _err('IMAGE_TOO_LARGE', '이미지가 너무 큽니다. 더 작게 보내주세요.')
+
+    # PII 마스킹 (2026-07-15 팀 안건): 입구에서 완전 제거 — 이후의 LLM 전송·원본 저장·
+    # 요약·그래프가 전부 자동으로 안전. 값은 [종류] 태그로 치환 (0비트 보존, pii_mask.py).
+    from . import pii_mask
+    message, pii_found = pii_mask.mask(message)
+
+    user = _session_user(request, session)
+    session_mode = 'secret' if session.is_secret else 'normal'
+
+    # 직전 턴 감정 — 초단문 바이패스·저확신 폴백용 (일반 모드만, 시크릿은 감정 미저장)
+    prev_emotion = None
     if not session.is_secret:
-        ChatMessage.objects.create(session=session, role='user', content=user_content)
+        prev_emotion = (
+            ChatMessage.objects
+            .filter(session=session, role='assistant', emotion_label__isnull=False)
+            .order_by('-created_at')
+            .values_list('emotion_label', flat=True)
+            .first()
+        )
+
+    # MBTI 질문은 대화 맥락으로 즉석 생성되므로, 판별엔 '실제로 물어본 문장'
+    # (직전 assistant 메시지)을 쓴다. 없으면 고정 template로 폴백.
+    mbti_q_text = ''
+    if session.mbti_pending and not session.is_secret:
+        mbti_q_text = (
+            ChatMessage.objects
+            .filter(session=session, role='assistant')
+            .order_by('-created_at')
+            .values_list('content', flat=True)
+            .first()
+        ) or ''
+    if not mbti_q_text:
+        mbti_q_text = mbti_svc.question_text(session.mbti_last_question_code or '')
+
+    # LangGraph 실행: MBTI pending 체크 → 컨텍스트 → 감성분석(확신도 게이트) → 에이전트 → 응답
+    from .graph.graph import get_graph
+    state = {
+        'user_id': user.id if user else None,
+        'session_id': session.id,
+        'session_mode': session_mode,
+        'character_id': session.character,
+        'user_message': message,
+        'image_data_url': image_data_url or None,   # 멀티모달(사진) · 저장은 안 함
+        'selected_emotion': session.selected_emotion,
+        'prev_emotion': prev_emotion,
+        'mbti_pending': session.mbti_pending,
+        'mbti_question_text': mbti_q_text,
+        'mbti_question_code': session.mbti_last_question_code or '',
+    }
+    result = get_graph().invoke(state)
+
+    tagged_response = result.get('final_response', '')   # [sighs] 등 연기 태그 포함 (TTS용)
+    final_response = _strip_tags(tagged_response)        # 화면/DB용
+    emotion_label = result.get('emotion_label')          # MBTI 답변 턴이면 None
+    is_mbti_answer = bool(result.get('is_mbti_answer'))
+    image_caption = (result.get('image_caption') or '').strip()   # 사진 캡션 (저장·리포트·기억용)
+
+    # PII 감지 턴엔 투명성 안내 한 줄 — 조용히 가리면 "봇이 기억 못 함"이 고장처럼 보임.
+    # 결정적 문자열(LLM에 안 맡김) — 안내 자체도 환각 0.
+    if pii_found:
+        _pii_note = pii_mask.notice(pii_found)
+        final_response += _pii_note
+        tagged_response += _pii_note
+
+    # ── MBTI 질문을 대화 흐름에 자연스럽게 엮기 (유휴 타이머 대신) ──
+    #  트리거가 '침묵(초)'이 아니라 '방금 사용자가 한 말'이 되도록 이 턴 안에서 판단.
+    #  조건: 로그인 · 일반모드 · 이번 턴이 MBTI 답변 턴이 아님 · 감정이 안 무거움(joy/normal)
+    #       · 워밍업(사용자 3턴↑) · MBTI_MIN_GAP턴마다 1번 · 수집 미완료.
+    #  통과하면 봇 응답 뒤에 질문 한 문장을 '두 번째 말풍선'으로 얹는다.
+    #
+    #  2026-07-22: MBTI의 본진은 마이페이지(온보딩 입력·mock-qna·월간 리포트)다.
+    #    챗봇 수집은 '보조 채널' — 대화하다 어쩌다 몇 개 더 주워담는 정도라 완성 책임이 없다.
+    #    그래서 물어보는 빈도를 낮춘다: 기존 '% 4'(4턴마다) → env MBTI_MIN_GAP(기본 8).
+    #    '지금 물어봐도 자연스러운 문장인가'의 판단은 generate_question이 최근 6턴을 보고
+    #    이미 하고 있으므로(추가 LLM 콜 없음), 여기선 '너무 자주 묻지 않기'만 담당한다.
+    probe_code = None
+    probe_text = None      # 별도 말풍선으로 내려줄 MBTI 질문 (2026-07-21)
+    if (user and not session.is_secret and not session.mbti_pending
+            and emotion_label in ('joy', 'normal')):
+        user_turn_no = ChatMessage.objects.filter(session=session, role='user').count() + 1
+        _mbti_gap = int(os.environ.get('MBTI_MIN_GAP', '8'))
+        if user_turn_no >= 3 and user_turn_no % _mbti_gap == 0 and not mbti_svc.is_complete(user):
+            _recent = list(ChatMessage.objects.filter(session=session).order_by('-created_at')[:6])
+            _recent.reverse()
+            _history = [{'role': m.role, 'content': m.content} for m in _recent]
+            _probe = mbti_svc.generate_question(user, _history)
+            if _probe:
+                probe_code, probe_text = _probe
+                #  2026-07-21: 본문에 이어붙이지 않는다.
+                #  전엔 f'{final_response}\n\n{probe_text}'로 합쳐 한 말풍선에 넣었더니
+                #  말풍선이 길어져 대화 흐름이 끊겼다. 이제 응답에 mbti_probe로 따로 실어
+                #  프론트가 '두 번째 말풍선'으로 렌더한다 (한 번 더 물어보는 모양).
+                #  TTS는 본문만 읽는다 — 질문까지 읽으면 음성이 길어지고,
+                #  화면상 별개 버블인데 음성이 하나로 이어지면 어색하다.
+
+    # MBTI pending 정리 (답변이든 다른 얘기든 해제)
+    if session.mbti_pending:
+        session.mbti_pending = False
+        session.save(update_fields=['mbti_pending'])
+
+    # 저장 — 출력을 막지 않음 (일반: DB+비동기 요약 / 시크릿: RAM 캐시)
+    message_id = None
+    # 저장 텍스트: 사진은 원본 대신 캡션(설명)으로 남긴다 → 마음리포트·기억이 사진 맥락을 반영
+    if image_caption:
+        stored_user_msg = f'{message} (사진: {image_caption})'.strip()
+    elif image_data_url:
+        stored_user_msg = message or '[사진]'
+    else:
+        stored_user_msg = message
+    if session.is_secret:
+        secret_cache.append(session.id, 'user', stored_user_msg)
+        secret_cache.append(session.id, 'assistant', final_response)
+    else:
+        ChatMessage.objects.create(session=session, role='user', content=stored_user_msg)
         assistant_msg = ChatMessage.objects.create(
             session=session, role='assistant',
-            content=assistant_content, emotion_label=emotion_label,
+            content=final_response, emotion_label=emotion_label,
         )
-        return Response(ChatMessageSerializer(assistant_msg).data)
+        message_id = assistant_msg.id
+        #  MBTI 질문은 별도 말풍선이므로 assistant 메시지로도 따로 남긴다 —
+        #  화면(2개 버블)과 DB(2행)를 일치시켜야 다음 턴 컨텍스트(최근 N턴)도 어긋나지 않는다.
+        if probe_text:
+            ChatMessage.objects.create(
+                session=session, role='assistant', content=probe_text,
+                emotion_label=emotion_label,
+            )
+        uid = user.id if user else None
+        # 요약 계층 완전 은퇴 (2026-07-19) — 소비자 0 확인(마음리포트는 ChatMessage만 읽음).
+        # 위기 발화의 위로 연속성은 최근 N턴 원문이 담당 (요약 재인용 사고 F2의 원천도 함께 소멸).
+        # 위기 턴은 구조화 기억(그래프)에서 제외 — 민감 발화 영구 박제·오회상 방지 (2026-07-12)
+        if not result.get('crisis'):
+            from chat import memory_backend
+            memory_backend.capture_async(uid, stored_user_msg, emotion=emotion_label)  # v1/v2 스위치 경유 (Neo4j 미설정 시 no-op)
 
-    return Response({
-        'id': None, 'role': 'assistant',
-        'content': assistant_content,
+        # 응답에 MBTI 질문을 얹었으면, 다음 사용자 메시지를 그 답변으로 받도록 pending 설정
+        if probe_code:
+            session.mbti_pending = True
+            session.mbti_last_question_code = probe_code
+            session.save(update_fields=['mbti_pending', 'mbti_last_question_code'])
+
+    # 페이지 안내 칩 — 사용자가 리포트·마이페이지 관련 얘기를 꺼냈을 때만 (2026-07-12)
+    suggest_page, suggest_label = _page_suggestion(message)
+
+    # TTS 병렬 생성 (OpenAI gpt-audio, 2026-07-19 확정) — 연기 태그 포함 원문으로 생성, 1회 재생 후 파기
+    # 음소거 사용자(tts=false)는 생성 자체를 스킵 — 듣지 않을 음성에 크레딧을 쓰지 않는다 (2026-07-12)
+    use_tts = request.data.get('tts', True)
+    use_tts = use_tts not in (False, 'false', '0', 0)
+    tts_task_id = tts_service.create_task(
+        tagged_response, session.character, emotion_label or 'normal') if use_tts else None
+
+    return _ok({
+        'session_id': session.id,
+        'message_id': message_id,
+        'message': {'text': final_response},
+        #  MBTI 질문 — 있으면 프론트가 본문 다음에 '두 번째 말풍선'으로 그린다 (2026-07-21)
+        'mbti_probe': ({'text': probe_text} if probe_text else None),
         'emotion_label': emotion_label,
-        'created_at': None,
+        'tts_task_id': tts_task_id,
+        'ui': {
+            'mbti_pending': is_mbti_answer,
+            'suggest_page': suggest_page,       # 'report' | 'mypage' | None — 대화 맥락 바로가기 칩
+            'suggest_label': suggest_label,
+        },
     })
 
 
-# ── 힐링 차 추천 ────────────────────────────────────────────
-@api_view(['POST'])
+@api_view(['GET'])
+@authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([AllowAny])
-def recommend_tea(request, session_id):
-    try:
-        session = ChatSession.objects.get(id=session_id)
-    except ChatSession.DoesNotExist:
-        return Response({'error': '세션을 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
-
-    recent = list(session.messages.order_by('-created_at')[:10])
-    recent.reverse()
-    context = '\n'.join(f"{'사용자' if m.role == 'user' else '캐릭터'}: {m.content}" for m in recent)
-
-    system = (
-        "당신은 힐링 차 전문가입니다. 대화 내용을 읽고 사용자의 감정 상태에 맞는 차를 추천해주세요.\n"
-        "반드시 아래 JSON 형식으로만 응답하세요:\n"
-        '{"name": "차 이름", "reason": "추천 이유 (1문장)", "effect": "효능", "emoji": "☕"}'
-    )
-
-    resp = _client().chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[
-            {'role': 'system', 'content': system},
-            {'role': 'user', 'content': f'대화:\n{context}\n\n위 대화에 맞는 힐링 차를 추천해주세요.'},
-        ],
-        max_tokens=150,
-        temperature=0.7,
-    )
-
-    try:
-        raw = resp.choices[0].message.content.strip()
-        start, end = raw.find('{'), raw.rfind('}') + 1
-        tea = json.loads(raw[start:end])
-    except Exception:
-        tea = {'name': '캐모마일', 'reason': '마음을 편안하게 해줘요.', 'effect': '진정 효과', 'emoji': '🌼'}
-
-    return Response(tea)
+def memory_panel(request):
+    """기억 패널 (UI #3, 2026-07-20) — 좌측 패널 '기억하는 것' 카드 데이터.
+    비로그인·시크릿·Neo4j 미설정이면 빈 패널 (프론트는 섹션 숨김)."""
+    user = request.user if request.user.is_authenticated else None
+    if user is None:
+        return _ok({'upcoming': [], 'prefs': [], 'people': [], 'recent': []})
+    from chat import memory_backend   # 지연 임포트 (chat_turn과 동일 스타일 — Neo4j 미설정 시 기동 무영향)
+    return _ok(memory_backend.panel_summary(user.id))
 
 
-# ── BGM 추천 ────────────────────────────────────────────────
-@api_view(['POST'])
+@api_view(['GET'])
+@authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([AllowAny])
-def recommend_bgm(request, session_id):
-    try:
-        session = ChatSession.objects.get(id=session_id)
-    except ChatSession.DoesNotExist:
-        return Response({'error': '세션을 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
-
-    recent = list(session.messages.order_by('-created_at')[:10])
-    recent.reverse()
-    context = '\n'.join(f"{'사용자' if m.role == 'user' else '캐릭터'}: {m.content}" for m in recent)
-
-    system = (
-        "당신은 음악 큐레이터입니다. 대화 내용을 읽고 사용자의 감정에 맞는 BGM을 추천해주세요.\n"
-        "반드시 아래 JSON 형식으로만 응답하세요:\n"
-        '{"title": "곡 제목", "artist": "아티스트", "mood": "분위기 설명 (1문장)", "youtube_query": "유튜브 검색어"}'
-    )
-
-    resp = _client().chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[
-            {'role': 'system', 'content': system},
-            {'role': 'user', 'content': f'대화:\n{context}\n\n위 대화에 맞는 BGM을 추천해주세요.'},
-        ],
-        max_tokens=150,
-        temperature=0.8,
-    )
-
-    try:
-        raw = resp.choices[0].message.content.strip()
-        start, end = raw.find('{'), raw.rfind('}') + 1
-        bgm = json.loads(raw[start:end])
-    except Exception:
-        bgm = {'title': 'Rainy Day', 'artist': 'Unknown', 'mood': '차분하고 따뜻한 분위기', 'youtube_query': 'relaxing piano music'}
-
-    return Response(bgm)
+def tts_status(request, task_id):
+    """TTS 폴링 — pending/done/failed. done이면 audio_url에서 1회 다운로드."""
+    task = tts_service.get_status(task_id)
+    if task is None:
+        return _err('TASK_NOT_FOUND', 'TTS 태스크를 찾을 수 없습니다.', status.HTTP_404_NOT_FOUND)
+    data = {'status': task['status'], 'audio_url': task.get('audio_url')}
+    if task['status'] == 'done':
+        data['voice_id'] = task.get('voice_id')
+        data['alignment'] = task.get('alignment')   # 글자별 타임스탬프 (자막 동기용, 없으면 null)
+    return _ok(data)
 
 
-# ── 추천 질문 생성 ──────────────────────────────────────────
-@api_view(['POST'])
+@api_view(['GET'])
+@authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([AllowAny])
-def suggest_questions(request, session_id):
-    try:
-        session = ChatSession.objects.get(id=session_id)
-    except ChatSession.DoesNotExist:
-        return Response({'error': '세션을 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
-
-    recent = list(session.messages.order_by('-created_at')[:6])
-    recent.reverse()
-    context = '\n'.join(f"{'사용자' if m.role == 'user' else '캐릭터'}: {m.content}" for m in recent)
-
-    system = (
-        "당신은 공감 대화 전문가입니다. 대화 흐름을 읽고 사용자가 다음에 할 수 있는 말 3가지를 추천해주세요.\n"
-        "짧고 자연스러운 구어체로, 반드시 아래 JSON 형식으로만 응답하세요:\n"
-        '{"questions": ["질문1", "질문2", "질문3"]}'
-    )
-
-    resp = _client().chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[
-            {'role': 'system', 'content': system},
-            {'role': 'user', 'content': f'대화:\n{context}'},
-        ],
-        max_tokens=150,
-        temperature=0.9,
-    )
-
-    try:
-        raw = resp.choices[0].message.content.strip()
-        start, end = raw.find('{'), raw.rfind('}') + 1
-        result = json.loads(raw[start:end])
-    except Exception:
-        result = {'questions': ['오늘 하루 어땠어?', '요즘 제일 힘든 게 뭐야?', '그냥 수다 떨까?']}
-
-    return Response(result)
+def tts_audio(request, task_id):
+    """오디오 1회 반환 후 서버에서 즉시 파기 (다시 듣기 없음 — 저장 안 함 원칙)."""
+    from django.http import HttpResponse
+    audio = tts_service.consume_audio(task_id)
+    if audio is None:
+        return _err('AUDIO_GONE', '이미 재생되었거나 존재하지 않는 음성입니다.', status.HTTP_404_NOT_FOUND)
+    # 포맷 자동 감지: gpt-audio=mp3 (RIFF/wav 분기는 과거 provider 호환용 잔존)
+    ctype = 'audio/wav' if audio[:4] == b'RIFF' else 'audio/mpeg'
+    return HttpResponse(audio, content_type=ctype)
 
 
-# ── 이너 카운슬 ─────────────────────────────────────────────
-COUNCIL_PERSONAS = {
-    'haeon':   ('해온', '위로형 상담사. 공감과 감정 수용 중심. 따뜻하고 포근하게 이야기한다.'),
-    'greung':  ('그릉', '직면형 상담사. 현실적이고 날카로운 피드백. CBT 기반으로 이야기한다.'),
-    'dalkong': ('달콩', '코칭형 상담사. 긍정적이고 행동 지향적. ACT 기반으로 이야기한다.'),
-}
+# ═════════════════════════════════════════════════════════════
+# 3. 세션 종료
+# ═════════════════════════════════════════════════════════════
 
 @api_view(['POST'])
+@authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([AllowAny])
-def inner_council(request, session_id):
-    try:
-        session = ChatSession.objects.get(id=session_id)
-    except ChatSession.DoesNotExist:
-        return Response({'error': '세션을 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+def session_end(request):
+    """세션 종료 — 시크릿: RAM 캐시 파기. (요약 반영은 요약 계층 은퇴로 제거 2026-07-19)"""
+    session = _get_session(request.data.get('session_id'), request)
+    if session is None:
+        return _err('SESSION_NOT_FOUND', '세션을 찾을 수 없습니다.', status.HTTP_404_NOT_FOUND)
+    secret_cache.purge(session.id)
+    return _ok({'ended': True})   # 음성은 애초에 저장 안 함 (1회 재생 후 파기)
 
-    user_input = request.data.get('user_input')
-    turn = int(request.data.get('turn', 0))
 
-    if turn >= 3:
-        return Response({'error': '최대 3턴을 초과했습니다.'}, status=status.HTTP_400_BAD_REQUEST)
+# (👍👎 피드백/MLOps 재학습 큐는 2차 확장으로 제거 — 2026-07-02)
+# (구 콜드스타트 감정 선택 · 날씨 배너 API는 친구 컨셉 개편으로 제거 — 2026-07-03)
+# (추천 질문 '이런 말 어때요' API는 기능 폐기로 제거 — 2026-07-03)
+# (계획도움 /api/plan-support/ · WalkCuration은 장소 추천 기능 폐기로 제거 — 2026-07-05)
 
-    recent = list(session.messages.order_by('-created_at')[:10])
-    recent.reverse()
-    context = '\n'.join(f"{'사용자' if m.role == 'user' else '캐릭터'}: {m.content}" for m in recent)
-    if user_input:
-        context += f'\n[사용자 개입]: {user_input}'
 
-    agent_messages = {}
-    client = _client()
-
-    for key, (name, persona) in COUNCIL_PERSONAS.items():
-        system = (
-            f"당신은 '{name}'입니다. {persona}\n"
-            "사용자의 대화 내용을 읽고 당신의 관점에서 2-3문장으로 이야기해주세요.\n"
-            "다른 캐릭터의 말을 듣고 있다는 전제로, 자연스럽게 회의에 참여하듯 말하세요."
-        )
-        resp = client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[
-                {'role': 'system', 'content': system},
-                {'role': 'user', 'content': f'대화 맥락:\n{context}'},
-            ],
-            max_tokens=200,
-            temperature=0.8,
-        )
-        agent_messages[key] = resp.choices[0].message.content.strip()
-
-    summary_resp = client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[
-            {'role': 'system', 'content': '세 상담사의 의견을 한 문장으로 요약해주세요.'},
-            {'role': 'user', 'content': '\n'.join(f'{k}: {v}' for k, v in agent_messages.items())},
-        ],
-        max_tokens=100,
-        temperature=0.5,
-    )
-    summary = summary_resp.choices[0].message.content.strip()
-
-    return Response({
-        'agent_messages': agent_messages,
-        'summary': summary,
-        'turn': turn + 1,
-    })
+# (복합 감정 임계값 보정용 임시 /api/emotion/probe/ 는 실측 완료 후 제거 — 2026-07-10.
+#  재보정 필요 시 predict_emotion_full을 임시 뷰로 노출해 절 분할 실측 재현 가능)

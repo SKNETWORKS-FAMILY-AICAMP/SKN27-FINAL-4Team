@@ -1,0 +1,19 @@
+﻿priority_rank,rule_group,source,score,resolution
+1,SAFETY_HARD,safety rule,hard_forbidden,blocks every lower-priority rule
+2,EXPLICIT_NEGATION,user negation,hard_forbidden,negated elements cannot be generated
+3,EXPLICIT_CAUSE,user fact,+1000,preserve visible emotional cause
+4,EXPLICIT_WEATHER,user fact,+1000,explicit weather overrides emotion weather
+5,EXPLICIT_TIME,user fact,+1000,explicit time overrides style defaults
+6,EXPLICIT_PLACE,user fact,+1000,preserve generalized place
+7,EXPLICIT_ACTION,user fact,+1000,preserve safe action
+8,EXPLICIT_OBJECT,user fact,+1000,preserve safe object
+9,PRIVACY,privacy rule,hard_forbidden,remove identifiers and readable documents
+10,EVENT_REQUIRED_CUE,event rule,+200,keep event cause recognizable
+11,SOCIAL_CONTEXT,explicit/high-confidence social fact,+60,respect alone/companion limits
+12,EMOTION_VISUAL,emotion rule,+50,provide compatible candidates only
+13,EXPLICIT_ENERGY,user selection,+40,soft preference only
+14,EXPLICIT_NEED,user selection,+40,soft preference only
+15,INFERRED_ENERGY_NEED,confidence>=0.75,+15,low-weight soft preference
+16,INTEREST,profile preference,+5,optional decoration
+17,DIVERSITY,history,+1..10,avoid repetitive scenes
+18,STYLE,style preset,0,rendering only; cannot change scene IDs

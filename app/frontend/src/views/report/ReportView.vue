@@ -1,592 +1,1439 @@
 <template>
-  <main class="archive-page">
-    <section class="archive-shell" aria-label="마음 리포트 보관함">
-      <aside class="archive-sidebar">
-        <section class="panel">
-          <div class="panel-head">
-            <p>마음 리포트 보관함</p>
-            <button
-              type="button"
-              class="filter-toggle"
-              :class="{ active: isMonthFilterOpen }"
-              :aria-expanded="isMonthFilterOpen"
-              @click="isMonthFilterOpen = !isMonthFilterOpen"
-            >
-              기간 선택
-            </button>
-          </div>
+  <main class="diary-page" :style="{ '--report-bg': `url(${reportBg})` }">
+    <div class="diary-toolbar">
+      <button
+        type="button"
+        class="refresh-button"
+        :disabled="isLoading || isRefreshing"
+        title="최신 대화로 마음 리포트 새로고침"
+        @click="refreshReports"
+      >
+        <span class="refresh-icon" :class="{ spinning: isRefreshing }" aria-hidden="true">↻</span>
+        {{ isRefreshing ? '확인 중' : '새로고침' }}
+      </button>
+    </div>
 
-          <div v-if="isMonthFilterOpen" class="month-filter" aria-label="월별 리포트 필터">
+    <section class="diary-shell" aria-label="마음 리포트 보관함">
+      <!-- ────── 사이드바 ────── -->
+      <aside class="side">
+        <div class="side-head">
+          <img class="side-quill" :src="feather" alt="" aria-hidden="true" />
+          <span class="side-brand">마음 리포트</span>
+          <button
+            type="button"
+            class="filter-toggle"
+            :class="{ active: isMonthFilterOpen }"
+            :aria-expanded="isMonthFilterOpen"
+            @click="isMonthFilterOpen = !isMonthFilterOpen"
+          >기록</button>
+        </div>
+
+        <div class="side-body">
+          <div v-if="isMonthFilterOpen" class="month-filter">
             <button
               v-for="month in monthOptions"
               :key="month.value"
               type="button"
               class="month-chip"
               :class="{ active: selectedMonth === month.value }"
-              :aria-pressed="selectedMonth === month.value"
               @click="selectedMonth = month.value"
-            >
-              <span class="month-check" aria-hidden="true"></span>
-              {{ month.label }}
-            </button>
+            >{{ month.label }}</button>
           </div>
-
-          <button
-            v-for="period in filteredReports"
-            :key="period.id"
-            type="button"
-            class="period-card"
-            :class="{ active: selectedReportId === period.id }"
-            @click="selectedReportId = period.id"
-          >
-            <strong>{{ period.range }}</strong>
-            <span>{{ period.type }}</span>
-          </button>
-        </section>
-
-        <section class="panel emotion-panel">
-          <div class="panel-head">
-            <p>감정 일기</p>
-            <span>시계열 감정 흐름</span>
-          </div>
-          <div class="emotion-strip" :class="{ 'emotion-strip--monthly': currentReport.emotions.length > 7 }">
-            <article
-              v-for="day in currentReport.emotions"
-              :key="day.day"
-              class="emotion-day"
-              :class="emotionToneClass(day)"
-            >
-              <div class="mood">{{ day.icon }}</div>
-              <span>{{ day.day }}</span>
-            </article>
-          </div>
-        </section>
+          <p v-if="!isLoading && !hasReports" class="side-empty">아직 생성된 마음 리포트가 없어요.</p>
+          <ul class="report-list">
+            <li v-for="period in filteredReports" :key="period.id">
+              <button
+                type="button"
+                class="report-item"
+                :class="{ active: selectedReportId === period.id }"
+                @click="selectedReportId = period.id"
+              >
+                <span class="ri-date">{{ periodDateLabel(period) }}</span>
+                <strong class="ri-title">{{ period.title }}</strong>
+                <img v-if="selectedReportId === period.id" class="ri-heart" :src="heartIcon" alt="" aria-hidden="true" />
+                <span v-else class="ri-lock" aria-hidden="true">🔒</span>
+              </button>
+            </li>
+          </ul>
+        </div>
       </aside>
 
-      <section class="report-card">
-        <header class="report-header">
-          <div>
-            <span class="eyebrow">{{ currentReport.range }} · {{ currentReport.type }}</span>
-            <h1>{{ currentReport.title }}</h1>
-            <div class="report-meta">
-              <span>{{ currentReport.summary }}</span>
-              <span>{{ currentReport.emotions.length }}일 감정 기록</span>
+      <!-- ────── 보드 ────── -->
+      <section class="board report-card" :class="{ 'is-loading': isLoading }" :aria-busy="isLoading">
+        <!-- 상태 -->
+        <div v-if="!isLoading && (fetchError || !currentReport)" class="board-state">
+          <img :src="bubbleHeart" class="state-icon" alt="" aria-hidden="true" />
+          <template v-if="fetchError"><h1>마음 리포트를 불러오지 못했어요.</h1><p>{{ fetchError }}</p></template>
+          <template v-else><h1>아직 기록이 조금 부족해요</h1><p>대화를 나눈 뒤 새로고침하면 최신 주간·월간 마음 리포트를 확인할 수 있어요.</p></template>
+        </div>
+
+        <!-- 안전 -->
+        <div v-else-if="!isLoading && currentReport?.is_safety_response" class="board-state">
+          <img :src="bubbleHeart" class="state-icon" alt="" aria-hidden="true" />
+          <h1>{{ currentReport.title }}</h1>
+          <p class="safety-line">지금은 안전을 먼저 확인할 시간이에요. 도움을 받을 수 있는 방법을 안내합니다.</p>
+          <div class="safety-body"><p v-for="line in currentReport.analysis" :key="line">{{ line }}</p></div>
+        </div>
+
+        <!-- 본문 -->
+        <template v-else-if="!isLoading && currentReport">
+          <header class="board-header">
+            <img class="bh-icon" :src="bubbleHeart" alt="" aria-hidden="true" />
+            <div class="bh-text">
+              <h1>{{ currentReport.title }}<img class="title-spark" :src="sparkle" alt="" aria-hidden="true" /></h1>
+              <p class="bh-sub">잘 해냈어요, 오늘도. 당신의 하루를 반짝이는 선물로 기록해요.</p>
             </div>
+            <span class="bh-date">{{ headerDate }}</span>
+          </header>
+
+
+          <div class="board-grid">
+            <!-- 한 줄 기록 -->
+            <section class="card card-oneline">
+              <h2 class="card-title"><img :src="feather" alt="" aria-hidden="true" />한 줄 기록</h2>
+              <p class="oneline">
+                {{ currentReport.summary || '기록이 모이면 이번 마음의 한 줄이 여기에 담겨요.' }}
+                <img class="oneline-heart" :src="heartIcon" alt="" aria-hidden="true" />
+              </p>
+            </section>
+
+            <!-- 태그 -->
+            <section class="card card-tags">
+              <h2 class="card-title"><img :src="heartIcon" alt="" aria-hidden="true" />태그 속 마음 조각</h2>
+              <div class="tag-cloud">
+                <span
+                  v-for="tag in mindTags"
+                  :key="tag.type + tag.text"
+                  class="mind-tag"
+                  :class="[`is-${tag.type}`, `is-${tag.emphasis}`]"
+                >#{{ tag.text }}</span>
+                <span v-if="mindTags.length === 0" class="mind-tag is-muted">아직 모이는 중</span>
+              </div>
+            </section>
+
+            <!-- 감정 흐름 -->
+            <section class="card card-flow">
+              <h2 class="card-title"><img :src="noteIcon" alt="" aria-hidden="true" />감정 흐름 (멜로디)</h2>
+              <p class="flow-sub">감정 기록이 더 섬세할수록 내 멜로디가 그려져요.</p>
+              <div class="flow-legend">
+                <span class="lg tone-neg"><i></i>많이 힘들었어요</span>
+                <span class="lg tone-neu"><i></i>조금 나아졌어요</span>
+                <span class="lg tone-pos"><i></i>따뜻했어요</span>
+              </div>
+              <div v-if="emotionPoints.length" class="flow-stage">
+                <svg class="flow-svg" :viewBox="`0 0 ${FLOW_W} ${FLOW_H}`" preserveAspectRatio="none" aria-hidden="true">
+                  <defs>
+                    <linearGradient id="flowStroke" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stop-color="#8f7bd6" />
+                      <stop offset="50%" stop-color="#e59ec3" />
+                      <stop offset="100%" stop-color="#f4a35f" />
+                    </linearGradient>
+                  </defs>
+                  <path :d="emotionPath" class="flow-line" />
+                </svg>
+                <div class="flow-dots">
+                  <div
+                    v-for="(p, i) in emotionPoints"
+                    :key="p.day + i"
+                    class="flow-dot"
+                    :class="`tone-${p.tone}`"
+                    :style="{ left: `${(p.x / FLOW_W) * 100}%`, top: `${(p.y / FLOW_H) * 100}%` }"
+                  ><small>{{ p.day }}</small></div>
+                </div>
+              </div>
+              <p v-else class="card-empty">감정 기록이 더 쌓이면 이곳에 멜로디가 그려져요.</p>
+            </section>
+
+            <!-- 마음을 힘들게 한 순간 -->
+            <section class="card card-hard">
+              <h2 class="card-title"><img :src="catIcon" alt="" aria-hidden="true" />마음을 힘들게 한 순간 <em>(불협화음)</em></h2>
+              <ul class="hard-list">
+                <li v-for="line in hardMoments" :key="line">{{ line }}</li>
+                <li v-if="hardMoments.length === 0" class="hard-empty">뚜렷하게 마음을 흔든 순간은 아직 보이지 않아요.</li>
+              </ul>
+            </section>
+
+            <!-- 당신에게 한마디 -->
+            <section class="card card-comfort">
+              <h2 class="card-title"><img :src="heartIcon" alt="" aria-hidden="true" />당신에게 한마디 <em>(마음 선물)</em></h2>
+              <p class="comfort-quote">{{ comfortMessage }}</p>
+              <img class="comfort-mascot" :src="flowRedpanda" alt="" aria-hidden="true" />
+            </section>
           </div>
-        </header>
 
-        <section class="report-section">
-          <h2>스트레스 주요 원인</h2>
-          <div class="tag-row danger">
-            <span v-for="item in currentReport.stressCauses" :key="item">{{ item }}</span>
-          </div>
-        </section>
+          <!-- 작은 제안 -->
+          <section class="suggest-block">
+            <h2 class="suggest-head">
+              <img :src="sparkle" alt="" aria-hidden="true" />작은 제안
+              <em>지금의 나에게 어울리는 작은 활동이에요. 가볍게 시도해 보세요.</em>
+            </h2>
+            <div v-if="suggestCards.length" class="suggest-grid" :style="{ gridTemplateColumns: `repeat(${suggestCards.length}, 1fr)` }">
+              <article v-for="(card, index) in suggestCards" :key="card.title + index" class="suggest-card">
+                <div class="sc-head">
+                  <img class="sc-mascot" :src="mascotFor(index)" alt="" aria-hidden="true" />
+                  <strong>{{ card.title || '오늘의 작은 제안' }}</strong>
+                </div>
+                <p class="sc-reason">{{ card.reason }}</p>
+                <div v-if="card.how" class="sc-start">
+                  <span class="sc-start-label">어떻게 시작해볼까요?</span>
+                  <p><img class="sc-heart" :src="heartIcon" alt="" aria-hidden="true" />{{ card.how }}</p>
+                </div>
+              </article>
+            </div>
+            <p v-else class="card-empty">추천 활동이 준비되면 이곳에 담겨요.</p>
+          </section>
+        </template>
 
-        <section class="report-section">
-          <h2>스트레스 이완 주요 원인</h2>
-          <div class="tag-row calm">
-            <span v-for="item in currentReport.reliefCauses" :key="item">{{ item }}</span>
-          </div>
-        </section>
-
-        <section class="analysis-box">
-          <p v-for="paragraph in currentReport.analysis" :key="paragraph">
-            {{ paragraph }}
-          </p>
-        </section>
-
-        <footer class="report-actions">
-          <button type="button" class="secondary-button">이미지 저장</button>
-          <button type="button" class="primary-button">공유</button>
+        <footer v-if="!isLoading" class="report-actions">
+          <p>☆ 작은 기록이 모여, 당신의 내일을 더 단단하게 만듭니다. <span>♥</span></p>
+          <button type="button" class="secondary-button" :disabled="!currentReport">이미지 저장</button>
         </footer>
+
       </section>
     </section>
+
   </main>
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { reportApi } from '../../api/report.js'
 import reportBg from '../../assets/report-bg.png'
 
-const monthlyEmotionIcons = [
-  '🙂', '🥹', '😣', '😐', '😳', '😄', '😌', '😮‍💨', '🙂', '😣',
-  '😐', '😊', '😌', '😄', '🥲', '😳', '🙂', '😔', '😐', '😌',
-  '😄', '😊', '😣', '😮‍💨', '🙂', '😌', '😄', '😊', '🙂', '😌',
-]
+import bubbleHeart from '../../assets/report/bubble-heart.png'
+import feather from '../../assets/report/feather.png'
+import heartIcon from '../../assets/report/heart.png'
+import noteIcon from '../../assets/report/note.png'
+import sparkle from '../../assets/report/sparkle.png'
+import flowBird from '../../assets/report/flow-bird.png'
+import flowOtter from '../../assets/report/flow-otter.png'
+import flowRedpanda from '../../assets/report/flow-redpanda.png'
+import flowCat from '../../assets/report/flow-cat.png'
+import catIcon from '../../assets/report/flow-cat.png'
 
-const monthlyEmotions = monthlyEmotionIcons.map((icon, index) => ({
-  day: `${index + 1}일`,
-  icon,
-}))
+import { attachMindReportImageSaver } from './reportImageSaver.js'
 
-const reports = [
-  {
-    id: 'monthly-202605',
-    type: '월간',
-    range: '2026.05.01 ~ 2026.05.31',
-    title: '2026년 5월 월간 마음 리포트',
-    summary: '관계 피로와 프로젝트 긴장이 함께 오른 달',
-    stressCauses: ['대학교 친구', '프로젝트 경험', '부모님의 잔소리'],
-    reliefCauses: ['포켓몬', '네이버웹툰', '절친'],
-    emotions: monthlyEmotions,
-    analysis: [
-      '최근 감정의 변동은 프로젝트로 인한 학업적 긴장감과 대학교 친구 및 부모님의 잔소리에서 비롯된 관계적 피로도가 겹칠 때 주로 나타나고 있었어요. 하지만 이를 완화하기 위해 나름의 두 가지 방식의 휴식으로 감정의 균형을 잘 찾아가는 모습이 확인됩니다.',
-      '포켓몬이나 네이버웹툰을 통해 개인적인 몰입의 시간을 갖거나, 절친과의 교류를 통해 안전한 소통을 하는 방식이죠. 스트레스 요인이 집중되는 날에는 이런 편안한 콘텐츠 소비 시간을 조금 더 늘리거나, 편안한 관계에 에너지를 온전히 쓰는 것이 감정 회복에 도움이 될 것으로 예상됩니다.',
-    ],
-  },
-  {
-    id: 'weekly-20260601',
-    type: '주간',
-    range: '2026.06.01 ~ 2026.06.07',
-    title: '2026년 6월 1주차 마음 리포트',
-    summary: '마감 일정 이후 회복 리듬을 찾은 주',
-    stressCauses: ['과제 마감', '수면 부족', '팀 회의'],
-    reliefCauses: ['산책', '따뜻한 차', '짧은 낮잠'],
-    emotions: [
-      { day: '1일', icon: '😐' },
-      { day: '2일', icon: '😣' },
-      { day: '3일', icon: '😮‍💨' },
-      { day: '4일', icon: '🙂' },
-      { day: '5일', icon: '😌' },
-      { day: '6일', icon: '😄' },
-      { day: '7일', icon: '🙂' },
-    ],
-    analysis: [
-      '이번 주에는 과제 마감과 팀 회의가 겹치면서 초반 피로도가 높게 나타났어요. 특히 잠이 부족한 날에는 사소한 일정도 크게 부담으로 느껴지는 흐름이 보였습니다.',
-      '후반으로 갈수록 산책과 짧은 낮잠처럼 몸을 바로 쉬게 해주는 행동이 감정 회복에 도움이 되었어요. 다음 주에도 긴 일정 전후에는 작은 휴식 시간을 먼저 확보하는 편이 좋겠습니다.',
-    ],
-  },
-  {
-    id: 'weekly-20260608',
-    type: '주간',
-    range: '2026.06.08 ~ 2026.06.14',
-    title: '2026년 6월 2주차 마음 리포트',
-    summary: '발표와 진로 고민을 정리해간 주',
-    stressCauses: ['발표 준비', '진로 고민', '가족 대화'],
-    reliefCauses: ['음악 감상', '웹툰 보기', '친구와 통화'],
-    emotions: [
-      { day: '8일', icon: '😳' },
-      { day: '9일', icon: '😣' },
-      { day: '10일', icon: '😐' },
-      { day: '11일', icon: '🙂' },
-      { day: '12일', icon: '😌' },
-      { day: '13일', icon: '😄' },
-      { day: '14일', icon: '😊' },
-    ],
-    analysis: [
-      '발표 준비와 진로 고민이 함께 올라오면서 미래에 대한 압박감이 자주 감지됐어요. 가족과의 대화에서는 조언을 받는 상황이 때때로 평가처럼 느껴져 긴장감이 커진 것으로 보입니다.',
-      '음악 감상과 웹툰 보기처럼 혼자 호흡을 정리하는 시간이 안정감을 주었고, 친구와의 통화는 생각을 정리하는 데 도움이 되었어요. 부담이 커질 때는 먼저 감정을 말로 꺼내는 루틴을 만들어보면 좋겠습니다.',
-    ],
-  },
-]
+const mascots = [flowRedpanda, flowOtter, flowBird, flowCat]
+const mascotFor = (index) => mascots[index % mascots.length]
 
-const getReportStartDate = (report) => new Date(report.range.split(' ~ ')[0].replaceAll('.', '-'))
-const getReportMonth = (report) => report.range.slice(0, 7)
+const reports = ref([])
+const isLoading = ref(true)
+const isRefreshing = ref(false)
+const fetchError = ref('')
+const isMonthFilterOpen = ref(false)
+const selectedMonth = ref('')
+const selectedReportId = ref(null)
+
+let detachReportImageSaver = null
+
+const normalizeReport = (report) => ({
+  ...report,
+  stressCauses: Array.isArray(report?.stressCauses) ? report.stressCauses : [],
+  reliefCauses: Array.isArray(report?.reliefCauses) ? report.reliefCauses : [],
+  causeLabels: Array.isArray(report?.causeLabels) ? report.causeLabels : [],
+  emotions: Array.isArray(report?.emotions) ? report.emotions : [],
+  analysis: Array.isArray(report?.analysis) ? report.analysis : [],
+  recommendations: Array.isArray(report?.recommendations) ? report.recommendations : [],
+  comfortMessage: String(report?.comfortMessage ?? report?.summary ?? '').trim(),
+  is_fallback: Boolean(report?.is_fallback),
+  is_safety_response: Boolean(report?.is_safety_response),
+})
+
+const getReportStartDate = (report) => {
+  if (!report?.range) return new Date(0)
+
+  const dateText = report.range
+    .split(' ~ ')[0]
+    .replace(' 생성', '')
+    .trim()
+    .replaceAll('.', '-')
+
+  const date = new Date(dateText)
+  return Number.isNaN(date.getTime()) ? new Date(0) : date
+}
+
+const getReportMonth = (report) => {
+  if (!report?.range) return ''
+  return report.range.replace(' 생성', '').trim().slice(0, 7)
+}
+
 const formatMonthLabel = (month) => {
+  if (!month) return ''
   const [year, value] = month.split('.')
   return `${year}년 ${Number(value)}월`
 }
 
-const reportsByNewest = [...reports].sort((a, b) => getReportStartDate(b) - getReportStartDate(a))
-const latestMonth = getReportMonth(reportsByNewest[0])
-const isMonthFilterOpen = ref(false)
-const selectedMonth = ref(latestMonth)
-const selectedReportId = ref(reportsByNewest[0].id)
+const periodDateLabel = (report) => (
+  report?.range
+    ? report.range.split(' ~ ')[0].replace(' 생성', '').trim()
+    : ''
+)
+
+const weekdayKo = ['일', '월', '화', '수', '목', '금', '토']
+
+const hasReports = computed(() => reports.value.length > 0)
+
+const reportsByNewest = computed(() => (
+  [...reports.value].sort(
+    (a, b) => getReportStartDate(b).getTime() - getReportStartDate(a).getTime(),
+  )
+))
+
+const latestMonth = computed(() => getReportMonth(reportsByNewest.value[0]))
 
 const monthOptions = computed(() => {
-  const months = [...new Set(reportsByNewest.map(getReportMonth))]
+  const months = [...new Set(reportsByNewest.value.map(getReportMonth).filter(Boolean))]
   return months.map((month) => ({
     value: month,
     label: formatMonthLabel(month),
   }))
 })
 
-const filteredReports = computed(() => (
-  reportsByNewest.filter((report) => getReportMonth(report) === selectedMonth.value)
-))
-
-const currentReport = computed(
-  () => filteredReports.value.find((report) => report.id === selectedReportId.value) ?? filteredReports.value[0],
-)
-
-watch(selectedMonth, () => {
-  selectedReportId.value = filteredReports.value[0]?.id
+const filteredReports = computed(() => {
+  if (!selectedMonth.value) return reportsByNewest.value
+  return reportsByNewest.value.filter(
+    (report) => getReportMonth(report) === selectedMonth.value,
+  )
 })
 
-const negativeEmotionIcons = new Set(['😣', '😮‍💨', '😔'])
-const positiveEmotionIcons = new Set(['🙂', '😌', '😄', '😊', '🥲'])
+const currentReport = computed(() => (
+  filteredReports.value.find(
+    (report) => report.id === selectedReportId.value,
+  ) ?? filteredReports.value[0] ?? null
+))
 
-const emotionToneClass = (day) => {
-  if (negativeEmotionIcons.has(day.icon)) return 'emotion-day--low'
-  if (positiveEmotionIcons.has(day.icon)) return 'emotion-day--good'
-  return 'emotion-day--neutral'
+const headerDate = computed(() => {
+  const report = currentReport.value
+  if (!report?.range) return ''
+
+  const range = report.range.replace(' 생성', '').trim()
+  if (range.includes('~')) return range
+
+  const date = getReportStartDate(report)
+  if (Number.isNaN(date.getTime())) return range
+
+  return `${range} ${weekdayKo[date.getDay()]}요일`
+})
+
+watch(selectedMonth, () => {
+  selectedReportId.value = filteredReports.value[0]?.id ?? null
+})
+
+watch(latestMonth, (newMonth) => {
+  if (newMonth && !selectedMonth.value) {
+    selectedMonth.value = newMonth
+  }
+})
+
+const mindTags = computed(() => {
+  const report = currentReport.value
+  if (!report) return []
+
+  const detailedLabels = report.causeLabels
+    .map((label) => {
+      const text = String(label?.keyword ?? '').trim()
+      const type = ['stress', 'relief'].includes(label?.causeType)
+        ? label.causeType
+        : null
+      const emphasis = label?.emphasis === 'secondary' ? 'secondary' : 'primary'
+      const hasDisplayWeight = label?.displayWeight !== null
+        && label?.displayWeight !== undefined
+        && label?.displayWeight !== ''
+      const parsedWeight = hasDisplayWeight ? Number(label.displayWeight) : Number.NaN
+
+      return {
+        text,
+        type,
+        emphasis,
+        displayWeight: Number.isFinite(parsedWeight)
+          ? Math.min(1, Math.max(0, parsedWeight))
+          : emphasis === 'secondary' ? 0.7 : 1,
+      }
+    })
+    .filter((tag) => tag.type && tag.text && tag.text !== '기록 수집 중...')
+    .sort((a, b) => b.displayWeight - a.displayWeight)
+
+  if (detailedLabels.length) return detailedLabels
+
+  const clean = (list) => list
+    .map((text) => String(text).trim())
+    .filter((text) => text && text !== '기록 수집 중...')
+
+  return [
+    ...clean(report.stressCauses).map((text) => ({ text, type: 'stress', emphasis: 'primary' })),
+    ...clean(report.reliefCauses).map((text) => ({ text, type: 'relief', emphasis: 'primary' })),
+  ]
+})
+
+const parsedAnalysis = computed(() => {
+  const analysis = currentReport.value?.analysis ?? []
+  const recommendations = currentReport.value?.recommendations ?? []
+  const reflections = []
+  const cards = []
+
+  const hasMarker = analysis.some(
+    (line) => String(line).trim().startsWith('✅'),
+  )
+
+  if (hasMarker) {
+    let currentCard = null
+
+    const valueAfterLabel = (line, labels) => {
+      for (const label of labels) {
+        const index = line.indexOf(label)
+        if (index >= 0) {
+          return line
+            .slice(index + label.length)
+            .replace(/^[\s:?-]*/, '')
+            .trim()
+        }
+      }
+      return null
+    }
+
+    for (const raw of analysis) {
+      const line = String(raw).trim()
+
+      if (line.startsWith('✅')) {
+        currentCard = {
+          title: line.replace(/^✅\s*/, ''),
+          reason: '',
+          how: '',
+        }
+        cards.push(currentCard)
+      } else if (!currentCard && line) {
+        reflections.push(line)
+      } else if (currentCard) {
+        const reason = valueAfterLabel(
+          line,
+          ['왜 추천하나요?', '웹 추천 이유'],
+        )
+        const how = valueAfterLabel(
+          line,
+          ['어떻게 시작할까요?', '가볍게 시작하기'],
+        )
+
+        if (reason !== null) currentCard.reason = reason
+        if (how !== null) currentCard.how = how
+      }
+    }
+  } else {
+    const recommendationSet = new Set(
+      recommendations.map((item) => String(item).trim()),
+    )
+
+    for (const raw of analysis) {
+      const line = String(raw ?? '').trim()
+      if (!line || recommendationSet.has(line)) continue
+      reflections.push(line)
+    }
+
+    for (const recommendation of recommendations) {
+      cards.push({
+        title: '',
+        reason: String(recommendation).trim(),
+        how: '',
+      })
+    }
+  }
+
+  return { reflections, cards }
+})
+
+const hardMoments = computed(() => {
+  const report = currentReport.value
+  if (!report) return []
+
+  if (report.is_fallback) {
+    return ['기록이 조금 더 모이면 마음을 힘들게 한 순간도 알려드릴게요.']
+  }
+
+  const causes = report.stressCauses
+    .map((text) => String(text).trim())
+    .filter((text) => text && text !== '기록 수집 중...')
+
+  if (causes.length) return causes.slice(0, 4)
+  return parsedAnalysis.value.reflections.slice(0, 3)
+})
+
+const suggestCards = computed(() => parsedAnalysis.value.cards.slice(0, 4))
+
+const comfortMessage = computed(() => (
+  currentReport.value?.comfortMessage
+  || currentReport.value?.summary
+  || ''
+))
+
+const FLOW_W = 640
+const FLOW_H = 150
+
+const moodLevel = (icon) => {
+  if (['😊', '😄', '🙂', '😌', '🥲'].includes(icon)) return 0.82
+  if (['😢', '😣', '😔', '😞', '😥'].includes(icon)) return 0.2
+  if (['😮‍💨', '😳', '😰', '😨'].includes(icon)) return 0.36
+  return 0.5
 }
+
+const moodTone = (icon) => {
+  const level = moodLevel(icon)
+  if (level >= 0.7) return 'pos'
+  if (level <= 0.4) return 'neg'
+  return 'neu'
+}
+
+const buildPath = (points) => {
+  if (points.length === 0) return ''
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`
+
+  let path = `M ${points[0].x} ${points[0].y}`
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const current = points[index]
+    const next = points[index + 1]
+    const middleX = (current.x + next.x) / 2
+
+    path += ` C ${middleX} ${current.y}, ${middleX} ${next.y}, ${next.x} ${next.y}`
+  }
+
+  return path
+}
+
+const emotionPoints = computed(() => {
+  const list = currentReport.value?.emotions ?? []
+  if (!list.length) return []
+
+  const count = list.length
+  const paddingX = 40
+  const usableWidth = FLOW_W - paddingX * 2
+  const top = 26
+  const bottom = 120
+
+  return list.map((day, index) => {
+    const level = moodLevel(day.icon)
+    const x = count === 1
+      ? FLOW_W / 2
+      : paddingX + (usableWidth * index) / (count - 1)
+    const y = bottom - level * (bottom - top)
+
+    return {
+      x,
+      y,
+      icon: day.icon,
+      day: day.day,
+      tone: moodTone(day.icon),
+    }
+  })
+})
+
+const emotionPath = computed(() => buildPath(emotionPoints.value))
+
+const applyReports = (data) => {
+  reports.value = Array.isArray(data?.reports)
+    ? data.reports.map(normalizeReport)
+    : []
+
+  const firstReport = reportsByNewest.value[0]
+
+  if (firstReport) {
+    selectedMonth.value = getReportMonth(firstReport)
+    selectedReportId.value = firstReport.id
+  } else {
+    selectedMonth.value = ''
+    selectedReportId.value = null
+  }
+}
+
+const loadReports = async () => {
+  try {
+    fetchError.value = ''
+    const data = await reportApi.getReports()
+    applyReports(data)
+  } catch (error) {
+    fetchError.value = error?.message ?? '마음 리포트를 불러오지 못했습니다.'
+    console.error('Failed to fetch stored reports:', error)
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const refreshReports = async () => {
+  try {
+    isRefreshing.value = true
+    fetchError.value = ''
+    const data = await reportApi.refreshReports()
+    applyReports(data)
+  } catch (error) {
+    fetchError.value = error?.message ?? '마음 리포트를 새로고침하지 못했습니다.'
+    console.error('Failed to refresh reports:', error)
+  } finally {
+    isRefreshing.value = false
+  }
+}
+
+onMounted(() => {
+  detachReportImageSaver = attachMindReportImageSaver()
+  loadReports()
+})
+
+onBeforeUnmount(() => {
+  detachReportImageSaver?.()
+})
 </script>
 
 <style scoped>
-.archive-page {
-  position: relative;
-  isolation: isolate;
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.diary-page {
   min-height: calc(100vh - 54px);
-  padding: 34px 28px;
+  padding: 30px 26px 84px;
   overflow: hidden auto;
-  background: transparent;
+  background-image:
+    linear-gradient(
+      180deg,
+      rgba(13, 5, 32, 0.18) 0%,
+      rgba(20, 8, 48, 0.3) 45%,
+      rgba(13, 5, 32, 0.46) 100%
+    ),
+    var(--report-bg);
+  background-position: center;
+  background-size: cover;
+  background-attachment: fixed;
+  font-family: var(--font-ui);
 }
 
-.archive-shell {
-  display: grid;
-  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
-  gap: 20px;
-  width: min(1480px, 100%);
-  margin: 0 auto;
-  padding: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-  background: rgba(13, 5, 32, 0.18);
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-
-.archive-sidebar {
-  display: grid;
-  align-content: start;
-  gap: 16px;
-}
-
-.panel,
-.report-card {
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
-  background: linear-gradient(180deg, rgba(31, 13, 76, 0.56), rgba(18, 8, 46, 0.42));
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.24);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-}
-
-.panel {
-  padding: 16px;
-}
-
-.panel-head {
+.diary-toolbar {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
+  justify-content: flex-end;
+  width: min(1400px, 100%);
+  margin: 0 auto 12px;
 }
 
-.panel-head p,
-.report-section h2 {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 15px;
-  font-weight: 700;
+.refresh-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 8px 15px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(38, 22, 66, 0.6);
+  color: #fff8ff;
+  box-shadow: 0 8px 24px rgba(8, 3, 20, 0.2);
+  transition: transform 0.16s ease, border-color 0.16s ease;
 }
 
-.panel-head span,
-.eyebrow {
-  display: block;
-  margin-top: 3px;
-  color: var(--text-muted);
-  font-size: 12px;
+.refresh-button:disabled {
+  cursor: wait;
+  opacity: 0.58;
 }
 
-.period-card {
-  display: grid;
-  width: 100%;
-  gap: 5px;
-  min-height: 58px;
-  margin-top: 8px;
-  padding: 11px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--text-secondary);
-  text-align: left;
-  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
-}
-
-.period-card:hover,
-.period-card.active {
+.refresh-button:hover:not(:disabled) {
+  border-color: rgba(244, 175, 170, 0.8);
   transform: translateY(-1px);
-  border-color: rgba(255, 179, 71, 0.58);
-  background: linear-gradient(135deg, rgba(255, 179, 71, 0.16), rgba(94, 234, 212, 0.09));
-  color: var(--text-primary);
 }
 
-.period-card strong {
-  color: #BFF8EF;
-  font-size: 13px;
+.refresh-icon.spinning {
+  animation: refresh-spin 0.8s linear infinite;
 }
 
-.period-card span {
-  font-size: 12px;
+@keyframes refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.diary-shell {
+  display: grid;
+  grid-template-columns: 288px minmax(0, 1fr);
+  gap: 20px;
+  width: min(1400px, 100%);
+  margin: 0 auto;
+  align-items: stretch;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  padding: 22px 18px 20px;
+  border: 1px solid rgba(150, 110, 190, 0.4);
+  border-radius: 26px;
+  background: linear-gradient(180deg, #2c1a50 0%, #38215f 60%, #2a1850 100%);
+  box-shadow:
+    0 22px 54px rgba(8, 3, 24, 0.5),
+    inset 0 0 0 1px rgba(210, 180, 255, 0.08);
+  color: #f6eefc;
+}
+
+.side-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 16px;
+}
+
+.side-quill {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.side-brand {
+  flex: 1;
+  font-family: var(--font-soft);
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
 }
 
 .filter-toggle {
-  min-height: 31px;
-  padding: 0 10px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--text-muted);
+  padding: 5px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  background: transparent;
+  color: #e9dcf4;
   font-size: 12px;
-  font-weight: 800;
-  transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
 }
 
 .filter-toggle:hover,
 .filter-toggle.active {
-  border-color: rgba(94, 234, 212, 0.5);
-  background: rgba(94, 234, 212, 0.12);
-  color: #BFF8EF;
+  border-color: #f2aaa8;
+  color: #ffd6d3;
+}
+
+.side-body {
+  flex: 1;
+  min-height: 150px;
+  overflow-y: auto;
 }
 
 .month-filter {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
-  margin-bottom: 10px;
+  gap: 6px;
+  margin-bottom: 12px;
 }
 
 .month-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 31px;
-  padding: 0 10px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--text-muted);
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #e6daf0;
   font-size: 12px;
-  font-weight: 800;
-  transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
-}
-
-.month-check {
-  width: 12px;
-  height: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.34);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.05);
 }
 
 .month-chip:hover,
 .month-chip.active {
-  border-color: rgba(94, 234, 212, 0.5);
-  background: rgba(94, 234, 212, 0.12);
-  color: #BFF8EF;
+  border-color: rgba(242, 170, 168, 0.8);
+  background: rgba(242, 170, 168, 0.16);
+  color: #fff;
 }
 
-.month-chip.active .month-check {
-  border-color: rgba(94, 234, 212, 0.85);
-  background: linear-gradient(135deg, rgba(94, 234, 212, 0.95), rgba(191, 248, 239, 0.85));
-  box-shadow: 0 0 8px rgba(94, 234, 212, 0.38);
+.side-empty {
+  color: #c9b7dc;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
-.emotion-strip {
+.report-list {
   display: grid;
-  grid-template-columns: repeat(7, minmax(34px, 1fr));
-  gap: 7px;
-  overflow: visible;
-  padding-bottom: 4px;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.emotion-strip--monthly {
-  grid-template-columns: repeat(6, minmax(34px, 1fr));
+.report-item {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 12px 40px 12px 14px;
+  border: 1px solid rgba(180, 150, 220, 0.28);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #f2e9f8;
+  text-align: left;
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    background 0.16s ease;
 }
 
-.emotion-day {
+.report-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(210, 180, 255, 0.5);
+}
+
+.report-item.active {
+  border-color: rgba(244, 176, 180, 0.7);
+  background: linear-gradient(
+    135deg,
+    rgba(244, 176, 180, 0.26),
+    rgba(150, 120, 210, 0.22)
+  );
+  box-shadow: 0 8px 20px rgba(120, 60, 120, 0.3);
+}
+
+.ri-date {
+  color: #cdbde2;
+  font-size: 12px;
+}
+
+.ri-title {
+  overflow: hidden;
+  color: #fffaff;
+  font-size: 14px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ri-lock {
+  position: absolute;
+  top: 12px;
+  right: 13px;
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.ri-heart {
+  position: absolute;
+  top: 9px;
+  right: 10px;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+.board {
+  position: relative;
+  min-width: 0;
+  padding: 26px 28px;
+  border: 1px solid rgba(230, 175, 175, 0.4);
+  border-radius: 28px;
+  background: linear-gradient(158deg, #fae4d6 0%, #f7d2ce 50%, #f2c6d0 100%);
+  box-shadow:
+    0 26px 64px rgba(30, 10, 40, 0.4),
+    inset 0 0 0 1px rgba(255, 245, 240, 0.55);
+  color: #5a4460;
+  font-family: var(--font-soft);
+}
+
+.board.is-loading {
+  min-height: 532px;
+}
+
+.board-state {
   display: grid;
   justify-items: center;
-  gap: 4px;
-  min-width: 0;
-  padding: 7px 3px;
-  border: 1px solid rgba(255, 255, 255, 0.13);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  align-content: center;
+  gap: 10px;
+  min-height: 480px;
+  text-align: center;
 }
 
-.emotion-day--low {
-  border: 2px solid rgba(255, 64, 98, 0.92);
-  background: rgba(255, 64, 98, 0.09);
-  box-shadow: 0 0 12px rgba(255, 64, 98, 0.48), inset 0 0 10px rgba(255, 64, 98, 0.12);
+.state-icon {
+  width: 74px;
+  height: 74px;
+  object-fit: contain;
 }
 
-.emotion-day--neutral {
-  border: 2px solid rgba(169, 176, 190, 0.72);
-  background: rgba(169, 176, 190, 0.07);
-  box-shadow: 0 0 8px rgba(169, 176, 190, 0.18);
+.board-state h1 {
+  margin: 4px 0 0;
+  color: #6a4270;
+  font-size: 24px;
 }
 
-.emotion-day--good {
-  border: 2px solid rgba(75, 255, 162, 0.82);
-  background: rgba(75, 255, 162, 0.08);
-  box-shadow: 0 0 12px rgba(75, 255, 162, 0.36), inset 0 0 10px rgba(75, 255, 162, 0.1);
+.board-state p {
+  max-width: 480px;
+  margin: 0;
+  color: #7d6787;
+  font-size: 15px;
+  line-height: 1.7;
 }
 
-.mood {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: rgba(255, 179, 71, 0.22);
-  font-size: 16px;
-}
-
-.emotion-day span {
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.report-card {
-  padding: 24px;
-}
-
-.report-header {
-  padding-bottom: 18px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
-}
-
-.report-header h1 {
-  margin: 5px 0 0;
-  color: var(--text-primary);
-  font-size: 26px;
-  line-height: 1.28;
-  letter-spacing: 0;
-}
-
-.report-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.report-meta span {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 4px 10px;
-  border: 1px solid rgba(255, 179, 71, 0.26);
-  border-radius: 999px;
-  background: rgba(255, 179, 71, 0.1);
-  color: rgba(255, 241, 214, 0.9);
-  font-size: 12px;
+.safety-line {
+  color: #a24d6c !important;
   font-weight: 700;
 }
 
-.report-section {
-  margin-top: 18px;
+.safety-body {
+  max-height: 300px;
+  margin-top: 12px;
+  overflow-y: auto;
 }
 
-.tag-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
+.safety-body p {
+  margin: 0 0 10px;
+  color: #5c4a62;
+  font-size: 14px;
+  line-height: 1.8;
 }
 
-.tag-row span {
-  display: inline-flex;
+.board-header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  min-height: 30px;
-  padding: 4px 11px;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.bh-icon {
+  width: 54px;
+  height: 54px;
+  object-fit: contain;
+}
+
+.bh-text h1 {
+  margin: 0;
+  color: #5a3570;
+  font-family: var(--font-soft);
+  font-size: clamp(24px, 2.4vw, 32px);
+  font-weight: 800;
+  letter-spacing: -0.4px;
+}
+
+.title-spark {
+  width: 20px;
+  height: 20px;
+  margin-left: 8px;
+  object-fit: contain;
+  vertical-align: 6px;
+  opacity: 0.85;
+}
+
+.bh-sub {
+  margin: 5px 0 0;
+  color: #9a7ba6;
+  font-size: 14px;
+}
+
+.bh-date {
+  align-self: start;
+  padding: 7px 14px;
   border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+  color: #8a5c86;
+  font-family: var(--font-ui);
   font-size: 13px;
   font-weight: 700;
+  white-space: nowrap;
 }
 
-.tag-row.danger span {
-  border: 1px solid rgba(252, 165, 165, 0.42);
-  background: rgba(248, 113, 113, 0.12);
-  color: #FCA5A5;
+.board-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  grid-template-areas:
+    'oneline tags'
+    'flow hard'
+    'flow comfort';
+  gap: 16px;
+  margin-bottom: 18px;
 }
 
-.tag-row.calm span {
-  border: 1px solid rgba(94, 234, 212, 0.42);
-  background: rgba(94, 234, 212, 0.12);
-  color: #A7F3E9;
+.card {
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid rgba(255, 250, 248, 0.72);
+  border-radius: 20px;
+  background: rgba(255, 250, 247, 0.46);
+  box-shadow:
+    0 8px 22px rgba(150, 90, 120, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.64);
 }
 
-.analysis-box {
+.card-oneline {
+  grid-area: oneline;
+  background: rgba(255, 251, 246, 0.6);
+}
+
+.card-tags {
+  grid-area: tags;
+}
+
+.card-flow {
+  grid-area: flow;
+}
+
+.card-hard {
+  grid-area: hard;
+  background: rgba(233, 224, 245, 0.62);
+}
+
+.card-comfort {
+  position: relative;
+  grid-area: comfort;
+  overflow: hidden;
+  background: rgba(247, 214, 220, 0.6);
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  color: #6a4270;
+  font-family: var(--font-soft);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.card-title img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.card-title em {
+  color: #a382ab;
+  font-size: 12.5px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.card-empty {
+  margin: 0;
+  color: #9a7fa0;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.card-oneline .oneline {
+  padding: 12px 14px;
+  border: 1.5px dashed rgba(190, 140, 160, 0.5);
+  border-radius: 14px;
+  background: rgba(255, 252, 249, 0.5);
+}
+
+.oneline {
+  margin: 0;
+  color: #5c4660;
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.oneline-heart {
+  width: 22px;
+  height: 22px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.tag-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mind-tag {
+  padding: 8px 14px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-family: var(--font-ui);
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.mind-tag.is-stress {
+  background: rgba(232, 160, 185, 0.4);
+  color: #9c4d6a;
+}
+
+.mind-tag.is-relief {
+  background: rgba(170, 160, 225, 0.42);
+  color: #574f9c;
+}
+
+.mind-tag.is-primary {
+  box-shadow: 0 4px 12px rgba(95, 70, 120, 0.12);
+}
+
+.mind-tag.is-stress.is-secondary {
+  border-color: rgba(156, 77, 106, 0.28);
+  background: rgba(255, 250, 252, 0.54);
+  color: #7c5665;
+  box-shadow: none;
+}
+
+.mind-tag.is-relief.is-secondary {
+  border-color: rgba(87, 79, 156, 0.28);
+  background: rgba(250, 249, 255, 0.56);
+  color: #625d88;
+  box-shadow: none;
+}
+
+.mind-tag.is-muted {
+  background: rgba(200, 185, 205, 0.5);
+  color: #7d6787;
+}
+
+.flow-sub {
+  margin: -4px 0 10px;
+  color: #8a728f;
+  font-size: 13px;
+}
+
+.flow-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.lg {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #6f5f79;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+}
+
+.lg i {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+
+.lg.tone-neg i {
+  background: #8f7bd6;
+}
+
+.lg.tone-neu i {
+  background: #d29ecf;
+}
+
+.lg.tone-pos i {
+  background: #f4a35f;
+}
+
+.flow-stage {
+  position: relative;
+  width: 100%;
+  height: 150px;
+}
+
+.flow-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.flow-line {
+  fill: none;
+  stroke: url(#flowStroke);
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+
+.flow-dots {
+  position: absolute;
+  inset: 0;
+}
+
+.flow-dot {
+  position: absolute;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 3px 8px rgba(120, 70, 120, 0.28);
+  transform: translate(-50%, -50%);
+}
+
+.flow-dot.tone-pos {
+  background: #f4a35f;
+}
+
+.flow-dot.tone-neu {
+  background: #d29ecf;
+}
+
+.flow-dot.tone-neg {
+  background: #8f7bd6;
+}
+
+.flow-dot small {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  color: #7c6a86;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.hard-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hard-list li {
+  position: relative;
+  padding-left: 18px;
+  color: #5f4a68;
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+.hard-list li::before {
+  content: '♪';
+  position: absolute;
+  left: 0;
+  color: #9a7bc0;
+}
+
+.hard-empty::before {
+  content: '·' !important;
+}
+
+.comfort-quote {
+  margin: 0;
+  padding-right: 76px;
+  color: #8a4c84;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.7;
+  white-space: pre-line;
+}
+
+.comfort-mascot {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  width: 62px;
+  height: 62px;
+  object-fit: contain;
+}
+
+.suggest-block {
+  padding: 18px 18px 16px;
+  border: 1px solid rgba(255, 250, 248, 0.7);
+  border-radius: 20px;
+  background: rgba(255, 250, 247, 0.42);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.suggest-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+  color: #6a4270;
+  font-family: var(--font-soft);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.suggest-head img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.suggest-head em {
+  color: #9a86a6;
+  font-size: 12.5px;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.suggest-grid {
   display: grid;
   gap: 14px;
-  margin-top: 20px;
-  padding: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
-  background: rgba(13, 5, 32, 0.28);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
 }
 
-.analysis-box p {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.82);
+.suggest-card {
+  display: flex;
+  flex-direction: column;
+  padding: 14px 15px;
+  border: 1px solid rgba(255, 250, 248, 0.8);
+  border-radius: 16px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 252, 250, 0.82),
+    rgba(250, 240, 246, 0.72)
+  );
+  box-shadow: 0 6px 16px rgba(150, 90, 120, 0.1);
+}
+
+.sc-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.sc-mascot {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.sc-head strong {
+  color: #6a4270;
   font-size: 14.5px;
-  line-height: 1.86;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.sc-reason {
+  margin: 0;
+  color: #6f5f79;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.sc-start {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(160, 120, 170, 0.35);
+}
+
+.sc-start-label {
+  display: block;
+  margin-bottom: 6px;
+  color: #a06bb0;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.sc-start p {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  color: #5a4665;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.sc-heart {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  object-fit: contain;
 }
 
 .report-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 10px;
-  margin-top: 16px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px dashed rgba(125, 80, 130, 0.28);
 }
 
-.primary-button,
+.report-actions p {
+  flex: 1 1 360px;
+  margin: 0;
+  color: #7b6482;
+  font-size: 13px;
+}
+
+.report-actions p span {
+  color: #d46f91;
+}
+
 .secondary-button {
-  min-height: 38px;
-  padding: 0 17px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 800;
-}
-
-.primary-button {
-  background: linear-gradient(135deg, var(--accent-orange), var(--accent-gold));
-  color: #1A0A00;
+  min-height: 40px;
+  padding: 9px 18px;
+  border-radius: 999px;
+  font-family: var(--font-ui);
+  transition: transform 0.16s ease, opacity 0.16s ease;
 }
 
 .secondary-button {
-  border: 1px solid rgba(94, 234, 212, 0.56);
-  background: rgba(94, 234, 212, 0.08);
-  color: #BFF8EF;
+  border: 1px solid rgba(113, 72, 124, 0.34);
+  background: rgba(255, 255, 255, 0.48);
+  color: #6a4270;
 }
 
-@media (max-width: 760px) {
-  .archive-page {
-    padding: 20px 12px;
-  }
+.secondary-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
 
-  .archive-shell {
+.secondary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 1040px) {
+  .diary-shell {
     grid-template-columns: 1fr;
-    padding: 12px;
   }
 
-  .emotion-strip--monthly {
-    grid-template-columns: repeat(5, minmax(34px, 1fr));
+  .side-body {
+    max-height: 260px;
   }
 
-  .report-card {
-    padding: 16px;
+  .board-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'oneline'
+      'tags'
+      'flow'
+      'hard'
+      'comfort';
   }
 
-  .report-header h1 {
-    font-size: 20px;
+  .suggest-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 620px) {
+  .diary-page {
+    padding: 66px 12px 40px;
+    background-attachment: scroll;
+  }
+
+  .board {
+    padding: 20px 16px;
+    border-radius: 22px;
+  }
+
+  .board-header {
+    grid-template-columns: auto 1fr;
+  }
+
+  .bh-date {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .suggest-grid {
+    grid-template-columns: 1fr !important;
   }
 
   .report-actions {
-    justify-content: stretch;
+    align-items: stretch;
+    flex-direction: column;
   }
 
-  .report-actions button {
-    flex: 1;
+  .report-actions p {
+    flex-basis: auto;
+  }
+
+  .secondary-button {
+    width: 100%;
   }
 }
 </style>
