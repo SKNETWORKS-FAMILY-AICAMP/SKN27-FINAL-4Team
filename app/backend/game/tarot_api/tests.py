@@ -1,12 +1,80 @@
 from datetime import date
 from unittest.mock import patch
 
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from user.models import User
 
+from . import services
+from .serializers import TarotReadingRequestSerializer
 from .views import daily_major_fortune
+
+
+class TarotReadingSelectionTests(SimpleTestCase):
+    def test_client_card_payload_is_ignored(self):
+        serializer = TarotReadingRequestSerializer(data={
+            'topic': 'general',
+            'question': '오늘의 조언이 궁금해요.',
+            'cards': [
+                {'card_number': 0, 'orientation': 'upright'},
+                {'card_number': 1, 'orientation': 'upright'},
+                {'card_number': 2, 'orientation': 'upright'},
+            ],
+        })
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertNotIn('cards', serializer.validated_data)
+
+    @patch('game.tarot_api.services.save_reading', return_value=123)
+    @patch('game.tarot_api.services.call_llm', return_value={})
+    @patch('game.tarot_api.services.fetch_chunks', return_value='')
+    @patch('game.tarot_api.services.fetch_cards')
+    @patch('game.tarot_api.services.draw_reading_cards')
+    def test_reading_uses_server_draw_instead_of_client_cards(
+        self,
+        draw_reading_cards,
+        fetch_cards,
+        _fetch_chunks,
+        _call_llm,
+        _save_reading,
+    ):
+        drawn_cards = [
+            {'card_number': 11, 'orientation': 'upright'},
+            {'card_number': 22, 'orientation': 'reversed'},
+            {'card_number': 33, 'orientation': 'upright'},
+        ]
+        draw_reading_cards.return_value = drawn_cards
+        fetch_cards.return_value = [
+            {
+                'card_number': card['card_number'],
+                'card_name': 'The Fool',
+                'upright_meaning_sentence_ko': '새로운 시작',
+                'reversed_meaning_sentence_ko': '신중한 시작',
+                'upright_meaning': '새로운 시작',
+                'reversed_meaning': '신중한 시작',
+                'love_meaning_sentence_ko': '',
+                'career_meaning_sentence_ko': '',
+                'love_meaning': '',
+                'career_meaning': '',
+                'advice_seed_ko': '',
+            }
+            for card in drawn_cards
+        ]
+
+        result = services.create_reading({
+            'topic': 'general',
+            'question': '오늘의 조언이 궁금해요.',
+            'cards': [
+                {'card_number': 0, 'orientation': 'upright'},
+                {'card_number': 1, 'orientation': 'upright'},
+                {'card_number': 2, 'orientation': 'upright'},
+            ],
+        })
+
+        draw_reading_cards.assert_called_once_with()
+        fetch_cards.assert_called_once_with(drawn_cards)
+        self.assertEqual([card['card_number'] for card in result['cards']], [11, 22, 33])
 
 
 class DailyMajorRevealViewTests(TestCase):
