@@ -50,7 +50,7 @@ CALL {
 
     WITH user
     MATCH (user)-[fact]->(person:Person)
-    WHERE type(fact) IN ['RELATES_TO', 'KNOWS']
+    WHERE type(fact) = 'RELATES_TO'
     RETURN coalesce(
                fact.episode,
                fact.created_at,
@@ -224,7 +224,7 @@ ORDER BY memory_id, event_created_at, event_id
 
 RELATION_CONTEXT_QUERY = """
 MATCH (user:User {uid: $uid})-[rel]->(person:Person)
-WHERE type(rel) IN ['RELATES_TO', 'KNOWS']
+WHERE type(rel) = 'RELATES_TO'
 WITH rel,
      person,
      coalesce(
@@ -310,7 +310,7 @@ CALL {
 
     WITH user
     MATCH (user)-[fact]->(person:Person)
-    WHERE type(fact) IN ['RELATES_TO', 'KNOWS']
+    WHERE type(fact) = 'RELATES_TO'
     WITH fact,
          person,
          coalesce(
@@ -398,7 +398,7 @@ DELETE fact
 
 DELETE_RELATION_FACTS_QUERY = """
 MATCH (user:User {uid: $uid})-[fact]->(person:Person)
-WHERE type(fact) IN ['RELATES_TO', 'KNOWS']
+WHERE type(fact) = 'RELATES_TO'
 WITH fact,
      person,
      coalesce(

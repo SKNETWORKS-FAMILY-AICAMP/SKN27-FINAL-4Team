@@ -92,21 +92,30 @@ def is_complete(user):
 import random
 
 def _next_code(user):
-    """다음에 물어볼 미답변 문항 코드. 완료/비로그인 시 None."""
+    """다음에 물어볼 미답변 문항 코드. 완료/비로그인 시 None.
+
+    2026-07-22: 챗봇은 MBTI를 '드물게' 물어보는 보조 채널이라, 물어보는 횟수 자체가 적다.
+      그래서 아무 축이나 뽑으면(random) 특정 축에 쏠려 리포트가 한쪽만 채워질 수 있다.
+      → '지금까지 답변이 가장 적은 축'의 미답변 문항부터 고른다. 적게 물어도 4축이 고르게
+        채워지도록. (완성 책임은 마이페이지 mock-qna에 있으므로 여기선 균형만 챙긴다)
+    """
     if user is None or is_complete(user):
         return None
     answered = _answered_codes(user)
     unanswered = [code for code, _ in QUESTIONS if code not in answered]
-    if unanswered:
-        return random.choice(unanswered)
-    return None
-
-
-def next_question(user):
-    """다음 미답변 질문 (code, 고정 template text). 완료/비로그인 시 None.
-    (컨텍스트 없이 쓰는 폴백 경로 · generate_question의 하위 호환)"""
-    code = _next_code(user)
-    return (code, _CODE2TEXT[code]) if code else None
+    if not unanswered:
+        return None
+    # 축별 답변 수 → 가장 적은 축 우선 (동률이면 축 순서 IE→SN→TF→JP)
+    answered_per_axis = {
+        axis: sum(1 for c in answered if c.startswith(axis)) for axis in AXES
+    }
+    unanswered_axes = {code[:2] for code in unanswered}
+    target_axis = min(
+        (a for a in AXES if a in unanswered_axes),
+        key=lambda a: (answered_per_axis[a], AXES.index(a)),
+    )
+    axis_pool = [code for code in unanswered if code.startswith(target_axis)]
+    return random.choice(axis_pool)   # 같은 축 안에서만 랜덤 (문항 순서 편향 방지)
 
 
 def generate_question(user, recent_history=None):

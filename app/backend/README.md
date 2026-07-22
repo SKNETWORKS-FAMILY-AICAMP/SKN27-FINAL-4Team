@@ -48,7 +48,7 @@ docker compose down -v && docker compose up -d --build
 | `OPENAI_MODEL` | N | 기본 `gpt-5.4-mini` |
 | `LLM_PROVIDER` | N | `openai`(기본) / `groq` — groq 쓸 땐 `GROQ_API_KEY` 필요 |
 | `PG_*` | Y | PostgreSQL 접속 (docker면 자동) |
-| `ELEVENLABS_API_KEY` + `VOICE_ID_{PORI,KKAMI,TOTO,YEOUL}` | N | 없으면 TTS만 failed, 대화는 정상 |
+| `OPENAI_API_KEY` (TTS 겸용) · `OPENAI_AUDIO_MODEL`(기본 `gpt-audio`) · `TTS_PROVIDER`(`openai`/`off`) | N | TTS는 OpenAI gpt-audio 사용(2026-07-19 확정, ElevenLabs·Typecast 은퇴). 키 없거나 `off`면 TTS만 failed, 대화는 정상 |
 | `KAKAO_REST_API_KEY` | 마이페이지 도서 | Kakao Daum 책 검색의 후보·책 소개·서지정보·상세 링크·표지 조회. 미설정 시 소셜 로그인용 `KAKAO_CLIENT_ID`를 재사용 |
 | `TAVILY_API_KEY` | 마이페이지 날씨 | 공개 웹 날씨 맥락 검색. 사용자 프로필·정밀 좌표는 전송하지 않음 |
 | `TAVILY_PLAN_NAME` | 운영 권장 | 확인한 Tavily 구독/계약 플랜명 |

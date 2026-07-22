@@ -137,6 +137,28 @@ CORS_ALLOW_CREDENTIALS = True
 
 FRONTEND_BASE_URL = os.environ.get('FRONTEND_BASE_URL', 'http://localhost:5173').rstrip('/')
 
+# ── HTTPS 배포 (ALB가 TLS 종료) ─────────────────────────────────
+#  ALB가 인증서를 처리하고 컨테이너로는 평문 HTTP로 전달한다. 그래서 Django가
+#  그냥 두면 request.is_secure()를 False로 본다. ALB가 붙인 X-Forwarded-Proto를
+#  nginx가 보존해 넘겨주므로(deploy/nginx.conf) 그 헤더로 판단하게 한다.
+#  ★ nginx가 이 헤더를 $scheme으로 덮어쓰면 무용지물 — 둘은 세트다.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+#  운영 도메인은 env로 주입. FRONTEND_BASE_URL이 곧 서비스 도메인이므로 자동 포함하고,
+#  추가 도메인이 있으면 CSRF_TRUSTED_ORIGINS(쉼표 구분)로 넣는다.
+#  누락 시 증상: 로그인·채팅 등 모든 POST가 CSRF 403 (개발에선 안 보이고 배포에서만 터짐).
+for _o in [FRONTEND_BASE_URL] + [
+    s.strip() for s in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',')
+]:
+    if _o and _o.startswith(('http://', 'https://')) and _o not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(_o)
+
+#  쿠키 secure 플래그 — HTTPS 배포에서만 True.
+#  ★개발(http)에서 True로 두면 쿠키가 아예 안 실려 로그인이 안 된다. 기본 False 유지.
+_SECURE_COOKIES = os.environ.get('SECURE_COOKIES', 'False') == 'True'
+SESSION_COOKIE_SECURE = _SECURE_COOKIES
+CSRF_COOKIE_SECURE = _SECURE_COOKIES
+
 SOCIAL_LOGIN = {
     'providers': {
         'kakao': {
@@ -188,6 +210,33 @@ STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'   # collectstatic 산출 (운영: nginx가 서빙)
 
 # ── TTS mp3 등 미디어 파일 (API 명세서 v6.0 §3-2) ──
+# ── 미디어 저장소 (마음카드 이미지) ──────────────────────────────
+#  S3_MEDIA_BUCKET이 있으면 S3, 없으면 로컬 디스크(개발 기본).
+#  이유: 컨테이너 파일시스템은 휘발성인데 EmotionCard.image_url은 DB에 남는다.
+#        재시작하면 URL만 남고 파일이 없어 과거 마음카드가 전부 깨진다.
+#  코드는 django storage API만 쓰므로(emotion_cards/services.py:_store_card_file)
+#  여기 설정만 바꾸면 저장 위치가 바뀐다.
+_S3_MEDIA_BUCKET = os.environ.get('S3_MEDIA_BUCKET', '').strip()
+if _S3_MEDIA_BUCKET:
+    STORAGES = {
+        'default': {'BACKEND': 'storages.backends.s3boto3.S3Boto3Storage'},
+        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+    }
+    AWS_STORAGE_BUCKET_NAME = _S3_MEDIA_BUCKET
+    AWS_S3_REGION_NAME = os.environ.get('AWS_S3_REGION_NAME', 'ap-northeast-2')
+    #  ★ 필수: S3 키 앞에 'media/'를 붙여 로컬(MEDIA_URL='/media/')과 경로를 맞춘다.
+    #    없으면 URL이 /emotion_cards/xxx.png 가 되어 CloudFront의 /media/* 동작에
+    #    매칭되지 않고 SPA fallback(index.html)으로 떨어져 이미지가 전부 깨진다.
+    AWS_LOCATION = 'media'
+    AWS_DEFAULT_ACL = None            # 버킷 정책/OAC로 접근 제어 (객체 ACL 미사용)
+    AWS_QUERYSTRING_AUTH = False      # 공개 URL (서명 없이 CloudFront로 서빙)
+    AWS_S3_FILE_OVERWRITE = False     # 같은 이름이면 접미사 자동 부여
+    #  CloudFront를 앞에 두면 그 도메인으로 URL 생성 (없으면 S3 직접 URL)
+    _S3_MEDIA_DOMAIN = os.environ.get('S3_MEDIA_CUSTOM_DOMAIN', '').strip()
+    if _S3_MEDIA_DOMAIN:
+        AWS_S3_CUSTOM_DOMAIN = _S3_MEDIA_DOMAIN
+    #  자격증명은 EC2 인스턴스 역할에서 자동 획득 (키를 .env에 넣지 않는다)
+
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 

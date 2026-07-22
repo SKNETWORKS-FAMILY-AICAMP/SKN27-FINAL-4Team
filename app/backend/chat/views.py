@@ -5,11 +5,11 @@
   session_start   POST /api/session/start/        세션 시작 (친구 첫인사)
   chat_turn       POST /api/chat/                 대화 턴 (텍스트 즉시 + tts_task_id)
   tts_status      GET  /api/tts/<task_id>/        TTS 오디오 폴링
-  mbti_next_question GET /api/mbti/next-question/ (레거시·미사용) — MBTI 질문은 chat_turn 응답에 삽입
   session_end     POST /api/session/end/          세션 종료 (시크릿 캐시 파기)
 
 지원 모듈: graph/(LangGraph), tts_service, mbti, memory, secret_cache
 """
+import os
 import re
 
 from rest_framework import status
@@ -228,21 +228,33 @@ def chat_turn(request):
     # ── MBTI 질문을 대화 흐름에 자연스럽게 엮기 (유휴 타이머 대신) ──
     #  트리거가 '침묵(초)'이 아니라 '방금 사용자가 한 말'이 되도록 이 턴 안에서 판단.
     #  조건: 로그인 · 일반모드 · 이번 턴이 MBTI 답변 턴이 아님 · 감정이 안 무거움(joy/normal)
-    #       · 워밍업(사용자 3턴↑) · 4턴마다 1번 · 수집 미완료.
-    #  통과하면 봇 응답 끝에 질문 한 문장을 '같은 말풍선'으로 얹는다.
+    #       · 워밍업(사용자 3턴↑) · MBTI_MIN_GAP턴마다 1번 · 수집 미완료.
+    #  통과하면 봇 응답 뒤에 질문 한 문장을 '두 번째 말풍선'으로 얹는다.
+    #
+    #  2026-07-22: MBTI의 본진은 마이페이지(온보딩 입력·mock-qna·월간 리포트)다.
+    #    챗봇 수집은 '보조 채널' — 대화하다 어쩌다 몇 개 더 주워담는 정도라 완성 책임이 없다.
+    #    그래서 물어보는 빈도를 낮춘다: 기존 '% 4'(4턴마다) → env MBTI_MIN_GAP(기본 8).
+    #    '지금 물어봐도 자연스러운 문장인가'의 판단은 generate_question이 최근 6턴을 보고
+    #    이미 하고 있으므로(추가 LLM 콜 없음), 여기선 '너무 자주 묻지 않기'만 담당한다.
     probe_code = None
+    probe_text = None      # 별도 말풍선으로 내려줄 MBTI 질문 (2026-07-21)
     if (user and not session.is_secret and not session.mbti_pending
             and emotion_label in ('joy', 'normal')):
         user_turn_no = ChatMessage.objects.filter(session=session, role='user').count() + 1
-        if user_turn_no >= 3 and user_turn_no % 4 == 0 and not mbti_svc.is_complete(user):
+        _mbti_gap = int(os.environ.get('MBTI_MIN_GAP', '8'))
+        if user_turn_no >= 3 and user_turn_no % _mbti_gap == 0 and not mbti_svc.is_complete(user):
             _recent = list(ChatMessage.objects.filter(session=session).order_by('-created_at')[:6])
             _recent.reverse()
             _history = [{'role': m.role, 'content': m.content} for m in _recent]
             _probe = mbti_svc.generate_question(user, _history)
             if _probe:
-                probe_code, _probe_text = _probe
-                final_response = f'{final_response}\n\n{_probe_text}'
-                tagged_response = f'{tagged_response}\n\n{_probe_text}'
+                probe_code, probe_text = _probe
+                #  2026-07-21: 본문에 이어붙이지 않는다.
+                #  전엔 f'{final_response}\n\n{probe_text}'로 합쳐 한 말풍선에 넣었더니
+                #  말풍선이 길어져 대화 흐름이 끊겼다. 이제 응답에 mbti_probe로 따로 실어
+                #  프론트가 '두 번째 말풍선'으로 렌더한다 (한 번 더 물어보는 모양).
+                #  TTS는 본문만 읽는다 — 질문까지 읽으면 음성이 길어지고,
+                #  화면상 별개 버블인데 음성이 하나로 이어지면 어색하다.
 
     # MBTI pending 정리 (답변이든 다른 얘기든 해제)
     if session.mbti_pending:
@@ -268,6 +280,13 @@ def chat_turn(request):
             content=final_response, emotion_label=emotion_label,
         )
         message_id = assistant_msg.id
+        #  MBTI 질문은 별도 말풍선이므로 assistant 메시지로도 따로 남긴다 —
+        #  화면(2개 버블)과 DB(2행)를 일치시켜야 다음 턴 컨텍스트(최근 N턴)도 어긋나지 않는다.
+        if probe_text:
+            ChatMessage.objects.create(
+                session=session, role='assistant', content=probe_text,
+                emotion_label=emotion_label,
+            )
         uid = user.id if user else None
         # 요약 계층 완전 은퇴 (2026-07-19) — 소비자 0 확인(마음리포트는 ChatMessage만 읽음).
         # 위기 발화의 위로 연속성은 최근 N턴 원문이 담당 (요약 재인용 사고 F2의 원천도 함께 소멸).
@@ -285,7 +304,7 @@ def chat_turn(request):
     # 페이지 안내 칩 — 사용자가 리포트·마이페이지 관련 얘기를 꺼냈을 때만 (2026-07-12)
     suggest_page, suggest_label = _page_suggestion(message)
 
-    # TTS 병렬 생성 (ElevenLabs) — 연기 태그 포함 원문으로 생성, 1회 재생 후 파기
+    # TTS 병렬 생성 (OpenAI gpt-audio, 2026-07-19 확정) — 연기 태그 포함 원문으로 생성, 1회 재생 후 파기
     # 음소거 사용자(tts=false)는 생성 자체를 스킵 — 듣지 않을 음성에 크레딧을 쓰지 않는다 (2026-07-12)
     use_tts = request.data.get('tts', True)
     use_tts = use_tts not in (False, 'false', '0', 0)
@@ -296,6 +315,8 @@ def chat_turn(request):
         'session_id': session.id,
         'message_id': message_id,
         'message': {'text': final_response},
+        #  MBTI 질문 — 있으면 프론트가 본문 다음에 '두 번째 말풍선'으로 그린다 (2026-07-21)
+        'mbti_probe': ({'text': probe_text} if probe_text else None),
         'emotion_label': emotion_label,
         'tts_task_id': tts_task_id,
         'ui': {
@@ -343,72 +364,13 @@ def tts_audio(request, task_id):
     audio = tts_service.consume_audio(task_id)
     if audio is None:
         return _err('AUDIO_GONE', '이미 재생되었거나 존재하지 않는 음성입니다.', status.HTTP_404_NOT_FOUND)
-    # 포맷 자동 감지: Typecast=wav(RIFF), ElevenLabs=mp3
+    # 포맷 자동 감지: gpt-audio=mp3 (RIFF/wav 분기는 과거 provider 호환용 잔존)
     ctype = 'audio/wav' if audio[:4] == b'RIFF' else 'audio/mpeg'
     return HttpResponse(audio, content_type=ctype)
 
 
 # ═════════════════════════════════════════════════════════════
-# 3. MBTI 서브플로우
-# ═════════════════════════════════════════════════════════════
-
-@api_view(['GET'])
-@authentication_classes([CsrfExemptSessionAuthentication])
-@permission_classes([AllowAny])
-def mbti_next_question(request):
-    """(레거시) 구 10초 유휴 타이머용 엔드포인트 — 현재 프론트는 호출하지 않음.
-    MBTI 질문은 chat_turn 응답에 대화 흐름으로 얹는다(2026-07-08). 코드는 하위호환용 유지.
-    수집 미완료면 질문 반환 + pending 설정. 시크릿 모드는 완전 무저장 원칙으로 질문 안 함."""
-    session = _get_session(request.GET.get('session_id'), request)
-    if session is None:
-        return _err('SESSION_NOT_FOUND', '세션을 찾을 수 없습니다.', status.HTTP_404_NOT_FOUND)
-    if session.is_secret:
-        return _ok({'has_question': False})
-
-    if session.mbti_pending:
-        return _ok({'has_question': False})
-
-    user = _session_user(request, session)
-
-    # 방금까지의 대화 맥락 → 자연스러운 질문 생성 재료
-    recent = list(
-        ChatMessage.objects.filter(session=session).order_by('-created_at')[:6]
-    )
-    recent.reverse()
-    history = [{'role': m.role, 'content': m.content} for m in recent]
-
-    nq = mbti_svc.generate_question(user, history)
-    if nq is None:
-        return _ok({'has_question': False})
-
-    code, text = nq
-    session.mbti_pending = True
-    session.mbti_last_question_code = code
-    session.save(update_fields=['mbti_pending', 'mbti_last_question_code'])
-
-    # MBTI 질문도 대화 이력에 남긴다 (다음 턴 컨텍스트 연결)
-    if session.is_secret:
-        secret_cache.append(session.id, 'assistant', text)
-    else:
-        ChatMessage.objects.create(session=session, role='assistant', content=text)
-
-    use_tts = request.GET.get('tts', '1') not in ('false', '0')
-    tts_task_id = (tts_service.create_task(text, session.character, 'normal', cacheable=True)
-                   if use_tts else None)
-    return _ok({
-        'has_question': True,
-        'question_code': code,
-        'question_text': text,
-        'tts_task_id': tts_task_id,
-    })
-
-
-# (시크릿 모드 MBTI 저장 동의 플로우는 "시크릿 = 완전 무저장" 원칙으로 제거 — 2026-07-03.
-#  시크릿에서는 MBTI 질문 자체를 하지 않는다.)
-
-
-# ═════════════════════════════════════════════════════════════
-# 4. 세션 종료
+# 3. 세션 종료
 # ═════════════════════════════════════════════════════════════
 
 @api_view(['POST'])

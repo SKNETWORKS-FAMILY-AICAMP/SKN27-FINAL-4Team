@@ -9,6 +9,20 @@
 from collections import OrderedDict
 
 from .constants import MEMORY_ID_PREFIXES
+
+
+def _decrypt_source(value):
+    """Episode.text 복호화 — 그래프에 Fernet으로 저장돼 있다 (2026-07-21).
+
+    'enc:v1:' 접두사가 없는 값(암호화 도입 이전 데이터)은 decrypt가 그대로
+    돌려주므로 기존 기억도 계속 보인다. 키가 없으면 안내 문구가 나온다.
+    """
+    if not value:
+        return ''
+    from chat.crypto_fields import decrypt
+    return decrypt(value)
+
+
 from .introduction import (
     _cause_lead,
     build_memory_content,
@@ -272,7 +286,9 @@ def serialise_units(memory_records, event_records, relation_records, preference_
                 else 'fact' if record.get('saved_at')
                 else 'unknown'
             ),
-            'source_text': record.get('source_text') or '',
+            #  Episode.text는 Fernet으로 암호화돼 저장된다(graph_memory_v2_base:_store).
+            #  접두사 'enc:v1:'가 없는 기존 데이터는 decrypt가 그대로 통과시킨다 → 무중단.
+            'source_text': _decrypt_source(record.get('source_text')),
             'has_source': bool(record.get('has_source')),
             'graph': {
                 'user': {

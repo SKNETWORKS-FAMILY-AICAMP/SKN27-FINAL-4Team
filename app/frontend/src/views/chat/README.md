@@ -53,7 +53,6 @@
 POST /api/session/start/        → 세션 시작 (친구 첫인사 opener 반환)
 POST /api/chat/                 → 대화 턴 (텍스트 즉시 + tts_task_id)
 GET  /api/tts/:taskId/          → TTS 오디오 폴링
-GET  /api/mbti/next-question/   → MBTI 질문 (10초 유휴 시 · 일반 모드 전용)
 POST /api/session/end/          → 세션 종료 (시크릿: 캐시 파기 / 일반: 잔여 기억 정리)
 ```
 

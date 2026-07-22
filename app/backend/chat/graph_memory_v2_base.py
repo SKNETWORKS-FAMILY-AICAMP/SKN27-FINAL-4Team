@@ -34,11 +34,20 @@ import json
 import os
 import re
 import threading
+import time
 import uuid
 
 _driver = None
-_driver_tried = False
+_driver_failed_at = 0.0     # 마지막 연결 실패 시각 (0 = 아직 시도 안 함)
 _lock = threading.Lock()
+
+#  연결 실패 후 재시도 쿨다운(초). 2026-07-21 추가.
+#  이전엔 _driver_tried 불리언이라 "한 번 실패 = 프로세스 재시작까지 영구 포기"였다.
+#  실제 위험은 좁다(첫 요청 시점에 Neo4j가 안 떠 있는 경우 — 운영 중 다운은
+#  드라이버 연결 풀이 스스로 복구한다). 다만 컨테이너 기동 순서가 꼬이면
+#  기억 기능만 조용히 죽은 채로 서비스가 계속된다.
+#  매 요청 재연결은 Neo4j 다운 시 응답을 느리게 하므로 쿨다운을 둔다.
+_RETRY_AFTER = int(os.environ.get('NEO4J_RETRY_AFTER_SEC', '60'))
 
 # 다이얼 일원화 (2026-07-19) — 값·근거·env 이름은 memory_config.py 한 곳에서 관리.
 # (CLOSURE_WINDOW=14 삭제 — 종결 단언 노출은 사건 자신의 occurs 날짜에서 유도:
@@ -122,13 +131,22 @@ def _causal_question(message):
 
 
 def _get_driver():
-    global _driver, _driver_tried
-    if _driver_tried:
+    """연결된 드라이버 반환. 실패 시 None이되 _RETRY_AFTER초 뒤 재시도한다.
+
+    성공하면 _driver에 캐시되어 이후 호출은 재시도 경로를 아예 타지 않는다
+    (기존과 동일한 비용). 실패 상태에서만 쿨다운을 확인한다.
+    """
+    global _driver, _driver_failed_at
+    if _driver is not None:                     # 이미 연결됨 — 그대로 재사용
         return _driver
+    if _driver_failed_at and (time.time() - _driver_failed_at) < _RETRY_AFTER:
+        return None                             # 쿨다운 중 — 즉시 포기(지연 없음)
     with _lock:
-        if _driver_tried:
+        if _driver is not None:
             return _driver
-        _driver_tried = True
+        if _driver_failed_at and (time.time() - _driver_failed_at) < _RETRY_AFTER:
+            return None
+        _driver_failed_at = time.time()         # 이번 시도 실패로 일단 표시
         uri = os.environ.get('NEO4J_URI', '').strip()
         if not uri:
             return None
@@ -146,9 +164,11 @@ def _get_driver():
             drv.verify_connectivity()
             _setup(drv)
             _driver = drv
+            _driver_failed_at = 0.0             # 성공 — 이후 재시도 경로 안 탐
             print('[graph_memory_v2_base] Neo4j(temporal KG) 연결됨')
         except Exception as e:
-            print(f'[graph_memory_v2_base] Neo4j 비활성({e})')
+            print(f'[graph_memory_v2_base] Neo4j 비활성({e}) — '
+                  f'{_RETRY_AFTER}초 뒤 재시도')
             _driver = None
         return _driver
 
@@ -519,8 +539,14 @@ def _store(tx, uid, data, msg_probs, message):
     today = _today_s()
     eid = 'ep_' + uuid.uuid4().hex[:12]
     tx.run('MERGE (u:User {uid:$uid})', uid=uid)
+    #  Episode.text = 발화 원문. Postgres(chat_messages)와 같은 Fernet으로 암호화한다
+    #  (2026-07-21). 검색·매칭에 쓰이지 않아(WHERE ... CONTAINS 0건) 암호화해도
+    #  기능이 죽지 않는다 — 기억보관함 표시(memorystorage) 때 복호화해서 보여준다.
+    #  이유: crypto_fields.py:6의 "DB가 유출돼도 대화 내용은 암호문" 보장이
+    #        그래프에 평문 사본이 있으면 성립하지 않는다.
+    from chat.crypto_fields import encrypt as _enc
     tx.run('CREATE (ep:Episode {id:$eid, uid:$uid, text:$text, created_at:$now})',
-           eid=eid, uid=uid, text=message[:1000], now=now)
+           eid=eid, uid=uid, text=_enc(message[:1000]), now=now)
 
     events = [e for e in (data.get('events') or []) if isinstance(e, dict)]
     keep_keys = set()   # 이번 턴 저장분 — 무효화에서 보호 (§8-4-1a)
