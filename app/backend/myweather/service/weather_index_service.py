@@ -200,22 +200,22 @@ def calculate_weather_indices(weather, to_float):
         food_poisoning_derived = True
         food_poisoning_method = (
             "기온·습도 기반 참고 산식: 1.79 × 1.03^기온 × 1.04^습도 "
-            "(표시 범위 0~300, 현행 공식 발표값과는 다름)"
+            "(표시 범위 0~300, 식약처·기상청 55/71/86 기준 적용)"
         )
     else:
         food_poisoning = None
         food_poisoning_raw = None
 
     if food_poisoning is not None:
-        if food_poisoning >= 258:
+        if food_poisoning >= 86:
             food_poisoning_level = "위험"
             food_poisoning_severity = "danger"
             food_poisoning_status = "식중독 발생 가능성이 매우 높아 각별한 경계가 필요합니다."
-        elif food_poisoning >= 213:
+        elif food_poisoning >= 71:
             food_poisoning_level = "경고"
             food_poisoning_severity = "warning"
             food_poisoning_status = "식중독 발생 가능성이 높아 예방에 경계가 필요합니다."
-        elif food_poisoning >= 165:
+        elif food_poisoning >= 55:
             food_poisoning_level = "주의"
             food_poisoning_severity = "caution"
             food_poisoning_status = "식중독 발생 가능성이 중간 단계여서 예방에 주의가 필요합니다."
