@@ -4,6 +4,7 @@ import json
 from django.core.cache import cache
 
 from myweather.constants import (
+    WEATHER_HOBBY_ROTATION_CACHE_SECONDS,
     WEATHER_INSIGHT_ALERT_STATE_FIELDS,
     WEATHER_INSIGHT_FALLBACK_CACHE_SECONDS,
     WEATHER_INSIGHT_SUCCESS_CACHE_SECONDS,
@@ -14,6 +15,38 @@ from user.constants import WEATHER_INSIGHT_CACHE_VERSION
 
 def _selected_values(item, fields):
     return tuple(item.get(field) for field in fields)
+
+
+def select_weather_hobby(user_id, user_profile, *, rotate=False):
+    """Keep one profile hobby selected, advancing only on an explicit refresh."""
+    profile = dict(user_profile or {})
+    hobbies = list(dict.fromkeys(
+        str(value).strip()
+        for value in profile.get("hobbies") or []
+        if str(value).strip()
+    ))
+    if not hobbies:
+        profile["hobbies"] = []
+        profile["selected_hobby"] = ""
+        return profile
+
+    cache_key = f"weather_hobby_rotation_v1_{user_id}"
+    previous = str(cache.get(cache_key) or "").strip()
+    if previous not in hobbies:
+        selected = hobbies[0]
+    elif rotate and len(hobbies) > 1:
+        selected = hobbies[(hobbies.index(previous) + 1) % len(hobbies)]
+    else:
+        selected = previous
+
+    cache.set(
+        cache_key,
+        selected,
+        timeout=WEATHER_HOBBY_ROTATION_CACHE_SECONDS,
+    )
+    profile["hobbies"] = [selected]
+    profile["selected_hobby"] = selected
+    return profile
 
 
 def build_weather_insight_cache_key(weather, user_id, user_profile):

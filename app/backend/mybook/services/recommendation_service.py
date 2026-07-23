@@ -11,6 +11,7 @@ from ..constants import (
     PROCESSING_NOTICE,
     PROFILE_BASIS_TO_THEME,
     RECOMMENDATION_ENGINE_VERSION,
+    RECOMMENDATION_HISTORY_LIMIT,
     UNEXPECTED_ERROR_CODE,
     UNEXPECTED_ERROR_MESSAGE,
 )
@@ -46,6 +47,15 @@ def isbns_for_themes(isbn_map, theme_ids):
 
 def recommendation_isbns(recommendation):
     isbns_by_theme = {}
+    history = (
+        recommendation.get("recommendation_history", {}).get("isbns", {})
+        if isinstance(recommendation, dict) else {}
+    )
+    for theme_id, values in history.items():
+        for value in values if isinstance(values, list) else []:
+            isbn = str(value or "").strip()
+            if isbn and isbn not in isbns_by_theme.setdefault(theme_id, []):
+                isbns_by_theme[theme_id].append(isbn)
     books = recommendation.get("books", []) if isinstance(recommendation, dict) else []
     for book in books:
         if not isinstance(book, dict):
@@ -105,15 +115,23 @@ def payload_has_real_books(payload):
     return True
 
 
-def _latest_valid_previous_record(user, today):
+def _recent_valid_previous_records(user, today):
     records = DailyBookRecommendation.objects.filter(
         user=user,
         recommendation_date__lt=today,
     ).order_by("-recommendation_date")
-    return next(
-        (record for record in records.iterator() if payload_has_real_books(record.payload)),
-        None,
-    )
+    valid = []
+    for record in records.iterator():
+        if payload_has_real_books(record.payload):
+            valid.append(record)
+            if len(valid) >= RECOMMENDATION_HISTORY_LIMIT:
+                break
+    return valid
+
+
+def _latest_valid_previous_record(user, today):
+    records = _recent_valid_previous_records(user, today)
+    return records[0] if records else None
 
 
 def _failure_response(exc):
@@ -173,10 +191,11 @@ def build_recommendation_response(
 
     if not is_cached:
         profile_basis = current_profile_basis
-        previous_record = _latest_valid_previous_record(user, today)
-        previous_isbns = recommendation_isbns(
-            previous_record.payload if previous_record else None
-        )
+        previous_records = _recent_valid_previous_records(user, today)
+        previous_record = previous_records[0] if previous_records else None
+        previous_isbns = merge_isbns_by_theme(*(
+            recommendation_isbns(record.payload) for record in previous_records
+        ))
         if (force or engine_changed) and daily_payload_valid:
             previous_isbns = merge_isbns_by_theme(
                 previous_isbns,
@@ -196,7 +215,11 @@ def build_recommendation_response(
             recommendation = recommendation_agent.recommend(
                 user_profile,
                 force_theme=force_theme if force else automatic_force_theme,
-                cached_data=daily_record.payload if daily_payload_valid else None,
+                cached_data=(
+                    daily_record.payload
+                    if daily_payload_valid
+                    else (previous_record.payload if previous_record else None)
+                ),
                 excluded_isbns=previous_isbns,
             )
             if not payload_has_real_books(recommendation):

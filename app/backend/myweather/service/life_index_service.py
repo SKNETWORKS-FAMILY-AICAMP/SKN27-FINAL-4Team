@@ -164,7 +164,10 @@ def _request_uv_index(service_key, area_no, announced_at):
             }
         except LifeIndexConfigurationError:
             raise
-        except (requests.RequestException, ET.ParseError, ValueError) as exc:
+        except ValueError:
+            # 정상 응답이지만 해당 발표시각 자료가 없으면 호출자가 이전 발표시각을 조회한다.
+            raise
+        except (requests.RequestException, ET.ParseError) as exc:
             last_error = exc
             if attempt < KMA_LIFE_INDEX_RETRY_COUNT:
                 time.sleep(0.25 * (2 ** attempt))
@@ -203,8 +206,12 @@ def fetch_uv_index(location):
             except LifeIndexConfigurationError:
                 failure_status = "authorization_failed"
                 break
-            except (requests.RequestException, ET.ParseError, ValueError):
+            except ValueError:
+                # 생산 지연으로 최신 발표시각 자료만 비어 있을 때에만 이전 시각을 확인한다.
                 continue
+            except (requests.RequestException, ET.ParseError):
+                # 연결·응답 형식 장애는 발표시각을 바꿔도 해결되지 않으므로 중복 대기를 막는다.
+                break
     except (TypeError, OverflowError, ValueError):
         pass
 

@@ -82,7 +82,7 @@
         </dl>
 
         <p v-if="error" class="weather-error">{{ error }}</p>
-        <p v-else-if="loading" class="weather-loading">{{ selectedRegion }} 날씨와 추천을 불러오는 중입니다.</p>
+        <p v-else-if="loading" class="weather-loading">{{ selectedRegion }} 날씨를 불러오는 중입니다.</p>
 
         <button class="weather-refresh-button" type="button" :disabled="loading" @click="$emit('refresh')">
           새로고침
@@ -159,6 +159,9 @@
                 <span>{{ item.scale_min_label }}</span>
                 <span>{{ item.scale_max_label }}</span>
               </div>
+              <p v-if="item.available === false" class="weather-guide-status">
+                {{ item.status }}
+              </p>
             </article>
           </div>
           <p v-else class="weather-empty-message" role="status">
@@ -287,6 +290,7 @@
             <p>{{ methodology.graph }}</p>
             <a v-if="methodology.formula_source_url" :href="methodology.formula_source_url" target="_blank" rel="noopener noreferrer">기상청 체감온도 산식 보기</a>
             <a v-if="methodology.discomfort_source_url" :href="methodology.discomfort_source_url" target="_blank" rel="noopener noreferrer">기상청 생활기상지수 안내 보기</a>
+            <a v-if="methodology.food_poisoning_source_url" :href="methodology.food_poisoning_source_url" target="_blank" rel="noopener noreferrer">현행 공식 식중독 단계 참고</a>
           </details>
           <details v-if="processingNotice || apiLimits">
             <summary>AI·API 이용 안내</summary>
@@ -382,6 +386,9 @@ export default {
       return this.insight?.generation || null;
     },
     generationSummary() {
+      if (this.generation?.status === "pending") {
+        return "기상청 관측값을 먼저 표시하고 개인화 해설을 준비하고 있습니다.";
+      }
       if (this.generation?.status === "generated") {
         return this.generation.personalized
           ? `OpenAI가 ${this.generation.personalization_fields.join("·")}을 최소한으로 참고해 개인화 문장을 생성했습니다.`
@@ -433,7 +440,7 @@ export default {
       return `${date.slice(4, 6)}.${date.slice(6, 8)} ${time.slice(0, 2)}:${time.slice(2, 4)}`;
     },
     loadingText() {
-      return this.loading ? "날씨 데이터를 분석하여 맞춤형 리포트를 준비하고 있습니다." : "새로운 날씨 리포트를 불러오는 중입니다.";
+      return "새 정보를 로딩중입니다.";
     },
     insightTitle() {
       if (this.error) return "날씨 정보를 확인할 수 없어요";

@@ -3,6 +3,7 @@ import os
 import re
 import time
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from datetime import datetime
 from datetime import timedelta
@@ -735,8 +736,8 @@ def fetch_weekly_forecast(auth_key, grid, location):
     mid_temperature_items = []
     mid_land_items = []
 
-    try:
-        short_payload = _request_kma_json(get_short_forecast_url(), {
+    def load_short_forecast():
+        payload = _request_kma_json(get_short_forecast_url(), {
             **common_params,
             "numOfRows": 1000,
             "base_date": short_date,
@@ -744,31 +745,44 @@ def fetch_weekly_forecast(auth_key, grid, location):
             "nx": grid["nx"],
             "ny": grid["ny"],
         })
-        short_forecasts = parse_short_forecast_items(_validate_kma_payload(short_payload))
-    except WeatherServiceError:
-        errors.append("short_forecast")
+        return parse_short_forecast_items(_validate_kma_payload(payload))
 
-    try:
-        temperature_payload = _request_kma_json(get_mid_temperature_url(), {
+    def load_mid_temperature():
+        payload = _request_kma_json(get_mid_temperature_url(), {
             **common_params,
             "numOfRows": 10,
             "regId": mid_codes["temperature"],
             "tmFc": mid_time,
         })
-        mid_temperature_items = _validate_kma_payload(temperature_payload)
-    except WeatherServiceError:
-        errors.append("mid_temperature")
+        return _validate_kma_payload(payload)
 
-    try:
-        land_payload = _request_kma_json(get_mid_land_url(), {
+    def load_mid_land():
+        payload = _request_kma_json(get_mid_land_url(), {
             **common_params,
             "numOfRows": 10,
             "regId": mid_codes["land"],
             "tmFc": mid_time,
         })
-        mid_land_items = _validate_kma_payload(land_payload)
-    except WeatherServiceError:
-        errors.append("mid_land")
+        return _validate_kma_payload(payload)
+
+    loaders = {
+        "short_forecast": load_short_forecast,
+        "mid_temperature": load_mid_temperature,
+        "mid_land": load_mid_land,
+    }
+    loaded = {}
+    with ThreadPoolExecutor(max_workers=len(loaders)) as executor:
+        futures = {executor.submit(loader): name for name, loader in loaders.items()}
+        for future in as_completed(futures):
+            name = futures[future]
+            try:
+                loaded[name] = future.result()
+            except WeatherServiceError:
+                errors.append(name)
+
+    short_forecasts = loaded.get("short_forecast", [])
+    mid_temperature_items = loaded.get("mid_temperature", [])
+    mid_land_items = loaded.get("mid_land", [])
 
     mid_forecasts = parse_mid_forecast_items(mid_temperature_items, mid_land_items, mid_time)
     weekly = merge_weekly_forecasts(short_forecasts, mid_forecasts)
@@ -821,29 +835,49 @@ def fetch_current_weather(lat=None, lon=None, region=None):
         "ny": grid["ny"],
     }
 
-    parsed = _cached_payload(observation_cache_key)
-    observation_cache_status = "fresh"
-    if parsed is None:
-        stale_key = f"myweather:kma:ncst:stale:{grid['nx']}:{grid['ny']}"
-        try:
-            payload = _request_kma_json(get_current_weather_url(), params)
-            parsed = parse_kma_items(_validate_kma_payload(payload))
-            parsed["_observation_base_date"] = base_date
-            parsed["_observation_base_time"] = base_time
-            cache.set(observation_cache_key, parsed, timeout=KMA_CACHE_SECONDS)
-            cache.set(stale_key, parsed, timeout=KMA_STALE_CACHE_SECONDS)
-            observation_cache_status = "miss"
-        except WeatherServiceError:
-            parsed = _cached_payload(stale_key)
-            if parsed is None:
-                raise
-            observation_cache_status = "stale"
+    def load_observation():
+        parsed = _cached_payload(observation_cache_key)
+        cache_status = "fresh"
+        if parsed is None:
+            stale_key = f"myweather:kma:ncst:stale:{grid['nx']}:{grid['ny']}"
+            try:
+                payload = _request_kma_json(get_current_weather_url(), params)
+                parsed = parse_kma_items(_validate_kma_payload(payload))
+                parsed["_observation_base_date"] = base_date
+                parsed["_observation_base_time"] = base_time
+                cache.set(observation_cache_key, parsed, timeout=KMA_CACHE_SECONDS)
+                cache.set(stale_key, parsed, timeout=KMA_STALE_CACHE_SECONDS)
+                cache_status = "miss"
+            except WeatherServiceError:
+                parsed = _cached_payload(stale_key)
+                if parsed is None:
+                    raise
+                cache_status = "stale"
+        return parsed, cache_status
+
+    weather_loaders = {
+        "observation": load_observation,
+        "sky_forecast": lambda: fetch_sky_forecast(auth_key, grid),
+        "weekly_forecast": lambda: fetch_weekly_forecast(auth_key, grid, location),
+        "weather_alerts": lambda: fetch_weather_warnings(location),
+        "uv_index": lambda: fetch_uv_index(location),
+    }
+    loaded = {}
+    with ThreadPoolExecutor(max_workers=len(weather_loaders)) as executor:
+        futures = {
+            executor.submit(loader): name
+            for name, loader in weather_loaders.items()
+        }
+        for future in as_completed(futures):
+            loaded[futures[future]] = future.result()
+
+    parsed, observation_cache_status = loaded["observation"]
     observation_base_date = parsed.pop("_observation_base_date", base_date)
     observation_base_time = parsed.pop("_observation_base_time", base_time)
-    sky_forecast = fetch_sky_forecast(auth_key, grid)
-    weekly_forecast = fetch_weekly_forecast(auth_key, grid, location)
-    weather_alerts = fetch_weather_warnings(location)
-    uv_index = fetch_uv_index(location)
+    sky_forecast = loaded["sky_forecast"]
+    weekly_forecast = loaded["weekly_forecast"]
+    weather_alerts = loaded["weather_alerts"]
+    uv_index = loaded["uv_index"]
     if sky_forecast.get("condition"):
         parsed["condition"] = sky_forecast["condition"]
     if sky_forecast:

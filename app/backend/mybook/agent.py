@@ -3,6 +3,7 @@ import hashlib
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from functools import lru_cache
 
 import requests
 from django.core.cache import cache
@@ -12,6 +13,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from .constants import (
     BOOK_COVER_CACHE_SECONDS,
     BOOK_COVER_TIMEOUT_SECONDS,
+    EMOTION_SEARCH_MARKERS,
     FALLBACK_KEYWORDS,
     FALLBACK_CONTENT_TERMS,
     GENRE_RULES,
@@ -26,9 +28,11 @@ from .constants import (
     NLK_PROVIDER_INFO,
     NLK_BOOK_QUERY_LIMIT,
     OPEN_LIBRARY_COVER_PROVIDER_INFO,
+    POSITIVE_EMOTION_LABELS,
     PROFILE_TOPIC_THEME_IDS,
     REJECTED_KAKAO_TITLE_MARKERS,
     RECOMMENDATION_ENGINE_VERSION,
+    RECOMMENDATION_HISTORY_LIMIT,
     THEME_DEFINITIONS,
     THEME_SEARCH_GUIDES,
     VISIBLE_DATA_BLOCKED_PATTERNS,
@@ -85,8 +89,20 @@ class BookRecommendationAgent:
                 if isinstance(th, dict) and "id" in th:
                     cached_themes[th["id"]] = th
 
-        themes = BookRecommendationAgent._build_themes(user_profile)
-        excluded_by_theme = excluded_isbns if isinstance(excluded_isbns, dict) else {}
+        history = BookRecommendationAgent._rotation_history(cached_data)
+        previous_basis = {
+            theme_id: values[-1]
+            for theme_id, values in history["selected_basis"].items()
+            if values
+        }
+        themes = BookRecommendationAgent._build_themes(user_profile, previous_basis)
+        supplied_exclusions = excluded_isbns if isinstance(excluded_isbns, dict) else {}
+        excluded_by_theme = {}
+        for theme_id in (definition["id"] for definition in THEME_DEFINITIONS):
+            excluded_by_theme[theme_id] = list(dict.fromkeys([
+                *(history["isbns"].get(theme_id) or []),
+                *(supplied_exclusions.get(theme_id) or []),
+            ]))[-RECOMMENDATION_HISTORY_LIMIT:]
         for theme in themes:
             theme["excluded_isbns"] = excluded_by_theme.get(theme["id"], [])
 
@@ -99,6 +115,9 @@ class BookRecommendationAgent:
                 theme["keyword"] = cached_theme_info.get("keyword", theme.get("keyword"))
                 theme["reason"] = cached_theme_info.get("reason", theme.get("reason"))
                 theme["keyword_basis"] = cached_theme_info.get("keyword_basis", theme.get("keyword_basis"))
+                theme["search_terms"] = cached_theme_info.get("search_terms", theme.get("search_terms", []))
+                theme["content_terms"] = cached_theme_info.get("content_terms", theme.get("content_terms", []))
+                theme["selected_basis"] = cached_theme_info.get("selected_basis", theme.get("selected_basis", ""))
                 theme["skip_process"] = True
             else:
                 theme["skip_process"] = False
@@ -137,6 +156,7 @@ class BookRecommendationAgent:
                     )
 
         books = BookRecommendationAgent._generate_reviews(user_profile, themes, cached_books=cached_books)
+        history = BookRecommendationAgent._updated_rotation_history(history, themes, books)
 
         return {
             "recommendation_engine": RECOMMENDATION_ENGINE_VERSION,
@@ -168,6 +188,7 @@ class BookRecommendationAgent:
                 for theme in themes
             ],
             "books": books,
+            "recommendation_history": history,
             "source_disclosure": {
                 "book_metadata": "Kakao Daum 책 검색",
                 "cover_metadata": "Kakao Daum 책 검색 표지",
@@ -176,6 +197,63 @@ class BookRecommendationAgent:
                 "providers": [KAKAO_BOOK_PROVIDER_INFO],
             },
         }
+
+    @staticmethod
+    def _rotation_history(cached_data):
+        history = {
+            "selected_basis": {theme_id: [] for theme_id in ("interests", "hobbies")},
+            "isbns": {definition["id"]: [] for definition in THEME_DEFINITIONS},
+        }
+        if not isinstance(cached_data, dict):
+            return history
+
+        raw_history = cached_data.get("recommendation_history") or {}
+        for theme_id in history["selected_basis"]:
+            values = (raw_history.get("selected_basis") or {}).get(theme_id) or []
+            history["selected_basis"][theme_id] = [
+                str(value).strip() for value in values if str(value).strip()
+            ][-RECOMMENDATION_HISTORY_LIMIT:]
+        for theme_id in history["isbns"]:
+            values = (raw_history.get("isbns") or {}).get(theme_id) or []
+            history["isbns"][theme_id] = list(dict.fromkeys(
+                _normalize_isbn([value]) for value in values if _normalize_isbn([value])
+            ))[-RECOMMENDATION_HISTORY_LIMIT:]
+
+        for theme in cached_data.get("themes") or []:
+            theme_id = str(theme.get("id") or "") if isinstance(theme, dict) else ""
+            selected = str(theme.get("selected_basis") or "").strip() if isinstance(theme, dict) else ""
+            if theme_id in history["selected_basis"] and selected:
+                values = history["selected_basis"][theme_id]
+                if not values or values[-1] != selected:
+                    values.append(selected)
+                    del values[:-RECOMMENDATION_HISTORY_LIMIT]
+        for book in cached_data.get("books") or []:
+            if not isinstance(book, dict):
+                continue
+            theme_id = str(book.get("theme_id") or "")
+            isbn = _normalize_isbn([book.get("isbn")])
+            if theme_id in history["isbns"] and isbn and isbn not in history["isbns"][theme_id]:
+                history["isbns"][theme_id].append(isbn)
+                del history["isbns"][theme_id][:-RECOMMENDATION_HISTORY_LIMIT]
+        return history
+
+    @staticmethod
+    def _updated_rotation_history(history, themes, books):
+        for theme in themes:
+            theme_id = theme.get("id")
+            selected = str(theme.get("selected_basis") or "").strip()
+            if theme_id in history["selected_basis"] and selected:
+                values = history["selected_basis"][theme_id]
+                if not values or values[-1] != selected:
+                    values.append(selected)
+                    del values[:-RECOMMENDATION_HISTORY_LIMIT]
+        for book in books:
+            theme_id = book.get("theme_id")
+            isbn = _normalize_isbn([book.get("isbn")])
+            if theme_id in history["isbns"] and isbn and isbn not in history["isbns"][theme_id]:
+                history["isbns"][theme_id].append(isbn)
+                del history["isbns"][theme_id][:-RECOMMENDATION_HISTORY_LIMIT]
+        return history
 
     @staticmethod
     def _enrich_book_covers(books):
@@ -277,13 +355,25 @@ class BookRecommendationAgent:
             )
 
     @staticmethod
-    def _build_themes(user_profile):
+    def _build_themes(user_profile, previous_basis=None):
+        previous_basis = previous_basis if isinstance(previous_basis, dict) else {}
+        try:
+            shared_llm = _get_llm(temperature=0.25, max_tokens=220)
+        except Exception:
+            # 기존 테마별 폴백 경로가 인증 설정 오류도 처리하도록 유지한다.
+            shared_llm = None
+
         def build_theme(definition):
             theme_id = definition["id"]
             fallback_keyword, fallback_reason = FALLBACK_KEYWORDS[theme_id]
             basis_values = BookRecommendationAgent._basis_values(
                 user_profile,
                 definition["basis_key"],
+            )
+            required_basis = BookRecommendationAgent._next_profile_basis(
+                theme_id,
+                basis_values,
+                previous_basis.get(theme_id),
             )
 
             return {
@@ -295,6 +385,8 @@ class BookRecommendationAgent:
                     basis_values,
                     fallback_keyword,
                     fallback_reason,
+                    llm=shared_llm,
+                    required_basis=required_basis,
                 ),
             }
 
@@ -302,22 +394,37 @@ class BookRecommendationAgent:
             return list(executor.map(build_theme, THEME_DEFINITIONS))
 
     @staticmethod
-    def _build_search_intent(user_profile, definition, basis_values, fallback_keyword, fallback_reason):
+    def _build_search_intent(
+        user_profile,
+        definition,
+        basis_values,
+        fallback_keyword,
+        fallback_reason,
+        llm=None,
+        required_basis="",
+    ):
         try:
-            response = _get_llm(temperature=0.25, max_tokens=220).invoke([
+            response = (llm or _get_llm(temperature=0.25, max_tokens=220)).invoke([
                 (
                     "system",
                     "당신은 책 제목의 문구가 아니라 책이 실제로 다루는 내용을 기준으로 "
                     "개인 맞춤 Kakao Daum 도서 검색어를 설계하는 큐레이터입니다. "
                     "온라인 서점 검색에서 실제 책 후보가 충분히 나오는 한국어 검색어와 추천 의도를 JSON으로만 작성하세요.",
                 ),
-                ("user", BookRecommendationAgent._keyword_prompt(user_profile, definition, basis_values)),
+                (
+                    "user",
+                    BookRecommendationAgent._keyword_prompt(
+                        user_profile,
+                        definition,
+                        basis_values,
+                        required_basis=required_basis,
+                    ),
+                ),
             ])
             data = BookRecommendationAgent._parse_json(response.content)
             keyword = _clean_keyword(data.get("keyword"))
-            selected_basis = BookRecommendationAgent._selected_basis_value(
-                data.get("selected_basis"),
-                basis_values,
+            selected_basis = required_basis or BookRecommendationAgent._selected_basis_value(
+                data.get("selected_basis"), basis_values,
             )
             content_terms = _clean_content_terms(data.get("content_terms"), keyword)
             keyword, content_terms = BookRecommendationAgent._anchor_profile_topic(
@@ -326,11 +433,26 @@ class BookRecommendationAgent:
                 content_terms,
                 selected_basis,
             )
-            search_terms = _book_search_terms(
-                data.get("search_terms"),
-                selected_basis=selected_basis,
-                keyword=keyword,
-            )
+            if definition["id"] == "emotion":
+                keyword, content_terms, raw_search_terms = (
+                    BookRecommendationAgent._sanitize_emotion_search_intent(
+                        keyword,
+                        content_terms,
+                        data.get("search_terms"),
+                        basis_values,
+                    )
+                )
+                search_terms = _book_search_terms(
+                    raw_search_terms,
+                    selected_basis="",
+                    keyword=keyword,
+                )
+            else:
+                search_terms = _book_search_terms(
+                    data.get("search_terms"),
+                    selected_basis=selected_basis,
+                    keyword=keyword,
+                )
             reason = str(data.get("reason") or "").strip()
             if keyword:
                 return {
@@ -349,19 +471,36 @@ class BookRecommendationAgent:
             basis_values,
             fallback_keyword,
         )
+        selected_basis = required_basis or (
+            str(basis_values[0]).strip() if basis_values else ""
+        )
+        fallback_content_terms = BookRecommendationAgent._fallback_content_terms(
+            definition["id"],
+            basis_values,
+            fallback_keyword,
+        )
+        search_term_basis = selected_basis
+        if definition["id"] == "emotion":
+            keyword, fallback_content_terms, fallback_search_terms = (
+                BookRecommendationAgent._sanitize_emotion_search_intent(
+                    keyword,
+                    fallback_content_terms,
+                    [],
+                    basis_values,
+                )
+            )
+            search_term_basis = ""
+        else:
+            fallback_search_terms = []
         return {
             "keyword": keyword,
-            "content_terms": BookRecommendationAgent._fallback_content_terms(
-                definition["id"],
-                basis_values,
-                fallback_keyword,
-            ),
+            "content_terms": fallback_content_terms,
             "search_terms": _book_search_terms(
-                [],
-                selected_basis=(str(basis_values[0]).strip() if basis_values else ""),
+                fallback_search_terms,
+                selected_basis=search_term_basis,
                 keyword=keyword,
             ),
-            "selected_basis": str(basis_values[0]).strip() if basis_values else "",
+            "selected_basis": selected_basis,
             "reason": fallback_reason,
             "keyword_basis": definition["basis_label"],
         }
@@ -371,6 +510,69 @@ class BookRecommendationAgent:
         available = [str(item).strip() for item in basis_values if str(item).strip()]
         requested = str(value or "").strip()
         return next((item for item in available if item == requested), available[0] if available else "")
+
+    @staticmethod
+    def _next_profile_basis(theme_id, basis_values, previous_basis):
+        available = [str(item).strip() for item in basis_values if str(item).strip()]
+        if theme_id not in PROFILE_TOPIC_THEME_IDS or not available:
+            return ""
+        previous = str(previous_basis or "").strip()
+        if previous not in available:
+            return available[0]
+        return available[(available.index(previous) + 1) % len(available)]
+
+    @staticmethod
+    def _emotion_is_positive(basis_values):
+        values = {str(value).strip().lower() for value in basis_values if str(value).strip()}
+        return bool(values & {label.lower() for label in POSITIVE_EMOTION_LABELS})
+
+    @staticmethod
+    def _emotion_reading_goal(basis_values):
+        if BookRecommendationAgent._emotion_is_positive(basis_values):
+            return "긍정적인 상태를 자연스럽게 유지·확장하는 몰입, 유머, 성취, 발견의 독서 경험"
+        return "무거운 상태를 직접 분석하지 않고 긴장을 덜어 환기·회복을 돕는 독서 경험"
+
+    @staticmethod
+    def _sanitize_emotion_search_intent(keyword, content_terms, search_terms, basis_values):
+        emotion_labels = list(dict.fromkeys([
+            *(str(value).strip() for value in basis_values if str(value).strip()),
+            *EMOTION_SEARCH_MARKERS,
+        ]))
+
+        def without_labels(value):
+            cleaned = str(value or "")
+            for label in emotion_labels:
+                cleaned = re.sub(
+                    rf"{re.escape(label)}(?:으로|에서|에게|처럼|보다|까지|부터|을|를|이|가|은|는|의|과|와|로)?",
+                    " ",
+                    cleaned,
+                    flags=re.IGNORECASE,
+                )
+            cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,-/")
+            return re.sub(
+                r"^(?:(?:(?:더|더욱)\s*)?깊게\s+만드는|더하는|유지하는|이어가는|해소하는|달래는|회복하는)\s+",
+                "",
+                cleaned,
+            ).strip()
+
+        positive = BookRecommendationAgent._emotion_is_positive(basis_values)
+        fallback_keyword = "몰입 성장 소설" if positive else "마음 환기 소설"
+        cleaned_keyword = _clean_keyword(without_labels(keyword)) or fallback_keyword
+        cleaned_content = [without_labels(value) for value in content_terms or []]
+        cleaned_search = [without_labels(value) for value in search_terms or []]
+        goal_terms = (
+            ["몰입", "일상 활력", "유머", "성취"]
+            if positive
+            else ["마음 환기", "긴장 완화", "회복", "휴식"]
+        )
+        cleaned_content = _clean_content_terms(
+            [*cleaned_content, *goal_terms],
+            cleaned_keyword,
+        )
+        cleaned_search = [value for value in cleaned_search if value]
+        if not cleaned_search:
+            cleaned_search = goal_terms[:3]
+        return cleaned_keyword, cleaned_content, cleaned_search
 
     @staticmethod
     def _anchor_profile_topic(theme_id, keyword, content_terms, selected_basis):
@@ -388,21 +590,32 @@ class BookRecommendationAgent:
         return anchored_keyword, _clean_content_terms(anchored_terms, anchored_keyword)
 
     @staticmethod
-    def _keyword_prompt(user_profile, definition, basis_values):
+    def _keyword_prompt(user_profile, definition, basis_values, required_basis=""):
         basis_text = ", ".join(str(value) for value in basis_values if str(value).strip()) or "미상"
+        rotation_rule = (
+            f"- 이번 회차 고정 주제: {required_basis}\n"
+            f"- selected_basis는 반드시 '{required_basis}'로 출력하고 다른 프로필 주제를 섞지 마세요.\n"
+            if required_basis else ""
+        )
+        emotion_goal = (
+            f"- 감정 독서 목표: {BookRecommendationAgent._emotion_reading_goal(basis_values)}\n"
+            "- 핵심 값의 감정 단어를 keyword·search_terms·content_terms에 그대로 쓰지 마세요. 감정과 같은 제목을 찾는 것이 아닙니다.\n"
+            if definition["id"] == "emotion" else ""
+        )
         return f"""
 [추천 유형]
 - id: {definition['id']}
 - 이름: {definition['name']}
 - 핵심 기준: {definition['basis_label']}
 - 핵심 값: {basis_text}
+{rotation_rule}{emotion_goal}
 
 [해야 할 일]
 {THEME_SEARCH_GUIDES.get(definition['id'], '핵심 기준을 읽고 책 검색어를 만드세요.')}
 
 [검색 키워드 작성 규칙]
 - search_terms는 Kakao Daum 책 검색 API에 각각 독립적으로 넣을 탐색어입니다. 문장이나 가상의 책 제목이 아니라 실제 온라인 서점에서 관련 책을 찾기 좋은 1~4어절의 한국어 검색어로 작성하세요.
-- 관심사·취미 유형에서는 핵심 값 중 정확히 하나를 이번 검색의 selected_basis로 고르세요. selected_basis는 반드시 입력된 핵심 값의 원문과 완전히 같아야 합니다.
+- 관심사·취미 유형에서는 지정된 이번 회차 고정 주제 하나만 selected_basis로 사용하세요. selected_basis는 반드시 입력된 핵심 값의 원문과 완전히 같아야 합니다.
 - keyword의 첫 부분에는 selected_basis 원문을 그대로 포함하세요. 원래 주제를 다른 분야, 넓은 교양어, 감정 상태로 치환하지 마세요.
 - selected_basis가 '패션'이면 '패션', '사진 찍기'이면 '사진 찍기'가 keyword에 직접 보여야 합니다. '라이프스타일', '창의성', '힐링'만 남기는 식의 일반화는 금지합니다.
 - 여러 핵심 값을 억지로 한 검색어에 섞지 말고, 한 가지 주제를 선명하게 고른 뒤 그 주제의 하위 분야·기술·역사·비평 관점으로 구체화하세요.
@@ -441,7 +654,11 @@ Below output JSON only.
         if not values:
             return fallback_keyword
         if theme_id == "emotion":
-            return f"{values[0]} 마음 소설"
+            return (
+                "몰입 성장 소설"
+                if BookRecommendationAgent._emotion_is_positive(values)
+                else "마음 환기 소설"
+            )
         if theme_id == "interests":
             return " ".join(values[:2])
         if theme_id == "hobbies":
@@ -731,6 +948,11 @@ Below output JSON only.
             cached_books = {}
 
         results = [None] * len(themes)
+        try:
+            shared_llm = _get_llm(temperature=0.45, max_tokens=360)
+        except Exception:
+            # 각 테마 처리에서 기존 오류 코드로 변환되도록 한다.
+            shared_llm = None
 
         def process_theme(index, theme):
             theme_id = theme["id"]
@@ -744,7 +966,11 @@ Below output JSON only.
                 )
 
             try:
-                return index, BookRecommendationAgent._generate_single_review(user_profile, theme)
+                return index, BookRecommendationAgent._generate_single_review(
+                    user_profile,
+                    theme,
+                    llm=shared_llm,
+                )
             except Exception as exc:
                 print(f"[BookAgent] Review generation failed for {theme['id']}: {exc}")
                 if isinstance(exc, BookRecommendationUnavailable):
@@ -766,7 +992,7 @@ Below output JSON only.
         return [r for r in results if r is not None]
 
     @staticmethod
-    def _generate_single_review(user_profile, theme):
+    def _generate_single_review(user_profile, theme, llm=None):
         chain = (
             ChatPromptTemplate.from_messages(
                 [
@@ -778,7 +1004,7 @@ Below output JSON only.
                     ("user", BookRecommendationAgent._single_review_prompt(user_profile, theme)),
                 ]
             )
-            | _get_llm(temperature=0.45, max_tokens=360)
+            | (llm or _get_llm(temperature=0.45, max_tokens=360))
             | StrOutputParser()
         )
         raw_result = chain.invoke({})
@@ -805,6 +1031,14 @@ Below output JSON only.
     @staticmethod
     def _single_review_prompt(user_profile, theme):
         basis_text = ", ".join(theme["basis_values"]) or "미상"
+        emotion_selection_rule = ""
+        if theme.get("id") == "emotion":
+            emotion_selection_rule = (
+                "\n- 감정 독서 목표: "
+                f"{BookRecommendationAgent._emotion_reading_goal(theme.get('basis_values') or [])}\n"
+                "- 제목에 감정 단어가 포함된 후보도 제외하지 마세요.\n"
+                "- 단, 제목 일치만으로 고르지 말고 책 소개, 저자, 출판사, 주제와 서지정보를 비교해 위 목표에 가장 잘 맞는 책을 고르세요.\n"
+            )
         candidate_lines = []
         for book in theme.get("candidates", []):
             candidate_lines.append(
@@ -834,6 +1068,7 @@ Below output JSON only.
 - 검색 키워드: {theme.get('keyword') or '미상'}
 - 책에서 다루길 바라는 핵심 내용: {', '.join(theme.get('content_terms') or []) or '미상'}
 - 검색 키워드 생성 의도: {theme.get('reason') or '사용자 맥락에 맞는 책 후보를 찾기 위한 검색어입니다.'}
+{emotion_selection_rule}
 
 [검증된 개인화 상위 후보]
 {chr(10).join(candidate_lines)}
@@ -896,6 +1131,7 @@ review: 추천 서평
             "theme_reason": theme.get("reason", ""),
             "keyword": theme.get("keyword", ""),
             "keyword_basis": theme.get("keyword_basis", ""),
+            "recommendation_basis": _visible_recommendation_basis(theme),
             "genre": ai_curation["genre"],
             "title": book.get("title", ""),
             "author": book.get("author", ""),
@@ -953,6 +1189,7 @@ review: 추천 서평
             return json.loads(match.group(0))
 
 
+@lru_cache(maxsize=8)
 def _get_llm(temperature=0.4, max_tokens=1000):
     from langchain_openai import ChatOpenAI
 
@@ -980,6 +1217,24 @@ def _visible_data_used(theme, llm_values=None):
         if not any(pattern in value for pattern in VISIBLE_DATA_BLOCKED_PATTERNS)
         and not re.search(r"\d+\s*세", value)
     ][:4]
+
+
+def _visible_recommendation_basis(theme):
+    label = str(
+        theme.get("keyword_basis")
+        or theme.get("basis_label")
+        or "추천 기준"
+    ).strip()
+    basis_values = [
+        str(value).strip()
+        for value in theme.get("basis_values") or []
+        if str(value).strip()
+    ]
+    if theme.get("id") == "emotion":
+        value = basis_values[0] if basis_values else ""
+    else:
+        value = str(theme.get("selected_basis") or "").strip()
+    return f"{label} · {value}" if value else label
 
 
 def _nlk_service_key():

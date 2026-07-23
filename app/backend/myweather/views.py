@@ -16,7 +16,10 @@ from .constants import (
 )
 from .models import WeatherRegion
 from .service.exceptions import WeatherInputError, WeatherServiceError
-from .service.insight_cache_service import get_or_create_weather_insight
+from .service.insight_cache_service import (
+    get_or_create_weather_insight,
+    select_weather_hobby,
+)
 from .service.user_profile_service import build_weather_user_profile
 from .services import fetch_current_weather
 
@@ -31,6 +34,10 @@ def _request_value(request, key):
     if isinstance(value, str):
         value = value.strip()
     return value or None
+
+
+def _request_flag(request, key):
+    return str(_request_value(request, key) or "").lower() in {"1", "true", "yes", "on"}
 
 
 @api_view(["GET", "POST"])
@@ -59,7 +66,11 @@ def current_weather(request):
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
-    user_profile = build_weather_user_profile(request.user)
+    user_profile = select_weather_hobby(
+        request.user.id,
+        build_weather_user_profile(request.user),
+        rotate=_request_flag(request, "rotate_hobby"),
+    )
     insight, cache_hit = get_or_create_weather_insight(
         weather,
         request.user.id,
@@ -124,11 +135,12 @@ def current_weather(request):
             },
         },
         "methodology": {
-            "summary": "체감온도는 기상청 계절별 산식을, 불쾌지수는 기상청 과거 공식 산식을 재현합니다. 식중독지수는 기상청·식약처의 식중독 예측 모델식을 사용합니다. 자외선지수는 추정하지 않고 기상청 생활기상지수 V5 API의 공식 발표값만 표시합니다.",
-            "graph": "막대 색은 공식 단계 구간, 흰색 표식은 현재 지수값의 위치입니다. 특보는 환산하지 않고 기상청 발표 단계를 그대로 표시합니다.",
+            "summary": "체감온도는 기상청 계절별 산식을, 불쾌지수는 기상청 과거 공식 산식을 재현합니다. 식중독지수는 기온·습도 기반 참고 산식의 계산값을 표시하며, 식약처·기상청의 식중독지수 절대 단계 기준(55 미만 관심, 55~71 주의, 71~86 경고, 86 이상 위험)을 적용합니다. 자외선지수는 기상청 생활기상지수 V5 API의 공식 발표값만 표시합니다.",
+            "graph": "막대 색은 각 지수에 명시된 단계 구간, 흰색 표식은 현재 지수값의 위치입니다. 특보는 환산하지 않고 기상청 발표 단계를 그대로 표시합니다.",
             "indices": insight.get("conditionGuide", []),
             "formula_source_url": "https://data.kma.go.kr/climate/windChill/selectWindChillChart.do",
             "discomfort_source_url": "https://data.kma.go.kr/data/lwi/lwiList.do?pgmNo=635",
+            "food_poisoning_source_url": "https://www.weather.go.kr/w/forecast/life/index-info.do",
             "uv_index_source_url": "https://www.weather.go.kr/w/forecast/life/index-info.do",
         },
         "api_limits": {

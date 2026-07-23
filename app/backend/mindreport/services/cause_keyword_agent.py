@@ -29,6 +29,12 @@ class MindReportCauseKeywordAgent:
             raise ValueError('Cause keyword analysis requires an emotion flow.')
 
         alternative_plan = build_alternative_plan(emotion_flow)
+        collection_result = state.get('collection_result')
+        graph_events = (
+            getattr(collection_result, 'ltm_events', ())
+            if collection_result is not None
+            else ()
+        )
         keyword_extractor = self.keyword_extractor or MindReportKeywordExtractor(
             keyword_client=state.get('keyword_client')
         )
@@ -37,6 +43,7 @@ class MindReportCauseKeywordAgent:
             emotion_scores=scoring_result.emotion_scores,
             emotion_flow=emotion_flow,
             alternative_plan=alternative_plan,
+            graph_events=graph_events,
             revision_instructions=state.get('revision_instructions', ()),
         )
 
@@ -54,6 +61,7 @@ class MindReportCauseKeywordAgent:
                 emotion_scores=scoring_result.emotion_scores,
                 emotion_flow=emotion_flow,
                 source_messages=scoring_result.source_messages,
+                graph_events=graph_events,
                 revision_instructions=state.get('revision_instructions', ()),
             )
             if cause_result.status in {

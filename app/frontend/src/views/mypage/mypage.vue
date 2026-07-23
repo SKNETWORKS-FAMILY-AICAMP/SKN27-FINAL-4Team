@@ -180,7 +180,7 @@
           :error="weatherError"
           :location="weatherLocation"
           :regions="weatherRegions"
-          @refresh="loadWeatherData({ force: true })"
+          @refresh="loadWeatherData({ force: true, rotateHobby: true })"
           @change-region="setWeatherRegion"
           @close="closePanel"
         />
@@ -234,6 +234,7 @@
 
 <script>
 import { fetchCurrentWeather, fetchMbtiDemoPayload, requestMbtiMonthlyAnalysis, fetchMyProfile, fetchTodayEmotion, updateMyProfile, saveOnboardingMbti, fetchBookRecommendation, fetchMemoryVault, deleteMemoryVaultItem, fetchWeatherRegions } from "./mypage.api";
+import { userApi } from "../../api/user.js";
 import { LOCATION_CONSENT_VERSION } from "../../constants/consentVersions";
 import { createMypageState, i18n } from "./state/mypage.state";
 import {
@@ -594,6 +595,12 @@ export default {
       try {
         await updateMyProfile({ selectedCharacter: id });
         localStorage.setItem(MYPAGE_STORAGE_KEYS.character, JSON.stringify({ characterId: id }));
+        try {
+          const updatedUser = await userApi.getCurrentUser();
+          window.dispatchEvent(new CustomEvent("binteumsai-auth-changed", { detail: { user: updatedUser } }));
+        } catch (authErr) {
+          console.warn("Failed to refresh user after character update", authErr);
+        }
         this.showToast("대화 대상 캐릭터가 교체되었습니다.");
       } catch (e) {
         console.error(e);
@@ -647,8 +654,44 @@ export default {
         );
       });
     },
+    weatherLocalDateKey() {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, "0");
+      const day = String(now.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    },
+    requestWeatherLocationConsent() {
+      const consentKey = `mindroom-location-consent-${LOCATION_CONSENT_VERSION}`;
+      if (localStorage.getItem(consentKey) === "true") return true;
+      const confirmed = window.confirm(
+        "현재 위치의 위도·경도를 날씨 조회에 사용합니다. 좌표는 서버에 저장하지 않고 현재 브라우저 탭에서만 보관하며, 기상청 예보 격자 변환에 사용합니다. 계속할까요?"
+      );
+      if (confirmed) localStorage.setItem(consentKey, "true");
+      return confirmed;
+    },
     async resolveWeatherLocation(force = false) {
-      const saved = this.getSavedWeatherLocation();
+      let saved = this.getSavedWeatherLocation();
+      const today = this.weatherLocalDateKey();
+      const dailyLocationDate = localStorage.getItem(
+        MYPAGE_STORAGE_KEYS.weatherDailyLocationDate
+      );
+      if (!force && dailyLocationDate !== today) {
+        // 하루의 첫 날씨 진입에서는 이전 수동 선택보다 현재 위치를 먼저 시도한다.
+        // 거부·실패 후 패널을 다시 열 때마다 권한 창이 반복되지 않도록 시도 날짜를 기록한다.
+        localStorage.setItem(MYPAGE_STORAGE_KEYS.weatherDailyLocationDate, today);
+        if (this.requestWeatherLocationConsent()) {
+          try {
+            const browserLocation = await this.getBrowserLocation();
+            this.saveWeatherLocation(browserLocation);
+            return browserLocation;
+          } catch (error) {
+            console.warn("Failed to resolve today's browser location:", error);
+          }
+        }
+        sessionStorage.removeItem(MYPAGE_STORAGE_KEYS.weatherAutoLocation);
+        saved = this.getSavedWeatherLocation();
+      }
       if (!force && saved) {
         this.weatherLocation = saved;
         return saved;
@@ -668,7 +711,7 @@ export default {
         return fallback;
       }
     },
-    async loadWeatherData({ force = false, refreshLocation = false } = {}) {
+    async loadWeatherData({ force = false, refreshLocation = false, rotateHobby = false } = {}) {
       const hasFreshPayload = this.weatherPayload
         && Date.now() - this.weatherLastFetchedAt < MYPAGE_TIMING.weatherFreshnessMs;
       if (!force && (hasFreshPayload || this.weatherLoading)) return;
@@ -681,7 +724,7 @@ export default {
         const requestLocation = location.mode === "auto"
           ? { lat: location.lat, lon: location.lon, region: location.region }
           : { region: location.region || DEFAULT_WEATHER_REGION };
-        const payload = await fetchCurrentWeather(requestLocation);
+        const payload = await fetchCurrentWeather(requestLocation, { rotateHobby });
         if (requestId !== this.weatherRequestId) return;
         this.weatherPayload = payload;
         this.weatherLastFetchedAt = Date.now();
@@ -690,20 +733,18 @@ export default {
         console.error(error);
         this.weatherError = error.message || "날씨 정보를 불러오지 못했습니다.";
       } finally {
-        if (requestId === this.weatherRequestId) this.weatherLoading = false;
+        if (requestId === this.weatherRequestId) {
+          this.weatherLoading = false;
+        }
       }
     },
     async setWeatherRegion(region) {
       if (region === "현재 위치") {
-        const consentKey = `mindroom-location-consent-${LOCATION_CONSENT_VERSION}`;
-        const hasConsent = localStorage.getItem(consentKey) === "true";
-        if (!hasConsent) {
-          const confirmed = window.confirm(
-            "현재 위치의 위도·경도를 날씨 조회에 사용합니다. 좌표는 서버에 저장하지 않고 현재 브라우저 탭에서만 보관하며, 기상청 예보 격자 변환에 사용합니다. 계속할까요?"
-          );
-          if (!confirmed) return;
-          localStorage.setItem(consentKey, "true");
-        }
+        if (!this.requestWeatherLocationConsent()) return;
+        localStorage.setItem(
+          MYPAGE_STORAGE_KEYS.weatherDailyLocationDate,
+          this.weatherLocalDateKey()
+        );
         localStorage.removeItem(MYPAGE_STORAGE_KEYS.weatherLocation);
         await this.loadWeatherData({ force: true, refreshLocation: true });
         return;
@@ -713,8 +754,6 @@ export default {
       await this.loadWeatherData({ force: true });
     },
     async loadBookData(force = false) {
-      this.bookLoading = true;
-      this.bookError = "";
       let forceBool = false;
       let themeParam = null;
       if (typeof force === "object" && force !== null) {
@@ -723,6 +762,10 @@ export default {
       } else {
         forceBool = Boolean(force);
       }
+      if (!forceBool && this.bookPayload) return;
+
+      this.bookLoading = true;
+      this.bookError = "";
       try {
         this.bookPayload = await fetchBookRecommendation(forceBool, themeParam);
       } catch (error) {
