@@ -13,6 +13,7 @@ export function useTts() {
     if (pollAbort) { pollAbort.aborted = true; pollAbort = null }
     if (currentAudio) {
       try { currentAudio.pause(); currentAudio.currentTime = 0 } catch (e) { /* noop */ }
+      if (currentAudio._blobUrl) URL.revokeObjectURL(currentAudio._blobUrl)   // blob 메모리 회수 (2026-07-23)
       currentAudio = null
     }
   }
@@ -33,8 +34,17 @@ export function useTts() {
         const data = await chatApi.getTts(taskId)
         if (data.status === 'done' && data.audio_url) {
           if (abort.aborted) return
-          currentAudio = new Audio(data.audio_url)   // 서버는 이 요청 후 즉시 파기
-          currentAudio.onended = () => { currentAudio = null }
+          // 2026-07-23: URL 직결 재생 → blob 통재생으로 교체.
+          // 서버가 1회 응답 후 즉시 파기하는데, 크롬은 오디오를 두 번에 나눠
+          // 요청할 때가 있어 두 번째 요청이 404 → 음성이 문장 중간에 끊겼다.
+          // 통째로 받아 손에 쥐고 재생하면 서버 파기와 무관해진다 (파기 원칙 유지).
+          const audioResp = await fetch(data.audio_url, { credentials: 'include' })
+          if (!audioResp.ok) { handlers.onFail?.(); return }
+          const blobUrl = URL.createObjectURL(await audioResp.blob())
+          if (abort.aborted) { URL.revokeObjectURL(blobUrl); return }
+          currentAudio = new Audio(blobUrl)
+          currentAudio._blobUrl = blobUrl
+          currentAudio.onended = () => { URL.revokeObjectURL(blobUrl); currentAudio = null }
           // 실제 소리가 나기 시작하는 순간 → 텍스트 동기 타이핑 시작
           const audioEl = currentAudio
           audioEl.addEventListener('playing', () => {
