@@ -4,6 +4,7 @@ from threading import Barrier
 from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
 
+import requests
 from django.core.cache import cache
 from django.test import SimpleTestCase
 
@@ -592,6 +593,54 @@ class KmaApiHubUnificationTests(SimpleTestCase):
     @patch('myweather.services.fetch_weather_warnings')
     @patch('myweather.services.fetch_weekly_forecast')
     @patch('myweather.services.fetch_sky_forecast')
+    @patch('myweather.services._cached_payload', return_value=None)
+    @patch('myweather.services._request_kma_json')
+    def test_observation_and_supplemental_sources_start_concurrently_on_cache_miss(
+        self,
+        request_kma_json,
+        cached_payload,
+        fetch_sky_forecast,
+        fetch_weekly_forecast,
+        fetch_weather_warnings,
+        fetch_uv_index_mock,
+    ):
+        start_barrier = Barrier(5, timeout=2)
+
+        def concurrently(value):
+            start_barrier.wait()
+            return value
+
+        request_kma_json.side_effect = lambda *_: concurrently({
+            'response': {
+                'header': {'resultCode': '00'},
+                'body': {'items': {'item': [
+                    {'category': 'T1H', 'obsrValue': '24.4'},
+                    {'category': 'REH', 'obsrValue': '70'},
+                    {'category': 'WSD', 'obsrValue': '2.1'},
+                    {'category': 'PTY', 'obsrValue': '0'},
+                    {'category': 'RN1', 'obsrValue': '0'},
+                ]}},
+            },
+        })
+        fetch_sky_forecast.side_effect = lambda *_: concurrently({})
+        fetch_weekly_forecast.side_effect = lambda *_: concurrently({'days': []})
+        fetch_weather_warnings.side_effect = lambda *_: concurrently({
+            'status': 'none', 'items': [],
+        })
+        fetch_uv_index_mock.side_effect = lambda *_: concurrently({
+            'status': 'available', 'value': 5,
+        })
+
+        result = fetch_current_weather(region='서울')
+
+        self.assertEqual(result['temperature'], '24.4')
+        self.assertEqual(result['uv_index']['value'], 5)
+
+    @patch.dict(os.environ, {'KMA_API_HUB_AUTH_KEY': 'hub-key'})
+    @patch('myweather.services.fetch_uv_index')
+    @patch('myweather.services.fetch_weather_warnings')
+    @patch('myweather.services.fetch_weekly_forecast')
+    @patch('myweather.services.fetch_sky_forecast')
     @patch('myweather.services._cached_payload')
     def test_supplemental_weather_sources_start_concurrently(
         self,
@@ -723,6 +772,51 @@ class KmaLifeIndexTests(SimpleTestCase):
         self.assertIsNone(result['value'])
         request_get.assert_not_called()
 
+    @patch.dict(os.environ, {'KMA_LIFE_INDEX_SERVICE_KEY': 'life-key'})
+    @patch('myweather.service.life_index_service.KMA_LIFE_INDEX_RETRY_COUNT', 1)
+    @patch('myweather.service.life_index_service.requests.get')
+    def test_network_failure_retries_once_without_querying_older_release_times(
+        self,
+        request_get,
+    ):
+        request_get.side_effect = requests.Timeout("timed out")
+
+        result = fetch_uv_index({'name': '서울'})
+
+        self.assertEqual(result['status'], 'request_failed')
+        self.assertEqual(request_get.call_count, 2)
+        requested_times = {
+            call.kwargs['params']['time']
+            for call in request_get.call_args_list
+        }
+        self.assertEqual(len(requested_times), 1)
+
+    @patch.dict(os.environ, {'KMA_LIFE_INDEX_SERVICE_KEY': 'life-key'})
+    @patch('myweather.service.life_index_service.KMA_LIFE_INDEX_RETRY_COUNT', 1)
+    @patch('myweather.service.life_index_service.requests.get')
+    def test_missing_latest_data_checks_three_release_times_without_duplicate_retries(
+        self,
+        request_get,
+    ):
+        response = Mock(status_code=200, content=b'')
+        response.json.return_value = {
+            'response': {
+                'header': {'resultCode': '00'},
+                'body': {'items': {'item': []}},
+            }
+        }
+        request_get.return_value = response
+
+        result = fetch_uv_index({'name': '서울'})
+
+        self.assertEqual(result['status'], 'request_failed')
+        self.assertEqual(request_get.call_count, 3)
+        requested_times = [
+            call.kwargs['params']['time']
+            for call in request_get.call_args_list
+        ]
+        self.assertEqual(len(set(requested_times)), 3)
+
 
 class KmaWarningTests(SimpleTestCase):
     def test_parses_and_filters_current_warnings_by_region(self):
@@ -743,7 +837,7 @@ L1150000,부산광역시,L1150100,부산동부,202607151000,202607151100,호우,
         self.assertEqual(alerts[0]['type'], '폭염')
         self.assertEqual(alerts[0]['level'], '주의보')
         self.assertEqual(alerts[0]['areas'], ['동해산지', '삼척산지', '강릉산지', '양양북부산지'])
-        self.assertEqual(alerts[0]['region'], '강원도(동해산지, 삼척산지, 강릉산지, 양양북부산지)')
+        self.assertEqual(alerts[0]['region'], '동해산지, 삼척산지, 강릉산지, 양양북부산지')
 
     def test_maps_every_supported_region_by_official_land_warning_code(self):
         cases = {
@@ -782,7 +876,98 @@ L1150000,부산광역시,L1150100,부산동부,202607151000,202607151100,호우,
             '경북',
         )
 
-        self.assertEqual(alerts[0]['region'], '경상북도(울릉도.독도)')
+        self.assertEqual(alerts[0]['region'], '울릉도.독도')
+
+    def test_assigns_remote_island_warning_areas_to_their_administrative_regions(self):
+        cases = (
+            (
+                '인천',
+                [
+                    ('L1014000', '서해5도', 'L1014200', '백령도.대청도'),
+                    ('L1014000', '서해5도', 'L1014300', '연평도.우도'),
+                ],
+                ['백령도.대청도', '연평도.우도'],
+            ),
+            (
+                '전남광주',
+                [('L1052400', '흑산도.홍도', 'L1052500', '흑산도.홍도')],
+                ['흑산도.홍도'],
+            ),
+            (
+                '경북',
+                [('L1600000', '울릉도.독도', 'L1072100', '울릉도.독도')],
+                ['울릉도.독도'],
+            ),
+        )
+
+        for region, area_rows, expected_areas in cases:
+            with self.subTest(region=region):
+                rows = [
+                    {
+                        'REG_UP': reg_up,
+                        'REG_UP_KO': reg_up_ko,
+                        'REG_ID': reg_id,
+                        'REG_KO': reg_ko,
+                        'WRN': '호우',
+                        'LVL': '주의',
+                        'CMD': '발표',
+                    }
+                    for reg_up, reg_up_ko, reg_id, reg_ko in area_rows
+                ]
+                alerts = filter_kma_warnings(rows, region)
+
+                self.assertEqual(len(alerts), 1)
+                self.assertEqual(alerts[0]['areas'], expected_areas)
+
+    def test_does_not_leak_remote_islands_into_regions_sharing_detail_code_prefix(self):
+        cases = (
+            ('경기', 'L1014000', '서해5도', 'L1014200', '백령도.대청도'),
+            ('경남', 'L1150000', '부산광역시', 'L1082500', '부산동부'),
+            ('경남', 'L1160000', '울산광역시', 'L1082800', '울산동부'),
+            ('충남', 'L1120000', '대전광역시', 'L1030100', '대전광역시'),
+            ('경북', 'L1140000', '대구광역시', 'L1070200', '군위군'),
+        )
+
+        for region, reg_up, reg_up_ko, reg_id, reg_ko in cases:
+            with self.subTest(region=region, area=reg_ko):
+                alerts = filter_kma_warnings(
+                    [{
+                        'REG_UP': reg_up,
+                        'REG_UP_KO': reg_up_ko,
+                        'REG_ID': reg_id,
+                        'REG_KO': reg_ko,
+                        'WRN': '호우',
+                        'LVL': '주의',
+                        'CMD': '발표',
+                    }],
+                    region,
+                )
+
+                self.assertEqual(alerts, [])
+
+    def test_assigns_cross_code_metropolitan_details_by_official_parent(self):
+        cases = (
+            ('부산', 'L1150000', 'L1082500', '부산동부'),
+            ('울산', 'L1160000', 'L1082800', '울산동부'),
+            ('대전', 'L1120000', 'L1030100', '대전광역시'),
+            ('대구', 'L1140000', 'L1070200', '군위군'),
+        )
+
+        for region, reg_up, reg_id, reg_ko in cases:
+            with self.subTest(region=region, area=reg_ko):
+                alerts = filter_kma_warnings(
+                    [{
+                        'REG_UP': reg_up,
+                        'REG_ID': reg_id,
+                        'REG_KO': reg_ko,
+                        'WRN': '호우',
+                        'LVL': '주의',
+                        'CMD': '발표',
+                    }],
+                    region,
+                )
+
+                self.assertEqual(len(alerts), 1)
 
     def test_uses_detail_code_when_parent_and_detail_regions_conflict(self):
         alerts = filter_kma_warnings(
@@ -816,7 +1001,7 @@ L1150000,부산광역시,L1150100,부산동부,202607151000,202607151100,호우,
         )
 
         self.assertEqual(alerts[0]['areas'], ['목포', '광주'])
-        self.assertEqual(alerts[0]['region'], '전남광주(목포, 광주)')
+        self.assertEqual(alerts[0]['region'], '목포, 광주')
 
     def test_returns_none_when_coordinate_region_cannot_be_mapped(self):
         self.assertIsNone(filter_kma_warnings([], '현재 위치'))

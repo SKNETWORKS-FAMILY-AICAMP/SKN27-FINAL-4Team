@@ -5,6 +5,7 @@ export const MYPAGE_STORAGE_KEYS = Object.freeze({
   character: "binteumsaiCharacter",
   weatherLocation: "mindroom-weather-location",
   weatherAutoLocation: "mindroom-weather-auto-location",
+  weatherDailyLocationDate: "mindroom-weather-daily-location-date",
 });
 
 export const MYPAGE_TIMING = Object.freeze({
