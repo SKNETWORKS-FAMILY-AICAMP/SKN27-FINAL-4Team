@@ -14,7 +14,7 @@ from user.views import CsrfExemptSessionAuthentication
 
 
 class MindReportGenerateAPIView(APIView):
-    """Authenticated HTTP boundary for reading and refreshing mind reports."""
+    """Read scheduled reports and optionally check the latest data immediately."""
 
     authentication_classes = [CsrfExemptSessionAuthentication]
     permission_classes = [IsAuthenticated]
@@ -39,7 +39,7 @@ class MindReportGenerateAPIView(APIView):
             )
         return Response({
             'status': 'success',
-            'message': '저장된 마음 리포트를 불러왔습니다.',
+            'message': '정기 주간·월간 마음 리포트를 불러왔습니다.',
             'reports': reports,
         })
 
@@ -63,7 +63,7 @@ class MindReportGenerateAPIView(APIView):
             )
         return Response({
             'status': 'success',
-            'message': '최신 대화로 마음 리포트를 갱신했습니다.',
+            'message': '다음 정기 갱신을 기다리지 않고 최신 대화를 반영했어요.',
             'reports': reports,
         })
 

@@ -60,7 +60,12 @@ _SAFETY_RESPONSE_PHRASES = (
     '응급', '긴급', '안전', '도움', '의료기관', '전문가', '주변 사람',
     'emergency', 'immediate help', 'professional help',
 )
-_DATE_PATTERN = re.compile(r'\b(20\d{2})[-./](\d{1,2})[-./](\d{1,2})\b')
+_DATE_PATTERN = re.compile(
+    r'(?<!\d)(20\d{2})[-./](\d{1,2})[-./](\d{1,2})(?!\d)'
+)
+_KOREAN_DATE_PATTERN = re.compile(
+    r'(?<!\d)(1[0-2]|0?[1-9])월\s*(3[01]|[12]?\d)일'
+)
 _QUOTED_PATTERN = re.compile(r'["“”](.{3,80}?)["“”]')
 _PII_PATTERNS = (
     re.compile(r'\b\d{6}-?[1-4]\d{6}\b'),
@@ -77,6 +82,20 @@ _INTERNAL_ANALYSIS_PATTERNS = (
     re.compile(r'(초록|빨강|회색)\s*유지'),
     re.compile(r'(당신은|현재\s*상태는).{0,30}(상태|보입니다|판단됩니다)'),
 )
+_PRACTICAL_CUE_PATTERN = re.compile(
+    r'(오늘|내일|아침|점심|저녁|퇴근|귀가|잠들기|기상|시작\s*전|마친\s*뒤|'
+    r'직전|직후|\d+\s*분\s*(?:전|후)|(?:회의|수업|업무|일정|외출|잠|식사)\s*(?:전|후|뒤))'
+)
+_PRACTICAL_AMOUNT_PATTERN = re.compile(
+    r'(?:\d+|한|두|세)\s*(분|초|회|번|개|줄|쪽|걸음|가지)'
+)
+_PRACTICAL_ACTION_PATTERN = re.compile(
+    r'(적|쓰|열|꺼내|놓|맞추|고르|정리|표시|걷|마시|보내|읽|듣|앉|'
+    r'나가|챙기|준비|시작|닫|끄|누르|확인|말해|연락)'
+)
+_VIEW_DATE_DEPENDENT_PATTERN = re.compile(
+    r'(오늘|내일|모레|이번\s*(?:주|주말|달)|금주|금월)'
+)
 
 
 class MindReportValidationAgent:
@@ -86,6 +105,7 @@ class MindReportValidationAgent:
         issues: list[MindReportValidationIssue] = []
         issues.extend(self._validate_data(state))
         issues.extend(self._validate_analysis(state))
+        issues.extend(self._validate_cause_output(state))
         issues.extend(self._validate_safety(state))
 
         if not issues:
@@ -257,6 +277,11 @@ class MindReportValidationAgent:
                 VALIDATION_ROUTE_EMOTION,
             ))
 
+        available_graph_event_ids = {
+            event.event_id
+            for event in getattr(collection, 'ltm_events', ())
+            if event.event_id
+        }
         for evidence_owner in self._keyword_evidence(state):
             evidence_ids = set(evidence_owner.evidence_message_ids)
             if not evidence_ids or not evidence_ids.issubset(collection_ids):
@@ -267,6 +292,17 @@ class MindReportValidationAgent:
                     VALIDATION_ROUTE_CAUSE,
                 ))
                 continue
+
+            cited_graph_event_ids = set(
+                getattr(evidence_owner, 'graph_event_ids', ())
+            )
+            if not cited_graph_event_ids.issubset(available_graph_event_ids):
+                issues.append(self._issue(
+                    'unsupported_graph_event_evidence',
+                    f'Keyword "{evidence_owner.keyword}" cites an unavailable GraphDB event.',
+                    'error',
+                    VALIDATION_ROUTE_CAUSE,
+                ))
             actual_dates = {
                 source_by_id[message_id].source_date.isoformat()
                 for message_id in evidence_ids
@@ -280,17 +316,134 @@ class MindReportValidationAgent:
                 ))
 
         narrative_text = self._narrative_text(state)
-        source_dates = {
+        narrative_allowed_dates = {
             message.source_date for message in collection.source_messages
         }
+        graph_date_parts = []
+        for event in getattr(collection, 'ltm_events', ()):
+            graph_date_parts.extend((
+                event.episode_date,
+                event.occurs_start,
+                event.occurs_end,
+            ))
+        narrative_allowed_dates.update(self._extract_dates(' '.join(
+            str(value) for value in graph_date_parts if value
+        )))
         for cited_date in self._extract_dates(narrative_text):
-            if cited_date not in source_dates:
+            if cited_date not in narrative_allowed_dates:
                 issues.append(self._issue(
                     'unknown_narrative_date',
                     f'Narrative cites an unsupported date: {cited_date.isoformat()}.',
                     'error',
                     VALIDATION_ROUTE_NARRATIVE,
                 ))
+        for cited_month, cited_day in self._extract_month_days(narrative_text):
+            if not any(
+                source_date.month == cited_month and source_date.day == cited_day
+                for source_date in narrative_allowed_dates
+            ):
+                issues.append(self._issue(
+                    'unknown_narrative_date',
+                    f'Narrative cites an unsupported date: {cited_month}월 {cited_day}일.',
+                    'error',
+                    VALIDATION_ROUTE_NARRATIVE,
+                ))
+
+        return issues
+
+    def _validate_cause_output(
+        self,
+        state: MindReportGraphState,
+    ) -> list[MindReportValidationIssue]:
+        """Validate every cause-agent sentence that can reach the frontend."""
+        issues: list[MindReportValidationIssue] = []
+        cause_text = self._cause_text(state)
+        if not cause_text:
+            return issues
+
+        if any(pattern.search(cause_text) for pattern in _INTERNAL_ANALYSIS_PATTERNS):
+            issues.append(self._issue(
+                'cause_internal_score_or_state_disclosed',
+                'Remove scores, internal emotion states, and flow classifications from the public cause report.',
+                'error',
+                VALIDATION_ROUTE_CAUSE,
+            ))
+
+        if _QUOTED_PATTERN.search(cause_text):
+            issues.append(self._issue(
+                'cause_direct_conversation_quote_disclosed',
+                'Paraphrase the cause evidence without directly quoting the conversation.',
+                'error',
+                VALIDATION_ROUTE_CAUSE,
+            ))
+
+        collection = state.get('collection_result')
+        allowed_dates = {
+            message.source_date
+            for message in getattr(collection, 'source_messages', ())
+        }
+        cause_result = state.get('cause_result')
+        cited_graph_event_ids = {
+            event_id
+            for keyword in getattr(cause_result, 'cause_keywords', ())
+            for event_id in keyword.graph_event_ids
+        }
+        graph_date_parts = []
+        for event in getattr(collection, 'ltm_events', ()):
+            if event.event_id not in cited_graph_event_ids:
+                continue
+            graph_date_parts.extend((
+                event.episode_date,
+                event.occurs_start,
+                event.occurs_end,
+            ))
+        allowed_dates.update(self._extract_dates(' '.join(
+            str(value) for value in graph_date_parts if value
+        )))
+        for cited_date in self._extract_dates(cause_text):
+            if cited_date not in allowed_dates:
+                issues.append(self._issue(
+                    'unknown_cause_date',
+                    f'Cause report cites an unsupported date: {cited_date.isoformat()}.',
+                    'error',
+                    VALIDATION_ROUTE_CAUSE,
+                ))
+        for cited_month, cited_day in self._extract_month_days(cause_text):
+            if not any(
+                allowed_date.month == cited_month and allowed_date.day == cited_day
+                for allowed_date in allowed_dates
+            ):
+                issues.append(self._issue(
+                    'unknown_cause_date',
+                    f'Cause report cites an unsupported date: {cited_month}월 {cited_day}일.',
+                    'error',
+                    VALIDATION_ROUTE_CAUSE,
+                ))
+
+        lowered = cause_text.lower()
+        if any(re.search(pattern, lowered, re.IGNORECASE) for pattern in _DIAGNOSIS_PATTERNS):
+            issues.append(self._issue(
+                'cause_diagnosis_or_treatment_claim',
+                'Remove disease, diagnosis, and guaranteed treatment claims from the cause report.',
+                'error',
+                VALIDATION_ROUTE_CAUSE,
+            ))
+
+        if any(phrase in lowered for phrase in _OVERLY_POSITIVE_PHRASES):
+            issues.append(self._issue(
+                'cause_overly_positive_or_unconditional_agreement',
+                'Replace excessive optimism or unconditional agreement in the cause report with balanced wording.',
+                'warning',
+                VALIDATION_ROUTE_CAUSE,
+            ))
+
+        if any(pattern.search(cause_text) for pattern in _PII_PATTERNS):
+            issues.append(self._issue(
+                'cause_excessive_personal_information',
+                'Remove personal identifiers from the public cause report.',
+                'error',
+                VALIDATION_ROUTE_CAUSE,
+            ))
 
         return issues
 
@@ -396,6 +549,27 @@ class MindReportValidationAgent:
                     VALIDATION_ROUTE_NARRATIVE,
                 ))
 
+            for card in narrative.suggestion_cards:
+                how = card.how.strip()
+                if _VIEW_DATE_DEPENDENT_PATTERN.search(how):
+                    issues.append(self._issue(
+                        'suggestion_timing_depends_on_view_date',
+                        f'Rewrite the starting method for "{card.title}" so it remains clear when this saved report is opened later. Replace today, tomorrow, this weekend, or this month with a repeatable cue such as the next commute home, the next meeting, or before sleep, while keeping the action inside report_context.action_window.',
+                        'warning',
+                        VALIDATION_ROUTE_NARRATIVE,
+                    ))
+                if (
+                    not _PRACTICAL_CUE_PATTERN.search(how)
+                    or not _PRACTICAL_AMOUNT_PATTERN.search(how)
+                    or not _PRACTICAL_ACTION_PATTERN.search(how)
+                ):
+                    issues.append(self._issue(
+                        'suggestion_start_not_practical',
+                        f'Rewrite the starting method for "{card.title}" with a concrete cue, one clear first action, a small measurable amount, and a stopping point. Keep it grounded in the supplied cause scene and do not add unsupported facts.',
+                        'warning',
+                        VALIDATION_ROUTE_NARRATIVE,
+                    ))
+
         narrative_text = self._narrative_text(state).lower()
         for keyword in cause_result.cause_keywords:
             if keyword.confidence < 0.6 and keyword.keyword.lower() in narrative_text:
@@ -497,8 +671,23 @@ class MindReportValidationAgent:
                 narrative.summary,
                 *narrative.analysis_sentences,
                 *narrative.action_recommendations,
+                *(card.title for card in narrative.suggestion_cards),
             )
         )
+
+    @staticmethod
+    def _cause_text(state: MindReportGraphState) -> str:
+        cause_result = state.get('cause_result')
+        if cause_result is None:
+            return ''
+        return ' '.join(filter(None, (
+            cause_result.stress_report,
+            cause_result.relief_report,
+            *(
+                keyword.moment_description
+                for keyword in cause_result.cause_keywords
+            ),
+        )))
 
     @staticmethod
     def _extract_dates(text: str) -> tuple[date, ...]:
@@ -508,6 +697,19 @@ class MindReportValidationAgent:
                 parsed.append(date(int(year), int(month), int(day)))
             except ValueError:
                 continue
+        return tuple(parsed)
+
+    @staticmethod
+    def _extract_month_days(text: str) -> tuple[tuple[int, int], ...]:
+        parsed = []
+        for month, day in _KOREAN_DATE_PATTERN.findall(text):
+            month_number = int(month)
+            day_number = int(day)
+            try:
+                date(2000, month_number, day_number)
+            except ValueError:
+                continue
+            parsed.append((month_number, day_number))
         return tuple(parsed)
 
     @staticmethod

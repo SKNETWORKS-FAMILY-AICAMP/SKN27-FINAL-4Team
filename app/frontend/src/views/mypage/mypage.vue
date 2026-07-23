@@ -647,8 +647,44 @@ export default {
         );
       });
     },
+    weatherLocalDateKey() {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, "0");
+      const day = String(now.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    },
+    requestWeatherLocationConsent() {
+      const consentKey = `mindroom-location-consent-${LOCATION_CONSENT_VERSION}`;
+      if (localStorage.getItem(consentKey) === "true") return true;
+      const confirmed = window.confirm(
+        "현재 위치의 위도·경도를 날씨 조회에 사용합니다. 좌표는 서버에 저장하지 않고 현재 브라우저 탭에서만 보관하며, 기상청 예보 격자 변환에 사용합니다. 계속할까요?"
+      );
+      if (confirmed) localStorage.setItem(consentKey, "true");
+      return confirmed;
+    },
     async resolveWeatherLocation(force = false) {
-      const saved = this.getSavedWeatherLocation();
+      let saved = this.getSavedWeatherLocation();
+      const today = this.weatherLocalDateKey();
+      const dailyLocationDate = localStorage.getItem(
+        MYPAGE_STORAGE_KEYS.weatherDailyLocationDate
+      );
+      if (!force && dailyLocationDate !== today) {
+        // 하루의 첫 날씨 진입에서는 이전 수동 선택보다 현재 위치를 먼저 시도한다.
+        // 거부·실패 후 패널을 다시 열 때마다 권한 창이 반복되지 않도록 시도 날짜를 기록한다.
+        localStorage.setItem(MYPAGE_STORAGE_KEYS.weatherDailyLocationDate, today);
+        if (this.requestWeatherLocationConsent()) {
+          try {
+            const browserLocation = await this.getBrowserLocation();
+            this.saveWeatherLocation(browserLocation);
+            return browserLocation;
+          } catch (error) {
+            console.warn("Failed to resolve today's browser location:", error);
+          }
+        }
+        sessionStorage.removeItem(MYPAGE_STORAGE_KEYS.weatherAutoLocation);
+        saved = this.getSavedWeatherLocation();
+      }
       if (!force && saved) {
         this.weatherLocation = saved;
         return saved;
@@ -690,20 +726,18 @@ export default {
         console.error(error);
         this.weatherError = error.message || "날씨 정보를 불러오지 못했습니다.";
       } finally {
-        if (requestId === this.weatherRequestId) this.weatherLoading = false;
+        if (requestId === this.weatherRequestId) {
+          this.weatherLoading = false;
+        }
       }
     },
     async setWeatherRegion(region) {
       if (region === "현재 위치") {
-        const consentKey = `mindroom-location-consent-${LOCATION_CONSENT_VERSION}`;
-        const hasConsent = localStorage.getItem(consentKey) === "true";
-        if (!hasConsent) {
-          const confirmed = window.confirm(
-            "현재 위치의 위도·경도를 날씨 조회에 사용합니다. 좌표는 서버에 저장하지 않고 현재 브라우저 탭에서만 보관하며, 기상청 예보 격자 변환에 사용합니다. 계속할까요?"
-          );
-          if (!confirmed) return;
-          localStorage.setItem(consentKey, "true");
-        }
+        if (!this.requestWeatherLocationConsent()) return;
+        localStorage.setItem(
+          MYPAGE_STORAGE_KEYS.weatherDailyLocationDate,
+          this.weatherLocalDateKey()
+        );
         localStorage.removeItem(MYPAGE_STORAGE_KEYS.weatherLocation);
         await this.loadWeatherData({ force: true, refreshLocation: true });
         return;

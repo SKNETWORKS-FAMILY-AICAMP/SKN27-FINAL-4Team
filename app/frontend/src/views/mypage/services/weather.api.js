@@ -1,4 +1,7 @@
-export async function fetchCurrentWeather(location = {}, { rotateHobby = false } = {}) {
+export async function fetchCurrentWeather(
+  location = {},
+  { rotateHobby = false } = {}
+) {
   const params = new URLSearchParams();
   if (location.lat != null && location.lon != null) {
     params.set("lat", location.lat);
@@ -10,7 +13,6 @@ export async function fetchCurrentWeather(location = {}, { rotateHobby = false }
   if (rotateHobby) {
     params.set("rotate_hobby", "true");
   }
-
   const query = params.toString();
   const response = await fetch(`/api/myweather/current/${query ? `?${query}` : ""}`, {
     cache: "no-store",

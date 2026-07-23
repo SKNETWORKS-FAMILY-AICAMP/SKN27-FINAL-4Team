@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Literal, TypedDict
 
+from django.utils import timezone
+
 from mindreport.services.alternatives import AlternativePlanResult
 from mindreport.services.collection import MindReportCollectionResult
 from mindreport.services.cause_keywords import (
@@ -73,6 +75,7 @@ class MindReportGraphState(TypedDict, total=False):
     year: int | None
     month: int | None
     period_name: str
+    generated_on: date
 
     # Optional dependency-injected clients used by tests and controlled execution.
     score_client: EmotionScoreClient | None
@@ -114,6 +117,7 @@ def build_initial_mindreport_state(
     year: int | None = None,
     month: int | None = None,
     period_name: str = '',
+    generated_on: date | None = None,
     score_client: EmotionScoreClient | None = None,
     keyword_client: KeywordCandidateClient | None = None,
     cause_client: CauseKeywordClient | None = None,
@@ -127,6 +131,7 @@ def build_initial_mindreport_state(
         'year': year,
         'month': month,
         'period_name': period_name,
+        'generated_on': generated_on or timezone.localdate(),
         'score_client': score_client,
         'keyword_client': keyword_client,
         'cause_client': cause_client,

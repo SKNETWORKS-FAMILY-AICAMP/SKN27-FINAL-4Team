@@ -81,9 +81,43 @@ def period_range_text(
     return f'{local_start:%Y.%m.%d} ~ {local_end:%Y.%m.%d}'
 
 
+def suggestion_time_context(
+    *,
+    period_type: str,
+    generated_on: date,
+    target_date: date | None = None,
+    year: int | None = None,
+    month: int | None = None,
+) -> dict[str, str | int]:
+    """Return generation-anchored timing guidance without persisting new data."""
+    window = resolve_period_window(
+        period_type=period_type,
+        target_date=target_date,
+        year=year,
+        month=month,
+    )
+    analysis_start = timezone.localtime(window.start).date()
+    analysis_end = min(timezone.localtime(window.end_inclusive).date(), generated_on)
+    duration_days = 28 if period_type == PERIOD_MONTH else 7
+    action_end = generated_on + timedelta(days=duration_days - 1)
+    return {
+        'period_type': period_type,
+        'analysis_period_start': analysis_start.isoformat(),
+        'analysis_period_end': analysis_end.isoformat(),
+        'generated_on': generated_on.isoformat(),
+        'action_window_start': generated_on.isoformat(),
+        'action_window_end': action_end.isoformat(),
+        'action_window_days': duration_days,
+        'action_window_label': (
+            '리포트 생성 후 4주'
+            if period_type == PERIOD_MONTH
+            else '리포트 생성 후 7일'
+        ),
+    }
+
+
 def is_last_week_of_month(target_date: date) -> bool:
     days_to_sunday = 6 - target_date.weekday()
     sunday_date = target_date + timedelta(days=days_to_sunday)
     _, last_day = calendar.monthrange(target_date.year, target_date.month)
     return sunday_date.month != target_date.month or sunday_date.day == last_day
-

@@ -22,6 +22,9 @@ class FallbackReportService:
         """
         사용자 정보와 Tavily 근거 기반 Web Agent를 사용하여 데이터 부족 안내를 생성합니다.
         """
+        period_label = "월간" if "월간" in report_type else "주간"
+        period_subject = "이번 달" if period_label == "월간" else "이번 주"
+
         # 1. 사용자 프로필 정보 조회
         age = None
         gender = None
@@ -55,13 +58,15 @@ class FallbackReportService:
             gender=gender, 
             hobbies=hobbies, 
             interests=interests,
-            mbti=user_mbti
+            mbti=user_mbti,
+            report_period=period_label,
         )
         
         # 4. 프론트엔드 ReportView.vue 구조에 맞게 JSON(Dict) 조립
         analysis_lines = []
-        
+
         recommendations_names = []
+        suggestion_cards = []
         if recommendations:
             analysis_lines.append(
                 "아래 활동은 대화에서 분석한 결과가 아니라, 기다리는 동안 참고할 수 있도록 Tavily 웹 검색 결과를 바탕으로 정리한 제안이에요."
@@ -85,7 +90,17 @@ class FallbackReportService:
                 analysis_lines.append(f"  - 왜 추천하나요?: {reason}")
             if how_to:
                 analysis_lines.append(f"  - 어떻게 시작할까요?: {how_to}")
+            analysis_lines.append("  - 제안 시점: routine")
+            analysis_lines.append("  - 감정 흐름 후보: web_search")
             recommendations_names.append(act)
+            suggestion_cards.append({
+                "title": act,
+                "reason": reason,
+                "how": how_to,
+                "sourceCandidate": "web_search",
+                "relatedCause": "",
+                "timing": "routine",
+            })
 
         analysis_lines.append(
             f"기록이 아직 적어도, {report_recipient_name(user)}은 마음을 천천히 알아갈 충분한 시간이 있어요."
@@ -95,13 +110,14 @@ class FallbackReportService:
             "id": f"fallback-{user.id}",
             "type": f"{report_type} (데이터 부족)",
             "range": range_text,
-            "title": f"마음 리포트 분석 대기 중",
-            "summary": "아직 대화 기록이 조금 부족해요. 기록이 더 모이면 실제 대화를 바탕으로 마음의 흐름을 살펴볼게요.",
+            "title": f"{period_label} 마음 리포트를 준비하고 있어요",
+            "summary": f"{period_subject} 대화 기록이 조금 더 모이면 다음 정기 갱신에서 실제 마음의 흐름을 차분히 살펴볼게요.",
             "stressCauses": [],
             "reliefCauses": [],
             "emotions": [], # 데이터가 없으므로 비움
             "analysis": analysis_lines,
             "recommendations": recommendations_names,
+            "suggestionCards": suggestion_cards,
             "is_fallback": True
         }
         

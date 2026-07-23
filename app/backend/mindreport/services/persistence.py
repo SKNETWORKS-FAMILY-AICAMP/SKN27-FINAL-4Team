@@ -100,6 +100,9 @@ def save_period_report(
             return MindReport.objects.create(user=user, **defaults)
         for field, value in defaults.items():
             setattr(report, field, value)
-        report.save(update_fields=list(defaults))
+        # A refreshed report starts a new suggestion window. Reuse the existing
+        # timestamp as its latest generation time instead of adding a DB field.
+        report.created_at = timezone.now()
+        report.save(update_fields=[*defaults, 'created_at'])
         period_reports.exclude(pk=report.pk).delete()
         return report

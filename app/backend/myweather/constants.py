@@ -12,6 +12,18 @@ JEONNAM_GWANGJU_LOCATION = {
     "lon": 126.8526,
 }
 
+INCHEON_LOCATION = {
+    "name": "인천",
+    "lat": 37.4563,
+    "lon": 126.7052,
+}
+
+GYEONGBUK_LOCATION = {
+    "name": "경북",
+    "lat": 36.5684,
+    "lon": 128.7294,
+}
+
 STATIC_DEFAULT_KNOWN_LOCATIONS = {
     "서울": DEFAULT_LOCATION,
     "서울특별시": DEFAULT_LOCATION,
@@ -19,8 +31,14 @@ STATIC_DEFAULT_KNOWN_LOCATIONS = {
     "부산광역시": {"name": "부산", "lat": 35.1796, "lon": 129.0756},
     "대구": {"name": "대구", "lat": 35.8714, "lon": 128.6014},
     "대구광역시": {"name": "대구", "lat": 35.8714, "lon": 128.6014},
-    "인천": {"name": "인천", "lat": 37.4563, "lon": 126.7052},
-    "인천광역시": {"name": "인천", "lat": 37.4563, "lon": 126.7052},
+    "인천": INCHEON_LOCATION,
+    "인천광역시": INCHEON_LOCATION,
+    "서해5도": INCHEON_LOCATION,
+    "백령도": INCHEON_LOCATION,
+    "대청도": INCHEON_LOCATION,
+    "소청도": INCHEON_LOCATION,
+    "연평도": INCHEON_LOCATION,
+    "강화군 우도": INCHEON_LOCATION,
     "전남광주": JEONNAM_GWANGJU_LOCATION,
     "전남광주통합특별시": JEONNAM_GWANGJU_LOCATION,
     "광주": JEONNAM_GWANGJU_LOCATION,
@@ -43,8 +61,16 @@ STATIC_DEFAULT_KNOWN_LOCATIONS = {
     "전북특별자치도": {"name": "전북", "lat": 35.8242, "lon": 127.1480},
     "전남": JEONNAM_GWANGJU_LOCATION,
     "전라남도": JEONNAM_GWANGJU_LOCATION,
-    "경북": {"name": "경북", "lat": 36.5684, "lon": 128.7294},
-    "경상북도": {"name": "경북", "lat": 36.5684, "lon": 128.7294},
+    "흑산도": JEONNAM_GWANGJU_LOCATION,
+    "홍도": JEONNAM_GWANGJU_LOCATION,
+    "흑산도.홍도": JEONNAM_GWANGJU_LOCATION,
+    "흑산도·홍도": JEONNAM_GWANGJU_LOCATION,
+    "경북": GYEONGBUK_LOCATION,
+    "경상북도": GYEONGBUK_LOCATION,
+    "울릉도": GYEONGBUK_LOCATION,
+    "독도": GYEONGBUK_LOCATION,
+    "울릉도.독도": GYEONGBUK_LOCATION,
+    "울릉도·독도": GYEONGBUK_LOCATION,
     "경남": {"name": "경남", "lat": 35.2279, "lon": 128.6816},
     "경상남도": {"name": "경남", "lat": 35.2279, "lon": 128.6816},
     "제주": {"name": "제주", "lat": 33.4996, "lon": 126.5312},
@@ -57,10 +83,14 @@ STATIC_DEFAULT_WEATHER_REPRESENTATIVE_NAMES = (
 )
 
 STATIC_DEFAULT_WARNING_REGION_ALIASES = {
-    "서울": ("서울",), "부산": ("부산",), "대구": ("대구",), "인천": ("인천",),
-    "전남광주": ("전남광주", "광주", "전남", "전라남도"), "대전": ("대전",), "울산": ("울산",), "세종": ("세종",),
+    "서울": ("서울",), "부산": ("부산",), "대구": ("대구",),
+    "인천": ("인천", "서해5도", "백령도", "대청도", "소청도", "연평도", "강화군 우도"),
+    "전남광주": ("전남광주", "광주", "전남", "전라남도", "흑산도", "홍도", "흑산도.홍도", "흑산도·홍도"),
+    "대전": ("대전",), "울산": ("울산",), "세종": ("세종",),
     "경기": ("경기",), "강원": ("강원",), "충북": ("충북", "충청북도"), "충남": ("충남", "충청남도"),
-    "전북": ("전북", "전라북도", "전북특별자치도"), "경북": ("경북", "경상북도"), "경남": ("경남", "경상남도"),
+    "전북": ("전북", "전라북도", "전북특별자치도"),
+    "경북": ("경북", "경상북도", "울릉도", "독도", "울릉도.독도", "울릉도·독도"),
+    "경남": ("경남", "경상남도"),
     "제주": ("제주",),
 }
 
@@ -157,6 +187,19 @@ KMA_WARNING_EXPECTED_FIELDS = (
 )
 
 KMA_WARNING_LEVEL_PRIORITY = {"예비특보": 1, "주의보": 2, "경보": 3}
+
+# 기상청 특보구역에는 행정구역 코드 계열과 다른 REG_ID를 쓰는 하위 구역이 있다.
+# 이 경우 공식 REG_UP을 기준으로 귀속시켜 인접 도에 특보가 잘못 포함되는 것을 막는다.
+# 예: 부산동부 L1082500은 경남(L108)이 아니라 부산 상위구역 L1150000 소속이다.
+KMA_WARNING_PARENT_REGION_OVERRIDES = {
+    "L1014": "인천",       # 서해5도(백령·대청·소청·연평도, 강화군 우도)
+    "L10524": "전남광주", # 흑산도·홍도
+    "L112": "대전",       # 상세코드 L1030100
+    "L114": "대구",       # 군위 상세코드 L1070200 포함
+    "L115": "부산",       # 상세코드 L10825~L10827
+    "L116": "울산",       # 상세코드 L10828~L10829
+    "L160": "경북",       # 울릉도·독도 상세코드 L1072100
+}
 
 METROPOLITAN_WARNING_DISPLAY_NAMES = {
     "서울특별시": "서울",

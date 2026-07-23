@@ -82,7 +82,7 @@
         </dl>
 
         <p v-if="error" class="weather-error">{{ error }}</p>
-        <p v-else-if="loading" class="weather-loading">{{ selectedRegion }} 날씨와 추천을 불러오는 중입니다.</p>
+        <p v-else-if="loading" class="weather-loading">{{ selectedRegion }} 날씨를 불러오는 중입니다.</p>
 
         <button class="weather-refresh-button" type="button" :disabled="loading" @click="$emit('refresh')">
           새로고침
@@ -386,6 +386,9 @@ export default {
       return this.insight?.generation || null;
     },
     generationSummary() {
+      if (this.generation?.status === "pending") {
+        return "기상청 관측값을 먼저 표시하고 개인화 해설을 준비하고 있습니다.";
+      }
       if (this.generation?.status === "generated") {
         return this.generation.personalized
           ? `OpenAI가 ${this.generation.personalization_fields.join("·")}을 최소한으로 참고해 개인화 문장을 생성했습니다.`
