@@ -76,8 +76,8 @@
 }
 
 .character-detail {
-  display: grid;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
   padding: 22px;
 }
@@ -194,7 +194,8 @@
 .character-actions {
   display: flex;
   justify-content: flex-end;
-  margin-top: 4px;
+  margin-top: auto;
+  padding-top: 12px;
 }
 
 .character-actions .primary-button:disabled {

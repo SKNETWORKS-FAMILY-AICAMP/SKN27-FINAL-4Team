@@ -234,6 +234,7 @@
 
 <script>
 import { fetchCurrentWeather, fetchMbtiDemoPayload, requestMbtiMonthlyAnalysis, fetchMyProfile, fetchTodayEmotion, updateMyProfile, saveOnboardingMbti, fetchBookRecommendation, fetchMemoryVault, deleteMemoryVaultItem, fetchWeatherRegions } from "./mypage.api";
+import { userApi } from "../../api/user.js";
 import { LOCATION_CONSENT_VERSION } from "../../constants/consentVersions";
 import { createMypageState, i18n } from "./state/mypage.state";
 import {
@@ -594,6 +595,12 @@ export default {
       try {
         await updateMyProfile({ selectedCharacter: id });
         localStorage.setItem(MYPAGE_STORAGE_KEYS.character, JSON.stringify({ characterId: id }));
+        try {
+          const updatedUser = await userApi.getCurrentUser();
+          window.dispatchEvent(new CustomEvent("binteumsai-auth-changed", { detail: { user: updatedUser } }));
+        } catch (authErr) {
+          console.warn("Failed to refresh user after character update", authErr);
+        }
         this.showToast("대화 대상 캐릭터가 교체되었습니다.");
       } catch (e) {
         console.error(e);
