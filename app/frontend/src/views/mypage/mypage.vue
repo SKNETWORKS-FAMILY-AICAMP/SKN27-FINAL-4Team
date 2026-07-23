@@ -103,7 +103,7 @@
                 <small>{{ memoryDashboard.latest.savedAt || '대화에서 저장됨' }}</small>
               </button>
               <button v-else class="memory-dashboard-empty-action" type="button" @click="goToChat">
-                오늘 기억된 내용이 없어요 · 대화하러 가기 <span aria-hidden="true">→</span>
+                오늘 기억된 내용이 없어요 <br /> 대화하러 가기 <span aria-hidden="true">→</span>
               </button>
             </template>
           </section>
