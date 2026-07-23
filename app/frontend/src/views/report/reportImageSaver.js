@@ -1,5 +1,4 @@
 const DEFAULT_TARGET_SELECTOR = '.report-card'
-const DEFAULT_BUTTON_SELECTOR = '.report-actions .secondary-button'
 const DEFAULT_EXCLUDED_SELECTORS = [
   '.report-actions',
 ]
@@ -8,20 +7,12 @@ const INVALID_FILENAME_CHARACTERS = /[\\/:*?"<>|\u0000-\u001f]/g
 const MAX_CANVAS_EDGE = 16384
 
 /**
- * 마음 리포트 카드의 글과 디자인으로 PNG Blob을 만든다.
- *
- * 외부 캡처 라이브러리에 의존하지 않으며, 화면에 계산된 스타일을 복제한 뒤
- * 실제 DOM의 레이아웃 좌표를 Canvas에 다시 그려 PNG 파일을 만든다.
+ * 화면의 마음 리포트를 PDF 출력에 사용할 Canvas로 렌더링한다.
  *
  * @param {object} [options]
- * @param {HTMLElement} [options.element] 직접 저장할 리포트 요소
- * @param {string} [options.targetSelector='.report-card'] 리포트 요소 선택자
- * @param {string} [options.filename] 확장자를 제외한 파일명
- * @param {number} [options.scale] 출력 배율(기본값: 기기 배율, 최대 2)
- * @param {string[]} [options.excludeSelectors] 이미지에서 제외할 요소 선택자
- * @returns {Promise<{ blob: Blob, filename: string, width: number, height: number }>}
+ * @returns {Promise<{ canvas: HTMLCanvasElement, filename: string, width: number, height: number }>}
  */
-export async function createMindReportImage(options = {}) {
+export async function createMindReportCanvas(options = {}) {
   assertBrowserEnvironment()
 
   const target = options.element ?? document.querySelector(
@@ -38,104 +29,19 @@ export async function createMindReportImage(options = {}) {
   const excludeSelectors = options.excludeSelectors ?? DEFAULT_EXCLUDED_SELECTORS
   const { width, height } = getCaptureSize(target, excludeSelectors)
   const safeScale = fitScaleToCanvas(width, height, scale)
-  const pngBlob = await renderReportToPng(target, {
+  const canvas = await renderReportToCanvas(target, {
     width,
     height,
     scale: safeScale,
     excludeSelectors,
   })
-  const filename = `${sanitizeFilename(options.filename ?? buildReportFilename(target))}.png`
 
   return {
-    blob: pngBlob,
-    filename,
-    width: Math.round(width * safeScale),
-    height: Math.round(height * safeScale),
+    canvas,
+    filename: sanitizeFilename(options.filename ?? buildReportFilename(target)),
+    width: canvas.width,
+    height: canvas.height,
   }
-}
-
-/**
- * 마음 리포트 PNG를 만들어 사용자의 기기에 저장한다.
- *
- * @param {object} [options]
- * @returns {Promise<{ blob: Blob, filename: string, width: number, height: number }>}
- */
-export async function saveMindReportAsImage(options = {}) {
-  const result = await createMindReportImage(options)
-  downloadBlob(result.blob, result.filename)
-  return result
-}
-
-/**
- * 현재 마음 리포트 화면의 "이미지 저장" 버튼에 저장 동작을 연결한다.
- * 이벤트 위임 방식이므로 API 응답 후 버튼이 늦게 렌더링되어도 동작한다.
- *
- * @param {object} [options]
- * @param {ParentNode} [options.root=document] 이벤트를 감시할 루트
- * @param {string} [options.buttonSelector] 저장 버튼 선택자
- * @param {string} [options.targetSelector] 저장할 리포트 선택자
- * @param {(result: object) => void} [options.onSuccess]
- * @param {(error: Error) => void} [options.onError]
- * @returns {() => void} 이벤트 연결을 해제하는 함수
- */
-export function attachMindReportImageSaver(options = {}) {
-  assertBrowserEnvironment()
-
-  const root = options.root ?? document
-  const buttonSelector = options.buttonSelector ?? DEFAULT_BUTTON_SELECTOR
-
-  const handleClick = async (event) => {
-    const clickedElement = event.target
-    if (!(clickedElement instanceof Element)) return
-
-    const button = clickedElement.closest(buttonSelector)
-    if (!(button instanceof HTMLButtonElement) || !root.contains(button)) return
-
-    event.preventDefault()
-    if (button.dataset.reportImageSaving === 'true') return
-
-    const previousText = button.textContent
-    const previousDisabled = button.disabled
-    button.dataset.reportImageSaving = 'true'
-    button.disabled = true
-    button.setAttribute('aria-busy', 'true')
-    button.textContent = '이미지 만드는 중...'
-
-    try {
-      const result = await saveMindReportAsImage({
-        targetSelector: options.targetSelector ?? DEFAULT_TARGET_SELECTOR,
-        filename: options.filename,
-        scale: options.scale,
-        excludeSelectors: options.excludeSelectors,
-      })
-
-      window.dispatchEvent(new CustomEvent('mind-report-image-saved', {
-        detail: result,
-      }))
-      options.onSuccess?.(result)
-    } catch (cause) {
-      const error = cause instanceof Error
-        ? cause
-        : new Error('마음 리포트 이미지를 저장하지 못했습니다.')
-
-      window.dispatchEvent(new CustomEvent('mind-report-image-save-error', {
-        detail: { error },
-      }))
-      options.onError?.(error)
-
-      if (!options.onError) {
-        window.alert(error.message)
-      }
-    } finally {
-      delete button.dataset.reportImageSaving
-      button.disabled = previousDisabled
-      button.removeAttribute('aria-busy')
-      button.textContent = previousText
-    }
-  }
-
-  root.addEventListener('click', handleClick)
-  return () => root.removeEventListener('click', handleClick)
 }
 
 function getCaptureSize(target, excludeSelectors) {
@@ -165,7 +71,7 @@ function getCaptureSize(target, excludeSelectors) {
   return { width, height }
 }
 
-async function renderReportToPng(target, { width, height, scale, excludeSelectors }) {
+async function renderReportToCanvas(target, { width, height, scale, excludeSelectors }) {
   const canvas = document.createElement('canvas')
   canvas.width = Math.round(width * scale)
   canvas.height = Math.round(height * scale)
@@ -180,16 +86,16 @@ async function renderReportToPng(target, { width, height, scale, excludeSelector
   context.imageSmoothingQuality = 'high'
 
   const origin = target.getBoundingClientRect()
-  drawElement(context, target, {
+  await drawElement(context, target, {
     origin,
     excludeSelectors,
     inheritedOpacity: 1,
   })
 
-  return await canvasToBlob(canvas)
+  return canvas
 }
 
-function drawElement(context, element, options) {
+async function drawElement(context, element, options) {
   if (element !== options.root && isExcluded(element, options.excludeSelectors)) return
 
   const style = window.getComputedStyle(element)
@@ -210,9 +116,19 @@ function drawElement(context, element, options) {
   drawElementBorder(context, box, style)
   context.restore()
 
+  if (element instanceof HTMLImageElement) {
+    drawImageElement(context, element, box, style, opacity)
+    return
+  }
+
+  if (element instanceof SVGElement && element.tagName.toLowerCase() === 'svg') {
+    await drawSvgElement(context, element, box, opacity)
+    return
+  }
+
   for (const node of element.childNodes) {
     if (node instanceof Element) {
-      drawElement(context, node, {
+      await drawElement(context, node, {
         ...options,
         inheritedOpacity: opacity,
         root: options.root ?? element,
@@ -221,6 +137,119 @@ function drawElement(context, element, options) {
       drawTextNode(context, node, style, options.origin, opacity)
     }
   }
+}
+
+function drawImageElement(context, image, box, style, opacity) {
+  if (!image.complete || image.naturalWidth <= 0 || image.naturalHeight <= 0) return
+  if (box.width <= 0 || box.height <= 0) return
+
+  const objectFit = style.objectFit || 'fill'
+  const imageRatio = image.naturalWidth / image.naturalHeight
+  const boxRatio = box.width / box.height
+  let width = box.width
+  let height = box.height
+
+  if (objectFit === 'contain' || objectFit === 'scale-down') {
+    if (imageRatio > boxRatio) {
+      height = width / imageRatio
+    } else {
+      width = height * imageRatio
+    }
+    if (objectFit === 'scale-down') {
+      width = Math.min(width, image.naturalWidth)
+      height = Math.min(height, image.naturalHeight)
+    }
+  } else if (objectFit === 'cover') {
+    if (imageRatio > boxRatio) {
+      width = height * imageRatio
+    } else {
+      height = width / imageRatio
+    }
+  } else if (objectFit === 'none') {
+    width = image.naturalWidth
+    height = image.naturalHeight
+  }
+
+  const x = box.x + (box.width - width) / 2
+  const y = box.y + (box.height - height) / 2
+  const radius = Math.max(
+    Number.parseFloat(style.borderTopLeftRadius) || 0,
+    Number.parseFloat(style.borderTopRightRadius) || 0,
+    Number.parseFloat(style.borderBottomRightRadius) || 0,
+    Number.parseFloat(style.borderBottomLeftRadius) || 0,
+  )
+
+  context.save()
+  context.globalAlpha = opacity
+  roundedRectPath(context, box.x, box.y, box.width, box.height, radius)
+  context.clip()
+  context.drawImage(image, x, y, width, height)
+  context.restore()
+}
+
+async function drawSvgElement(context, svg, box, opacity) {
+  if (box.width <= 0 || box.height <= 0) return
+
+  const clone = svg.cloneNode(true)
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+  clone.setAttribute('width', String(box.width))
+  clone.setAttribute('height', String(box.height))
+  inlineSvgComputedStyles(svg, clone)
+
+  const markup = new XMLSerializer().serializeToString(clone)
+  const blob = new Blob([markup], { type: 'image/svg+xml;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+
+  try {
+    const image = await loadImage(url)
+    context.save()
+    context.globalAlpha = opacity
+    context.drawImage(image, box.x, box.y, box.width, box.height)
+    context.restore()
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+function inlineSvgComputedStyles(source, clone) {
+  const sourceElements = [source, ...source.querySelectorAll('*')]
+  const cloneElements = [clone, ...clone.querySelectorAll('*')]
+  const properties = [
+    'fill',
+    'fill-opacity',
+    'stroke',
+    'stroke-width',
+    'stroke-opacity',
+    'stroke-dasharray',
+    'stroke-linecap',
+    'stroke-linejoin',
+    'opacity',
+    'stop-color',
+    'stop-opacity',
+    'color',
+    'font-family',
+    'font-size',
+    'font-weight',
+  ]
+
+  sourceElements.forEach((sourceElement, index) => {
+    const cloneElement = cloneElements[index]
+    if (!cloneElement) return
+    const computed = window.getComputedStyle(sourceElement)
+    for (const property of properties) {
+      const value = computed.getPropertyValue(property)
+      if (value) cloneElement.style.setProperty(property, value)
+    }
+  })
+}
+
+function loadImage(source) {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('그래프를 이미지에 그리지 못했습니다.'))
+    image.src = source
+  })
 }
 
 function drawElementBackground(context, box, style) {
@@ -452,32 +481,8 @@ function settleWithin(promise, milliseconds) {
   ])
 }
 
-function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.style.display = 'none'
-  document.body.append(link)
-  link.click()
-  link.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
-
-function canvasToBlob(canvas) {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (blob) {
-        resolve(blob)
-      } else {
-        reject(new Error('PNG 이미지 파일을 만들지 못했습니다.'))
-      }
-    }, 'image/png')
-  })
-}
-
 function assertBrowserEnvironment() {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
-    throw new Error('마음 리포트 이미지 저장은 브라우저에서만 사용할 수 있습니다.')
+    throw new Error('마음 리포트 PDF 렌더링은 브라우저에서만 사용할 수 있습니다.')
   }
 }

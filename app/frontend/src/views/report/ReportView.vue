@@ -1,15 +1,18 @@
 <template>
   <main class="diary-page" :style="{ '--report-bg': `url(${reportBg})` }">
     <div class="diary-toolbar">
+      <p class="refresh-context" :class="{ 'has-feedback': refreshFeedback }">
+        {{ refreshFeedback || '주간은 매주, 월간은 월말에 자동으로 새 리포트가 준비돼요.' }}
+      </p>
       <button
         type="button"
         class="refresh-button"
         :disabled="isLoading || isRefreshing"
-        title="최신 대화로 마음 리포트 새로고침"
+        title="다음 정기 갱신을 기다리지 않고 최신 대화를 지금 반영합니다"
         @click="refreshReports"
       >
         <span class="refresh-icon" :class="{ spinning: isRefreshing }" aria-hidden="true">↻</span>
-        {{ isRefreshing ? '확인 중' : '새로고침' }}
+        {{ isRefreshing ? '반영 중' : '지금 확인' }}
       </button>
     </div>
 
@@ -39,7 +42,7 @@
               @click="selectedMonth = month.value"
             >{{ month.label }}</button>
           </div>
-          <p v-if="!isLoading && !hasReports" class="side-empty">아직 생성된 마음 리포트가 없어요.</p>
+          <p v-if="!isLoading && !hasReports" class="side-empty">아직 준비된 정기 리포트가 없어요.</p>
           <ul class="report-list">
             <li v-for="period in filteredReports" :key="period.id">
               <button
@@ -48,7 +51,7 @@
                 :class="{ active: selectedReportId === period.id }"
                 @click="selectedReportId = period.id"
               >
-                <span class="ri-date">{{ periodDateLabel(period) }}</span>
+                <span class="ri-date"><b>{{ reportPeriodLabel(period) }}</b> · {{ periodDateLabel(period) }}</span>
                 <strong class="ri-title">{{ period.title }}</strong>
                 <img v-if="selectedReportId === period.id" class="ri-heart" :src="heartIcon" alt="" aria-hidden="true" />
                 <span v-else class="ri-lock" aria-hidden="true">🔒</span>
@@ -59,12 +62,12 @@
       </aside>
 
       <!-- ────── 보드 ────── -->
-      <section class="board report-card" :class="{ 'is-loading': isLoading }" :aria-busy="isLoading">
+      <section ref="reportCardRef" class="board report-card" :class="{ 'is-loading': isLoading }" :aria-busy="isLoading">
         <!-- 상태 -->
         <div v-if="!isLoading && (fetchError || !currentReport)" class="board-state">
           <img :src="bubbleHeart" class="state-icon" alt="" aria-hidden="true" />
           <template v-if="fetchError"><h1>마음 리포트를 불러오지 못했어요.</h1><p>{{ fetchError }}</p></template>
-          <template v-else><h1>아직 기록이 조금 부족해요</h1><p>대화를 나눈 뒤 새로고침하면 최신 주간·월간 마음 리포트를 확인할 수 있어요.</p></template>
+          <template v-else><h1>첫 정기 리포트를 준비하고 있어요</h1><p>주간·월간 리포트는 정해진 시점에 자동으로 준비돼요. 최신 대화를 먼저 반영하고 싶다면 ‘지금 확인’을 이용해 주세요.</p></template>
         </div>
 
         <!-- 안전 -->
@@ -81,16 +84,16 @@
             <img class="bh-icon" :src="bubbleHeart" alt="" aria-hidden="true" />
             <div class="bh-text">
               <h1>{{ currentReport.title }}<img class="title-spark" :src="sparkle" alt="" aria-hidden="true" /></h1>
-              <p class="bh-sub">잘 해냈어요, 오늘도. 당신의 하루를 반짝이는 선물로 기록해요.</p>
+              <p class="bh-sub">이번 기간에 이어진 마음의 흐름을 차분히 돌아봐요.</p>
             </div>
-            <span class="bh-date">{{ headerDate }}</span>
+            <span class="bh-date">{{ reportPeriodLabel(currentReport) }} · {{ headerDate }}</span>
           </header>
 
 
           <div class="board-grid">
-            <!-- 한 줄 기록 -->
+            <!-- 이번 기간의 한 줄 -->
             <section class="card card-oneline">
-              <h2 class="card-title"><img :src="feather" alt="" aria-hidden="true" />한 줄 기록</h2>
+              <h2 class="card-title"><img :src="feather" alt="" aria-hidden="true" />이번 기간의 한 줄</h2>
               <p class="oneline">
                 {{ currentReport.summary || '기록이 모이면 이번 마음의 한 줄이 여기에 담겨요.' }}
                 <img class="oneline-heart" :src="heartIcon" alt="" aria-hidden="true" />
@@ -114,50 +117,123 @@
             <!-- 감정 흐름 -->
             <section class="card card-flow">
               <h2 class="card-title"><img :src="noteIcon" alt="" aria-hidden="true" />감정 흐름 (멜로디)</h2>
-              <p class="flow-sub">감정 기록이 더 섬세할수록 내 멜로디가 그려져요.</p>
-              <div class="flow-legend">
-                <span class="lg tone-neg"><i></i>많이 힘들었어요</span>
-                <span class="lg tone-neu"><i></i>조금 나아졌어요</span>
-                <span class="lg tone-pos"><i></i>따뜻했어요</span>
-              </div>
+              <p class="flow-sub">날짜마다 달라진 마음의 높낮이를 하나의 멜로디로 이었어요. 위쪽은 가벼웠던 날, 아래쪽은 버거웠던 날이에요.</p>
               <div v-if="emotionPoints.length" class="flow-stage">
+                <div class="flow-scale" aria-hidden="true">
+                  <span :style="flowScaleLabelStyle(FLOW_LIGHT_LABEL_Y)">가벼웠던 날</span>
+                  <span :style="flowScaleLabelStyle(FLOW_STEADY_LABEL_Y)">잔잔했던 날</span>
+                  <span :style="flowScaleLabelStyle(FLOW_HEAVY_LABEL_Y)">버거웠던 날</span>
+                </div>
                 <svg class="flow-svg" :viewBox="`0 0 ${FLOW_W} ${FLOW_H}`" preserveAspectRatio="none" aria-hidden="true">
                   <defs>
-                    <linearGradient id="flowStroke" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0%" stop-color="#8f7bd6" />
-                      <stop offset="50%" stop-color="#e59ec3" />
-                      <stop offset="100%" stop-color="#f4a35f" />
+                    <linearGradient
+                      v-for="segment in emotionSegments"
+                      :id="segment.gradientId"
+                      :key="segment.gradientId"
+                      :x1="segment.x1"
+                      :y1="segment.y1"
+                      :x2="segment.x2"
+                      :y2="segment.y2"
+                      gradientUnits="userSpaceOnUse"
+                    >
+                      <stop offset="0%" :stop-color="segment.fromColor" />
+                      <stop offset="100%" :stop-color="segment.toColor" />
                     </linearGradient>
                   </defs>
-                  <path :d="emotionPath" class="flow-line" />
+                  <rect
+                    :x="FLOW_PLOT_LEFT"
+                    :y="FLOW_PLOT_TOP"
+                    :width="FLOW_W - FLOW_PLOT_LEFT - FLOW_PLOT_RIGHT"
+                    :height="FLOW_LIGHT_BOUNDARY_Y - FLOW_PLOT_TOP"
+                    class="flow-zone is-light-zone"
+                  />
+                  <rect
+                    :x="FLOW_PLOT_LEFT"
+                    :y="FLOW_LIGHT_BOUNDARY_Y"
+                    :width="FLOW_W - FLOW_PLOT_LEFT - FLOW_PLOT_RIGHT"
+                    :height="FLOW_HEAVY_BOUNDARY_Y - FLOW_LIGHT_BOUNDARY_Y"
+                    class="flow-zone is-steady-zone"
+                  />
+                  <rect
+                    :x="FLOW_PLOT_LEFT"
+                    :y="FLOW_HEAVY_BOUNDARY_Y"
+                    :width="FLOW_W - FLOW_PLOT_LEFT - FLOW_PLOT_RIGHT"
+                    :height="FLOW_PLOT_BOTTOM - FLOW_HEAVY_BOUNDARY_Y"
+                    class="flow-zone is-heavy-zone"
+                  />
+                  <line
+                    :x1="FLOW_PLOT_LEFT"
+                    :x2="FLOW_W - FLOW_PLOT_RIGHT"
+                    :y1="FLOW_LIGHT_BOUNDARY_Y"
+                    :y2="FLOW_LIGHT_BOUNDARY_Y"
+                    class="flow-guide"
+                  />
+                  <line
+                    :x1="FLOW_PLOT_LEFT"
+                    :x2="FLOW_W - FLOW_PLOT_RIGHT"
+                    :y1="FLOW_HEAVY_BOUNDARY_Y"
+                    :y2="FLOW_HEAVY_BOUNDARY_Y"
+                    class="flow-guide"
+                  />
+                  <line
+                    :x1="FLOW_PLOT_LEFT"
+                    :x2="FLOW_W - FLOW_PLOT_RIGHT"
+                    :y1="FLOW_PLOT_BOTTOM"
+                    :y2="FLOW_PLOT_BOTTOM"
+                    class="flow-x-axis-line"
+                  />
+                  <path
+                    v-for="segment in emotionSegments"
+                    :key="segment.pathKey"
+                    :d="segment.path"
+                    :stroke="`url(#${segment.gradientId})`"
+                    class="flow-line"
+                  />
                 </svg>
                 <div class="flow-dots">
                   <div
                     v-for="(p, i) in emotionPoints"
                     :key="p.day + i"
                     class="flow-dot"
-                    :class="`tone-${p.tone}`"
-                    :style="{ left: `${(p.x / FLOW_W) * 100}%`, top: `${(p.y / FLOW_H) * 100}%` }"
-                  ><small>{{ p.day }}</small></div>
+                    :style="{
+                      left: `${(p.x / FLOW_W) * 100}%`,
+                      top: `${(p.y / FLOW_H) * 100}%`,
+                      backgroundColor: p.color,
+                    }"
+                    :aria-label="`${p.day}, ${p.band}`"
+                  ></div>
+                </div>
+                <div class="flow-date-axis" aria-hidden="true">
+                  <span
+                    v-for="(p, i) in emotionPoints"
+                    :key="`flow-date-${p.day}-${i}`"
+                    :style="{
+                      left: `${(p.x / FLOW_W) * 100}%`,
+                      top: `${(FLOW_DATE_LABEL_Y / FLOW_H) * 100}%`,
+                    }"
+                  >{{ p.day }}</span>
                 </div>
               </div>
+              <p v-else-if="hasUnscoredEmotions" class="card-empty">이 기록은 다음 정기 갱신에 새로운 멜로디로 반영돼요. 먼저 보고 싶다면 ‘지금 확인’을 이용해 주세요.</p>
               <p v-else class="card-empty">감정 기록이 더 쌓이면 이곳에 멜로디가 그려져요.</p>
             </section>
 
-            <!-- 마음을 힘들게 한 순간 -->
-            <section class="card card-hard">
-              <h2 class="card-title"><img :src="catIcon" alt="" aria-hidden="true" />마음을 힘들게 한 순간 <em>(불협화음)</em></h2>
-              <ul class="hard-list">
-                <li v-for="line in hardMoments" :key="line">{{ line }}</li>
-                <li v-if="hardMoments.length === 0" class="hard-empty">뚜렷하게 마음을 흔든 순간은 아직 보이지 않아요.</li>
-              </ul>
+            <!-- 마음이 놓였던 장면 -->
+            <section class="card card-relief">
+              <h2 class="card-title"><img :src="heartIcon" alt="" aria-hidden="true" />마음이 놓였던 장면 <em>(편안한 화음)</em></h2>
+              <p v-if="reliefHarmony" class="harmony-passage">
+                <span v-if="reliefHarmonyDate" class="harmony-date">{{ reliefHarmonyDate }} ·</span>{{ reliefHarmony }}
+              </p>
+              <p v-else class="moment-empty">마음이 놓였던 장면은 기록이 조금 더 쌓이면 들려드릴게요.</p>
             </section>
 
-            <!-- 당신에게 한마디 -->
-            <section class="card card-comfort">
-              <h2 class="card-title"><img :src="heartIcon" alt="" aria-hidden="true" />당신에게 한마디 <em>(마음 선물)</em></h2>
-              <p class="comfort-quote">{{ comfortMessage }}</p>
-              <img class="comfort-mascot" :src="flowRedpanda" alt="" aria-hidden="true" />
+            <!-- 마음이 무거워졌던 장면 -->
+            <section class="card card-hard">
+              <h2 class="card-title"><img :src="catIcon" alt="" aria-hidden="true" />마음이 무거워졌던 장면 <em>(불협화음)</em></h2>
+              <p v-if="hardHarmony" class="harmony-passage">
+                <span v-if="hardHarmonyDate" class="harmony-date">{{ hardHarmonyDate }} ·</span>{{ hardHarmony }}
+              </p>
+              <p v-else class="moment-empty">마음이 무거워졌던 장면은 아직 뚜렷하게 보이지 않아요.</p>
             </section>
           </div>
 
@@ -165,13 +241,13 @@
           <section class="suggest-block">
             <h2 class="suggest-head">
               <img :src="sparkle" alt="" aria-hidden="true" />작은 제안
-              <em>지금의 나에게 어울리는 작은 활동이에요. 가볍게 시도해 보세요.</em>
+              <em>{{ suggestionWindowDescription }}</em>
             </h2>
             <div v-if="suggestCards.length" class="suggest-grid" :style="{ gridTemplateColumns: `repeat(${suggestCards.length}, 1fr)` }">
               <article v-for="(card, index) in suggestCards" :key="card.title + index" class="suggest-card">
                 <div class="sc-head">
                   <img class="sc-mascot" :src="mascotFor(index)" alt="" aria-hidden="true" />
-                  <strong>{{ card.title || '오늘의 작은 제안' }}</strong>
+                  <strong>{{ card.title || '작은 실천' }}</strong>
                 </div>
                 <p class="sc-reason">{{ card.reason }}</p>
                 <div v-if="card.how" class="sc-start">
@@ -186,7 +262,14 @@
 
         <footer v-if="!isLoading" class="report-actions">
           <p>☆ 작은 기록이 모여, 당신의 내일을 더 단단하게 만듭니다. <span>♥</span></p>
-          <button type="button" class="secondary-button" :disabled="!currentReport">이미지 저장</button>
+          <button
+            type="button"
+            class="secondary-button pdf-button"
+            :disabled="!currentReport || isPdfSaving"
+            :aria-busy="isPdfSaving"
+            title="현재 마음 리포트를 예시 이미지와 같은 구성의 PDF로 저장합니다"
+            @click="saveCurrentReportAsPdf"
+          >{{ isPdfSaving ? 'PDF 준비 중...' : 'PDF 저장' }}</button>
         </footer>
 
       </section>
@@ -196,7 +279,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { reportApi } from '../../api/report.js'
 import reportBg from '../../assets/report-bg.png'
 
@@ -211,7 +294,7 @@ import flowRedpanda from '../../assets/report/flow-redpanda.png'
 import flowCat from '../../assets/report/flow-cat.png'
 import catIcon from '../../assets/report/flow-cat.png'
 
-import { attachMindReportImageSaver } from './reportImageSaver.js'
+import { saveMindReportAsPdf } from './reportPdfSaver.js'
 
 const mascots = [flowRedpanda, flowOtter, flowBird, flowCat]
 const mascotFor = (index) => mascots[index % mascots.length]
@@ -220,20 +303,30 @@ const reports = ref([])
 const isLoading = ref(true)
 const isRefreshing = ref(false)
 const fetchError = ref('')
+const refreshFeedback = ref('')
 const isMonthFilterOpen = ref(false)
 const selectedMonth = ref('')
 const selectedReportId = ref(null)
-
-let detachReportImageSaver = null
+const reportCardRef = ref(null)
+const isPdfSaving = ref(false)
 
 const normalizeReport = (report) => ({
   ...report,
   stressCauses: Array.isArray(report?.stressCauses) ? report.stressCauses : [],
   reliefCauses: Array.isArray(report?.reliefCauses) ? report.reliefCauses : [],
   causeLabels: Array.isArray(report?.causeLabels) ? report.causeLabels : [],
+  hardMoments: Array.isArray(report?.hardMoments) ? report.hardMoments : [],
+  reliefMoments: Array.isArray(report?.reliefMoments) ? report.reliefMoments : [],
+  stressReport: String(report?.stressReport ?? '').trim(),
+  reliefReport: String(report?.reliefReport ?? '').trim(),
   emotions: Array.isArray(report?.emotions) ? report.emotions : [],
+  emotionScale: report?.emotionScale && typeof report.emotionScale === 'object'
+    ? report.emotionScale
+    : null,
   analysis: Array.isArray(report?.analysis) ? report.analysis : [],
   recommendations: Array.isArray(report?.recommendations) ? report.recommendations : [],
+  suggestionCards: Array.isArray(report?.suggestionCards) ? report.suggestionCards : [],
+  generatedAt: String(report?.generatedAt ?? report?.createdAt ?? '').trim(),
   comfortMessage: String(report?.comfortMessage ?? report?.summary ?? '').trim(),
   is_fallback: Boolean(report?.is_fallback),
   is_safety_response: Boolean(report?.is_safety_response),
@@ -267,6 +360,10 @@ const periodDateLabel = (report) => (
   report?.range
     ? report.range.split(' ~ ')[0].replace(' 생성', '').trim()
     : ''
+)
+
+const reportPeriodLabel = (report) => (
+  String(report?.type ?? '').includes('월간') ? '월간 리포트' : '주간 리포트'
 )
 
 const weekdayKo = ['일', '월', '화', '수', '목', '금', '토']
@@ -399,6 +496,9 @@ const parsedAnalysis = computed(() => {
           title: line.replace(/^✅\s*/, ''),
           reason: '',
           how: '',
+          sourceCandidate: '',
+          relatedCause: '',
+          timing: '',
         }
         cards.push(currentCard)
       } else if (!currentCard && line) {
@@ -412,9 +512,15 @@ const parsedAnalysis = computed(() => {
           line,
           ['어떻게 시작할까요?', '가볍게 시작하기'],
         )
+        const relatedCause = valueAfterLabel(line, ['연결된 마음의 원인'])
+        const timing = valueAfterLabel(line, ['제안 시점'])
+        const sourceCandidate = valueAfterLabel(line, ['감정 흐름 후보'])
 
         if (reason !== null) currentCard.reason = reason
         if (how !== null) currentCard.how = how
+        if (relatedCause !== null) currentCard.relatedCause = relatedCause
+        if (timing !== null) currentCard.timing = timing
+        if (sourceCandidate !== null) currentCard.sourceCandidate = sourceCandidate
       }
     }
   } else {
@@ -440,92 +546,222 @@ const parsedAnalysis = computed(() => {
   return { reflections, cards }
 })
 
-const hardMoments = computed(() => {
+const hardHarmony = computed(() => {
   const report = currentReport.value
-  if (!report) return []
-
-  if (report.is_fallback) {
-    return ['기록이 조금 더 모이면 마음을 힘들게 한 순간도 알려드릴게요.']
-  }
-
-  const causes = report.stressCauses
-    .map((text) => String(text).trim())
-    .filter((text) => text && text !== '기록 수집 중...')
-
-  if (causes.length) return causes.slice(0, 4)
-  return parsedAnalysis.value.reflections.slice(0, 3)
+  if (!report) return ''
+  if (report.is_fallback) return '기록이 조금 더 모이면 마음을 힘들게 한 흐름도 알려드릴게요.'
+  return report.stressReport
+    || String(report.hardMoments?.[0]?.text ?? '').trim()
 })
 
-const suggestCards = computed(() => parsedAnalysis.value.cards.slice(0, 4))
+const reliefHarmony = computed(() => {
+  const report = currentReport.value
+  if (!report) return ''
+  if (report.is_fallback) return '기록이 조금 더 모이면 마음을 편안하게 해준 흐름도 알려드릴게요.'
+  return report.reliefReport
+    || String(report.reliefMoments?.[0]?.text ?? '').trim()
+})
 
-const comfortMessage = computed(() => (
-  currentReport.value?.comfortMessage
-  || currentReport.value?.summary
-  || ''
-))
+const compactEvidenceDate = (moments, reportText) => {
+  const dates = [...new Set(
+    (moments ?? [])
+      .flatMap((moment) => moment?.evidenceDates ?? [])
+      .map((value) => String(value ?? '').trim())
+      .filter(Boolean),
+  )].sort()
 
-const FLOW_W = 640
-const FLOW_H = 150
+  const formatted = dates
+    .map((value) => {
+      const match = value.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})/)
+      if (!match) return null
+      return {
+        raw: value,
+        iso: `${match[1]}-${String(match[2]).padStart(2, '0')}-${String(match[3]).padStart(2, '0')}`,
+        label: `${Number(match[2])}월 ${Number(match[3])}일`,
+        dotted: `${match[1]}.${String(match[2]).padStart(2, '0')}.${String(match[3]).padStart(2, '0')}`,
+      }
+    })
+    .filter(Boolean)
 
-const moodLevel = (icon) => {
-  if (['😊', '😄', '🙂', '😌', '🥲'].includes(icon)) return 0.82
-  if (['😢', '😣', '😔', '😞', '😥'].includes(icon)) return 0.2
-  if (['😮‍💨', '😳', '😰', '😨'].includes(icon)) return 0.36
-  return 0.5
-}
-
-const moodTone = (icon) => {
-  const level = moodLevel(icon)
-  if (level >= 0.7) return 'pos'
-  if (level <= 0.4) return 'neg'
-  return 'neu'
-}
-
-const buildPath = (points) => {
-  if (points.length === 0) return ''
-  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`
-
-  let path = `M ${points[0].x} ${points[0].y}`
-
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const current = points[index]
-    const next = points[index + 1]
-    const middleX = (current.x + next.x) / 2
-
-    path += ` C ${middleX} ${current.y}, ${middleX} ${next.y}, ${next.x} ${next.y}`
+  const text = String(reportText ?? '')
+  if (formatted.some((date) => text.includes(date.label) || text.includes(date.raw) || text.includes(date.iso) || text.includes(date.dotted))) {
+    return ''
   }
 
-  return path
+  const labels = formatted.map((date) => date.label)
+  if (labels.length <= 2) return labels.join(' · ')
+  return `${labels.slice(0, 2).join(' · ')} 외 ${labels.length - 2}일`
 }
 
+const hardHarmonyDate = computed(() => compactEvidenceDate(
+  currentReport.value?.hardMoments,
+  hardHarmony.value,
+))
+
+const reliefHarmonyDate = computed(() => compactEvidenceDate(
+  currentReport.value?.reliefMoments,
+  reliefHarmony.value,
+))
+
+const structuredSuggestCards = computed(() => (
+  (currentReport.value?.suggestionCards ?? [])
+    .map((card) => ({
+      title: String(card?.title ?? '').trim(),
+      reason: String(card?.reason ?? '').trim(),
+      how: String(card?.how ?? '').trim(),
+      sourceCandidate: String(card?.sourceCandidate ?? card?.source_candidate ?? '').trim(),
+      relatedCause: String(card?.relatedCause ?? card?.related_cause ?? '').trim(),
+      timing: String(card?.timing ?? '').trim(),
+    }))
+    .filter((card) => card.title && card.reason)
+    .slice(0, 3)
+))
+
+const suggestCards = computed(() => (
+  structuredSuggestCards.value.length
+    ? structuredSuggestCards.value
+    : parsedAnalysis.value.cards.slice(0, 3)
+))
+
+const suggestionWindowDescription = computed(() => {
+  const report = currentReport.value
+  const isMonthly = String(report?.type ?? '').includes('월간')
+  const parsed = report?.generatedAt ? new Date(report.generatedAt) : null
+  const hasGeneratedDate = parsed && !Number.isNaN(parsed.getTime())
+  const dateLabel = hasGeneratedDate
+    ? `${parsed.getMonth() + 1}월 ${parsed.getDate()}일부터 `
+    : '이 리포트가 만들어진 뒤 '
+
+  return isMonthly
+    ? `${dateLabel}4주 동안 천천히 이어가도록 준비한 활동이에요.`
+    : `${dateLabel}일주일 동안 가볍게 시도하도록 준비한 활동이에요.`
+})
+
+const FLOW_W = 640
+const FLOW_H = 200
+const FLOW_SCORE_MIN = 30
+const FLOW_SCORE_MAX = 70
+const FLOW_PLOT_LEFT = 148
+const FLOW_PLOT_RIGHT = 28
+const FLOW_PLOT_TOP = 22
+const FLOW_PLOT_BOTTOM = 166
+const FLOW_DATE_LABEL_Y = 177
+const DEFAULT_EMOTION_SCALE = Object.freeze({ heavyMax: 45, lightMin: 55 })
+const FLOW_BAND_COLORS = Object.freeze({
+  heavy: '#a7a3e5',
+  steady: '#e7b1cb',
+  light: '#f5be87',
+})
+
+const emotionScore = (emotion) => {
+  const rawScore = emotion?.emotion_score
+  if (rawScore === null || rawScore === undefined || rawScore === '') return null
+
+  const score = Number(rawScore)
+  return Number.isFinite(score) ? score : null
+}
+
+const moodLevel = (score) => {
+  const normalized = (score - FLOW_SCORE_MIN) / (FLOW_SCORE_MAX - FLOW_SCORE_MIN)
+  return Math.max(0, Math.min(1, normalized))
+}
+
+const scoreY = (score) => (
+  FLOW_PLOT_BOTTOM - moodLevel(score) * (FLOW_PLOT_BOTTOM - FLOW_PLOT_TOP)
+)
+
+const emotionScale = computed(() => {
+  const heavyMax = Number(currentReport.value?.emotionScale?.heavyMax)
+  const lightMin = Number(currentReport.value?.emotionScale?.lightMin)
+  if (
+    Number.isFinite(heavyMax)
+    && Number.isFinite(lightMin)
+    && heavyMax < lightMin
+  ) {
+    return { heavyMax, lightMin }
+  }
+  return DEFAULT_EMOTION_SCALE
+})
+
+const FLOW_LIGHT_BOUNDARY_Y = computed(() => scoreY(emotionScale.value.lightMin))
+const FLOW_HEAVY_BOUNDARY_Y = computed(() => scoreY(emotionScale.value.heavyMax))
+const FLOW_LIGHT_LABEL_Y = computed(() => (
+  (FLOW_PLOT_TOP + FLOW_LIGHT_BOUNDARY_Y.value) / 2
+))
+const FLOW_STEADY_LABEL_Y = computed(() => (
+  (FLOW_LIGHT_BOUNDARY_Y.value + FLOW_HEAVY_BOUNDARY_Y.value) / 2
+))
+const FLOW_HEAVY_LABEL_Y = computed(() => (
+  (FLOW_HEAVY_BOUNDARY_Y.value + FLOW_PLOT_BOTTOM) / 2
+))
+
+const flowScaleLabelStyle = (y) => ({
+  top: `${(y / FLOW_H) * 100}%`,
+})
+
+const moodBand = (score) => {
+  if (score > emotionScale.value.lightMin) return 'light'
+  if (score < emotionScale.value.heavyMax) return 'heavy'
+  return 'steady'
+}
+
+const moodBandLabel = (score) => {
+  const band = moodBand(score)
+  if (band === 'light') return '한결 가벼운 날'
+  if (band === 'heavy') return '조금 버거운 날'
+  return '대체로 잔잔한 날'
+}
+
+const moodColor = (score) => FLOW_BAND_COLORS[moodBand(score)]
+
 const emotionPoints = computed(() => {
-  const list = currentReport.value?.emotions ?? []
+  const list = (currentReport.value?.emotions ?? [])
+    .map((day) => ({ day, score: emotionScore(day) }))
+    .filter(({ score }) => score !== null)
   if (!list.length) return []
 
   const count = list.length
-  const paddingX = 40
-  const usableWidth = FLOW_W - paddingX * 2
-  const top = 26
-  const bottom = 120
+  const usableWidth = FLOW_W - FLOW_PLOT_LEFT - FLOW_PLOT_RIGHT
 
-  return list.map((day, index) => {
-    const level = moodLevel(day.icon)
+  return list.map(({ day, score }, index) => {
+    const level = moodLevel(score)
     const x = count === 1
-      ? FLOW_W / 2
-      : paddingX + (usableWidth * index) / (count - 1)
-    const y = bottom - level * (bottom - top)
+      ? FLOW_PLOT_LEFT + usableWidth / 2
+      : FLOW_PLOT_LEFT + (usableWidth * index) / (count - 1)
+    const y = FLOW_PLOT_BOTTOM - level * (FLOW_PLOT_BOTTOM - FLOW_PLOT_TOP)
 
     return {
       x,
       y,
-      icon: day.icon,
       day: day.day,
-      tone: moodTone(day.icon),
+      color: moodColor(score),
+      band: moodBandLabel(score),
     }
   })
 })
 
-const emotionPath = computed(() => buildPath(emotionPoints.value))
+const hasUnscoredEmotions = computed(() => (
+  (currentReport.value?.emotions?.length ?? 0) > 0
+  && emotionPoints.value.length === 0
+))
+
+const emotionSegments = computed(() => emotionPoints.value.slice(0, -1).map(
+  (current, index) => {
+    const next = emotionPoints.value[index + 1]
+    const middleX = (current.x + next.x) / 2
+    return {
+      gradientId: `flow-segment-gradient-${index}`,
+      pathKey: `flow-segment-path-${current.day}-${next.day}-${index}`,
+      x1: current.x,
+      y1: current.y,
+      x2: next.x,
+      y2: next.y,
+      fromColor: current.color,
+      toColor: next.color,
+      path: `M ${current.x} ${current.y} C ${middleX} ${current.y}, ${middleX} ${next.y}, ${next.x} ${next.y}`,
+    }
+  },
+))
 
 const applyReports = (data) => {
   reports.value = Array.isArray(data?.reports)
@@ -559,24 +795,44 @@ const loadReports = async () => {
 const refreshReports = async () => {
   try {
     isRefreshing.value = true
-    fetchError.value = ''
+    refreshFeedback.value = ''
     const data = await reportApi.refreshReports()
     applyReports(data)
+    fetchError.value = ''
+    refreshFeedback.value = data?.message || '최신 대화를 반영한 리포트를 확인했어요.'
   } catch (error) {
-    fetchError.value = error?.message ?? '마음 리포트를 새로고침하지 못했습니다.'
+    refreshFeedback.value = error?.message ?? '최신 대화를 지금 반영하지 못했어요. 기존 정기 리포트는 그대로 볼 수 있어요.'
     console.error('Failed to refresh reports:', error)
   } finally {
     isRefreshing.value = false
   }
 }
 
-onMounted(() => {
-  detachReportImageSaver = attachMindReportImageSaver()
-  loadReports()
-})
+const saveCurrentReportAsPdf = async () => {
+  if (!currentReport.value || isPdfSaving.value) return
 
-onBeforeUnmount(() => {
-  detachReportImageSaver?.()
+  try {
+    isPdfSaving.value = true
+    await saveMindReportAsPdf({
+      element: reportCardRef.value,
+      filename: [
+        '마음리포트',
+        currentReport.value.type,
+        currentReport.value.range,
+      ].filter(Boolean).join('_'),
+    })
+  } catch (error) {
+    const message = error instanceof Error
+      ? error.message
+      : '마음 리포트 PDF 파일을 만들지 못했습니다.'
+    window.alert(message)
+  } finally {
+    isPdfSaving.value = false
+  }
+}
+
+onMounted(() => {
+  loadReports()
 })
 </script>
 
@@ -606,9 +862,22 @@ button {
 
 .diary-toolbar {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 14px;
   width: min(1400px, 100%);
   margin: 0 auto 12px;
+}
+
+.refresh-context {
+  margin: 0 auto 0 0;
+  color: rgba(255, 248, 255, 0.82);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.refresh-context.has-feedback {
+  color: #fff8df;
 }
 
 .refresh-button {
@@ -783,6 +1052,11 @@ button {
   font-size: 12px;
 }
 
+.ri-date b {
+  color: #f1dce9;
+  font-weight: 700;
+}
+
 .ri-title {
   overflow: hidden;
   color: #fffaff;
@@ -929,8 +1203,8 @@ button {
   grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
   grid-template-areas:
     'oneline tags'
-    'flow hard'
-    'flow comfort';
+    'flow relief'
+    'flow hard';
   gap: 16px;
   margin-bottom: 18px;
 }
@@ -961,14 +1235,12 @@ button {
 
 .card-hard {
   grid-area: hard;
-  background: rgba(233, 224, 245, 0.62);
+  background: rgba(247, 214, 220, 0.6);
 }
 
-.card-comfort {
-  position: relative;
-  grid-area: comfort;
-  overflow: hidden;
-  background: rgba(247, 214, 220, 0.6);
+.card-relief {
+  grid-area: relief;
+  background: rgba(233, 224, 245, 0.62);
 }
 
 .card-title {
@@ -1078,44 +1350,28 @@ button {
   font-size: 13px;
 }
 
-.flow-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 10px;
-}
-
-.lg {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #6f5f79;
-  font-family: var(--font-ui);
-  font-size: 12.5px;
-}
-
-.lg i {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-}
-
-.lg.tone-neg i {
-  background: #8f7bd6;
-}
-
-.lg.tone-neu i {
-  background: #d29ecf;
-}
-
-.lg.tone-pos i {
-  background: #f4a35f;
-}
-
 .flow-stage {
   position: relative;
   width: 100%;
-  height: 150px;
+  height: 200px;
+}
+
+.flow-scale {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 1;
+  width: 20%;
+  color: #796783;
+  font-family: var(--font-ui);
+  font-size: clamp(9.5px, 1.15vw, 11.5px);
+  line-height: 1.45;
+}
+
+.flow-scale span {
+  position: absolute;
+  left: 0;
+  white-space: nowrap;
+  transform: translateY(-50%);
 }
 
 .flow-svg {
@@ -1127,9 +1383,35 @@ button {
 
 .flow-line {
   fill: none;
-  stroke: url(#flowStroke);
   stroke-width: 4;
   stroke-linecap: round;
+}
+
+.flow-zone {
+  stroke: none;
+}
+
+.flow-zone.is-light-zone {
+  fill: rgba(249, 211, 174, 0.2);
+}
+
+.flow-zone.is-steady-zone {
+  fill: rgba(238, 196, 216, 0.18);
+}
+
+.flow-zone.is-heavy-zone {
+  fill: rgba(195, 191, 235, 0.18);
+}
+
+.flow-guide {
+  stroke: rgba(126, 101, 147, 0.2);
+  stroke-width: 1;
+  stroke-dasharray: 5 7;
+}
+
+.flow-x-axis-line {
+  stroke: rgba(112, 91, 130, 0.28);
+  stroke-width: 1;
 }
 
 .flow-dots {
@@ -1141,28 +1423,22 @@ button {
   position: absolute;
   width: 15px;
   height: 15px;
+  box-sizing: border-box;
+  border: 2px solid rgba(255, 255, 255, 0.92);
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 3px 8px rgba(120, 70, 120, 0.28);
   transform: translate(-50%, -50%);
 }
 
-.flow-dot.tone-pos {
-  background: #f4a35f;
-}
-
-.flow-dot.tone-neu {
-  background: #d29ecf;
-}
-
-.flow-dot.tone-neg {
-  background: #8f7bd6;
-}
-
-.flow-dot small {
+.flow-date-axis {
   position: absolute;
-  top: 20px;
-  left: 50%;
+  inset: 0;
+  pointer-events: none;
+}
+
+.flow-date-axis span {
+  position: absolute;
   color: #7c6a86;
   font-family: var(--font-ui);
   font-size: 11px;
@@ -1170,50 +1446,55 @@ button {
   transform: translateX(-50%);
 }
 
-.hard-list {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.hard-list li {
+.harmony-passage {
   position: relative;
-  padding-left: 18px;
+  margin: 0;
+  padding: 4px 4px 4px 27px;
   color: #5f4a68;
   font-size: 14.5px;
-  line-height: 1.55;
+  line-height: 1.82;
+  text-wrap: pretty;
 }
 
-.hard-list li::before {
-  content: '♪';
+.harmony-passage::before {
+  content: '∿';
   position: absolute;
+  top: 4px;
   left: 0;
-  color: #9a7bc0;
+  color: rgba(132, 96, 151, 0.68);
+  font-family: var(--font-soft);
+  font-size: 22px;
+  line-height: 1;
 }
 
-.hard-empty::before {
-  content: '·' !important;
+.harmony-date {
+  display: inline-block;
+  margin-right: 8px;
+  color: #76547f;
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
-.comfort-quote {
+.card-hard .harmony-date {
+  color: #965a75;
+}
+
+.card-hard .harmony-passage {
+  color: #80516f;
+}
+
+.card-hard .harmony-passage::before {
+  color: rgba(190, 101, 137, 0.7);
+}
+
+.moment-empty {
   margin: 0;
-  padding-right: 76px;
-  color: #8a4c84;
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1.7;
-  white-space: pre-line;
-}
-
-.comfort-mascot {
-  position: absolute;
-  right: 12px;
-  bottom: 10px;
-  width: 62px;
-  height: 62px;
-  object-fit: contain;
+  padding: 8px 2px;
+  color: #927b98;
+  font-size: 13.5px;
+  line-height: 1.65;
 }
 
 .suggest-block {
@@ -1360,6 +1641,13 @@ button {
   transition: transform 0.16s ease, opacity 0.16s ease;
 }
 
+.pdf-button {
+  border-color: rgba(126, 91, 170, 0.38);
+  background: linear-gradient(135deg, rgba(239, 225, 251, 0.9), rgba(255, 235, 226, 0.9));
+  color: #65446f;
+  font-weight: 800;
+}
+
 .secondary-button {
   border: 1px solid rgba(113, 72, 124, 0.34);
   background: rgba(255, 255, 255, 0.48);
@@ -1390,8 +1678,8 @@ button {
       'oneline'
       'tags'
       'flow'
-      'hard'
-      'comfort';
+      'relief'
+      'hard';
   }
 
   .suggest-grid {
@@ -1419,6 +1707,15 @@ button {
     justify-self: start;
   }
 
+  .diary-toolbar {
+    align-items: flex-end;
+    flex-direction: column;
+  }
+
+  .refresh-context {
+    margin-left: 0;
+  }
+
   .suggest-grid {
     grid-template-columns: 1fr !important;
   }
@@ -1436,4 +1733,5 @@ button {
     width: 100%;
   }
 }
+
 </style>
