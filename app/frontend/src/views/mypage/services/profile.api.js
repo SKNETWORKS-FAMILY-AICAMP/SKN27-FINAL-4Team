@@ -1,5 +1,8 @@
 export async function fetchMyProfile() {
-  const response = await fetch("/api/myprofile/profile/", { credentials: "include" });
+  const response = await fetch("/api/myprofile/profile/", {
+    cache: "no-store",
+    credentials: "include",
+  });
   if (!response.ok) {
     throw new Error(`Failed to fetch profile: ${response.status}`);
   }

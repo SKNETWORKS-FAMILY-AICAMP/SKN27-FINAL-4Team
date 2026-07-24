@@ -3,6 +3,7 @@ from datetime import date
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from character.models import CharacterPreference
 from user.models import User, UserProfile
 from mybook.views import _build_user_profile
 from chat.models import ChatMessage, ChatSession
@@ -44,9 +45,24 @@ class MyProfileApiTests(APITestCase):
         self.assertEqual(profile['gender'], '남')
         self.assertEqual(profile['interests'], ['심리', '반려동물', '드라마', '디지털 트렌드'])
         self.assertEqual(profile['hobbies'], ['음악 감상', '카페 투어', '산책'])
-        self.assertEqual(profile['selectedCharacter'], 'pori')
+        self.assertEqual(profile['selectedCharacter'], 'redpanda')
         self.assertEqual(profile['account']['email'], 'mypage@example.com')
         self.assertEqual(profile['account']['provider'], 'Email')
+
+    def test_onboarding_character_preference_is_immediately_returned_for_mypage(self):
+        CharacterPreference.objects.create(
+            user=self.user,
+            character_id='cat',
+            expression_id='joy',
+        )
+        self.user.character = 'kkami'
+        self.user.save(update_fields=['character'])
+        self.client.force_authenticate(self.user)
+
+        response = self.client.get('/api/myprofile/profile/')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['profile']['selectedCharacter'], 'cat')
 
     def test_today_emotion_returns_recency_weighted_assistant_emotion(self):
         self.client.force_authenticate(self.user)
@@ -121,6 +137,13 @@ class MyProfileApiTests(APITestCase):
         self.assertEqual(self.profile.interests, ['음악', '관계'])
         self.assertEqual(self.profile.hobbies, ['산책'])
         self.assertEqual(response.data['profile']['name'], '새닉네임')
+        self.assertEqual(response.data['profile']['selectedCharacter'], 'otter')
+        self.assertTrue(
+            CharacterPreference.objects.filter(
+                user=self.user,
+                character_id='otter',
+            ).exists()
+        )
 
     def test_partial_interest_update_preserves_other_profile_fields_for_books(self):
         self.client.force_authenticate(self.user)

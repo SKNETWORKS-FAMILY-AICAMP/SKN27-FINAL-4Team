@@ -1,9 +1,23 @@
 <template>
   <main class="diary-page" :style="{ '--report-bg': `url(${reportBg})` }">
     <div class="diary-toolbar">
-      <p class="refresh-context" :class="{ 'has-feedback': refreshFeedback }">
-        {{ refreshFeedback || '주간은 매주, 월간은 월말에 자동으로 새 리포트가 준비돼요.' }}
-      </p>
+      <div class="refresh-copy">
+        <p class="refresh-context" :class="{ 'has-feedback': refreshFeedback }">
+        </p>
+        <details class="report-criteria">
+          <summary class="criteria-trigger">
+            리포트를 볼 수 있는 기준
+            <span class="criteria-help" aria-hidden="true">?</span>
+          </summary>
+          <div class="criteria-popover">
+            <p>내가 챗봇에게 보낸 메시지 수를 기준으로 해요.</p>
+            <ul>
+              <li><strong>주간 리포트</strong><span>일주일에 5번 이상</span></li>
+              <li><strong>월간 리포트</strong><span>한 달에 20번 이상</span></li>
+            </ul>
+          </div>
+        </details>
+      </div>
       <button
         type="button"
         class="refresh-button"
@@ -863,14 +877,20 @@ button {
 .diary-toolbar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 14px;
+  justify-content: space-between;
+  gap: 20px;
   width: min(1400px, 100%);
   margin: 0 auto 12px;
 }
 
+.refresh-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
 .refresh-context {
-  margin: 0 auto 0 0;
+  margin: 0;
   color: rgba(255, 248, 255, 0.82);
   font-size: 12.5px;
   line-height: 1.5;
@@ -880,28 +900,167 @@ button {
   color: #fff8df;
 }
 
-.refresh-button {
+.report-criteria {
+  position: relative;
+  width: fit-content;
+  margin: 0;
+  color: rgba(255, 248, 255, 0.92);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.criteria-trigger {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-height: 38px;
-  padding: 8px 15px;
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  min-height: 24px;
+  padding: 2px 9px;
+  border: 1px solid rgba(255, 221, 188, 0.5);
   border-radius: 999px;
-  background: rgba(38, 22, 66, 0.6);
-  color: #fff8ff;
-  box-shadow: 0 8px 24px rgba(8, 3, 20, 0.2);
-  transition: transform 0.16s ease, border-color 0.16s ease;
+  background: rgba(255, 245, 221, 0.13);
+  color: #fff3cf;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  list-style: none;
+}
+
+.criteria-trigger::-webkit-details-marker {
+  display: none;
+}
+
+.criteria-trigger:hover {
+  border-color: rgba(255, 236, 208, 0.85);
+  background: rgba(255, 245, 221, 0.2);
+}
+
+.criteria-trigger:focus-visible {
+  outline: 2px solid #fff3cf;
+  outline-offset: 3px;
+}
+
+.criteria-help {
+  display: inline-grid;
+  width: 17px;
+  height: 17px;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.criteria-popover {
+  position: absolute;
+  top: calc(100% + 9px);
+  left: 0;
+  z-index: 30;
+  width: min(360px, calc(100vw - 40px));
+  padding: 15px 16px;
+  border: 1px solid rgba(255, 226, 199, 0.72);
+  border-radius: 14px;
+  background: rgba(45, 25, 67, 0.97);
+  color: #fffaf4;
+  box-shadow: 0 16px 38px rgba(10, 4, 23, 0.38);
+}
+
+.criteria-popover::before {
+  position: absolute;
+  top: -6px;
+  left: 24px;
+  width: 10px;
+  height: 10px;
+  border-top: 1px solid rgba(255, 226, 199, 0.72);
+  border-left: 1px solid rgba(255, 226, 199, 0.72);
+  background: rgba(45, 25, 67, 0.97);
+  content: "";
+  transform: rotate(45deg);
+}
+
+.criteria-popover p {
+  margin: 0 0 10px;
+  color: rgba(255, 250, 244, 0.82);
+  font-size: 12.5px;
+}
+
+.criteria-popover ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.criteria-popover li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.criteria-popover li span {
+  color: #fff3cf;
+  white-space: nowrap;
+}
+
+.report-criteria strong {
+  color: #fffaf4;
+  font-weight: 800;
+}
+
+.refresh-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  gap: 9px;
+  min-width: 132px;
+  min-height: 48px;
+  padding: 10px 21px;
+  border: 2px solid rgba(255, 225, 205, 0.88);
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(140, 89, 152, 0.96), rgba(105, 62, 130, 0.96));
+  color: #fffdf7;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  box-shadow:
+    0 0 0 3px rgba(255, 212, 190, 0.13),
+    0 10px 28px rgba(8, 3, 20, 0.35);
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    filter 0.16s ease;
 }
 
 .refresh-button:disabled {
   cursor: wait;
-  opacity: 0.58;
+  opacity: 0.62;
 }
 
 .refresh-button:hover:not(:disabled) {
-  border-color: rgba(244, 175, 170, 0.8);
-  transform: translateY(-1px);
+  border-color: #fff3d7;
+  box-shadow:
+    0 0 0 4px rgba(255, 212, 190, 0.22),
+    0 13px 30px rgba(8, 3, 20, 0.42);
+  filter: brightness(1.08);
+  transform: translateY(-2px);
+}
+
+.refresh-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.refresh-button:focus-visible {
+  outline: 3px solid #fff3cf;
+  outline-offset: 3px;
+}
+
+.refresh-icon {
+  font-size: 20px;
+  line-height: 1;
 }
 
 .refresh-icon.spinning {
@@ -1708,12 +1867,13 @@ button {
   }
 
   .diary-toolbar {
-    align-items: flex-end;
+    align-items: stretch;
     flex-direction: column;
+    gap: 12px;
   }
 
-  .refresh-context {
-    margin-left: 0;
+  .refresh-button {
+    width: 100%;
   }
 
   .suggest-grid {

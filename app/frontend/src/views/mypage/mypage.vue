@@ -238,6 +238,7 @@ import {
   MYPAGE_STORAGE_KEYS,
   MYPAGE_TIMING,
   NAVIGATION_CONFIRM_OPTIONS,
+  normalizeMypageCharacterId,
   PANEL_DESCRIPTIONS,
 } from "./config/mypage.constants";
 import CharacterPanel from "./components/CharacterPanel.vue";
@@ -466,8 +467,9 @@ export default {
     applyProfilePayload(data) {
       if (!data?.profile) return;
       this.profile = { ...this.profile, ...data.profile };
-      if (data.profile.selectedCharacter) {
-        this.selectedCharacter = data.profile.selectedCharacter;
+      const selectedCharacter = normalizeMypageCharacterId(data.profile.selectedCharacter);
+      if (selectedCharacter) {
+        this.selectedCharacter = selectedCharacter;
       }
     },
     openPanel(panel) {
@@ -553,8 +555,9 @@ export default {
           });
           if (res && res.profile) {
             this.profile = { ...this.profile, ...res.profile };
-            if (res.profile.selectedCharacter) {
-              this.selectedCharacter = res.profile.selectedCharacter;
+            const selectedCharacter = normalizeMypageCharacterId(res.profile.selectedCharacter);
+            if (selectedCharacter) {
+              this.selectedCharacter = selectedCharacter;
             }
           }
           this.profileSavedAt = new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
