@@ -275,7 +275,7 @@ class WeatherExternalProcessingTests(SimpleTestCase):
             ['기준 미만', '관심', '주의', '경고', '위험'],
         )
         self.assertEqual(indices['식중독지수']['value'], 67.7)
-        self.assertEqual(indices['식중독지수']['level'], '관심')
+        self.assertEqual(indices['식중독지수']['level'], '주의')
         self.assertEqual(indices['식중독지수']['scale_max'], 300)
         self.assertTrue(indices['식중독지수']['available'])
         self.assertTrue(indices['식중독지수']['derived'])
@@ -292,12 +292,12 @@ class WeatherExternalProcessingTests(SimpleTestCase):
 
     def test_food_poisoning_index_accepts_supplied_values_and_scaled_boundaries(self):
         cases = (
-            (164.9, '관심'),
-            (165, '주의'),
-            (212.9, '주의'),
-            (213, '경고'),
-            (257.9, '경고'),
-            (258, '위험'),
+            (54.9, '관심'),
+            (55, '주의'),
+            (70.9, '주의'),
+            (71, '경고'),
+            (85.9, '경고'),
+            (86, '위험'),
             (300, '위험'),
         )
         for value, expected_level in cases:
