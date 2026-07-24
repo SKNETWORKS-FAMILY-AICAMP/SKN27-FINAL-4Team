@@ -92,6 +92,9 @@ const selectedEmotionEntry = computed(() => {
   if (!selectedCalendarEntry.value?.emotion_label) return null;
   return selectedCalendarEntry.value;
 });
+const hasCalendarDetail = computed(() => Boolean(
+  selectedFortune.value || selectedEmotionEntry.value?.conversation?.has_sufficient_conversation
+));
 const selectedConversationMessage = computed(() => {
   const conversation = selectedEmotionEntry.value?.conversation;
   if (conversation?.has_sufficient_conversation && conversation.summary) {
@@ -102,6 +105,7 @@ const selectedConversationMessage = computed(() => {
 const conversationTitle = "\uB300\uD654 \uAC10\uC815 \uAE30\uB85D";
 const fortuneTitle = "\uC774\uB0A0\uC758 \uC6B4\uC138";
 const missingFortuneMessage = "\uC544\uC9C1 \uC624\uB298\uC758 \uC6B4\uC138 \uCE74\uB4DC\uB97C \uD655\uC778\uD558\uC9C0 \uC54A\uC558\uC5B4\uC694.";
+const missingConversationMessage = "\uB300\uD654\uAC00 \uC544\uC9C1 \uC313\uC774\uC9C0 \uC54A\uC558\uC5B4\uC694.";
 const selectedDetailCharacterUrl = computed(() => {
   const record = selectedFortune.value || selectedCalendarEntry.value;
   if (!record) return selectedCharacterDefaultUrl.value;
@@ -606,7 +610,7 @@ function getErrorMessage(error) {
         </div>
       </template>
 
-      <div v-if="!selectedFortune" class="daily-summary today-fortune-summary">
+      <div v-if="hasCalendarDetail && !selectedFortune" class="daily-summary today-fortune-summary">
         <img class="daily-summary-icon" :src="calendarFortuneIcon" alt="" aria-hidden="true">
         <div>
           <strong>{{ fortuneTitle }}</strong>
@@ -614,15 +618,15 @@ function getErrorMessage(error) {
         </div>
       </div>
 
-      <div v-if="selectedEmotionEntry" class="daily-summary today-fortune-summary">
+      <div v-if="hasCalendarDetail" class="daily-summary today-fortune-summary">
         <img class="daily-summary-icon" :src="calendarRecordIcon" alt="" aria-hidden="true">
         <div>
           <strong>{{ conversationTitle }}</strong>
-          <p>{{ selectedConversationMessage }}</p>
+          <p>{{ selectedEmotionEntry ? selectedConversationMessage : missingConversationMessage }}</p>
         </div>
       </div>
 
-      <div v-if="false" class="empty-detail-card">
+      <div v-if="!hasCalendarDetail" class="empty-detail-card">
         <img class="empty-detail-icon" :src="calendarEmptyIcon" alt="" aria-hidden="true">
         <strong>저장된 운세 없음</strong>
         <p class="selected-date-guide">
@@ -632,11 +636,11 @@ function getErrorMessage(error) {
         <template v-if="selectedDateState === 'today' && !hasViewedTodayCard">
           <h4>오늘의 카드 확인하기</h4>
           <p>오늘의 운세카드를 확인하면 캘린더에서 다시 돌아볼 수 있어요.</p>
-          <button class="btn primary full" type="button" @click="goTodayFortune">오늘의 운세카드 보러가기 ›</button>
+          <button class="btn primary full" type="button" @click="goTodayFortune">오늘의 운세카드 보러가기 </button>
         </template>
         <template v-else>
           <h4>오늘의 마음을 지켜봐요</h4>
-          <p>날짜에 맞는 기록만 차분히 확인할 수 있어요.</p>
+          <p>날짜에 맞는 기록만 확인할 수 있어요.</p>
         </template>
       </div>
     </aside>
