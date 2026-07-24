@@ -110,6 +110,7 @@ _tmp_*.txt
 _update_*.py
 _write_*.py
 __mount_test.txt
+utputFormat
 
 # 데이터셋 (AI Hub 등 원본·파생 데이터는 재배포 금지 → 커밋 제외, AI Hub에서 직접 내려받아 사용)
 *.json
