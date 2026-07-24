@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 import json
 from typing import Any, Mapping, Protocol, Sequence
 
@@ -42,6 +42,7 @@ class ReportSourceMessage:
     content: str
     emotion_label: str | None
     persisted_emotion_label: str | None = None
+    created_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -121,6 +122,7 @@ def load_source_messages(
                 if message.next_message_role == 'assistant'
                 else None
             ),
+            created_at=message.created_at,
         )
         for message in queryset.order_by('created_at', 'id')
     )

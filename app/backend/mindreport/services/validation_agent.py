@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 import re
 from typing import Iterable
+
+from django.utils import timezone
 
 from mindreport.services.emotion_flow import analyze_emotion_flow
 from mindreport.services.graph_state import (
@@ -129,10 +131,21 @@ class MindReportValidationAgent:
             if target == VALIDATION_ROUTE_SAFETY:
                 validation_status = 'blocked'
                 status = 'blocked'
-            elif target == VALIDATION_ROUTE_FALLBACK or retry_count >= max_retries:
-                target = VALIDATION_ROUTE_FALLBACK
+            elif target == VALIDATION_ROUTE_FALLBACK:
                 validation_status = 'blocked'
                 status = 'blocked'
+            elif retry_count >= max_retries:
+                has_critical_error = any(
+                    issue.get('severity') == 'error' for issue in issues
+                )
+                if not has_critical_error:
+                    target = ''
+                    validation_status = 'passed_with_warnings'
+                    status = 'running'
+                else:
+                    target = VALIDATION_ROUTE_FALLBACK
+                    validation_status = 'blocked'
+                    status = 'blocked'
             else:
                 retry_count += 1
                 validation_status = 'needs_revision'
@@ -141,7 +154,11 @@ class MindReportValidationAgent:
             validation_result = {
                 'status': validation_status,
                 'issues': issues,
-                'message': 'Mind report validation found issues.',
+                'message': (
+                    'Mind report validation passed with warnings.'
+                    if validation_status == 'passed_with_warnings'
+                    else 'Mind report validation found issues.'
+                ),
             }
             next_state = {
                 **state,
@@ -150,7 +167,7 @@ class MindReportValidationAgent:
                 'revision_instructions': [issue['message'] for issue in issues],
                 'retry_count': retry_count,
                 'status': status,
-                'error': validation_result['message'],
+                'error': None if status == 'running' else validation_result['message'],
             }
 
         return append_trace(
@@ -169,7 +186,7 @@ class MindReportValidationAgent:
     @staticmethod
     def route(state: MindReportGraphState) -> str:
         validation_result = state.get('validation_result')
-        if validation_result and validation_result['status'] == 'passed':
+        if validation_result and validation_result['status'] in ('passed', 'passed_with_warnings'):
             return VALIDATION_ROUTE_FORMAT
         return state.get('revision_target') or VALIDATION_ROUTE_FALLBACK
 
@@ -617,9 +634,17 @@ class MindReportValidationAgent:
                 VALIDATION_ROUTE_NARRATIVE,
             ))
 
+        now = timezone.now()
+        safety_window = timedelta(hours=24)
+        recent_source_messages = [
+            message
+            for message in state.get('collection_result').source_messages
+            if getattr(message, 'created_at', None) is None
+            or (now - message.created_at < safety_window)
+        ]
         source_text = ' '.join(
             message.content
-            for message in state.get('collection_result').source_messages
+            for message in recent_source_messages
         ).lower()
         has_risk_signal = any(phrase in source_text for phrase in _RISK_PHRASES)
         if has_risk_signal:

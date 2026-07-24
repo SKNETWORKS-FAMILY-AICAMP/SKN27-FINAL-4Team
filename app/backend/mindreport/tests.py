@@ -1304,6 +1304,7 @@ class MindReportScoringServiceTests(TestCase):
     ):
         self._create_user_messages(5)
         scorer_class.return_value.model = None
+        scorer_class.return_value.available = False
 
         result = MindReportScoringService().run(
             user=self.user,
@@ -1312,6 +1313,35 @@ class MindReportScoringServiceTests(TestCase):
 
         self.assertEqual(result.status, 'scoring_model_unavailable')
         self.assertEqual(result.emotion_scores, ())
+
+    @patch('ai.emotion.emotion_model.predict_emotion_full')
+    def test_electra_scorer_remote_mode_returns_probs_matrix(self, mock_predict):
+        mock_predict.return_value = (
+            '기쁨', 0.9, {'기쁨': 0.8, '슬픔': 0.1, '분노': 0.05, '일반': 0.05}
+        )
+        from mindreport.services.electra_scorer import ElectraEmotionScorer
+        scorer = ElectraEmotionScorer()
+        with patch.object(scorer, 'model', None), patch.object(scorer, 'remote', True):
+            self.assertTrue(scorer.available)
+            probs = scorer.predict_probs(['오늘 너무 행복했다'])
+            self.assertEqual(probs.shape, (1, 4))
+            self.assertAlmostEqual(probs[0, 0], 0.8)
+
+    @patch('ai.emotion.emotion_model.predict_emotion_full')
+    def test_scoring_service_succeeds_with_remote_electra_scorer(self, mock_predict):
+        self._create_user_messages(5)
+        mock_predict.return_value = (
+            '기쁨', 0.9, {'기쁨': 0.8, '슬픔': 0.1, '분노': 0.05, '일반': 0.05}
+        )
+        from mindreport.services.electra_scorer import ElectraEmotionScorer
+        scorer = ElectraEmotionScorer()
+        with patch.object(scorer, 'model', None), patch.object(scorer, 'remote', True):
+            result = MindReportScoringService().run(
+                user=self.user,
+                period_type='week',
+            )
+            self.assertEqual(result.status, 'scored')
+            self.assertEqual(len(result.emotion_scores), 1)
 
     def test_source_message_uses_only_immediately_following_assistant_label(self):
         first_user = ChatMessage.objects.create(
@@ -2496,3 +2526,81 @@ class MindReportGraphAPIViewTests(TestCase):
             }],
             'is_fallback': False,
         }
+
+
+class MindReportSafetyResponse24hExpirationTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            email='safetytestuser@example.com',
+            password='password',
+            nickname='안전테스터',
+        )
+
+    def test_validate_safety_ignores_risk_signals_older_than_24_hours(self):
+        agent = MindReportValidationAgent()
+        now = timezone.now()
+
+        old_risk_msg = ReportSourceMessage(
+            message_id=1,
+            source_date=(now - timedelta(hours=25)).date(),
+            content='죽고 싶다 힘들다',
+            emotion_label='슬픔',
+            created_at=now - timedelta(hours=25),
+        )
+        state_old = {
+            'collection_result': SimpleNamespace(source_messages=(old_risk_msg,)),
+            'emotion_flow': SimpleNamespace(interpretation='해석'),
+            'narrative_result': SimpleNamespace(narrative=None),
+        }
+        issues_old = agent._validate_safety(state_old)
+        safety_issues_old = [i for i in issues_old if i['code'] == 'high_risk_signal_detected']
+        self.assertEqual(len(safety_issues_old), 0)
+
+        recent_risk_msg = ReportSourceMessage(
+            message_id=2,
+            source_date=(now - timedelta(hours=2)).date(),
+            content='죽고 싶다 힘들다',
+            emotion_label='슬픔',
+            created_at=now - timedelta(hours=2),
+        )
+        state_recent = {
+            'collection_result': SimpleNamespace(source_messages=(recent_risk_msg,)),
+            'emotion_flow': SimpleNamespace(interpretation='해석'),
+            'narrative_result': SimpleNamespace(narrative=None),
+        }
+        issues_recent = agent._validate_safety(state_recent)
+        safety_issues_recent = [i for i in issues_recent if i['code'] == 'high_risk_signal_detected']
+        self.assertEqual(len(safety_issues_recent), 1)
+
+    def test_period_report_exists_expires_safety_response_after_24_hours(self):
+        from mindreport.services.persistence import period_report_exists
+
+        now = timezone.now()
+        report = MindReport.objects.create(
+            user=self.user,
+            report_type='주간',
+            range_text='2026.07.20 ~ 2026.07.26',
+            title='안전 안내',
+            summary='요약',
+            is_safety_response=True,
+        )
+        MindReport.objects.filter(pk=report.pk).update(created_at=now - timedelta(hours=25))
+
+        exists = period_report_exists(
+            user=self.user,
+            period_type='week',
+            period_name='주간',
+            target_date=now.date(),
+        )
+        self.assertFalse(exists)
+
+        MindReport.objects.filter(pk=report.pk).update(created_at=now - timedelta(hours=2))
+        exists_recent = period_report_exists(
+            user=self.user,
+            period_type='week',
+            period_name='주간',
+            target_date=now.date(),
+        )
+        self.assertTrue(exists_recent)
+
