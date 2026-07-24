@@ -1,0 +1,73 @@
+# 빈틈사이 자동 배포 — main 푸시 → 앱 이미지 빌드 → ECR (2026-07-24 D4)
+#
+# 전체 그림:
+#   git push (main) → [이 워크플로] 이미지 빌드·ECR 푸시
+#                   → [EC2 크론 autodeploy.sh] 3분마다 새 이미지 확인 → pull + 재기동
+#
+# 선택 배경: CodeBuild(GitHub 앱 연결)는 org 소유자 권한이 필요해 불가(부트캠프 org).
+#   GitHub Actions는 저장소 권한만으로 동작 — 대신 ECR 푸시 전용 IAM 키를 Secrets에 보관.
+#
+# 필요 Secrets (저장소 Settings → Secrets and variables → Actions → New repository secret):
+#   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY  ← IAM 사용자 binteumsai-ci (ECR 푸시 전용)
+#
+# 주의:
+# - 감정분석 람다 이미지는 여기서 안 다룸 — 모델 파일(488MB)이 깃에 없어 로컬 전용 빌드
+# - provenance: false 필수 — attestation manifest가 붙으면 Lambda 등 일부가 이미지 거부
+
+name: deploy-app
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'ai/**'
+      - 'etl/**'
+      - 'deploy/Dockerfile'
+      - 'deploy/nginx.conf'
+      - 'deploy/run.sh'
+      - '.github/workflows/deploy-app.yml'
+  workflow_dispatch: {}   # Actions 탭에서 수동 실행 버튼
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECR_REPO: 296243639250.dkr.ecr.ap-northeast-2.amazonaws.com/binteumsai-ecr
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: 체크아웃
+        uses: actions/checkout@v4
+
+      - name: AWS 자격 증명
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: ECR 로그인
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Buildx 준비
+        uses: docker/setup-buildx-action@v3
+
+      - name: 이미지 빌드 + 푸시
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: true
+          tags: |
+            ${{ env.ECR_REPO }}:latest
+            ${{ env.ECR_REPO }}:${{ github.sha }}
+          provenance: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 결과 요약
+        run: |
+          echo "✅ ECR 푸시 완료 — EC2 크론이 3분 내 자동 반영" >> $GITHUB_STEP_SUMMARY
+          echo "급하면 서버에서: sudo /srv/binteumsai/autodeploy.sh" >> $GITHUB_STEP_SUMMARY
