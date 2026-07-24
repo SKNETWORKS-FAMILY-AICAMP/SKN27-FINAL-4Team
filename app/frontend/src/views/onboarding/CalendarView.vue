@@ -87,9 +87,15 @@ const streakCount = computed(() => getCurrentStreak(monthFortunes.value));
 const selectedCharacterId = computed(() => normalizeCharacterId(storedCharacter.value.characterId));
 const fallbackExpressionId = computed(() => normalizeExpressionId(storedCharacter.value.expressionId));
 const selectedCharacterDefaultUrl = computed(() => getCharacterImageUrl(selectedCharacterId.value, "default"));
+const selectedCalendarEntry = computed(() => fortuneByDate.value[selectedDate.value] || null);
+const selectedEmotionEntry = computed(() => {
+  if (selectedFortune.value || !selectedCalendarEntry.value?.emotion_label) return null;
+  return selectedCalendarEntry.value;
+});
 const selectedDetailCharacterUrl = computed(() => {
-  if (!selectedFortune.value) return selectedCharacterDefaultUrl.value;
-  return getCharacterImageUrl(selectedCharacterId.value, getFortuneExpressionId(selectedFortune.value));
+  const record = selectedFortune.value || selectedCalendarEntry.value;
+  if (!record) return selectedCharacterDefaultUrl.value;
+  return getCharacterImageUrl(selectedCharacterId.value, getFortuneExpressionId(record));
 });
 
 const dailyMajorSummary = computed(() => {
@@ -586,6 +592,15 @@ function getErrorMessage(error) {
           <div>
             <strong>{{ selectedDate === todayString ? '오늘의 운세' : '이 날의 운세' }}</strong>
             <p>{{ selectedFortuneSummary }}</p>
+          </div>
+        </div>
+      </template>
+
+      <template v-else-if="selectedEmotionEntry">
+        <div class="daily-summary today-fortune-summary">
+          <img class="daily-summary-icon" :src="calendarRecordIcon" alt="" aria-hidden="true">
+          <div>
+            <strong>대화 감정 기록</strong>
           </div>
         </div>
       </template>
