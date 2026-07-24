@@ -80,6 +80,8 @@ deploy/*
 !deploy/s3_sync.py
 
 # CI/CD 활성 (2026-07-24 D4 — main 푸시 시 이미지 빌드→ECR)
+# ci.yml: 테스트 자동화 — 검증 후 올릴 예정
+.github/workflows/ci.yml
 
 # IDE 설정
 .vscode/
