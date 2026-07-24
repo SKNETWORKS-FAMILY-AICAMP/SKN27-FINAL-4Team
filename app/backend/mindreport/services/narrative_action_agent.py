@@ -3,6 +3,7 @@ from __future__ import annotations
 from mindreport.services.graph_state import MindReportGraphState, append_trace
 from mindreport.services.narrative import MindReportNarrativeGenerator
 from mindreport.services.payloads import report_recipient_name
+from mindreport.services.periods import suggestion_time_context
 
 
 class MindReportNarrativeActionAgent:
@@ -38,6 +39,13 @@ class MindReportNarrativeActionAgent:
 
         collection_result = state.get('collection_result')
         ltm_context = getattr(collection_result, 'ltm_context', '') if collection_result else ''
+        report_context = suggestion_time_context(
+            period_type=state['period_type'],
+            generated_on=state['generated_on'],
+            target_date=state.get('target_date'),
+            year=state.get('year'),
+            month=state.get('month'),
+        )
 
         narrative_generator = (
             self.narrative_generator
@@ -55,6 +63,7 @@ class MindReportNarrativeActionAgent:
             recipient_name=report_recipient_name(state['user']),
             revision_instructions=state.get('revision_instructions', ()),
             ltm_context=ltm_context,
+            report_context=report_context,
         )
         is_generated = (
             narrative_result.status == 'generated'
@@ -83,6 +92,7 @@ class MindReportNarrativeActionAgent:
                     else 0,
                 },
                 'actions': {
+                    'action_window': report_context,
                     'alternative_candidate_count': len(
                         alternative_plan.candidates
                     ),
@@ -91,6 +101,14 @@ class MindReportNarrativeActionAgent:
                     )
                     if narrative
                     else 0,
+                    'suggestion_card_count': len(narrative.suggestion_cards)
+                    if narrative
+                    else 0,
+                    'source_candidates': [
+                        card.source_candidate for card in narrative.suggestion_cards
+                    ]
+                    if narrative
+                    else [],
                 },
             },
         )

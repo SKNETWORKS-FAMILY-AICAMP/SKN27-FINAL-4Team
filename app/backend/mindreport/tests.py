@@ -11,14 +11,19 @@ from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from chat.models import ChatMessage, ChatSession
+from mindreport.constants import (
+    EMOTION_SCORE_NEGATIVE_MAX,
+    EMOTION_SCORE_POSITIVE_MIN,
+)
 from mindreport.services.alternatives import build_alternative_plan
 from mindreport.services.cause_keywords import (
     FLOW_SCORE_UPWARD,
     build_cause_keyword_payload,
     determine_label_display_policy,
+    parse_cause_keywords,
 )
 from mindreport.services.cause_keyword_agent import MindReportCauseKeywordAgent
-from mindreport.services.collection import collect_ltm_context
+from mindreport.services.collection import LtmEvent, collect_ltm_context, collect_ltm_events
 from mindreport.services.criteria_agent import (
     FALLBACK_ROUTE,
     GENERATION_ROUTE,
@@ -35,10 +40,16 @@ from mindreport.services.emotion_analysis_agent import MindReportEmotionAnalysis
 from mindreport.services.keyword_candidates import (
     KeywordCandidate,
     build_keyword_candidate_payload,
+    parse_keyword_candidates,
 )
 from mindreport.services.narrative import MindReportNarrativeGenerator
 from mindreport.services.narrative_action_agent import MindReportNarrativeActionAgent
-from mindreport.services.payloads import select_comfort_message
+from mindreport.services.payloads import (
+    normalize_public_payload,
+    select_comfort_message,
+    serialize_report,
+)
+from mindreport.services.periods import suggestion_time_context
 from mindreport.services.validation_agent import (
     VALIDATION_ROUTE_CAUSE,
     VALIDATION_ROUTE_CRITERIA,
@@ -65,6 +76,22 @@ from mindreport.services.graph_state import build_initial_mindreport_state
 from mindreport.services.graph_flow import MindReportSupervisorAgent
 from mindreport.models import MindReport
 from ai.agents.web_agent import FallbackWebAgent
+
+
+class MindReportSuggestionTimingTests(SimpleTestCase):
+    def test_monthly_suggestions_use_generation_anchored_four_week_window(self):
+        context = suggestion_time_context(
+            period_type='month',
+            year=2026,
+            month=7,
+            generated_on=date(2026, 8, 1),
+        )
+
+        self.assertEqual(context['analysis_period_start'], '2026-07-01')
+        self.assertEqual(context['analysis_period_end'], '2026-07-31')
+        self.assertEqual(context['action_window_start'], '2026-08-01')
+        self.assertEqual(context['action_window_end'], '2026-08-28')
+        self.assertEqual(context['action_window_days'], 28)
 
 
 class MindReportFallbackSafetyTests(SimpleTestCase):
@@ -100,9 +127,9 @@ class MindReportFallbackSafetyTests(SimpleTestCase):
         self.assertEqual(report['reliefCauses'], [])
         self.assertEqual(report['emotions'], [])
         self.assertEqual(report['recommendations'], [])
-        self.assertIn('분석 대기 중', report['title'])
+        self.assertEqual(report['title'], '주간 마음 리포트를 준비하고 있어요')
         self.assertTrue(any('계속 수집' in line for line in report['analysis']))
-        self.assertIn('기록이 더 모이면', report['summary'])
+        self.assertIn('다음 정기 갱신', report['summary'])
         self.assertEqual(
             select_comfort_message(
                 summary=report['summary'],
@@ -130,6 +157,8 @@ class MindReportFallbackSafetyTests(SimpleTestCase):
         )
 
         self.assertEqual(report['recommendations'], ['검색 근거 활동'])
+        self.assertEqual(report['suggestionCards'][0]['title'], '검색 근거 활동')
+        self.assertEqual(report['suggestionCards'][0]['sourceCandidate'], 'web_search')
         self.assertTrue(
             any('대화에서 분석한 결과가 아니라' in line for line in report['analysis'])
         )
@@ -212,7 +241,7 @@ class MindReportV2GraphCollectionTests(SimpleTestCase):
         self.assertIn('[event_rel:HAS_EVENT]', query)
         self.assertIn('[on_rel:ON]', query)
         self.assertIn('[person_rel:RELATES_TO]', query)
-        self.assertIn('[:EVOKED]', query)
+        self.assertIn('[evoked:EVOKED]', query)
         self.assertNotIn('[:KNOWS]', query)
         self.assertNotIn('[:FELT]', query)
         self.assertEqual(
@@ -228,6 +257,39 @@ class MindReportV2GraphCollectionTests(SimpleTestCase):
             "- 사건 1: '가족 여행' (날짜: 2026-07-07 ~ 2026-07-09), "
             '연관 인물: 민수(친구), 관련 정서: 기쁨',
         )
+
+    @patch('chat.graph_memory_v2_base._get_driver')
+    def test_collect_ltm_events_returns_episode_centered_structured_facts(
+        self,
+        get_driver,
+    ):
+        session = MagicMock()
+        session.run.return_value.data.return_value = [{
+            'event_id': 'ev-team-meeting',
+            'episode_id': 'ep-20',
+            'episode_created_at': '2026-07-20T19:30:00+09:00',
+            'name': '팀 프로젝트 회의',
+            'cause': '일정 조율 갈등',
+            'date': '2026-07-21',
+            'end_date': None,
+            'people': [{'name': '팀원', 'relation': '동료'}],
+            'places': ['회의실'],
+            'topics': ['학업'],
+            'emotions': [{'type': 'anger', 'score': 0.78}],
+        }]
+        get_driver.return_value.session.return_value.__enter__.return_value = session
+
+        events = collect_ltm_events(
+            user=SimpleNamespace(id=17),
+            period_type='week',
+            target_date=date(2026, 7, 20),
+        )
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].episode_date, '2026-07-20')
+        self.assertEqual(events[0].occurs_start, '2026-07-21')
+        self.assertEqual(events[0].people[0]['name'], '팀원')
+        self.assertEqual(events[0].emotions[0]['score'], 0.78)
 
     @patch('chat.graph_memory_v2_base._get_driver', return_value=None)
     def test_collect_ltm_context_returns_empty_message_without_v2_driver(
@@ -369,6 +431,12 @@ class FakeCauseKeywordClient:
         self.cause_type = cause_type
 
     def classify_keywords(self, *, payload):
+        keyword = payload['candidates'][0]['keyword']
+        report_text = (
+            f'이번 기록에서는 ‘{keyword}’에 관해 이야기할 때 잠시 여유가 생기고 긴장이 누그러졌다는 표현이 나타나, 마음을 쉬게 한 원인으로 보여요.'
+            if self.cause_type == 'relief'
+            else f'이번 기록에서는 ‘{keyword}’에 관해 이야기할 때 해야 할 일과 압박이 겹치며 부담이 커졌다는 표현이 나타나, 마음을 힘들게 한 원인으로 보여요.'
+        )
         return {
             'cause_keywords': [
                 {
@@ -377,10 +445,36 @@ class FakeCauseKeywordClient:
                     'publishable': True,
                     'confidence': 0.72,
                     'rationale': '테스트용 원인 키워드 분류입니다.',
+                    'moment_description': (
+                        f"'{candidate['keyword']}'와 함께하며 마음의 긴장이 조금 누그러졌어요."
+                        if self.cause_type == 'relief'
+                        else f"'{candidate['keyword']}'를 마주하며 마음의 부담이 커졌던 순간이에요."
+                    ),
                 }
                 for candidate in payload['candidates']
-            ]
+            ],
+            'cause_reports': {
+                'stress': report_text if self.cause_type == 'stress' else '',
+                'relief': report_text if self.cause_type == 'relief' else '',
+            },
         }
+
+
+class RevisingCauseKeywordClient(FakeCauseKeywordClient):
+    def __init__(self):
+        super().__init__(cause_type='stress')
+        self.call_count = 0
+        self.revision_instructions = []
+
+    def classify_keywords(self, *, payload):
+        self.call_count += 1
+        self.revision_instructions = payload.get('revision_instructions', [])
+        result = super().classify_keywords(payload=payload)
+        if not self.revision_instructions:
+            result['cause_keywords'][0]['moment_description'] = (
+                '2099-01-01에 발표 준비 때문에 마음의 부담이 커졌던 순간이에요.'
+            )
+        return result
 
 
 class FakeNarrativeClient:
@@ -389,6 +483,9 @@ class FakeNarrativeClient:
 
     def generate_narrative(self, *, payload):
         self.last_payload = payload
+        candidates = payload['alternative_plan']['candidates'][:2]
+        causes = payload.get('cause_keywords') or []
+        related_cause = causes[0]['keyword'] if causes else ''
         return {
             'title': '진로를 고민하는 시간에 함께 살펴볼 작은 단서',
             'summary': '진로를 준비하며 할 일을 정리하는 과정에서 부담과 잠깐의 휴식이 함께 언급됐어요.',
@@ -408,13 +505,24 @@ class FakeNarrativeClient:
             ],
             'action_recommendations': [
                 (
-                    '해야 할 일이 머릿속에서 겹칠 때 선택 부담을 줄일 수 있도록 오늘 할 일 하나만 가장 작은 행동으로 나눠보세요. '
-                    '오늘 저녁 5분 동안 첫 행동을 적고, 가능하다면 그중 10분 안에 끝낼 수 있는 것부터 시작해보세요.'
+                    '해야 할 일이 머릿속에서 겹칠 때 선택 부담을 줄일 수 있도록 할 일 하나만 가장 작은 행동으로 나눠보세요. '
+                    '다음 저녁 식사 후 5분 동안 첫 행동을 적고, 가능하다면 그중 10분 안에 끝낼 수 있는 것부터 시작해보세요.'
                 ),
                 (
                     '계속 생각을 이어가는 것보다 짧은 멈춤이 다음 행동을 정하는 데 도움이 될 수 있어요. '
                     '일을 시작하기 전이나 마친 뒤 10분을 비워 물을 마시거나 천천히 걷고, 전후에 달라진 점을 한 줄로 남겨보세요.'
                 ),
+            ],
+            'suggestion_cards': [
+                {
+                    'title': f"{candidate['title']}로 숨 고르기",
+                    'reason': f"{related_cause or '이번 기록의 부담'}로 커진 부담을 덜고 시작 범위를 좁히는 데 도움이 돼요.",
+                    'how': '다음 저녁 식사 후 5분 동안 가장 작은 첫 행동 하나만 적어 바로 시작해보세요.',
+                    'source_candidate': candidate['title'],
+                    'related_cause': related_cause,
+                    'timing': 'routine',
+                }
+                for index, candidate in enumerate(candidates)
             ],
         }
 
@@ -603,9 +711,13 @@ class MindReportScoringServiceTests(TestCase):
             '진로를 준비하며 애쓴 리포트테스터님은, 모든 걸 한 번에 해내지 않아도 괜찮아요.',
         )
         self.assertEqual(
-            {day['icon'] for day in result['report_payload']['emotions']},
-            {'😐'},
+            {day['emotion_score'] for day in result['report_payload']['emotions']},
+            {50.0},
         )
+        self.assertTrue(all(
+            set(day) == {'day', 'emotion_score'}
+            for day in result['report_payload']['emotions']
+        ))
         self.assertEqual(
             [entry['node'] for entry in result['trace']],
             [
@@ -703,6 +815,8 @@ class MindReportScoringServiceTests(TestCase):
         initial_state = build_initial_mindreport_state(
             user=self.user,
             period_type='week',
+            target_date=date(2026, 7, 23),
+            generated_on=date(2026, 7, 23),
             score_client=FakeEmotionScoreClient(),
             keyword_client=FakeKeywordCandidateClient(keyword='meeting prep'),
             cause_client=FakeCauseKeywordClient(cause_type='stress'),
@@ -723,6 +837,11 @@ class MindReportScoringServiceTests(TestCase):
         narrative = result['narrative_result'].narrative
         self.assertEqual(len(narrative.analysis_sentences), 3)
         self.assertEqual(len(narrative.action_recommendations), 2)
+        self.assertEqual(len(narrative.suggestion_cards), 2)
+        self.assertEqual(
+            narrative.suggestion_cards[0].source_candidate,
+            narrative_client.last_payload['alternative_plan']['candidates'][0]['title'],
+        )
         trace_payload = result['trace'][-1]['payload']
         self.assertEqual(
             trace_payload['evidence']['analysis_sentence_count'],
@@ -740,7 +859,24 @@ class MindReportScoringServiceTests(TestCase):
             support_guidance['recipient_name'],
             '리포트테스터님',
         )
+        report_context = narrative_client.last_payload['report_context']
+        self.assertEqual(report_context['analysis_period_start'], '2026-07-20')
+        self.assertEqual(report_context['analysis_period_end'], '2026-07-23')
+        self.assertEqual(report_context['generated_on'], '2026-07-23')
+        self.assertEqual(report_context['action_window_end'], '2026-07-29')
+        self.assertEqual(report_context['action_window_days'], 7)
         self.assertIn('격려', support_guidance['writing_direction'])
+        self.assertEqual(
+            narrative_client.last_payload['cause_context']['stress_report'],
+            cause_state['cause_result'].stress_report,
+        )
+        self.assertTrue(
+            narrative_client.last_payload['cause_keywords'][0]['moment_description']
+        )
+        self.assertTrue(any(
+            '실행 계기를 먼저 정하고' in constraint
+            for constraint in narrative_client.last_payload['constraints']
+        ))
 
     def test_validation_agent_routes_unsafe_narrative_back_for_revision(self):
         self._create_user_messages(5)
@@ -849,6 +985,136 @@ class MindReportScoringServiceTests(TestCase):
             VALIDATION_ROUTE_NARRATIVE,
         )
 
+        impractical_card = replace(
+            narrative_result.narrative.suggestion_cards[0],
+            how='여유가 생기면 시간을 내어 가볍게 시작해보세요.',
+        )
+        impractical_narrative = replace(
+            narrative_result.narrative,
+            suggestion_cards=(
+                impractical_card,
+                *narrative_result.narrative.suggestion_cards[1:],
+            ),
+        )
+        impractical = MindReportValidationAgent().run({
+            **complete_state,
+            'narrative_result': replace(
+                narrative_result,
+                narrative=impractical_narrative,
+            ),
+        })
+        impractical_codes = {
+            issue['code']
+            for issue in impractical['validation_result']['issues']
+        }
+        self.assertIn('suggestion_start_not_practical', impractical_codes)
+        self.assertEqual(
+            impractical['revision_target'],
+            VALIDATION_ROUTE_NARRATIVE,
+        )
+
+        view_relative_card = replace(
+            narrative_result.narrative.suggestion_cards[0],
+            how='오늘 저녁 식사 후 5분 동안 첫 행동 하나만 적고 멈춰보세요.',
+        )
+        view_relative = MindReportValidationAgent().run({
+            **complete_state,
+            'narrative_result': replace(
+                narrative_result,
+                narrative=replace(
+                    narrative_result.narrative,
+                    suggestion_cards=(
+                        view_relative_card,
+                        *narrative_result.narrative.suggestion_cards[1:],
+                    ),
+                ),
+            ),
+        })
+        self.assertIn(
+            'suggestion_timing_depends_on_view_date',
+            {
+                issue['code']
+                for issue in view_relative['validation_result']['issues']
+            },
+        )
+
+    def test_validation_rejects_public_cause_prose_and_routes_to_cause_agent(self):
+        self._create_user_messages(5)
+        initial_state = build_initial_mindreport_state(
+            user=self.user,
+            period_type='week',
+            score_client=FakeEmotionScoreClient(),
+            keyword_client=FakeKeywordCandidateClient(),
+            cause_client=FakeCauseKeywordClient(),
+            narrative_client=FakeNarrativeClient(),
+        )
+        criteria_state = MindReportGenerationCriteriaAgent().run(initial_state)
+        emotion_state = MindReportEmotionAnalysisAgent().run(criteria_state)
+        cause_state = MindReportCauseKeywordAgent().run(emotion_state)
+        complete_state = MindReportNarrativeActionAgent().run(cause_state)
+        cause_result = complete_state['cause_result']
+        unsafe_keyword = replace(
+            cause_result.cause_keywords[0],
+            moment_description=(
+                '“오늘의 감정 기록 0”이라는 말로 감정 점수 75점이며 '
+                '우울증입니다. 2099-01-01에 확인됐어요.'
+            ),
+        )
+        unsafe_causes = replace(
+            cause_result,
+            cause_keywords=(unsafe_keyword,),
+            stress_report='연락처 010-1234-5678 때문에 부담이 커졌어요.',
+        )
+
+        result = MindReportValidationAgent().run({
+            **complete_state,
+            'cause_result': unsafe_causes,
+        })
+
+        issue_codes = {
+            issue['code'] for issue in result['validation_result']['issues']
+        }
+        self.assertIn('cause_internal_score_or_state_disclosed', issue_codes)
+        self.assertIn('cause_direct_conversation_quote_disclosed', issue_codes)
+        self.assertIn('cause_diagnosis_or_treatment_claim', issue_codes)
+        self.assertIn('cause_excessive_personal_information', issue_codes)
+        self.assertIn('unknown_cause_date', issue_codes)
+        self.assertEqual(result['revision_target'], VALIDATION_ROUTE_CAUSE)
+
+    def test_validation_rejects_unavailable_graph_event_reference(self):
+        self._create_user_messages(5)
+        initial_state = build_initial_mindreport_state(
+            user=self.user,
+            period_type='week',
+            score_client=FakeEmotionScoreClient(),
+            keyword_client=FakeKeywordCandidateClient(),
+            cause_client=FakeCauseKeywordClient(),
+            narrative_client=FakeNarrativeClient(),
+        )
+        criteria_state = MindReportGenerationCriteriaAgent().run(initial_state)
+        emotion_state = MindReportEmotionAnalysisAgent().run(criteria_state)
+        cause_state = MindReportCauseKeywordAgent().run(emotion_state)
+        complete_state = MindReportNarrativeActionAgent().run(cause_state)
+        cause_result = complete_state['cause_result']
+        unsupported_keyword = replace(
+            cause_result.cause_keywords[0],
+            graph_event_ids=('invented-event',),
+        )
+
+        result = MindReportValidationAgent().run({
+            **complete_state,
+            'cause_result': replace(
+                cause_result,
+                cause_keywords=(unsupported_keyword,),
+            ),
+        })
+
+        issue_codes = {
+            issue['code'] for issue in result['validation_result']['issues']
+        }
+        self.assertIn('unsupported_graph_event_evidence', issue_codes)
+        self.assertEqual(result['revision_target'], VALIDATION_ROUTE_CAUSE)
+
     def test_supervisor_graph_routes_high_risk_language_to_safety_response(self):
         self._create_user_messages(5)
         first_message = ChatMessage.objects.filter(session=self.session).first()
@@ -890,6 +1156,36 @@ class MindReportScoringServiceTests(TestCase):
         self.assertEqual(narrative_client.call_count, 2)
         self.assertTrue(narrative_client.revision_instructions)
         trace_nodes = [entry['node'] for entry in result['trace']]
+        self.assertEqual(
+            trace_nodes.count('analysis_evidence_and_action_generation'),
+            2,
+        )
+        self.assertEqual(trace_nodes.count('report_validation'), 2)
+
+    def test_supervisor_graph_regenerates_failed_cause_prose_with_feedback(self):
+        self._create_user_messages(5)
+        cause_client = RevisingCauseKeywordClient()
+
+        result = MindReportSupervisorAgent().run(
+            user=self.user,
+            period_type='week',
+            period_name='weekly',
+            score_client=FakeEmotionScoreClient(),
+            keyword_client=FakeKeywordCandidateClient(),
+            cause_client=cause_client,
+            narrative_client=FakeNarrativeClient(),
+            max_retries=1,
+        )
+
+        self.assertEqual(result['status'], 'completed')
+        self.assertEqual(result['retry_count'], 1)
+        self.assertEqual(cause_client.call_count, 2)
+        self.assertTrue(cause_client.revision_instructions)
+        trace_nodes = [entry['node'] for entry in result['trace']]
+        self.assertEqual(
+            trace_nodes.count('cause_keyword_extraction_and_classification'),
+            2,
+        )
         self.assertEqual(
             trace_nodes.count('analysis_evidence_and_action_generation'),
             2,
@@ -1223,14 +1519,19 @@ class MindReportScoringServiceTests(TestCase):
         )
         self.assertEqual(result['keyword_result'].status, 'extracted')
         self.assertEqual(result['label_result'].policy.stress_emphasis, 'secondary')
+        cause_label = result['report_payload']['causeLabels'][0]
+        self.assertEqual(cause_label['keyword'], '발표 준비')
+        self.assertEqual(cause_label['causeType'], 'stress')
+        self.assertEqual(cause_label['emphasis'], 'secondary')
+        self.assertEqual(cause_label['displayWeight'], 0.7)
+        self.assertTrue(cause_label['momentDescription'])
         self.assertEqual(
-            result['report_payload']['causeLabels'],
-            [{
-                'keyword': '발표 준비',
-                'causeType': 'stress',
-                'emphasis': 'secondary',
-                'displayWeight': 0.7,
-            }],
+            result['report_payload']['hardMoments'][0]['text'],
+            cause_label['momentDescription'],
+        )
+        self.assertEqual(
+            result['report_payload']['stressReport'],
+            '이번 기록에서는 ‘발표 준비’에 관해 이야기할 때 해야 할 일과 압박이 겹치며 부담이 커졌다는 표현이 나타나, 마음을 힘들게 한 원인으로 보여요.',
         )
 
     def test_supervisor_enters_volatile_flow_before_keyword_extraction(self):
@@ -1408,6 +1709,177 @@ class MindReportScoringServiceTests(TestCase):
             '기쁨',
         )
 
+    def test_graph_events_are_grounded_and_carried_into_cause_classification(self):
+        graph_event = LtmEvent(
+            event_id='ev-presentation',
+            episode_id='ep-14',
+            episode_date='2026-07-14',
+            name='발표 준비',
+            occurs_start='2026-07-15',
+            occurs_end='',
+            cause='준비할 내용이 많음',
+            people=(),
+            places=(),
+            topics=('학업',),
+            emotions=({'type': 'sadness', 'score': 0.7},),
+        )
+        message = ReportSourceMessage(
+            message_id=14,
+            source_date=date(2026, 7, 14),
+            content='발표 준비할 게 너무 많아서 부담스러워.',
+            emotion_label='sadness',
+        )
+        parsed = parse_keyword_candidates(
+            payload={'candidates': [{
+                'keyword': '발표 준비',
+                'confidence': 0.91,
+                'evidence_message_ids': [14],
+                'evidence_type': 'explicit_causal',
+                'relationship': '준비할 일이 많아 부담스럽다고 표현했습니다.',
+                'graph_event_ids': ['ev-presentation', 'ev-invented'],
+            }]},
+            source_messages=(message,),
+            graph_events=(graph_event,),
+        )
+
+        self.assertEqual(parsed[0].graph_event_ids, ('ev-presentation',))
+        cause_payload = build_cause_keyword_payload(
+            candidates=parsed,
+            emotion_scores=(),
+            emotion_flow=analyze_emotion_flow(()),
+            source_messages=(message,),
+            graph_events=(graph_event,),
+        )
+        self.assertEqual(
+            cause_payload['candidates'][0]['graph_events'][0]['name'],
+            '발표 준비',
+        )
+        self.assertTrue(any(
+            '사건명, cause, 인물, 장소, 주제 관계' in constraint
+            for constraint in cause_payload['constraints']
+        ))
+        self.assertIn('cause_reports', cause_payload['output_schema'])
+        self.assertTrue(any(
+            '대표 날짜' in constraint
+            for constraint in cause_payload['constraints']
+        ))
+
+    def test_duplicate_moment_descriptions_receive_distinct_safe_fallbacks(self):
+        candidates = tuple(
+            KeywordCandidate(
+                keyword=keyword,
+                confidence=0.9,
+                evidence_message_ids=(index,),
+                evidence_dates=('2026-07-14',),
+                rationale='명시적 부담 표현',
+                evidence_type='explicit_causal',
+                relationship='부담스럽다고 직접 표현했습니다.',
+            )
+            for index, keyword in enumerate(('발표 준비', '면접 준비'), start=1)
+        )
+        duplicate = '준비 과정에서 해야 할 일이 겹치며 마음이 무거워졌던 순간이에요.'
+        parsed = parse_cause_keywords(
+            payload={'cause_keywords': [
+                {
+                    'keyword': candidate.keyword,
+                    'cause_type': 'stress',
+                    'publishable': True,
+                    'confidence': 0.8,
+                    'rationale': '테스트 근거',
+                    'moment_description': duplicate,
+                }
+                for candidate in candidates
+            ]},
+            candidates=candidates,
+        )
+
+        self.assertEqual(len(parsed), 2)
+        self.assertEqual(parsed[0].moment_description, duplicate)
+        self.assertNotEqual(
+            parsed[0].moment_description,
+            parsed[1].moment_description,
+        )
+
+    def test_low_confidence_cause_is_not_published_as_a_hard_moment(self):
+        candidate = KeywordCandidate(
+            keyword='발표 준비',
+            confidence=0.9,
+            evidence_message_ids=(1,),
+            evidence_dates=('2026-07-14',),
+            rationale='명시적인 부담 표현',
+            evidence_type='explicit_causal',
+            relationship='부담스럽다고 직접 표현했습니다.',
+        )
+
+        parsed = parse_cause_keywords(
+            payload={'cause_keywords': [{
+                'keyword': candidate.keyword,
+                'cause_type': 'stress',
+                'publishable': True,
+                'confidence': 0.59,
+                'rationale': '근거가 약함',
+                'moment_description': '발표를 준비하며 해야 할 일이 겹쳐 마음이 무거워졌던 순간이에요.',
+            }]},
+            candidates=(candidate,),
+        )
+
+        self.assertEqual(parsed, ())
+
+    def test_json_string_true_still_runs_full_cause_validation(self):
+        candidate = KeywordCandidate(
+            keyword='발표 준비',
+            confidence=0.9,
+            evidence_message_ids=(1,),
+            evidence_dates=('2026-07-14',),
+            rationale='명시적인 부담 표현',
+            evidence_type='explicit_causal',
+            relationship='부담스럽다고 직접 표현했습니다.',
+        )
+
+        parsed = parse_cause_keywords(
+            payload={'cause_keywords': [{
+                'keyword': candidate.keyword,
+                'cause_type': 'stress',
+                'publishable': 'true',
+                'confidence': 0.8,
+                'rationale': '직접 근거',
+                'moment_description': '발표를 준비하며 해야 할 일이 겹쳐 마음이 무거워졌던 순간이에요.',
+            }]},
+            candidates=(candidate,),
+        )
+
+        self.assertEqual(len(parsed), 1)
+        self.assertEqual(parsed[0].cause_type, 'stress')
+        self.assertGreaterEqual(parsed[0].confidence, 0.6)
+
+    def test_non_polite_stress_description_is_replaced_with_polite_copy(self):
+        candidate = KeywordCandidate(
+            keyword='발표 준비',
+            confidence=0.9,
+            evidence_message_ids=(1,),
+            evidence_dates=('2026-07-14',),
+            rationale='명시적인 부담 표현',
+            evidence_type='explicit_causal',
+            relationship='부담스럽다고 직접 표현했습니다.',
+        )
+        non_polite = '발표를 준비하며 해야 할 일이 겹쳐 마음이 무거워진 순간이었다.'
+
+        parsed = parse_cause_keywords(
+            payload={'cause_keywords': [{
+                'keyword': candidate.keyword,
+                'cause_type': 'stress',
+                'publishable': True,
+                'confidence': 0.8,
+                'rationale': '직접 근거',
+                'moment_description': non_polite,
+            }]},
+            candidates=(candidate,),
+        )
+
+        self.assertEqual(len(parsed), 1)
+        self.assertNotEqual(parsed[0].moment_description, non_polite)
+        self.assertTrue(parsed[0].moment_description.endswith('요.'))
+
     def test_keyword_candidate_extraction_runs_after_score_maintenance(self):
         self._create_user_messages(5)
         keyword_client = FakeKeywordCandidateClient()
@@ -1479,6 +1951,11 @@ class MindReportScoringServiceTests(TestCase):
         self.assertEqual(cause_keywords[0].keyword, '산책')
         self.assertEqual(cause_keywords[0].cause_type, 'relief')
         self.assertEqual(cause_keywords[0].classified_by, 'llm')
+        self.assertTrue(cause_keywords[0].moment_description.endswith('요.'))
+        self.assertEqual(
+            result['cause_result'].relief_report,
+            '이번 기록에서는 ‘산책’에 관해 이야기할 때 잠시 여유가 생기고 긴장이 누그러졌다는 표현이 나타나, 마음을 쉬게 한 원인으로 보여요.',
+        )
 
     def test_cause_keyword_classification_uses_llm_client_for_neutral_evidence(self):
         self._create_user_messages(5)
@@ -1558,6 +2035,7 @@ class MindReportScoringServiceTests(TestCase):
         self.assertEqual(result['narrative_result'].status, 'generated')
         self.assertEqual(len(narrative.analysis_sentences), 3)
         self.assertEqual(len(narrative.action_recommendations), 2)
+        self.assertEqual(len(narrative.suggestion_cards), 2)
         self.assertEqual(
             narrative_client.last_payload['cause_keywords'][0]['keyword'],
             '진로 고민',
@@ -1618,7 +2096,7 @@ class MindReportGraphAPIViewTests(TestCase):
         payload = self._report_payload()
         payload.update({
             'type': '주간 (데이터 부족)',
-            'title': '마음 리포트 분석 대기 중',
+            'title': '주간 마음 리포트를 준비하고 있어요',
             'stressCauses': [],
             'reliefCauses': [],
             'causeLabels': [],
@@ -1634,10 +2112,63 @@ class MindReportGraphAPIViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         report = response.json()['reports'][0]
-        self.assertEqual(report['title'], '마음 리포트 분석 대기 중')
+        self.assertEqual(report['title'], '주간 마음 리포트를 준비하고 있어요')
         self.assertTrue(report['is_fallback'])
         self.assertTrue(report['id'].startswith('fallback-weekly-'))
         self.assertEqual(MindReport.objects.filter(user=self.user).count(), 1)
+
+    @patch(
+        'mindreport.views.MindReportGenerateAPIView._is_last_week_of_month',
+        return_value=False,
+    )
+    @patch('mindreport.views.MindReportSupervisorAgent')
+    def test_get_automatically_creates_missing_full_weekly_report(
+        self,
+        supervisor_class,
+        _is_last_week,
+    ):
+        supervisor_class.return_value.run.return_value = {
+            'status': 'completed',
+            'report_payload': self._report_payload(),
+        }
+
+        response = self.client.get('/api/report/generate/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['reports'][0]['type'], '주간')
+        self.assertFalse(response.json()['reports'][0]['is_fallback'])
+        supervisor_class.return_value.run.assert_called_once()
+
+    @patch(
+        'mindreport.views.MindReportGenerateAPIView._is_last_week_of_month',
+        return_value=True,
+    )
+    @patch('mindreport.views.MindReportSupervisorAgent')
+    def test_get_automatically_catches_up_weekly_and_monthly_reports(
+        self,
+        supervisor_class,
+        _is_last_week,
+    ):
+        def graph_result(**kwargs):
+            payload = self._report_payload()
+            if kwargs['period_type'] == 'month':
+                payload.update({
+                    'type': '월간',
+                    'range': '2026.07 월간 결산',
+                    'title': '테스트 월간 마음 리포트',
+                })
+            return {'status': 'completed', 'report_payload': payload}
+
+        supervisor_class.return_value.run.side_effect = graph_result
+
+        response = self.client.get('/api/report/generate/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            {report['type'] for report in response.json()['reports']},
+            {'주간', '월간'},
+        )
+        self.assertEqual(supervisor_class.return_value.run.call_count, 2)
 
     @patch(
         'mindreport.views.MindReportGenerateAPIView._is_last_week_of_month',
@@ -1661,15 +2192,117 @@ class MindReportGraphAPIViewTests(TestCase):
         self.assertEqual(report['title'], '테스트 마음 리포트')
         self.assertEqual(report['stressCauses'], ['회의 준비'])
         self.assertEqual(report['causeLabels'][0]['emphasis'], 'secondary')
+        self.assertEqual(
+            report['hardMoments'][0]['text'],
+            '회의를 준비하며 해야 할 일이 겹쳐 마음이 무거워졌던 순간이에요.',
+        )
+        self.assertEqual(
+            report['reliefMoments'][0]['text'],
+            '산책을 하며 굳어 있던 마음이 조금씩 편안해졌어요.',
+        )
+        self.assertEqual(
+            report['stressReport'],
+            '회의 준비 과정에서 해야 할 일이 겹치고 압박감이 커졌다는 표현이 함께 나타나, 마음을 힘들게 한 원인으로 보여요.',
+        )
+        self.assertEqual(
+            report['reliefReport'],
+            '산책하며 생긴 여유가 복잡한 생각을 가라앉히고 긴장을 누그러뜨렸다는 표현이 나타나, 마음을 쉬게 한 원인으로 보여요.',
+        )
         self.assertEqual(report['recommendations'], ['10분 쉬기'])
+        self.assertEqual(report['emotionScale'], {
+            'heavyMax': float(EMOTION_SCORE_NEGATIVE_MAX),
+            'lightMin': float(EMOTION_SCORE_POSITIVE_MIN),
+        })
+        self.assertEqual(report['suggestionCards'][0]['title'], '회의 전 5분 정리')
+        self.assertEqual(report['suggestionCards'][0]['relatedCause'], '회의 준비')
         self.assertEqual(
             report['comfortMessage'],
             '테스트 요약',
         )
         self.assertFalse(report['is_fallback'])
         self.assertFalse(report['is_safety_response'])
+        self.assertTrue(report['generatedAt'])
         self.assertTrue(report['id'].startswith('weekly-'))
         self.assertEqual(MindReport.objects.filter(user=self.user).count(), 1)
+
+    def test_payload_formatter_does_not_invent_missing_cause_prose(self):
+        payload = self._report_payload()
+        cause_labels = [{
+            'keyword': '회의 준비',
+            'causeType': 'stress',
+            'emphasis': 'secondary',
+            'displayWeight': 0.7,
+            'momentDescription': '',
+            'harmonySummary': '',
+            'graphEventIds': [],
+            'evidenceDates': ['2026-07-14'],
+        }]
+        payload['causeLabels'] = cause_labels
+        payload['hardMoments'] = []
+        payload['reliefMoments'] = []
+
+        normalized = normalize_public_payload(payload)
+        stored_report = MindReport.objects.create(
+            user=self.user,
+            report_type='주간',
+            range_text='이번 주',
+            title='검증된 문구만 사용하는 리포트',
+            summary='검증된 요약 문장입니다.',
+            stress_causes=['회의 준비'],
+            relief_causes=[],
+            cause_labels=cause_labels,
+            emotions=[],
+            analysis=[],
+            recommendations=[],
+        )
+        serialized = serialize_report(stored_report)
+
+        self.assertEqual(normalized['stressReport'], '')
+        self.assertEqual(normalized['reliefReport'], '')
+        self.assertEqual(serialized['stressReport'], '')
+        self.assertEqual(serialized['reliefReport'], '')
+        self.assertEqual(serialized['hardMoments'], [])
+        self.assertEqual(serialized['reliefMoments'], [])
+
+    def test_payload_uses_verified_moment_when_aggregate_report_is_invalid(self):
+        payload = self._report_payload()
+        payload['stressReport'] = '회의 준비였어요.'
+        payload['reliefReport'] = '산책이었어요.'
+        payload['causeLabels'][0]['harmonySummary'] = ''
+        payload['causeLabels'][1]['harmonySummary'] = ''
+
+        normalized = normalize_public_payload(payload)
+        self.assertEqual(
+            normalized['stressReport'],
+            payload['causeLabels'][0]['momentDescription'],
+        )
+        self.assertEqual(
+            normalized['reliefReport'],
+            payload['causeLabels'][1]['momentDescription'],
+        )
+
+        stored_report = MindReport.objects.create(
+            user=self.user,
+            report_type='주간',
+            range_text='이번 주',
+            title='대표 장면 안전망 리포트',
+            summary='검증된 대표 장면을 표시하는 리포트예요.',
+            stress_causes=['회의 준비'],
+            relief_causes=['산책'],
+            cause_labels=payload['causeLabels'],
+            emotions=[],
+            analysis=[],
+            recommendations=[],
+        )
+        serialized = serialize_report(stored_report)
+        self.assertEqual(
+            serialized['stressReport'],
+            payload['causeLabels'][0]['momentDescription'],
+        )
+        self.assertEqual(
+            serialized['reliefReport'],
+            payload['causeLabels'][1]['momentDescription'],
+        )
 
     @patch(
         'mindreport.views.MindReportGenerateAPIView._is_last_week_of_month',
@@ -1785,6 +2418,10 @@ class MindReportGraphAPIViewTests(TestCase):
         }
 
         first_response = self.client.post('/api/report/generate/')
+        stale_generated_at = timezone.now() - timedelta(hours=2)
+        MindReport.objects.filter(user=self.user).update(
+            created_at=stale_generated_at
+        )
         second_response = self.client.post('/api/report/generate/')
 
         self.assertEqual(first_response.status_code, 200)
@@ -1793,6 +2430,12 @@ class MindReportGraphAPIViewTests(TestCase):
         self.assertEqual(
             first_response.json()['reports'][0]['id'],
             second_response.json()['reports'][0]['id'],
+        )
+        self.assertGreater(
+            datetime.fromisoformat(
+                second_response.json()['reports'][0]['generatedAt']
+            ),
+            stale_generated_at,
         )
 
     @staticmethod
@@ -1805,14 +2448,51 @@ class MindReportGraphAPIViewTests(TestCase):
             'summary': '테스트 요약',
             'stressCauses': ['회의 준비'],
             'reliefCauses': ['산책'],
-            'causeLabels': [{
+            'causeLabels': [
+                {
+                    'keyword': '회의 준비',
+                    'causeType': 'stress',
+                    'emphasis': 'secondary',
+                    'displayWeight': 0.7,
+                    'momentDescription': '회의를 준비하며 해야 할 일이 겹쳐 마음이 무거워졌던 순간이에요.',
+                    'harmonySummary': '회의 준비 과정에서 해야 할 일이 겹치고 압박감이 커졌다는 표현이 함께 나타나, 마음을 힘들게 한 원인으로 보여요.',
+                    'graphEventIds': ['ev-meeting'],
+                    'evidenceDates': ['2026-07-14'],
+                },
+                {
+                    'keyword': '산책',
+                    'causeType': 'relief',
+                    'emphasis': 'primary',
+                    'displayWeight': 1.0,
+                    'momentDescription': '산책을 하며 굳어 있던 마음이 조금씩 편안해졌어요.',
+                    'harmonySummary': '산책하며 생긴 여유가 복잡한 생각을 가라앉히고 긴장을 누그러뜨렸다는 표현이 나타나, 마음을 쉬게 한 원인으로 보여요.',
+                    'graphEventIds': ['ev-walk'],
+                    'evidenceDates': ['2026-07-15'],
+                },
+            ],
+            'hardMoments': [{
+                'text': '회의를 준비하며 해야 할 일이 겹쳐 마음이 무거워졌던 순간이에요.',
                 'keyword': '회의 준비',
-                'causeType': 'stress',
-                'emphasis': 'secondary',
-                'displayWeight': 0.7,
+                'evidenceDates': ['2026-07-14'],
             }],
-            'emotions': [{'day': '14일', 'icon': '😐'}],
+            'reliefMoments': [{
+                'text': '산책을 하며 굳어 있던 마음이 조금씩 편안해졌어요.',
+                'keyword': '산책',
+                'evidenceDates': ['2026-07-15'],
+            }],
+            'emotions': [{
+                'day': '14일',
+                'emotion_score': 50.0,
+            }],
             'analysis': ['근거 문장'],
             'recommendations': ['10분 쉬기'],
+            'suggestionCards': [{
+                'title': '회의 전 5분 정리',
+                'reason': '회의 준비로 커진 부담을 작은 순서로 나누는 데 도움이 될 수 있어요.',
+                'how': '회의 전에 5분 동안 첫 순서 하나만 적어보세요.',
+                'sourceCandidate': '해야 할 일 나누기',
+                'relatedCause': '회의 준비',
+                'timing': 'today',
+            }],
             'is_fallback': False,
         }

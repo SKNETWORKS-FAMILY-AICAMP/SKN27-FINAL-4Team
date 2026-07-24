@@ -106,18 +106,16 @@ MIN_TREND_DAYS = _bounded_int(
 )
 
 # Public payload contract
-EMOTION_STATE_ICONS = {
-    'positive': '😊',
-    'negative': '😢',
-    'neutral': '😐',
-}
 FRONTEND_LIST_FIELDS = (
     'stressCauses',
     'reliefCauses',
     'causeLabels',
+    'hardMoments',
+    'reliefMoments',
     'emotions',
     'analysis',
     'recommendations',
+    'suggestionCards',
 )
 FRONTEND_REQUIRED_TEXT_FIELDS = ('type', 'range', 'title', 'summary')
 GRAPH_REPORT_PAYLOAD_STATUSES = frozenset(('completed', 'safety_ready'))

@@ -44,20 +44,6 @@
           </div>
         </dl>
 
-        <div class="character-stats" aria-label="캐릭터 설정 성향">
-          <div
-            v-for="stat in statItems"
-            :key="stat.key"
-            class="character-stat"
-            :style="{ '--value': `${draftCharacter.stats[stat.key]}%` }"
-          >
-            <span>{{ stat.label }}</span>
-            <div><b></b></div>
-            <strong>{{ draftCharacter.stats[stat.key] }}</strong>
-          </div>
-        </div>
-        <p class="character-stat-note">표시된 수치는 캐릭터 제작자가 설정한 성향 정보입니다.</p>
-
         <div class="character-actions">
           <button
             class="primary-button"
@@ -86,13 +72,7 @@ export default {
     return {
       draftCharacterId: this.characters.some((character) => character.id === this.selectedCharacter)
         ? this.selectedCharacter
-        : this.currentCharacter.id,
-      statItems: [
-        { key: "empathy", label: "공감" },
-        { key: "calm", label: "차분함" },
-        { key: "support", label: "응원" },
-        { key: "careful", label: "섬세함" }
-      ]
+        : this.currentCharacter.id
     };
   },
   computed: {

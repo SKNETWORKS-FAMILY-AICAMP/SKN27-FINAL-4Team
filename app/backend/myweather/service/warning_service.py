@@ -5,6 +5,7 @@ from myweather.constants import (
     JEJU_WARNING_CITY_PREFIXES,
     KMA_WARNING_EXPECTED_FIELDS,
     KMA_WARNING_LEVEL_PRIORITY,
+    KMA_WARNING_PARENT_REGION_OVERRIDES,
     METROPOLITAN_WARNING_DISPLAY_NAMES,
     WARNING_LEVEL_LABELS,
     WARNING_RELEASE_COMMANDS,
@@ -83,6 +84,12 @@ def _warning_row_matches_region(row, region_name, aliases):
     prefixes = WARNING_REGION_CODE_PREFIXES.get(region_name, ())
     region_text = " ".join((row.get("REG_UP_KO") or "", row.get("REG_KO") or ""))
 
+    # 일부 도서·광역시 하위구역은 REG_ID가 인접 도의 코드 계열을 공유한다.
+    # 검증된 교차 계층에서는 REG_UP이 실제 소속을 나타내므로 먼저 판정한다.
+    for parent_prefix, parent_region in KMA_WARNING_PARENT_REGION_OVERRIDES.items():
+        if reg_up.startswith(parent_prefix):
+            return region_name == parent_region
+
     if reg_id.startswith("L") and reg_id != "L1000000":
         return any(reg_id.startswith(prefix) for prefix in prefixes)
     if reg_id == "L1000000" and "전국" in region_text:
@@ -108,7 +115,9 @@ def _warning_area_display_name(value):
 def _format_warning_region(region_name, areas):
     display_name = WARNING_REGION_DISPLAY_NAMES.get(region_name, region_name)
     compact_areas = [area for area in areas if area and area != display_name]
-    return display_name if not compact_areas else f"{display_name}({', '.join(compact_areas)})"
+    # 카드 머리글에 이미 조회 기준 상위 지자체가 표시되므로 상세 행에는
+    # 중복되는 상위 이름을 붙이지 않고 실제 특보 대상 하위 지역만 노출한다.
+    return ", ".join(compact_areas) if compact_areas else display_name
 
 
 def filter_kma_warnings(rows, location_name):

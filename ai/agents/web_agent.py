@@ -17,7 +17,14 @@ class FallbackWebAgent:
     """Return suggestions only when Tavily evidence is actually available."""
 
     @staticmethod
-    def get_trendy_contents(age, gender, hobbies=None, interests=None, mbti=None):
+    def get_trendy_contents(
+        age,
+        gender,
+        hobbies=None,
+        interests=None,
+        mbti=None,
+        report_period='주간',
+    ):
         openai_key = os.environ.get('OPENAI_API_KEY', '').strip()
         tavily_key = os.environ.get('TAVILY_API_KEY', '').strip()
         if not openai_key or not tavily_key:
@@ -38,6 +45,7 @@ class FallbackWebAgent:
                 hobbies=hobbies,
                 interests=interests,
                 mbti=mbti,
+                report_period=report_period,
             )
         except Exception:
             logger.exception('Mind-report Tavily fallback generation failed.')
@@ -93,6 +101,7 @@ class FallbackWebAgent:
         hobbies,
         interests,
         mbti,
+        report_period,
     ) -> list[dict[str, str]]:
         from openai import OpenAI
 
@@ -106,6 +115,7 @@ class FallbackWebAgent:
             'hobbies': FallbackWebAgent._string_list(hobbies),
             'interests': FallbackWebAgent._string_list(interests),
             'mbti': str(mbti).strip() if mbti else None,
+            'report_period': report_period,
         }
         prompt = {
             'task': 'web_grounded_mindreport_waiting_activity_suggestions',
@@ -116,6 +126,8 @@ class FallbackWebAgent:
                 'These are web suggestions, not conclusions inferred from the user conversations.',
                 'Do not claim that the user has done, prefers, or benefits from an activity.',
                 'Do not mention MBTI, age, or gender in the visible recommendation text.',
+                'For a weekly report, make how_to practical within seven days. For a monthly report, make it sustainable across four weeks.',
+                'Use a repeatable cue such as after the next commute, before the next meeting, or before sleep. Do not use today, tomorrow, this weekend, or this month because a saved report may be opened later.',
                 'If the evidence does not support a concrete activity, return an empty list.',
                 'Return a JSON object only.',
             ],

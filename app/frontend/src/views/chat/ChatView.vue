@@ -719,11 +719,28 @@ function pushAssistant(text, extra = {}) {
     messages.value.push(m)
     const target = messages.value[messages.value.length - 1]   // 반응형 프록시로 조작
     playTask(m.tts_task_id, {
-      onStart: (d, alignment, audioEl) => animateReveal(target, d, alignment, audioEl),
-      onFail: () => animateReveal(target, null, null, null),   // 실패해도 즉시 덤프 대신 타이핑 (2026-07-12)
+      onStart: (d, alignment, audioEl) => {
+        // 2026-07-23: 5초 폴백으로 이미 타이핑이 시작됐으면 재시작하지 않는다
+        // (animateReveal을 다시 걸면 진행도가 0부터라 글자가 뒤로 감긴다). 음성만 합류.
+        if (target._revealTimer || target.displayed === target.content) return
+        animateReveal(target, d, alignment, audioEl)
+      },
+      onFail: () => {
+        if (target._revealTimer || target.displayed === target.content) return
+        animateReveal(target, null, null, null)   // 실패해도 즉시 덤프 대신 타이핑 (2026-07-12)
+      },
     })
-    setTimeout(() => {                  // 안전장치: TTS 생성이 8초+ 걸릴 수 있어 폴링 타임아웃(~28초)보다 늦게
-      if (target.displayed !== target.content && !target._revealTimer) revealNow(target)
+    // 2026-07-23: 음성이 글자를 인질로 잡던 구조 해체 — TTS가 5초 안에 시작 안 되면
+    // 글자부터 타이핑한다 (팀원 체감 "답변이 안 나옴"의 주범: 최대 28초 '…' 대기).
+    // 음성은 준비되는 대로 재생만 합류 (위 onStart 가드가 이중 타이핑을 막는다).
+    setTimeout(() => {
+      if (!target._revealTimer && target.displayed !== target.content) {
+        animateReveal(target, null, null, null)
+      }
+    }, 5000)
+    setTimeout(() => {                  // 최후 안전장치 (2026-07-23: `_revealTimer 없음` 조건 제거 —
+      // 타이머가 살아있는 채 멈춘 케이스(오디오 스톨)에선 영영 안 풀리던 결함)
+      if (target.displayed !== target.content) revealNow(target)
     }, 30000)
     return target
   }
@@ -853,6 +870,13 @@ async function sendMessage() {
     return
   }
   clearIdleTimer()
+  // 2026-07-23: 끼어들기 정책 — 앞 말풍선이 아직 타이핑/재생 중이면 곱게 마무리.
+  // (전엔 새 턴의 playTask가 stop()으로 앞 음성·폴링만 끊고 글자는 미완성으로
+  //  방치되는 경로가 있었다 → "말하다 마는" 팀원 보고의 원인 중 하나. 스킵 버튼과 동일 동작.)
+  const prevSpeaking = [...messages.value].reverse().find(x => x.role === 'assistant')
+  if (prevSpeaking && prevSpeaking.displayed !== undefined
+      && prevSpeaking.displayed !== prevSpeaking.content) revealNow(prevSpeaking)
+  ttsStop()
   userTurnCount.value += 1                 // 대화 턴 카운트 (게이미피케이션/통계용)
   messages.value.push({ _tempId: Date.now(), role: 'user', content, image })
   inputText.value = ''

@@ -168,7 +168,7 @@ def _generate_openai(task_id: str, text: str, character: str, emotion: str, cach
                 audio = base64.b64decode(msg['data'])
                 break
             print(f'[tts_service] gpt-audio 대본 이탈(유사도 {sim:.2f}, 시도 {attempt}): '
-                  f'{spoken[:60]!r} — '
+                  f'{spoken[:60]!r} - '
                   f'{"재시도" if attempt < TTS_SCRIPT_RETRY else "폐기(텍스트만)"}')
         if audio is None:   # 2회 다 이탈 — 다른 말이 나가는 것보다 무음이 낫다
             with _lock:
@@ -181,7 +181,7 @@ def _generate_openai(task_id: str, text: str, character: str, emotion: str, cach
             if cache_key:
                 _cache[cache_key] = {'audio': audio, 'alignment': None}
     except Exception as e:
-        print(f'[tts_service] gpt-audio 실패: {e}')
+        print(f'[tts_service] gpt-audio 실패: {str(e).encode("ascii", "replace").decode("ascii")}')
         with _lock:
             if task_id in _tasks:
                 _tasks[task_id].update(status='failed')

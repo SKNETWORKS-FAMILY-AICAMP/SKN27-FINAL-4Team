@@ -19,6 +19,30 @@ _BASE = Path(__file__).resolve().parent
 _FT = Path(os.environ.get('EMOTION_FT_DIR', _BASE / 'artifacts_ft'))
 _ART = Path(os.environ.get('EMOTION_ARTIFACT_DIR', _BASE / 'artifacts'))
 
+# ── 원격 추론 (B안 배포, 2026-07-23): EMOTION_API_URL 설정 시 Lambda로 위임 ──
+# 사슬: API → (실패) → 로컬 모델 → (없음) → LLM 폴백(호출부). 개발 환경은
+# URL 미설정이라 기존 로컬 경로 그대로 — 코드 경로 변화 없음.
+_API_URL = os.environ.get('EMOTION_API_URL', '').strip()
+_API_TOKEN = os.environ.get('EMOTION_API_TOKEN', '').strip()
+_API_TIMEOUT = float(os.environ.get('EMOTION_API_TIMEOUT', '5'))
+
+
+def _api_predict(text):
+    """Lambda 원격 추론. 성공 시 (label, conf, probs), 실패 시 None (로컬 폴백)."""
+    try:
+        import requests
+        r = requests.post(
+            _API_URL, json={'text': text},
+            headers={'x-emotion-token': _API_TOKEN} if _API_TOKEN else {},
+            timeout=_API_TIMEOUT)
+        r.raise_for_status()
+        d = r.json()
+        if d.get('label') in EMO4:
+            return d['label'], d.get('confidence'), d.get('probs')
+    except Exception as e:
+        print(f'[emotion_model] 원격 추론 실패(로컬/LLM 폴백): {type(e).__name__}: {e}')
+    return None
+
 # 학습 시 라벨 인코딩 순서 (실험 노트북 EMO4와 동일 — 변경 금지)
 EMO4 = ['기쁨', '슬픔', '분노', '일반']
 
@@ -102,7 +126,13 @@ def _embed(texts):
 def predict_emotion_with_confidence(text: str):
     """(한글 라벨, 확신도 0~1) 반환 — 확신도 게이트용.
     모델 비활성이면 (None, None), 확률 미지원 분류기면 (라벨, None)."""
-    if not text or not _load():
+    if not text:
+        return None, None
+    if _API_URL:
+        hit = _api_predict(text)
+        if hit:
+            return hit[0], hit[1]
+    if not _load():
         return None, None
     try:
         if _S['mode'] == 'ft':
@@ -138,7 +168,13 @@ def predict_emotion_full(text: str):
     """(한글 라벨, 확신도, 4감정 확률 dict) 반환 — 복합 감정 감지용 (2026-07-10).
     softmax 분포는 원래 계산되고 있었으나 top1만 노출하던 것을 전체 반환.
     모델 비활성/오류면 (None, None, None). xgb 폴백 등 분포 미지원이면 (라벨, conf, None)."""
-    if not text or not _load():
+    if not text:
+        return None, None, None
+    if _API_URL:
+        hit = _api_predict(text)
+        if hit:
+            return hit
+    if not _load():
         return None, None, None
     try:
         if _S['mode'] == 'ft':
@@ -154,4 +190,6 @@ def predict_emotion_full(text: str):
 
 
 def is_active() -> bool:
+    if _API_URL:
+        return True    # 원격 모드 — 실패 시엔 호출 시점에 로컬/LLM 폴백이 받음
     return _load()
