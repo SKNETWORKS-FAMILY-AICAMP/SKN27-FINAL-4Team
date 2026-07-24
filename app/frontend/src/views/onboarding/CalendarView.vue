@@ -89,9 +89,19 @@ const fallbackExpressionId = computed(() => normalizeExpressionId(storedCharacte
 const selectedCharacterDefaultUrl = computed(() => getCharacterImageUrl(selectedCharacterId.value, "default"));
 const selectedCalendarEntry = computed(() => fortuneByDate.value[selectedDate.value] || null);
 const selectedEmotionEntry = computed(() => {
-  if (selectedFortune.value || !selectedCalendarEntry.value?.emotion_label) return null;
+  if (!selectedCalendarEntry.value?.emotion_label) return null;
   return selectedCalendarEntry.value;
 });
+const selectedConversationMessage = computed(() => {
+  const conversation = selectedEmotionEntry.value?.conversation;
+  if (conversation?.has_sufficient_conversation && conversation.summary) {
+    return conversation.summary;
+  }
+  return "\uCD5C\uBD84\uD55C \uB300\uD654\uAC00 \uC313\uC774\uC9C0 \uC54A\uC558\uC5B4\uC694.";
+});
+const conversationTitle = "\uB300\uD654 \uAC10\uC815 \uAE30\uB85D";
+const fortuneTitle = "\uC774\uB0A0\uC758 \uC6B4\uC138";
+const missingFortuneMessage = "\uC544\uC9C1 \uC624\uB298\uC758 \uC6B4\uC138 \uCE74\uB4DC\uB97C \uD655\uC778\uD558\uC9C0 \uC54A\uC558\uC5B4\uC694.";
 const selectedDetailCharacterUrl = computed(() => {
   const record = selectedFortune.value || selectedCalendarEntry.value;
   if (!record) return selectedCharacterDefaultUrl.value;
@@ -596,16 +606,23 @@ function getErrorMessage(error) {
         </div>
       </template>
 
-      <template v-else-if="selectedEmotionEntry">
-        <div class="daily-summary today-fortune-summary">
-          <img class="daily-summary-icon" :src="calendarRecordIcon" alt="" aria-hidden="true">
-          <div>
-            <strong>대화 감정 기록</strong>
-          </div>
+      <div v-if="!selectedFortune" class="daily-summary today-fortune-summary">
+        <img class="daily-summary-icon" :src="calendarFortuneIcon" alt="" aria-hidden="true">
+        <div>
+          <strong>{{ fortuneTitle }}</strong>
+          <p>{{ missingFortuneMessage }}</p>
         </div>
-      </template>
+      </div>
 
-      <div v-else class="empty-detail-card">
+      <div v-if="selectedEmotionEntry" class="daily-summary today-fortune-summary">
+        <img class="daily-summary-icon" :src="calendarRecordIcon" alt="" aria-hidden="true">
+        <div>
+          <strong>{{ conversationTitle }}</strong>
+          <p>{{ selectedConversationMessage }}</p>
+        </div>
+      </div>
+
+      <div v-if="false" class="empty-detail-card">
         <img class="empty-detail-icon" :src="calendarEmptyIcon" alt="" aria-hidden="true">
         <strong>저장된 운세 없음</strong>
         <p class="selected-date-guide">

@@ -10,7 +10,6 @@ from config.permissions import IsAuthenticatedOrDevelopment
 from calendar_api.serializers import DailyFortuneSerializer
 from calendar_api.services import (
     save_daily_major_as_daily_fortune,
-    save_tarot_result_as_daily_fortune,
 )
 from user.models import User
 
@@ -68,11 +67,6 @@ def create_tarot_reading(request):
             data=serializer.validated_data,
             user=request.user if request.user.is_authenticated else None,
         )
-        target_date = serializer.validated_data.get('date') or timezone.localdate()
-        fortune = save_tarot_result_as_daily_fortune(request, result, target_date)
-        if fortune:
-            result['daily_fortune'] = DailyFortuneSerializer(fortune).data
-
         return Response(result, status=status.HTTP_201_CREATED)
 
     except ValueError as exc:
