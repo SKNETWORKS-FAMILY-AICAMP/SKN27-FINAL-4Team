@@ -21,7 +21,7 @@
           <div>
             <span class="kicker">TODAY'S BOOK</span>
             <h3>{{ currentTab.name || currentBook.theme || "오늘의 추천" }}</h3>
-            <p>{{ currentBook.theme_reason || currentThemeReason }}</p>
+            <p>{{ currentThemeGuide }}</p>
           </div>
           <span v-if="payload && payload.is_cached" class="cache-badge">오늘의 추천</span>
         </header>
@@ -133,6 +133,7 @@
 <script>
 import {
   BOOK_THEME_CAPTIONS,
+  BOOK_THEME_GUIDES,
   BOOK_THEME_LABELS,
   BOOK_THEME_NAMES,
   BOOK_THEME_ORDER,
@@ -222,9 +223,9 @@ export default {
         : this.currentBook.selected_basis;
       return value ? `${label} · ${value}` : label;
     },
-    currentThemeReason() {
-      const theme = this.currentTab;
-      return theme?.reason || "오늘의 정보와 취향을 바탕으로 고른 추천입니다.";
+    currentThemeGuide() {
+      return BOOK_THEME_GUIDES[this.currentTab.id]
+        || "감정과 프로필의 관심사·취미를 기준으로 책의 주제와 분위기를 비교해 추천해요.";
     },
     hasCover() {
       return Boolean(this.currentSource.image && this.currentSource.image !== this.failedCoverUrl);

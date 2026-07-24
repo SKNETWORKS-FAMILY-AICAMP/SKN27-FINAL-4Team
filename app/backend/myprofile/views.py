@@ -4,10 +4,12 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.db import transaction
 from django.utils import timezone
+from character.models import CharacterPreference
 from user.models import UserProfile
 from .constants import (
     PROFILE_PREFERENCE_MINIMUM_ERROR,
     has_minimum_preferences,
+    to_backend_character_id,
 )
 from user.views import CsrfExemptSessionAuthentication
 from .serializers import MyProfileSerializer
@@ -58,11 +60,29 @@ def profile_detail(request):
                 if 'name' in data:
                     user.nickname = data['name'][:30]
                     user_update_fields.append('nickname')
-                if 'selectedCharacter' in data:
-                    user.character = data['selectedCharacter'][:10]
+                selected_character = data.get('selectedCharacter')
+                if selected_character:
+                    user.character = to_backend_character_id(selected_character)
                     user_update_fields.append('character')
                 if user_update_fields:
                     user.save(update_fields=user_update_fields)
+
+                if selected_character:
+                    preference = (
+                        CharacterPreference.objects.select_for_update()
+                        .filter(user=user)
+                        .order_by('-updated_at')
+                        .first()
+                    )
+                    if preference:
+                        preference.character_id = selected_character
+                        preference.save(update_fields=['character_id', 'updated_at'])
+                    else:
+                        CharacterPreference.objects.create(
+                            user=user,
+                            character_id=selected_character,
+                            expression_id='default',
+                        )
 
                 profile_update_fields = []
                 if 'job' in data:

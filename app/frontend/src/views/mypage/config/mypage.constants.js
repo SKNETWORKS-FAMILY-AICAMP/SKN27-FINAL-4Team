@@ -22,6 +22,26 @@ export const DEFAULT_MYPAGE_SETTINGS = Object.freeze({
   highContrast: false,
 });
 
+const MYPAGE_CHARACTER_ASSET_BY_BACKEND = Object.freeze({
+  pori: "redpanda",
+  kkami: "cat",
+  toto: "otter",
+  yeoul: "bird",
+});
+
+const MYPAGE_CHARACTER_ASSET_IDS = new Set([
+  "otter",
+  "cat",
+  "redpanda",
+  "bird",
+]);
+
+export function normalizeMypageCharacterId(value) {
+  const characterId = String(value || "").trim().toLowerCase();
+  if (MYPAGE_CHARACTER_ASSET_IDS.has(characterId)) return characterId;
+  return MYPAGE_CHARACTER_ASSET_BY_BACKEND[characterId] || "";
+}
+
 export const MYPAGE_CHARACTERS = Object.freeze([
   {
     id: "otter",
