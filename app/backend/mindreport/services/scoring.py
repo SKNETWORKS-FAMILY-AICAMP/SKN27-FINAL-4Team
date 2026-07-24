@@ -679,7 +679,8 @@ class MindReportScoringService:
         import numpy as np
         
         scorer = ElectraEmotionScorer()
-        if getattr(scorer, 'model', None) is None:
+        # 2026-07-24: 로컬 모델뿐 아니라 람다 원격 채점도 '사용 가능'으로 인정
+        if not getattr(scorer, 'available', getattr(scorer, 'model', None) is not None):
             return MindReportScoringResult(
                 status='scoring_model_unavailable',
                 period_type=period_type,
