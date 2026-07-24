@@ -72,6 +72,10 @@
       <!-- 펼침: 큰 캐릭터 + 기억 별자리 칩 -->
       <template v-if="!isCollapsed">
         <div class="room-label">{{ isSecret ? '밤하늘 아래 · 비밀 이야기' : timeGreeting }}</div>
+        <!-- 기억 별자리 — 이달의 실제 별자리 모양에 기억을 얹음 (2026-07-24 멘토 피드백).
+             넓은 화면 전용 장식, 별 클릭 시 그 기억으로 말 걸기 (전송은 사용자 몫) -->
+        <MemoryConstellation v-if="!isSecret && memoryPanelHasData" class="side-constellation"
+                             :panel-data="memoryPanelData" :glow-name="glowName" @pick="onStarPick" />
         <div class="hero-wrap" @click="pokeCharacter" title="쓰다듬기">
           <div class="hero-react" :style="reactStyle" :key="'r' + animKey">
             <div class="hero-circle">
@@ -260,6 +264,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { chatApi } from '../../api/chat.js'
 import chatBg from '../../assets/chat-bg.png'
 import { useSecret } from '../../composables/useSecret.js'
+import MemoryConstellation from './MemoryConstellation.vue'
 import { useTts } from '../../composables/useTts.js'
 import { useStt } from '../../composables/useStt.js'
 
@@ -940,6 +945,16 @@ async function confirmExitSecret() {
   coldStartDone.value = false
   await initSession()
   router.replace({ query: { character: displayCharacterId.value } })
+}
+
+// 별자리의 별 클릭 → 그 기억으로 말 거는 문구를 입력창에 채움 (전송은 사용자가 — 고쳐 보낼 수 있게)
+function onStarPick(mem) {
+  if (isTyping.value) return
+  inputText.value = (mem.ask || '').slice(0, 300)
+  nextTick(() => {
+    const el = inputRef.value
+    if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; el.focus() }
+  })
 }
 
 function autoResize(e) {
