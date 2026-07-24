@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 import re
 from typing import Iterable
+
+from django.utils import timezone
 
 from mindreport.services.emotion_flow import analyze_emotion_flow
 from mindreport.services.graph_state import (
@@ -617,9 +619,17 @@ class MindReportValidationAgent:
                 VALIDATION_ROUTE_NARRATIVE,
             ))
 
+        now = timezone.now()
+        safety_window = timedelta(hours=24)
+        recent_source_messages = [
+            message
+            for message in state.get('collection_result').source_messages
+            if getattr(message, 'created_at', None) is None
+            or (now - message.created_at < safety_window)
+        ]
         source_text = ' '.join(
             message.content
-            for message in state.get('collection_result').source_messages
+            for message in recent_source_messages
         ).lower()
         has_risk_signal = any(phrase in source_text for phrase in _RISK_PHRASES)
         if has_risk_signal:

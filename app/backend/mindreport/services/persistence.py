@@ -42,19 +42,28 @@ def period_report_exists(
     year: int | None = None,
     month: int | None = None,
 ) -> bool:
-    """Return whether the user already has a report for the resolved period."""
+    """Return whether the user already has a valid non-expired report for the resolved period."""
     window = resolve_period_window(
         period_type=period_type,
         target_date=target_date,
         year=year,
         month=month,
     )
-    return MindReport.objects.filter(
+    report = MindReport.objects.filter(
         user=user,
         report_type__startswith=period_name,
         created_at__gte=window.start,
         created_at__lt=window.end_exclusive,
-    ).exists()
+    ).first()
+
+    if report is None:
+        return False
+
+    # Safety responses expire after 24 hours (1 day), requiring regeneration
+    if report.is_safety_response and (timezone.now() - report.created_at >= timedelta(hours=24)):
+        return False
+
+    return True
 
 
 def save_period_report(
