@@ -71,11 +71,17 @@ etl/data/aug_wellness.jsonl
 # (GitHub 100MB 하드 리밋 — 본체는 Drive 공유, 재생성: 실험2 노트북 최종 학습 셀)
 ai/emotion/artifacts_ft/model.safetensors
 
-# 배포 스크립트 (개인 작업용 — dev 공유 제외)
-deploy/
+# 배포 폴더 (2026-07-24 D4: 통제외 → 허용목록 전환)
+# CI가 빌드에 쓰는 재료 4개만 공유 — 비밀값(.env.prod*)·내부 문서·람다 빌드는 계속 제외
+deploy/*
+!deploy/Dockerfile
+!deploy/nginx.conf
+!deploy/run.sh
+!deploy/s3_sync.py
 
-# CI/CD (배포 준비 완료 전까지 제외)
-.github/
+# CI/CD 활성 (2026-07-24 D4 — main 푸시 시 이미지 빌드→ECR)
+# ci.yml: 테스트 자동화 — 검증 후 올릴 예정
+.github/workflows/ci.yml
 
 # IDE 설정
 .vscode/

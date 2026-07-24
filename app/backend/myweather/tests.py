@@ -760,6 +760,32 @@ class KmaLifeIndexTests(SimpleTestCase):
         self.assertEqual(request_params['ServiceKey'], 'life-key')
         self.assertEqual(request_params['areaNo'], '1100000000')
 
+    @patch.dict(os.environ, {'KMA_LIFE_INDEX_SERVICE_KEY': 'life-key'})
+    @patch('myweather.service.life_index_service.requests.get')
+    def test_uses_post_merger_area_code_for_jeonnam_gwangju(self, request_get):
+        response = Mock(status_code=200, content=b'')
+        response.json.return_value = {
+            'response': {
+                'header': {'resultCode': '00'},
+                'body': {'items': {'item': {
+                    'areaNo': '1200000000',
+                    'date': '2026072409',
+                    'h0': '7',
+                }}},
+            }
+        }
+        request_get.return_value = response
+
+        result = fetch_uv_index({'name': '전남광주'})
+
+        self.assertEqual(result['status'], 'available')
+        self.assertEqual(result['value'], 7.0)
+        self.assertEqual(result['area_no'], '1200000000')
+        self.assertEqual(
+            request_get.call_args.kwargs['params']['areaNo'],
+            '1200000000',
+        )
+
     @patch.dict(
         os.environ,
         {'KMA_LIFE_INDEX_SERVICE_KEY': '', 'KMA_API_KEY': ''},
