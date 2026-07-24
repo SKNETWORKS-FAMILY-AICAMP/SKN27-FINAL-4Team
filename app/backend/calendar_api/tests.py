@@ -112,3 +112,56 @@ class CalendarChatEmotionTests(TestCase):
         self.assertEqual(entry['emotion_label'], 'joy')
         self.assertFalse(entry['has_fortune'])
         self.assertIsNone(entry['checkin'])
+        self.assertEqual(entry['conversation'], {
+            'has_sufficient_conversation': False,
+            'summary': '',
+        })
+
+    def test_month_returns_a_summary_after_three_user_messages(self):
+        user = User.objects.create_user(
+            email='calendar-summary@example.com',
+            password='test-password',
+            nickname='summary-test',
+        )
+        session = ChatSession.objects.create(user=user)
+        target_datetime = timezone.make_aware(datetime(2026, 7, 21, 12, 0, 0))
+        for content in ('I had a difficult meeting.', 'I shared my concerns.', 'I feel calmer now.'):
+            message = ChatMessage.objects.create(session=session, role='user', content=content)
+            ChatMessage.objects.filter(pk=message.pk).update(created_at=target_datetime)
+        response_message = ChatMessage.objects.create(
+            session=session,
+            role='assistant',
+            content='Thank you for sharing.',
+            emotion_label='joy',
+        )
+        ChatMessage.objects.filter(pk=response_message.pk).update(created_at=target_datetime)
+
+        self.client.force_login(user)
+        response = self.client.get('/api/calendar/month/', {'year': 2026, 'month': 7})
+
+        entry = response.json()[0]
+        self.assertTrue(entry['conversation']['has_sufficient_conversation'])
+        self.assertEqual(entry['conversation']['summary'], 'I had a difficult meeting. / I shared my concerns.')
+
+
+class CalendarDailyMajorOnlyTests(TestCase):
+    def test_month_ignores_a_general_tarot_reading(self):
+        user = User.objects.create_user(
+            email='calendar-major-only@example.com',
+            password='test-password',
+            nickname='major-only-test',
+        )
+        DailyFortune.objects.create(
+            user=user,
+            date=date(2026, 7, 22),
+            topic='general',
+            title='General reading',
+            content='Minor arcana reading',
+            keyword='Five of Swords',
+        )
+
+        self.client.force_login(user)
+        response = self.client.get('/api/calendar/month/', {'year': 2026, 'month': 7})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
