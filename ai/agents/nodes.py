@@ -491,7 +491,16 @@ def resp_prep_node(state: ChatState) -> dict:
     사진 첨부 시 멀티모달 메시지로 전달 → 친구처럼 사진에 반응(MVP · 비전 지원 모델 필요)."""
     guide = state.get('agent_guide', EMOTION_AGENT_GUIDES['normal'])
 
-    system_parts = [guide, COMMON_RULES, TTS_ACTING_RULES]
+    # 현재 시각 주입 (2026-07-23): 이게 없으면 "오늘 며칠이야?"에 LLM이 학습 시절
+    # 날짜로 환각한다. 서버는 UTC 컨테이너라 KST를 명시적으로 계산해 준다.
+    import datetime as _dt
+    _now_kst = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=9)))
+    _wd = ['월', '화', '수', '목', '금', '토', '일'][_now_kst.weekday()]
+    _clock = (f"[현재 시각] {_now_kst.strftime('%Y년 %m월 %d일')}({_wd}) "
+              f"{_now_kst.strftime('%H:%M')} (한국) — 날짜·요일·시간 얘기는 이 값이 기준. "
+              "안 물어봤는데 굳이 시간을 언급하진 마.")
+
+    system_parts = [guide, COMMON_RULES, TTS_ACTING_RULES, _clock]
     if state.get('memory_summary'):
         system_parts.append(f"[사용자에 대한 기억 요약]\n{state['memory_summary']}")
 

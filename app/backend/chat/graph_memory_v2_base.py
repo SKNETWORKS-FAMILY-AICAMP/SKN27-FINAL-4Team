@@ -106,6 +106,22 @@ def _today_s():
 _today_iso = _today_s   # v1 호환 별칭 (memory_eval 러너가 사용)
 
 
+def _date_hints():
+    """상대 날짜 달력 앵커 (2026-07-23 실측 사고: '다음주 금요일'을 7/29 수요일로 저장).
+    LLM의 요일 산수는 못 믿는다 — 이번주·다음주 요일별 날짜를 미리 계산해 프롬프트에
+    박아서 '계산'을 '베끼기'로 바꾼다."""
+    t = _today()
+    wd_names = ['월', '화', '수', '목', '금', '토', '일']
+    monday = t - datetime.timedelta(days=t.weekday())
+    def week_line(label, start):
+        return label + ' ' + ' '.join(
+            f'{wd_names[i]}={(start + datetime.timedelta(days=i)).isoformat()[5:]}'
+            for i in range(7))
+    return (f'오늘은 {t.isoformat()} {wd_names[t.weekday()]}요일. '
+            + week_line('[이번주]', monday) + ' / '
+            + week_line('[다음주]', monday + datetime.timedelta(days=7)))
+
+
 def _now():
     return datetime.datetime.now(
         datetime.timezone(datetime.timedelta(hours=9))).strftime('%Y-%m-%dT%H:%M:%S')
@@ -236,6 +252,8 @@ def _extract(message):
         f"[date 규칙] 다가오는 일정·콕 집은 날짜만, 오늘 {_today_s()} 기준 YYYY-MM-DD. "
         "기간이면 date(시작)+date_end(끝) — 사용자가 명시한 날짜만, 계산·추측 금지. "
         "과거의 일은 date를 null로.\n"
+        f"★요일 달력(상대 날짜는 반드시 이 표에서 베껴라 — 직접 계산 금지): {_date_hints()} "
+        "('다음주 금요일'이면 [다음주] 금= 값을 그대로. 연도는 오늘과 동일, 12월→1월만 +1)★\n"
         "[인과 규칙] caused_by는 사용자가 '~때문에/~해서'로 명시한 경우만. 추측 금지. "
         "★방향 주의: 'X 때문에 Y'라고 말하면 결과 Y의 caused_by가 원인 X다 — 둘 다 "
         "events로 기록하고, cause 텍스트 필드에 결과를 적는 역전 금지. "
