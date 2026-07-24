@@ -867,18 +867,28 @@ L1150000,부산광역시,L1150100,부산동부,202607151000,202607151100,호우,
 
     def test_maps_every_supported_region_by_official_land_warning_code(self):
         cases = {
-            '서울': 'L1100100', '부산': 'L1150100', '대구': 'L1140100',
-            '인천': 'L1110100', '대전': 'L1120100', '울산': 'L1160100',
-            '세종': 'L1170100', '전남광주': 'L1050100', '경기': 'L1010100',
-            '강원': 'L1020100', '충북': 'L1040100', '충남': 'L1030100',
-            '전북': 'L1060100', '경북': 'L1070100', '경남': 'L1080100',
-            '제주': 'L1090100',
+            '서울': ('L1100000', 'L1100100'),
+            '부산': ('L1000000', 'L1150000'),
+            '대구': ('L1140000', 'L1140100'),
+            '인천': ('L1110100', 'L1110110'),
+            '대전': ('L1000000', 'L1120000'),
+            '울산': ('L1000000', 'L1160000'),
+            '세종': ('L1170100', 'L1170110'),
+            '전남광주': ('L1050000', 'L1050300'),
+            '경기': ('L1010000', 'L1010200'),
+            '강원': ('L1020000', 'L1020300'),
+            '충북': ('L1040000', 'L1040300'),
+            '충남': ('L1030000', 'L1030200'),
+            '전북': ('L1060000', 'L1060100'),
+            '경북': ('L1070000', 'L1070300'),
+            '경남': ('L1080000', 'L1080500'),
+            '제주': ('L1090000', 'L1090500'),
         }
-        for region, reg_id in cases.items():
+        for region, (reg_up, reg_id) in cases.items():
             with self.subTest(region=region):
                 alerts = filter_kma_warnings(
                     [{
-                        'REG_UP': reg_id[:4] + '0000',
+                        'REG_UP': reg_up,
                         'REG_ID': reg_id,
                         'REG_KO': '세부지역',
                         'WRN': 'H',
@@ -888,6 +898,76 @@ L1150000,부산광역시,L1150100,부산동부,202607151000,202607151100,호우,
                     region,
                 )
                 self.assertEqual(len(alerts), 1)
+
+    def test_assigns_ganghwa_and_ongjin_to_incheon_by_official_parent(self):
+        rows = [
+            {
+                'REG_UP': 'L1110000',
+                'REG_UP_KO': '인천',
+                'REG_ID': 'L1010900',
+                'REG_KO': '강화',
+                'WRN': '호우',
+                'LVL': '주의',
+                'CMD': '발표',
+            },
+            {
+                'REG_UP': 'L1110000',
+                'REG_UP_KO': '인천',
+                'REG_ID': 'L1013600',
+                'REG_KO': '옹진',
+                'WRN': '호우',
+                'LVL': '주의',
+                'CMD': '발표',
+            },
+        ]
+
+        incheon_alerts = filter_kma_warnings(rows, '인천')
+
+        self.assertEqual(incheon_alerts[0]['areas'], ['강화', '옹진'])
+        self.assertEqual(filter_kma_warnings(rows, '경기'), [])
+
+    def test_keeps_yangpyeong_details_in_gyeonggi(self):
+        rows = [
+            {
+                'REG_UP': 'L1014400',
+                'REG_UP_KO': '양평',
+                'REG_ID': 'L1014410',
+                'REG_KO': '양평동부',
+                'WRN': '호우',
+                'LVL': '주의',
+                'CMD': '발표',
+            },
+            {
+                'REG_UP': 'L1014400',
+                'REG_UP_KO': '양평',
+                'REG_ID': 'L1014420',
+                'REG_KO': '양평서부',
+                'WRN': '호우',
+                'LVL': '주의',
+                'CMD': '발표',
+            },
+        ]
+
+        gyeonggi_alerts = filter_kma_warnings(rows, '경기')
+
+        self.assertEqual(gyeonggi_alerts[0]['areas'], ['양평동부', '양평서부'])
+        self.assertEqual(filter_kma_warnings(rows, '인천'), [])
+
+    def test_assigns_standalone_seohae5do_root_to_incheon(self):
+        row = {
+            'REG_UP': 'L1000000',
+            'REG_UP_KO': '전국',
+            'REG_ID': 'L1014000',
+            'REG_KO': '서해5도',
+            'WRN': '호우',
+            'LVL': '주의',
+            'CMD': '발표',
+        }
+
+        incheon_alerts = filter_kma_warnings([row], '인천')
+
+        self.assertEqual(incheon_alerts[0]['region'], '서해5도')
+        self.assertEqual(filter_kma_warnings([row], '경기'), [])
 
     def test_includes_ulleungdo_dokdo_in_gyeongbuk(self):
         alerts = filter_kma_warnings(
@@ -963,6 +1043,31 @@ L1150000,부산광역시,L1150100,부산동부,202607151000,202607151100,호우,
                         'REG_ID': reg_id,
                         'REG_KO': reg_ko,
                         'WRN': '호우',
+                        'LVL': '주의',
+                        'CMD': '발표',
+                    }],
+                    region,
+                )
+
+                self.assertEqual(alerts, [])
+
+    def test_excludes_marine_warning_codes_from_land_region_cards(self):
+        cases = (
+            ('인천', 'S1251100', 'S1251000', '인천·경기북부앞바다'),
+            ('경기', 'S1251200', 'S1251000', '인천·경기남부앞바다'),
+            ('부산', 'S1311100', 'S1311000', '부산앞바다'),
+            ('제주', 'S1323100', 'S1323000', '제주도북부앞바다'),
+        )
+
+        for region, reg_id, reg_up, reg_ko in cases:
+            with self.subTest(region=region, area=reg_ko):
+                alerts = filter_kma_warnings(
+                    [{
+                        'REG_UP': reg_up,
+                        'REG_UP_KO': reg_ko,
+                        'REG_ID': reg_id,
+                        'REG_KO': reg_ko,
+                        'WRN': '풍랑',
                         'LVL': '주의',
                         'CMD': '발표',
                     }],

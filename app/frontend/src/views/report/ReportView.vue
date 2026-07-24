@@ -1,22 +1,100 @@
 <template>
   <main class="diary-page" :style="{ '--report-bg': `url(${reportBg})` }">
+    <!-- 수동 갱신 프로그레스 모달 (Progress Overlay) -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="isRefreshing" class="refresh-progress-overlay" role="dialog" aria-modal="true" aria-label="마음리포트 분석 중">
+          <div class="refresh-progress-modal">
+            <div class="progress-header">
+              <div class="progress-icon-wrap character-icon-wrap">
+                <img :src="sparkle" class="sparkle-pulse" alt="" aria-hidden="true" />
+                <div class="character-avatar-badge">
+                  <img
+                    :src="characterSearchImgSrc"
+                    class="character-search-avatar"
+                    :alt="`${characterName}가 돋보기로 분석 중`"
+                  />
+                </div>
+              </div>
+              <h2 class="progress-title">{{ characterName }}가 마음 소식을 준비하는 중이에요</h2>
+              <p class="progress-subtitle">나눴던 이야기에서 소중한 기억과 마음 온도를 살펴보고 있어요</p>
+            </div>
+
+          <!-- 메인 프로그레스 바 -->
+          <div class="progress-bar-container">
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill" :style="{ width: `${refreshProgress}%` }">
+                <span class="progress-glow"></span>
+              </div>
+            </div>
+            <div class="progress-percentage">{{ Math.round(refreshProgress) }}%</div>
+          </div>
+
+          <!-- 단계별 파이프라인 스테이지 Indicator -->
+          <ul class="progress-stages">
+            <li
+              v-for="(stage, index) in refreshStages"
+              :key="stage.title"
+              class="stage-item"
+              :class="{
+                completed: currentStageIndex > index,
+                active: currentStageIndex === index,
+                pending: currentStageIndex < index
+              }"
+            >
+              <span class="stage-badge">
+                <template v-if="currentStageIndex > index">✓</template>
+                <template v-else-if="currentStageIndex === index">
+                  <span class="stage-spinner"></span>
+                </template>
+                <template v-else>{{ index + 1 }}</template>
+              </span>
+              <div class="stage-text">
+                <span class="stage-title">{{ stage.title }}</span>
+                <span class="stage-sub">{{ stage.desc }}</span>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
+
     <div class="diary-toolbar">
       <div class="refresh-copy">
-        <p class="refresh-context" :class="{ 'has-feedback': refreshFeedback }">
+        <div class="criteria-bar">
+          <details class="report-criteria">
+            <summary class="criteria-trigger">
+              리포트를 볼 수 있는 기준
+              <span class="criteria-help" aria-hidden="true">?</span>
+            </summary>
+            <div class="criteria-popover">
+              <p>내가 챗봇에게 보낸 메시지 수를 기준으로 해요.</p>
+              <ul>
+                <li>
+                  <strong>주간 리포트</strong>
+                  <span>일주일에 5번 이상</span>
+                  <span v-if="eligibility?.weekly" class="count-pill" :class="{ met: eligibility.weekly.is_eligible }">
+                    ({{ eligibility.weekly.current_count }}/5건)
+                  </span>
+                </li>
+                <li>
+                  <strong>월간 리포트</strong>
+                  <span>한 달에 20번 이상</span>
+                  <span v-if="eligibility?.monthly" class="count-pill" :class="{ met: eligibility.monthly.is_eligible }">
+                    ({{ eligibility.monthly.current_count }}/20건)
+                  </span>
+                </li>
+              </ul>
+            </div>
+          </details>
+          <span v-if="remainingChatNotice" class="remaining-notice-tag">
+            💬 {{ remainingChatNotice }}
+          </span>
+        </div>
+        <p v-if="refreshFeedback" class="refresh-context has-feedback">
+          {{ refreshFeedback }}
         </p>
-        <details class="report-criteria">
-          <summary class="criteria-trigger">
-            리포트를 볼 수 있는 기준
-            <span class="criteria-help" aria-hidden="true">?</span>
-          </summary>
-          <div class="criteria-popover">
-            <p>내가 챗봇에게 보낸 메시지 수를 기준으로 해요.</p>
-            <ul>
-              <li><strong>주간 리포트</strong><span>일주일에 5번 이상</span></li>
-              <li><strong>월간 리포트</strong><span>한 달에 20번 이상</span></li>
-            </ul>
-          </div>
-        </details>
       </div>
       <button
         type="button"
@@ -295,6 +373,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { reportApi } from '../../api/report.js'
+import { userApi } from '../../api/user.js'
 import reportBg from '../../assets/report-bg.png'
 
 import bubbleHeart from '../../assets/report/bubble-heart.png'
@@ -313,9 +392,105 @@ import { saveMindReportAsPdf } from './reportPdfSaver.js'
 const mascots = [flowRedpanda, flowOtter, flowBird, flowCat]
 const mascotFor = (index) => mascots[index % mascots.length]
 
+const currentUser = ref(null)
+
+const fetchCurrentUser = async () => {
+  try {
+    const data = await userApi.getCurrentUser()
+    currentUser.value = data?.user || data
+  } catch (e) {
+    console.error('Failed to fetch user in ReportView:', e)
+  }
+}
+
+const characterInfoMap = {
+  pori: { name: '포리', folder: 'redpanda' },
+  redpanda: { name: '포리', folder: 'redpanda' },
+  kkami: { name: '까미', folder: 'cat' },
+  cat: { name: '까미', folder: 'cat' },
+  toto: { name: '토토', folder: 'otter' },
+  otter: { name: '토토', folder: 'otter' },
+  yeoul: { name: '여울이', folder: 'bird' },
+  bird: { name: '여울이', folder: 'bird' },
+}
+
+const activeCharacter = computed(() => {
+  const code = currentUser.value?.character || 'pori'
+  return characterInfoMap[code] || characterInfoMap.pori
+})
+
+const characterName = computed(() => activeCharacter.value.name)
+
+const characterSearchImgSrc = computed(() => {
+  return `/characters/${activeCharacter.value.folder}/search.png`
+})
+
 const reports = ref([])
+const eligibility = ref(null)
 const isLoading = ref(true)
 const isRefreshing = ref(false)
+const refreshProgress = ref(0)
+const currentStageIndex = ref(0)
+let progressTimer = null
+
+const remainingChatNotice = computed(() => {
+  if (!eligibility.value?.weekly) return ''
+
+  const { current_count, required_count, missing_count } = eligibility.value.weekly
+
+  if (missing_count > 0) {
+    return `앞으로 ${missing_count}건 더 대화하면 리포트를 만들 수 있어요 (${current_count}/${required_count}건)`
+  }
+
+  return ''
+})
+
+const refreshStages = computed(() => [
+  {
+    title: `${characterName.value}가 대화 조각을 모으는 중`,
+    desc: '나눴던 이야기와 소중한 기억들을 모으고 있어요',
+  },
+  {
+    title: `${characterName.value}가 마음 온도를 읽는 중`,
+    desc: '하루하루 변화해 온 마음의 흐름을 다독이고 있어요',
+  },
+  {
+    title: `${characterName.value}가 감정의 원인을 찾는 중`,
+    desc: '생각과 마음에 힘이 되어준 가닥을 살피고 있어요',
+  },
+  {
+    title: `${characterName.value}가 다정한 가이드를 적는 중`,
+    desc: '당신을 위한 자상한 안부와 실천 조각을 담고 있어요',
+  },
+  {
+    title: `${characterName.value}가 마음리포트를 완성하는 중`,
+    desc: '따뜻한 위로와 응원을 담아 마무리하고 있어요',
+  },
+])
+
+const startProgressTimer = () => {
+  refreshProgress.value = 5
+  currentStageIndex.value = 0
+  if (progressTimer) clearInterval(progressTimer)
+
+  progressTimer = setInterval(() => {
+    if (refreshProgress.value < 92) {
+      refreshProgress.value += Math.random() * 2.5 + 1.2
+      if (refreshProgress.value < 18) currentStageIndex.value = 0
+      else if (refreshProgress.value < 42) currentStageIndex.value = 1
+      else if (refreshProgress.value < 68) currentStageIndex.value = 2
+      else if (refreshProgress.value < 88) currentStageIndex.value = 3
+      else currentStageIndex.value = 4
+    }
+  }, 180)
+}
+
+const completeProgress = () => {
+  if (progressTimer) clearInterval(progressTimer)
+  refreshProgress.value = 100
+  currentStageIndex.value = 5
+}
+
 const fetchError = ref('')
 const refreshFeedback = ref('')
 const isMonthFilterOpen = ref(false)
@@ -407,10 +582,15 @@ const filteredReports = computed(() => {
   )
 })
 
+const defaultReport = computed(() => {
+  const realReport = filteredReports.value.find((report) => !report.is_fallback)
+  return realReport ?? filteredReports.value[0] ?? null
+})
+
 const currentReport = computed(() => (
   filteredReports.value.find(
     (report) => report.id === selectedReportId.value,
-  ) ?? filteredReports.value[0] ?? null
+  ) ?? defaultReport.value
 ))
 
 const headerDate = computed(() => {
@@ -427,7 +607,8 @@ const headerDate = computed(() => {
 })
 
 watch(selectedMonth, () => {
-  selectedReportId.value = filteredReports.value[0]?.id ?? null
+  const targetReport = filteredReports.value.find((report) => !report.is_fallback) ?? filteredReports.value[0]
+  selectedReportId.value = targetReport?.id ?? null
 })
 
 watch(latestMonth, (newMonth) => {
@@ -778,15 +959,19 @@ const emotionSegments = computed(() => emotionPoints.value.slice(0, -1).map(
 ))
 
 const applyReports = (data) => {
+  if (data?.eligibility) {
+    eligibility.value = data.eligibility
+  }
+
   reports.value = Array.isArray(data?.reports)
     ? data.reports.map(normalizeReport)
     : []
 
-  const firstReport = reportsByNewest.value[0]
+  const targetReport = reportsByNewest.value.find((r) => !r.is_fallback) ?? reportsByNewest.value[0]
 
-  if (firstReport) {
-    selectedMonth.value = getReportMonth(firstReport)
-    selectedReportId.value = firstReport.id
+  if (targetReport) {
+    selectedMonth.value = getReportMonth(targetReport)
+    selectedReportId.value = targetReport.id
   } else {
     selectedMonth.value = ''
     selectedReportId.value = null
@@ -810,15 +995,23 @@ const refreshReports = async () => {
   try {
     isRefreshing.value = true
     refreshFeedback.value = ''
+    startProgressTimer()
+
     const data = await reportApi.refreshReports()
+    completeProgress()
+
+    await new Promise((resolve) => setTimeout(resolve, 400))
     applyReports(data)
     fetchError.value = ''
     refreshFeedback.value = data?.message || '최신 대화를 반영한 리포트를 확인했어요.'
   } catch (error) {
+    if (progressTimer) clearInterval(progressTimer)
     refreshFeedback.value = error?.message ?? '최신 대화를 지금 반영하지 못했어요. 기존 정기 리포트는 그대로 볼 수 있어요.'
     console.error('Failed to refresh reports:', error)
   } finally {
     isRefreshing.value = false
+    refreshProgress.value = 0
+    currentStageIndex.value = 0
   }
 }
 
@@ -846,6 +1039,7 @@ const saveCurrentReportAsPdf = async () => {
 }
 
 onMounted(() => {
+  fetchCurrentUser()
   loadReports()
 })
 </script>
@@ -887,6 +1081,40 @@ button {
   display: grid;
   gap: 6px;
   min-width: 0;
+}
+
+.criteria-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.remaining-notice-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: rgba(236, 72, 153, 0.16);
+  border: 1px solid rgba(244, 114, 182, 0.38);
+  border-radius: 100px;
+  color: #fff8df;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.count-pill {
+  font-size: 11.5px;
+  font-style: normal;
+  font-weight: 700;
+  color: #f472b6;
+  white-space: nowrap;
+}
+
+.count-pill.met {
+  color: #a7f3d0;
 }
 
 .refresh-context {
@@ -1894,4 +2122,275 @@ button {
   }
 }
 
+/* ────── 수동 갱신 프로그레스 모달 ────── */
+.refresh-progress-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(8, 3, 20, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.refresh-progress-modal {
+  width: min(520px, 92vw);
+  padding: 32px 28px;
+  background: linear-gradient(145deg, rgba(28, 15, 58, 0.94) 0%, rgba(18, 9, 38, 0.98) 100%);
+  border: 1px solid rgba(216, 180, 254, 0.28);
+  border-radius: 24px;
+  box-shadow:
+    0 24px 60px -12px rgba(0, 0, 0, 0.65),
+    0 0 45px rgba(168, 85, 247, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  color: #fff8df;
+  text-align: center;
+  animation: modalPop 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalPop {
+  0% { opacity: 0; transform: scale(0.92) translateY(12px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.progress-header {
+  margin-bottom: 22px;
+}
+
+.progress-icon-wrap {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.character-icon-wrap {
+  width: 96px;
+  height: 96px;
+  margin: 0 auto 14px;
+}
+
+.sparkle-pulse {
+  position: absolute;
+  width: 96px;
+  height: 96px;
+  opacity: 0.6;
+  animation: spinPulse 3s linear infinite;
+}
+
+.character-avatar-badge {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffffff 45%, rgba(243, 232, 255, 0.9) 100%);
+  box-shadow:
+    0 0 24px rgba(168, 85, 247, 0.45),
+    inset 0 0 8px rgba(0, 0, 0, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 2px solid rgba(216, 180, 254, 0.5);
+  z-index: 1;
+  animation: searchBob 2.5s ease-in-out infinite;
+}
+
+.character-search-avatar {
+  width: 76px;
+  height: 76px;
+  object-fit: contain;
+}
+
+@keyframes searchBob {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-7px) rotate(3deg); }
+}
+
+.heart-bounce {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  z-index: 1;
+  animation: floatHeart 2s ease-in-out infinite;
+}
+
+@keyframes spinPulse {
+  0% { transform: rotate(0deg) scale(0.95); opacity: 0.4; }
+  50% { transform: rotate(180deg) scale(1.1); opacity: 0.85; }
+  100% { transform: rotate(360deg) scale(0.95); opacity: 0.4; }
+}
+
+@keyframes floatHeart {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.progress-title {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+}
+
+.progress-subtitle {
+  margin: 0;
+  font-size: 13.5px;
+  color: rgba(233, 213, 255, 0.78);
+}
+
+.progress-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.progress-bar-track {
+  flex: 1;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 100px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  position: relative;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #a855f7 0%, #ec4899 50%, #3b82f6 100%);
+  border-radius: 100px;
+  transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.progress-glow {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 20px;
+  background: #ffffff;
+  box-shadow: 0 0 12px 4px rgba(255, 255, 255, 0.85);
+  opacity: 0.75;
+  border-radius: 100px;
+}
+
+.progress-percentage {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f472b6;
+  min-width: 40px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-stages {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+
+.stage-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  transition: all 0.3s ease;
+}
+
+.stage-item.completed {
+  background: rgba(168, 85, 247, 0.12);
+  border-color: rgba(168, 85, 247, 0.3);
+}
+
+.stage-item.active {
+  background: rgba(236, 72, 153, 0.15);
+  border-color: rgba(236, 72, 153, 0.45);
+  box-shadow: 0 0 16px rgba(236, 72, 153, 0.15);
+}
+
+.stage-item.pending {
+  opacity: 0.45;
+}
+
+.stage-badge {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.7);
+  flex-shrink: 0;
+}
+
+.stage-item.completed .stage-badge {
+  background: #a855f7;
+  color: #ffffff;
+}
+
+.stage-item.active .stage-badge {
+  background: #ec4899;
+  color: #ffffff;
+}
+
+.stage-spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.stage-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.stage-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  line-height: 1.3;
+}
+
+.stage-sub {
+  font-size: 11px;
+  color: rgba(233, 213, 255, 0.65);
+  line-height: 1.3;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
 </style>

@@ -72,7 +72,7 @@ class ElectraEmotionScorer:
                 if probs:
                     row = [float(probs.get(c, 0.0)) for c in EMO4_CLASSES]
                 elif label in EMO4_CLASSES:   # 분포 미지원 폴백 — 라벨 원핫
-                    row[EMO4_CLASSES.index(label)] = float(conf or 1.0)
+                    row[EMO4_CLASSES.index(label)] = 1.0
             except Exception as e:
                 logger.warning(f'원격 감정 채점 실패(0행 처리): {e}')
             rows.append(row)
