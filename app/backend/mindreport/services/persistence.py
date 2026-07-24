@@ -19,7 +19,10 @@ def list_latest_period_reports(user) -> list[dict[str, Any]]:
     seen_periods: set[tuple[Any, ...]] = set()
     monthly_label = period_label(PERIOD_MONTH)
 
-    for report in MindReport.objects.filter(user=user):
+    # Prioritize real non-fallback reports (is_fallback=False) over dummy fallback reports for the same period
+    queryset = MindReport.objects.filter(user=user).order_by('is_fallback', '-created_at')
+
+    for report in queryset:
         created_date = timezone.localtime(report.created_at).date()
         if report.report_type.startswith(monthly_label):
             period_key = (PERIOD_MONTH, created_date.year, created_date.month)

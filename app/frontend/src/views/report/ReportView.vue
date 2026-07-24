@@ -407,10 +407,15 @@ const filteredReports = computed(() => {
   )
 })
 
+const defaultReport = computed(() => {
+  const realReport = filteredReports.value.find((report) => !report.is_fallback)
+  return realReport ?? filteredReports.value[0] ?? null
+})
+
 const currentReport = computed(() => (
   filteredReports.value.find(
     (report) => report.id === selectedReportId.value,
-  ) ?? filteredReports.value[0] ?? null
+  ) ?? defaultReport.value
 ))
 
 const headerDate = computed(() => {
@@ -427,7 +432,8 @@ const headerDate = computed(() => {
 })
 
 watch(selectedMonth, () => {
-  selectedReportId.value = filteredReports.value[0]?.id ?? null
+  const targetReport = filteredReports.value.find((report) => !report.is_fallback) ?? filteredReports.value[0]
+  selectedReportId.value = targetReport?.id ?? null
 })
 
 watch(latestMonth, (newMonth) => {
@@ -782,11 +788,11 @@ const applyReports = (data) => {
     ? data.reports.map(normalizeReport)
     : []
 
-  const firstReport = reportsByNewest.value[0]
+  const targetReport = reportsByNewest.value.find((r) => !r.is_fallback) ?? reportsByNewest.value[0]
 
-  if (firstReport) {
-    selectedMonth.value = getReportMonth(firstReport)
-    selectedReportId.value = firstReport.id
+  if (targetReport) {
+    selectedMonth.value = getReportMonth(targetReport)
+    selectedReportId.value = targetReport.id
   } else {
     selectedMonth.value = ''
     selectedReportId.value = null
