@@ -1,3 +1,6 @@
+// 2026-07-23: PUT/POST/DELETE는 CSRF 토큰 필수 — 생짜 fetch라 axios 인터셉터를
+// 못 타서 운영(세션 인증)에서 전부 403이었다. 공용 토큰 저장소에서 첨부한다.
+import { getCsrfToken } from '../../../api/client.js'
 import {
   MEMORY_API_ROUTES,
 } from "../config/memory.constants";
@@ -47,6 +50,7 @@ export async function deleteMemoryVaultItem(memoryId) {
   const response = await requestFirstAvailable(
     (endpoint) => fetch(`${endpoint}${encodedId}/`, {
       method: "DELETE",
+      headers: { "X-CSRFToken": getCsrfToken() },
       credentials: "include",
     }),
     "Memory delete API is not reachable",
