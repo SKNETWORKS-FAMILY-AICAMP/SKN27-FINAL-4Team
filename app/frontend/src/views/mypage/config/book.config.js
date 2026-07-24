@@ -18,6 +18,12 @@ export const BOOK_THEME_NAMES = Object.freeze({
   hobbies: "취미 기반 추천",
 });
 
+export const BOOK_THEME_GUIDES = Object.freeze({
+  emotion: "오늘 기록된 감정과 책의 분위기·주제를 비교해 추천해요.",
+  interests: "프로필에 저장된 관심사와 책의 주제·분야를 비교해 추천해요.",
+  hobbies: "프로필에 저장된 취미와 책의 내용·활용성을 비교해 추천해요.",
+});
+
 export const DEFAULT_BOOK_SOURCE_PROVIDER = Object.freeze({
   label: "Kakao Daum 책 검색",
   short_label: "Kakao 도서정보",
