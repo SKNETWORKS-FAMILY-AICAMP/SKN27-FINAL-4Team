@@ -30,6 +30,25 @@ def get_emotion_labels_by_date(request, dates):
     return {message.created_at.date(): message.emotion_label for message in messages}
 
 
+def get_emotion_labels_in_range(request, start_date, end_date):
+    """Return the last analysed chat emotion for every day in a month range."""
+    if not request.user.is_authenticated:
+        return {}
+
+    messages = (
+        ChatMessage.objects.filter(
+            session__user=request.user,
+            role='assistant',
+            emotion_label__isnull=False,
+            created_at__date__gte=start_date,
+            created_at__date__lt=end_date,
+        )
+        .exclude(emotion_label='')
+        .order_by('created_at')
+    )
+    return {message.created_at.date().isoformat(): message.emotion_label for message in messages}
+
+
 def serialize_daily_fortune_with_emotion(request, fortune):
     data = DailyFortuneSerializer(fortune).data
     data['emotion_label'] = get_emotion_labels_by_date(request, [fortune.date]).get(fortune.date)
@@ -64,9 +83,11 @@ def get_calendar_month(request):
             date__lt=end_date,
         ).order_by('date')
 
-    emotion_by_date = get_emotion_labels_by_date(request, [fortune.date for fortune in fortunes])
+    emotion_by_date = get_emotion_labels_in_range(request, start_date, end_date)
     fortune_by_date = {fortune.date.isoformat(): fortune for fortune in fortunes}
-    dates = sorted(set(fortune_by_date) | set(checkins))
+    # A chat emotion is a calendar record in its own right: do not require a
+    # daily tarot card or check-in before showing the character expression.
+    dates = sorted(set(fortune_by_date) | set(checkins) | set(emotion_by_date))
     return Response([
         {
             'date': date_key,
@@ -74,7 +95,7 @@ def get_calendar_month(request):
             'topic': fortune_by_date[date_key].topic if date_key in fortune_by_date else 'checkin',
             'title': fortune_by_date[date_key].title if date_key in fortune_by_date else '오늘의 나',
             'keyword': fortune_by_date[date_key].keyword if date_key in fortune_by_date else '',
-            'emotion_label': emotion_by_date.get(fortune_by_date[date_key].date) if date_key in fortune_by_date else (checkins[date_key] or {}).get('primary_emotion'),
+            'emotion_label': emotion_by_date.get(date_key) or (checkins.get(date_key) or {}).get('primary_emotion'),
             'has_fortune': bool(fortune_by_date[date_key].content) if date_key in fortune_by_date else False,
             'checkin': checkins.get(date_key),
         }

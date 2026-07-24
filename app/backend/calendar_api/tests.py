@@ -1,7 +1,9 @@
-from datetime import date
+from datetime import date, datetime
 
 from django.test import RequestFactory, TestCase
+from django.utils import timezone
 
+from chat.models import ChatMessage, ChatSession
 from user.models import User
 
 from .models import DailyFortune
@@ -81,3 +83,32 @@ class CalendarPermissionTests(TestCase):
         )
 
         self.assertIn(response.status_code, (401, 403))
+
+
+class CalendarChatEmotionTests(TestCase):
+    def test_month_includes_a_day_that_has_only_a_chat_emotion(self):
+        user = User.objects.create_user(
+            email='calendar-emotion@example.com',
+            password='test-password',
+            nickname='emotion-test',
+        )
+        session = ChatSession.objects.create(user=user)
+        message = ChatMessage.objects.create(
+            session=session,
+            role='assistant',
+            content='I am glad things improved.',
+            emotion_label='joy',
+        )
+        target_datetime = timezone.make_aware(datetime(2026, 7, 20, 12, 0, 0))
+        ChatMessage.objects.filter(pk=message.pk).update(created_at=target_datetime)
+
+        self.client.force_login(user)
+        response = self.client.get('/api/calendar/month/', {'year': 2026, 'month': 7})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()), 1)
+        entry = response.json()[0]
+        self.assertEqual(entry['date'], '2026-07-20')
+        self.assertEqual(entry['emotion_label'], 'joy')
+        self.assertFalse(entry['has_fortune'])
+        self.assertIsNone(entry['checkin'])
