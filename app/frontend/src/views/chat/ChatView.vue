@@ -998,32 +998,38 @@ const skyAssign = computed(() => {
   const map = {}
   for (const k of [...zodiacLeft, ...zodiacRight]) map[k] = []
 
-  // ① 일정 → 해당 날짜의 별자리 (오늘 + dday로 날짜 계산)
+  // ① 일정 → 해당 날짜의 별자리 (오늘 + dday로 날짜 계산).
+  // 이번 달 별자리 몫은 아래 ②에서 2개까지만 배정 (종류별 2개 규칙 — 팝오버와 동일).
+  const seasonUpcoming = []
   for (const u of (d.upcoming || [])) {
     const when = new Date()
     when.setDate(when.getDate() + (u.dday || 0))
     const key = getSeasonConstellation(when).key
-    map[key].push({ key: 'u' + u.name, color: '#FCD34D',
-                    label: u.name + (u.dday === 0 ? ' 오늘' : ' D-' + u.dday),
-                    ask: `${u.name} 얼마 안 남았지? 같이 얘기해줘`, name: u.name })
+    const mem = { key: 'u' + u.name, color: '#FCD34D',
+                  label: u.name + (u.dday === 0 ? ' 오늘' : ' D-' + u.dday),
+                  ask: `${u.name} 얼마 안 남았지? 같이 얘기해줘`, name: u.name }
+    if (key === seasonKey) seasonUpcoming.push(mem)
+    else map[key].push(mem)
   }
 
   // ② 날짜 없는 기억들 — 이번 달 별자리의 남은 칸에 사람→취향→최근 순으로 번갈아 담아
   // 한 종류가 독식하지 못하게 함 (일정이 많아도 취향·사람이 최소 하나씩은 보이게).
   // 넘치는 기억은 하늘에 억지로 안 올림 — 잠든 별자리엔 "정말 그 계절의 일정"만
   // 걸린다 (배치의 정직함 유지, 나머지는 더보기에서 전부 확인).
-  const groups = [
-    (d.people || []).map(p => ({ key: 'p' + p.name, color: '#7dd3fc', label: p.name,
-                                 ask: `${p.name} 얘기 기억하고 있어?`, name: p.name })),
-    (d.prefs || []).map(t => ({ key: 't' + t.topic, color: '#f9a8d4', label: t.topic,
-                                ask: `나 요즘 ${t.topic} 좋아하는 거 알지?`, name: t.topic })),
-    (d.recent || []).map(n => ({ key: 'r' + n, color: '#cbc3e6', label: n,
-                                 ask: `저번에 ${n} 얘기했던 거 기억나?`, name: n })),
-  ]
-  let gi = 0, guard = 30
-  while (map[seasonKey].length < 6 && guard-- > 0 && groups.some(g => g.length)) {
-    const g = groups[gi % groups.length]; gi += 1
-    if (g.length) map[seasonKey].push(g.shift())
+  const people = (d.people || []).map(p => ({ key: 'p' + p.name, color: '#7dd3fc', label: p.name,
+                                              ask: `${p.name} 얘기 기억하고 있어?`, name: p.name }))
+  const prefs = (d.prefs || []).map(t => ({ key: 't' + t.topic, color: '#f9a8d4', label: t.topic,
+                                            ask: `나 요즘 ${t.topic} 좋아하는 거 알지?`, name: t.topic }))
+  const recent = (d.recent || []).map(n => ({ key: 'r' + n, color: '#cbc3e6', label: n,
+                                              ask: `저번에 ${n} 얘기했던 거 기억나?`, name: n }))
+
+  // 종류별 2개씩 (팝오버 대표 규칙과 동일): 일정 2 · 사람 2 · 취향 2 = 6.
+  map[seasonKey].push(...seasonUpcoming.splice(0, 2))
+  map[seasonKey].push(...people.splice(0, 2))
+  map[seasonKey].push(...prefs.splice(0, 2))
+  // 어떤 종류가 모자라 6이 안 되면 남은 기억(일정 초과분→최근→사람→취향)으로 채움
+  for (const g of [seasonUpcoming, recent, people, prefs]) {
+    while (map[seasonKey].length < 6 && g.length) map[seasonKey].push(g.shift())
   }
   return map
 })

@@ -126,6 +126,9 @@
 
 /* 배경 위로 실제 UI를 올림 */
 .chat-page > *:not(.chat-bg) { position: relative; z-index: 1; }
+/* 헤더를 채팅 스크롤 영역보다 위층으로 — 별자리 하늘이 헤더 밖(채팅 영역 초입)까지
+   내려와도 투명한 채팅 레이어에 마우스를 안 뺏기게 (아래 두 별 호버 불가 버그) */
+.chat-page > .mind-header { z-index: 2; }
 
 /* ── 시크릿챗 패널 톤: 차분한 푸른/은빛 ── */
 .is-secret .left-panel,

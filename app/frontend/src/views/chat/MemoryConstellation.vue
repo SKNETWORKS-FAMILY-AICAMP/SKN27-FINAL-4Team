@@ -18,12 +18,13 @@
          :style="{ animationDelay: s.delay }"
          @click="s.mem && $emit('pick', s.mem)">
         <circle v-if="s.mem" :cx="s.x" :cy="s.y" r="7" fill="transparent" />
-        <circle :cx="s.x" :cy="s.y" :r="s.mem ? 2.1 : (active ? 1.6 : 1.7)"
+        <!-- 기억 별 = 크고 + 제 색 광륜 / 장식 별 = 작고 수수하게 (한눈에 구분되게) -->
+        <circle :cx="s.x" :cy="s.y" :r="s.mem ? 2.8 : (active ? 1.2 : 1.7)"
                 :fill="s.mem ? s.mem.color : (active ? '#fff3d6' : starTint(s.idx))" />
-        <circle v-if="!s.mem" :cx="s.x" :cy="s.y" r="3.4"
-                :fill="active ? '#fcd34d' : starTint(s.idx)" opacity="0.16" />
-        <circle v-if="s.mem" :cx="s.x" :cy="s.y" r="4.2"
-                :fill="s.mem.color" opacity="0.18" />
+        <circle v-if="s.mem" :cx="s.x" :cy="s.y" r="5.6"
+                :fill="s.mem.color" opacity="0.28" />
+        <circle v-if="!s.mem && !active" :cx="s.x" :cy="s.y" r="3.4"
+                :fill="starTint(s.idx)" opacity="0.16" />
         <text v-if="s.mem" :x="labelX(s.x)" :y="s.y + 8.5" class="mc-label"
               text-anchor="middle">{{ s.mem.label }}</text>
       </g>
@@ -51,9 +52,9 @@ const cons = props.conKey
   ? { key: props.conKey, ...CONSTELLATIONS[props.conKey] }
   : getSeasonConstellation()
 
-// 이번 달이 아닌 별자리의 별 색 — 금·청·은·백이 한 별자리 안에서 섞여 빛남.
-// 별자리 이름으로 시작점을 어긋나게 해서 옆 별자리끼리 패턴이 안 겹치게.
-const STAR_TINTS = ['#fcd34d', '#7dd3fc', '#cbd5e1', '#f6f3ff']
+// 이번 달이 아닌 별자리의 별 색 — 은·백만 (색깔 별 = 기억이라는 규칙을 지키기 위해
+// 기억 없는 별은 무채색. 금=일정·하늘=사람·분홍=취향이 한눈에 구분되게).
+const STAR_TINTS = ['#cbd5e1', '#f6f3ff']
 const _seed = [...cons.key].reduce((a, ch) => a + ch.charCodeAt(0), 0)
 function starTint(i) { return STAR_TINTS[(_seed + i) % STAR_TINTS.length] }
 
