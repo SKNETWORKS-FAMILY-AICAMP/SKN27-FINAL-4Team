@@ -7,6 +7,7 @@ from urllib.parse import urlencode, urlparse
 from django.utils import timezone
 
 from .constants import (
+    ADULT_CONTENT_PATTERNS,
     ALLOWED_COVER_HOSTS,
     ALLOWED_COVER_HOST_SUFFIXES,
     BASIS_TOKEN_ALIASES,
@@ -17,6 +18,11 @@ from .constants import (
     NON_READING_TITLE_MARKERS,
     PERSONALIZATION_STOPWORDS,
     THESIS_TITLE_MARKERS,
+)
+
+
+_ADULT_CONTENT_REGEXES = tuple(
+    re.compile(pattern, re.IGNORECASE) for pattern in ADULT_CONTENT_PATTERNS
 )
 
 
@@ -199,6 +205,23 @@ def _without_excluded_books(books, excluded_isbns=None):
     return [book for book in candidates if book.get("isbn") not in excluded]
 
 
+def _is_safe_book_candidate(book):
+    """Return False when public catalog metadata signals adult-only content."""
+    if not isinstance(book, dict):
+        return False
+    source_result = book.get("source_result")
+    source_result = source_result if isinstance(source_result, dict) else {}
+    metadata = " ".join(
+        [
+            *(str(book.get(field) or "") for field in ("title", "description")),
+            *(str(source_result.get(field) or "") for field in ("title", "description")),
+        ]
+    )
+    normalized = re.sub(r"[\[\]{}()<>_/·:：-]+", " ", metadata)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return not any(pattern.search(normalized) for pattern in _ADULT_CONTENT_REGEXES)
+
+
 def _open_library_cover_url(isbn):
     return f"https://covers.openlibrary.org/b/isbn/{isbn}-L.jpg?default=false"
 
@@ -312,11 +335,20 @@ def _personalization_tokens(keyword, basis_values, content_terms=None):
 
 
 def _expanded_basis_tokens(basis_values):
-    tokens = _personalization_tokens("", basis_values)
+    tokens = [
+        token
+        for token in _personalization_tokens("", basis_values)
+        if token not in CATALOG_ACTION_TOKENS
+    ]
     expanded = list(tokens)
-    for token in tokens:
+    compact_basis_values = [
+        re.sub(r"[^0-9A-Za-z가-힣]", "", str(value or "")).lower()
+        for value in basis_values or []
+    ]
+    for token in [*tokens, *compact_basis_values]:
         for source, related in BASIS_TOKEN_ALIASES.items():
-            if source not in token and token not in source:
+            compact_source = re.sub(r"[^0-9A-Za-z가-힣]", "", source).lower()
+            if compact_source not in token and token not in compact_source:
                 continue
             for value in related:
                 if value not in expanded:

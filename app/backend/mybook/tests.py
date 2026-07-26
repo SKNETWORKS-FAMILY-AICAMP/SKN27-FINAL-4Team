@@ -15,9 +15,11 @@ from .agent import (
     _cached_external_book_info,
     _is_general_book,
     _is_recent_book,
+    _is_safe_book_candidate,
     _daum_book_search_url,
     _nlk_items,
     _nlk_probe_page_numbers,
+    _rank_kakao_books,
     _rank_personalized_books,
     _request_kakao_book_info,
     _request_nlk_books,
@@ -26,6 +28,7 @@ from .agent import (
 )
 from .utils import _catalog_search_terms, _nlk_search_terms
 from .models import DailyBookRecommendation
+from .services.recommendation_service import payload_has_real_books
 from .views import book_recommendation
 
 
@@ -50,6 +53,31 @@ def _general_book_item(**overrides):
 
 
 class NationalBibliographyBookSearchTests(SimpleTestCase):
+    def test_adult_content_filter_blocks_explicit_and_suspicious_metadata(self):
+        blocked = [
+            {'title': '[19금] 위험한 로맨스', 'description': ''},
+            {'title': '평범한 제목', 'description': '청소년 이용불가 성인 전용 소설'},
+            {'title': '고수위 관능소설', 'description': ''},
+            {
+                'title': '평범한 제목',
+                'source_result': {'description': '1 9 금 성인 로맨스'},
+            },
+        ]
+
+        self.assertTrue(all(not _is_safe_book_candidate(book) for book in blocked))
+        self.assertTrue(_is_safe_book_candidate({
+            'title': '19세기 영국 문학',
+            'description': '성인 학습자를 위한 문학 교양서',
+        }))
+
+    def test_cached_adult_book_payload_is_not_considered_valid_fallback(self):
+        self.assertFalse(payload_has_real_books({
+            'books': [{
+                'title': '성인 전용 로맨스',
+                'review': '이 책을 추천합니다.',
+            }],
+        }))
+
     def test_keyword_prompt_requires_an_exact_profile_topic_anchor(self):
         prompt = BookRecommendationAgent._keyword_prompt(
             {},
@@ -88,6 +116,31 @@ class NationalBibliographyBookSearchTests(SimpleTestCase):
 
         self.assertEqual(keyword, '사진 찍기 빛과 구도 실전')
         self.assertEqual(content_terms[0], '사진 찍기')
+
+    @patch.object(BookRecommendationAgent, '_search_kakao_books')
+    def test_candidate_search_ranks_only_the_rotated_profile_topic(self, search_books):
+        search_books.return_value = [{'title': '사진 촬영의 기술'}]
+        theme = {
+            'id': 'hobbies',
+            'keyword': '사진촬영 구도 기술',
+            'basis_values': ['사진촬영', '산책'],
+            'selected_basis': '사진촬영',
+            'content_terms': ['사진촬영', '구도'],
+            'search_terms': ['사진 촬영'],
+            'excluded_isbns': [],
+        }
+
+        BookRecommendationAgent._search_theme_candidates(theme)
+
+        search_books.assert_called_once_with(
+            '사진촬영 구도 기술',
+            display=8,
+            basis_values=['사진촬영'],
+            content_terms=['사진촬영', '구도'],
+            search_terms=['사진 촬영'],
+            theme_id='hobbies',
+            excluded_isbns=[],
+        )
 
     @patch.object(
         BookRecommendationAgent,
@@ -247,6 +300,20 @@ class NationalBibliographyBookSearchTests(SimpleTestCase):
                     'translators': [],
                     'price': 0,
                     'sale_price': 0,
+                    'thumbnail': '',
+                    'status': '정상판매',
+                },
+                {
+                    'title': '[19금] 근력 운동 뒤의 은밀한 이야기',
+                    'contents': '성인 전용 고수위 소설',
+                    'url': 'https://search.daum.net/search?w=bookpage&bookId=adult',
+                    'isbn': '9788996991342',
+                    'datetime': '2024-03-01T00:00:00.000+09:00',
+                    'authors': ['테스트 저자'],
+                    'publisher': '테스트 출판사',
+                    'translators': [],
+                    'price': 15000,
+                    'sale_price': 13000,
                     'thumbnail': '',
                     'status': '정상판매',
                 },
@@ -416,6 +483,58 @@ class NationalBibliographyBookSearchTests(SimpleTestCase):
 
         self.assertEqual(ranked[0]['title'], '사진 촬영의 기술')
         self.assertIn('사진', ranked[0]['match_terms'])
+
+    def test_kakao_profile_ranking_rejects_other_saved_topic_and_incidental_result(self):
+        ranked = _rank_kakao_books(
+            [
+                {
+                    'title': '마음을 걷는 산책 에세이',
+                    'description': '산책과 휴식에 관한 이야기',
+                    'author': '저자',
+                    'publisher': '출판사',
+                    'matched_queries': ['사진 촬영'],
+                    'query_index': 0,
+                    'result_index': 0,
+                },
+                {
+                    'title': '빛으로 완성하는 한 장',
+                    'description': '카메라 노출과 사진 촬영 구도를 단계별로 설명한다.',
+                    'author': '저자',
+                    'publisher': '출판사',
+                    'matched_queries': ['사진 촬영'],
+                    'query_index': 0,
+                    'result_index': 1,
+                },
+            ],
+            keyword='사진촬영 구도 기술',
+            basis_values=['사진촬영'],
+            content_terms=['구도', '노출'],
+            search_terms=['사진 촬영'],
+            theme_id='hobbies',
+        )
+
+        self.assertEqual([book['title'] for book in ranked], ['빛으로 완성하는 한 장'])
+        self.assertIn('촬영', ranked[0]['direct_basis_match_terms'])
+
+    def test_kakao_profile_ranking_accepts_two_concrete_topic_subconcepts(self):
+        ranked = _rank_kakao_books(
+            [{
+                'title': '빛으로 완성하는 한 장',
+                'description': '노출과 구도를 단계별 실습으로 익힌다.',
+                'author': '저자',
+                'publisher': '출판사',
+                'query_index': 0,
+                'result_index': 0,
+            }],
+            keyword='사진촬영 구도 기술',
+            basis_values=['사진촬영'],
+            content_terms=['구도', '노출'],
+            search_terms=['사진 촬영'],
+            theme_id='hobbies',
+        )
+
+        self.assertEqual([book['title'] for book in ranked], ['빛으로 완성하는 한 장'])
+        self.assertEqual(ranked[0]['intent_metadata_match_terms'], ['구도', '노출'])
 
     def test_profile_basis_outweighs_peripheral_search_word(self):
         books = [
@@ -869,7 +988,7 @@ class NationalBibliographyBookSearchTests(SimpleTestCase):
             excluded_isbns=[],
         )
         self.assertTrue(result['selection_policy']['general_books_only'])
-        self.assertEqual(result['recommendation_engine'], 'kakao_books_v2')
+        self.assertEqual(result['recommendation_engine'], 'kakao_books_v3')
         self.assertEqual(result['selection_policy']['candidate_source'], 'Kakao Daum 책 검색')
         self.assertEqual(
             result['source_disclosure']['cover_metadata'],
@@ -1275,7 +1394,7 @@ class BookRecommendationViewStabilityTests(TestCase):
     ):
         build_profile.return_value = self.profile
         old_payload = {
-            'recommendation_engine': 'kakao_books_v2',
+            'recommendation_engine': 'kakao_books_v3',
             'recommendation_history': {
                 'isbns': {
                     'hobbies': ['9788959710256', '9788937460449'],
@@ -1293,7 +1412,7 @@ class BookRecommendationViewStabilityTests(TestCase):
             }],
         }
         recommend.return_value = {
-            'recommendation_engine': 'kakao_books_v2',
+            'recommendation_engine': 'kakao_books_v3',
             'books': [{
                 'theme_id': 'hobbies',
                 'title': '새 추천',

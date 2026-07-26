@@ -59,6 +59,7 @@ from .utils import (
     _first_text,
     _is_general_book,
     _is_recent_book,
+    _is_safe_book_candidate,
     _issued_year,
     _kakao_search_queries,
     _normalize_book_author,
@@ -169,6 +170,8 @@ class BookRecommendationAgent:
                     "ISBN", "가격", "판매상태", "표지", "상세 URL",
                 ],
                 "ranking": "개인화 검색어별 Kakao 후보 중 AI가 전체 서지정보를 비교해 가장 적합한 책을 선정",
+                "adult_content_filter": "제목·책 소개의 성인 등급 및 유해 의심 신호를 후보·캐시·최종 선택 단계에서 차단",
+                "profile_topic_relevance": "선택된 관심사·취미가 제목 또는 책 소개에서 직접 확인되는 후보만 허용",
             },
             "themes": [
                 {
@@ -314,9 +317,12 @@ class BookRecommendationAgent:
 
     @staticmethod
     def _search_theme_candidates(theme):
+        ranking_basis_values = theme["basis_values"]
+        if theme["id"] in PROFILE_TOPIC_THEME_IDS and theme.get("selected_basis"):
+            ranking_basis_values = [theme["selected_basis"]]
         search_options = {
             "display": 8,
-            "basis_values": theme["basis_values"],
+            "basis_values": ranking_basis_values,
             "content_terms": theme.get("content_terms"),
             "theme_id": theme["id"],
             "excluded_isbns": theme.get("excluded_isbns"),
@@ -337,7 +343,7 @@ class BookRecommendationAgent:
             theme["candidates"] = BookRecommendationAgent._search_kakao_books(
                 fallback_keyword,
                 display=8,
-                basis_values=theme["basis_values"],
+                basis_values=ranking_basis_values,
                 content_terms=BookRecommendationAgent._fallback_content_terms(
                     theme["id"],
                     theme["basis_values"],
@@ -733,6 +739,7 @@ Below output JSON only.
                     not book.get("title")
                     or not identity.strip("|")
                     or any(marker in book["title"] for marker in REJECTED_KAKAO_TITLE_MARKERS)
+                    or not _is_safe_book_candidate(book)
                 ):
                     continue
                 existing = (
@@ -857,7 +864,11 @@ Below output JSON only.
                             len(books) + 1,
                             item,
                         )
-                        if not _is_general_book(item, book) or not _is_recent_book(book):
+                        if (
+                            not _is_general_book(item, book)
+                            or not _is_recent_book(book)
+                            or not _is_safe_book_candidate(book)
+                        ):
                             continue
                         book["general_book_verified"] = True
                         book["recent_book_verified"] = True
@@ -1015,6 +1026,11 @@ Below output JSON only.
                 "AI가 실제 후보 목록에 없는 책을 선택했습니다.",
                 code="BOOK_REVIEW_INVALID_SELECTION",
             )
+        if not _is_safe_book_candidate(selected_book):
+            raise BookRecommendationUnavailable(
+                "성인·유해 콘텐츠 가능성이 있는 도서는 추천할 수 없습니다.",
+                code="BOOK_UNSAFE_SELECTION",
+            )
         if not review:
             raise BookRecommendationUnavailable(
                 "AI 추천 서평이 비어 있습니다.",
@@ -1038,6 +1054,15 @@ Below output JSON only.
                 f"{BookRecommendationAgent._emotion_reading_goal(theme.get('basis_values') or [])}\n"
                 "- 제목에 감정 단어가 포함된 후보도 제외하지 마세요.\n"
                 "- 단, 제목 일치만으로 고르지 말고 책 소개, 저자, 출판사, 주제와 서지정보를 비교해 위 목표에 가장 잘 맞는 책을 고르세요.\n"
+                "- 성인 전용, 19금, 고수위, 성애·에로틱 콘텐츠가 조금이라도 의심되는 후보는 절대 고르지 마세요.\n"
+            )
+        topic_selection_rule = ""
+        if theme.get("id") in PROFILE_TOPIC_THEME_IDS:
+            selected_basis = str(theme.get("selected_basis") or basis_text).strip()
+            topic_selection_rule = (
+                f"\n- 이번 추천의 단일 고정 주제는 '{selected_basis}'입니다.\n"
+                "- 책 소개에서 이 주제·직접 동의어 또는 이 주제에만 속하는 구체적 하위 개념이 핵심 내용으로 확인되는 후보만 고르세요. "
+                "검색 결과에 함께 나왔다는 이유나 분위기·라이프스타일 같은 간접 연결만으로 고르면 안 됩니다.\n"
             )
         candidate_lines = []
         for book in theme.get("candidates", []):
@@ -1068,7 +1093,7 @@ Below output JSON only.
 - 검색 키워드: {theme.get('keyword') or '미상'}
 - 책에서 다루길 바라는 핵심 내용: {', '.join(theme.get('content_terms') or []) or '미상'}
 - 검색 키워드 생성 의도: {theme.get('reason') or '사용자 맥락에 맞는 책 후보를 찾기 위한 검색어입니다.'}
-{emotion_selection_rule}
+{emotion_selection_rule}{topic_selection_rule}
 
 [검증된 개인화 상위 후보]
 {chr(10).join(candidate_lines)}
@@ -1082,6 +1107,7 @@ Below output JSON only.
 - 감정 추천: 오늘의 감정이 기쁨, 평온, 만족, 설렘처럼 긍정적이면 그 감정을 유지하거나 더 선명하게 느끼게 하는 책을 고르세요. 슬픔, 불안, 분노, 외로움, 지침, 스트레스처럼 무거운 감정이면 감정을 해소하거나 숨을 고르게 하는 책을 고르세요. 마음리포트처럼 감정의 원인, 패턴, 진단, 하루 분석을 설명하지 말고 독서 경험만 말하세요.
 - 관심사 추천: 관심사 자체를 실제 주제로 다루는 책을 고르세요. 예를 들어 음악이면 음악 감상, 음악사, 뮤지션, 악기, 장르 해설처럼 그 관심사에 대해 읽을 내용이 있어야 합니다. 관심사를 막연한 위로 문장으로 바꾸지 마세요.
 - 취미 추천: 취미를 실제로 즐기는 사람에게 도움이 되는 책을 고르세요. 방법, 기술, 도구, 작품 감상, 문화, 역사, 루틴처럼 취미 관점이 드러나야 하며, 취미를 소재로 한 일반 감성 에세이에 치우치지 마세요.
+모든 유형에서 성인 전용, 19금, 청소년 유해, 고수위, 성애·에로틱 콘텐츠가 명시되거나 의심되는 책은 선택하지 마세요.
 도서 장르는 후보 도서의 실제 성격을 따르세요. 에세이, 소설, 인문서, 실용서, 예술서, 만화 등 특정 장르를 사전에 우대하지 마세요.
 서평 본문에 "관심사가 있어서", "취미가 있어서", "검색어", "키워드", "근거", "데이터", "마음리포트", "분석 결과"처럼 추천 로직이나 리포트 맥락이 직접 드러나는 표현을 쓰지 마세요.
 후보에 없는 책을 새로 고르거나 만들면 안 됩니다.
