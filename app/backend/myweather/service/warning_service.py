@@ -5,7 +5,7 @@ from myweather.constants import (
     JEJU_WARNING_CITY_PREFIXES,
     KMA_WARNING_EXPECTED_FIELDS,
     KMA_WARNING_LEVEL_PRIORITY,
-    KMA_WARNING_PARENT_REGION_OVERRIDES,
+    KMA_WARNING_REGION_CODE_OVERRIDES,
     METROPOLITAN_WARNING_DISPLAY_NAMES,
     WARNING_LEVEL_LABELS,
     WARNING_RELEASE_COMMANDS,
@@ -84,11 +84,19 @@ def _warning_row_matches_region(row, region_name, aliases):
     prefixes = WARNING_REGION_CODE_PREFIXES.get(region_name, ())
     region_text = " ".join((row.get("REG_UP_KO") or "", row.get("REG_KO") or ""))
 
+    # 마이페이지 지역 날씨 카드는 육상 특보만 다룬다. 해상 S 코드를
+    # 지역명 문자열로 추정하면 앞바다·먼바다 특보가 육상 카드에 섞인다.
+    if reg_id.startswith("S") or reg_up.startswith("S"):
+        return False
+
     # 일부 도서·광역시 하위구역은 REG_ID가 인접 도의 코드 계열을 공유한다.
-    # 검증된 교차 계층에서는 REG_UP이 실제 소속을 나타내므로 먼저 판정한다.
-    for parent_prefix, parent_region in KMA_WARNING_PARENT_REGION_OVERRIDES.items():
-        if reg_up.startswith(parent_prefix):
-            return region_name == parent_region
+    # 공식 REG_ID/REG_UP 전체 코드의 정확한 매핑을 접두사 판정보다 우선한다.
+    override_region = (
+        KMA_WARNING_REGION_CODE_OVERRIDES.get(reg_id)
+        or KMA_WARNING_REGION_CODE_OVERRIDES.get(reg_up)
+    )
+    if override_region:
+        return region_name == override_region
 
     if reg_id.startswith("L") and reg_id != "L1000000":
         return any(reg_id.startswith(prefix) for prefix in prefixes)
@@ -133,8 +141,15 @@ def filter_kma_warnings(rows, location_name):
             continue
         warning_code = str(row.get("WRN") or "").strip().upper()
         level_code = str(row.get("LVL") or "").strip()
-        warning_type = WARNING_TYPE_LABELS.get(warning_code, warning_code or "기상특보")
-        warning_level = WARNING_LEVEL_LABELS.get(level_code, "특보")
+        if warning_code in ("폭염중대경보", "HEATWAVE_MAJOR") or "폭염중대경보" in str(row.get("WRN") or ""):
+            warning_type = "폭염"
+            warning_level = "중대경보"
+        else:
+            warning_type = WARNING_TYPE_LABELS.get(warning_code, warning_code or "기상특보")
+            warning_level = WARNING_LEVEL_LABELS.get(
+                level_code,
+                WARNING_LEVEL_LABELS.get(level_code.upper(), level_code or "특보"),
+            )
         item = grouped.setdefault((warning_type, warning_level), {
             "type": warning_type,
             "level": warning_level,

@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from mindreport.exceptions import MindReportError
+from mindreport.services.criteria_service import ReportCriteriaService
 from mindreport.services.graph_flow import MindReportSupervisorAgent
 from mindreport.services.periods import is_last_week_of_month
 from mindreport.services.report_service import MindReportService
@@ -27,6 +28,7 @@ class MindReportGenerateAPIView(APIView):
                 target_date=target_date,
                 include_monthly=self._is_last_week_of_month(target_date),
             )
+            eligibility = self._get_eligibility(request.user, target_date)
         except MindReportError as exc:
             response_status = (
                 status.HTTP_503_SERVICE_UNAVAILABLE
@@ -41,6 +43,7 @@ class MindReportGenerateAPIView(APIView):
             'status': 'success',
             'message': '정기 주간·월간 마음 리포트를 불러왔습니다.',
             'reports': reports,
+            'eligibility': eligibility,
         })
 
     def post(self, request):
@@ -51,6 +54,7 @@ class MindReportGenerateAPIView(APIView):
                 target_date=target_date,
                 include_monthly=self._is_last_week_of_month(target_date),
             )
+            eligibility = self._get_eligibility(request.user, target_date)
         except MindReportError as exc:
             response_status = (
                 status.HTTP_503_SERVICE_UNAVAILABLE
@@ -65,7 +69,19 @@ class MindReportGenerateAPIView(APIView):
             'status': 'success',
             'message': '다음 정기 갱신을 기다리지 않고 최신 대화를 반영했어요.',
             'reports': reports,
+            'eligibility': eligibility,
         })
+
+    @classmethod
+    def _get_eligibility(cls, user, target_date):
+        return {
+            'weekly': ReportCriteriaService.check_weekly_report_eligibility(
+                user, target_date=target_date
+            ),
+            'monthly': ReportCriteriaService.check_monthly_report_eligibility(
+                user, year=target_date.year, month=target_date.month
+            ),
+        }
 
     @staticmethod
     def _service() -> MindReportService:
