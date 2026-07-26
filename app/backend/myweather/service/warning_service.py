@@ -141,8 +141,15 @@ def filter_kma_warnings(rows, location_name):
             continue
         warning_code = str(row.get("WRN") or "").strip().upper()
         level_code = str(row.get("LVL") or "").strip()
-        warning_type = WARNING_TYPE_LABELS.get(warning_code, warning_code or "기상특보")
-        warning_level = WARNING_LEVEL_LABELS.get(level_code, "특보")
+        if warning_code in ("폭염중대경보", "HEATWAVE_MAJOR") or "폭염중대경보" in str(row.get("WRN") or ""):
+            warning_type = "폭염"
+            warning_level = "중대경보"
+        else:
+            warning_type = WARNING_TYPE_LABELS.get(warning_code, warning_code or "기상특보")
+            warning_level = WARNING_LEVEL_LABELS.get(
+                level_code,
+                WARNING_LEVEL_LABELS.get(level_code.upper(), level_code or "특보"),
+            )
         item = grouped.setdefault((warning_type, warning_level), {
             "type": warning_type,
             "level": warning_level,

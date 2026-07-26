@@ -865,6 +865,26 @@ L1150000,부산광역시,L1150100,부산동부,202607151000,202607151100,호우,
         self.assertEqual(alerts[0]['areas'], ['동해산지', '삼척산지', '강릉산지', '양양북부산지'])
         self.assertEqual(alerts[0]['region'], '동해산지, 삼척산지, 강릉산지, 양양북부산지')
 
+    def test_parses_and_filters_major_heatwave_warning_level_4(self):
+        payload = """# REG_UP,REG_UP_KO,REG_ID,REG_KO,TM_FC,TM_EF,WRN,LVL,CMD
+L1100000,서울특별시,L1100100,서울,202607151000,202607151100,H,3,발표
+L1100000,서울특별시,L1100100,서울,202607151000,202607151100,H,4,발표
+L1100000,서울특별시,L1100100,서울,202607151000,202607151100,R,3,발표
+L1100000,서울특별시,L1100100,서울,202607151000,202607151100,W,2,발표
+"""
+        rows = parse_kma_warning_rows(payload)
+        alerts = filter_kma_warnings(rows, '서울')
+
+        self.assertEqual(len(alerts), 4)
+        self.assertEqual(alerts[0]['type'], '폭염')
+        self.assertEqual(alerts[0]['level'], '중대경보')
+        self.assertEqual(alerts[1]['type'], '호우')
+        self.assertEqual(alerts[1]['level'], '경보')
+        self.assertEqual(alerts[2]['type'], '폭염')
+        self.assertEqual(alerts[2]['level'], '경보')
+        self.assertEqual(alerts[3]['type'], '강풍')
+        self.assertEqual(alerts[3]['level'], '주의보')
+
     def test_maps_every_supported_region_by_official_land_warning_code(self):
         cases = {
             '서울': ('L1100000', 'L1100100'),

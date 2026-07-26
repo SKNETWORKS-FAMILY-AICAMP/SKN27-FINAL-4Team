@@ -462,10 +462,21 @@ export default {
       };
     },
     weatherAlertItems() {
-      return Array.isArray(this.weatherAlerts.items) ? this.weatherAlerts.items : [];
+      const items = Array.isArray(this.weatherAlerts.items) ? [...this.weatherAlerts.items] : [];
+      const priority = {
+        "중대경보": 4,
+        "폭염중대경보": 4,
+        "경보": 3,
+        "주의보": 2,
+        "예비특보": 1,
+      };
+      return items.sort((a, b) => (priority[b.level] || 0) - (priority[a.level] || 0));
     },
     weatherAlertBadge() {
       if (this.weatherAlerts.status === "active") {
+        if (this.weatherAlertItems.some((item) => item.level === "중대경보" || item.level === "폭염중대경보")) {
+          return "중대경보 발효";
+        }
         return this.weatherAlertItems.some((item) => item.level === "경보") ? "경보 발효" : "특보 발효";
       }
       if (this.weatherAlerts.status === "none") return "발효 없음";
@@ -474,7 +485,11 @@ export default {
     },
     weatherAlertClass() {
       if (this.weatherAlerts.status === "active") {
-        return this.weatherAlertItems.some((item) => item.level === "경보") ? "is-danger" : "is-warning";
+        return this.weatherAlertItems.some((item) =>
+          ["경보", "중대경보", "폭염중대경보"].includes(item.level) || item.level?.includes("경보")
+        )
+          ? "is-danger"
+          : "is-warning";
       }
       if (this.weatherAlerts.status === "none") return "is-clear";
       return "is-unavailable";
