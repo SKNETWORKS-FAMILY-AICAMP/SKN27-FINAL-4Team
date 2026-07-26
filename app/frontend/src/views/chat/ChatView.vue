@@ -79,13 +79,13 @@
           <div class="sky-panel sky-left">
             <MemoryConstellation v-for="k in zodiacLeft" :key="k" :con-key="k"
                                  :active="k === seasonKey"
-                                 :panel-data="memoryPanelData"
+                                 :memories="skyAssign[k] || []"
                                  :glow-name="glowName" @pick="onStarPick" />
           </div>
           <div class="sky-panel sky-right">
             <MemoryConstellation v-for="k in zodiacRight" :key="k" :con-key="k"
                                  :active="k === seasonKey"
-                                 :panel-data="memoryPanelData"
+                                 :memories="skyAssign[k] || []"
                                  :glow-name="glowName" @pick="onStarPick" />
           </div>
         </template>
@@ -987,6 +987,46 @@ async function confirmExitSecret() {
 const seasonKey = getSeasonConstellation().key
 const zodiacLeft  = ['aries', 'taurus', 'gemini', 'cancer', 'leo', 'virgo']
 const zodiacRight = ['libra', 'scorpio', 'sagittarius', 'capricorn', 'aquarius', 'pisces']
+
+// 하늘 전체에 기억 배분 (2026-07-24 "다 보여주자" → 의미 있는 배치로 개선):
+// · 다가오는 일(D-day) = "그 일이 일어날 날짜의 별자리"에 걸림 — 미래가 그 계절 별자리에 미리 걸리는 컨셉
+// · 사람·취향·최근 이야기 = 날짜가 없으니 이번 달(점등) 별자리에
+// · 넘치는 기억은 잠든 별자리에 순서대로 2개씩 (하늘이 채워지는 연출)
+// 글씨는 호버 때만 떠서 안 난잡. 색 규칙은 칩/팝오버와 동일.
+const skyAssign = computed(() => {
+  const d = memoryPanelData.value
+  const map = {}
+  for (const k of [...zodiacLeft, ...zodiacRight]) map[k] = []
+
+  // ① 일정 → 해당 날짜의 별자리 (오늘 + dday로 날짜 계산)
+  for (const u of (d.upcoming || [])) {
+    const when = new Date()
+    when.setDate(when.getDate() + (u.dday || 0))
+    const key = getSeasonConstellation(when).key
+    map[key].push({ key: 'u' + u.name, color: '#FCD34D',
+                    label: u.name + (u.dday === 0 ? ' 오늘' : ' D-' + u.dday),
+                    ask: `${u.name} 얼마 안 남았지? 같이 얘기해줘`, name: u.name })
+  }
+
+  // ② 날짜 없는 기억들 — 이번 달 별자리의 남은 칸에 사람→취향→최근 순으로 번갈아 담아
+  // 한 종류가 독식하지 못하게 함 (일정이 많아도 취향·사람이 최소 하나씩은 보이게).
+  // 넘치는 기억은 하늘에 억지로 안 올림 — 잠든 별자리엔 "정말 그 계절의 일정"만
+  // 걸린다 (배치의 정직함 유지, 나머지는 더보기에서 전부 확인).
+  const groups = [
+    (d.people || []).map(p => ({ key: 'p' + p.name, color: '#7dd3fc', label: p.name,
+                                 ask: `${p.name} 얘기 기억하고 있어?`, name: p.name })),
+    (d.prefs || []).map(t => ({ key: 't' + t.topic, color: '#f9a8d4', label: t.topic,
+                                ask: `나 요즘 ${t.topic} 좋아하는 거 알지?`, name: t.topic })),
+    (d.recent || []).map(n => ({ key: 'r' + n, color: '#cbc3e6', label: n,
+                                 ask: `저번에 ${n} 얘기했던 거 기억나?`, name: n })),
+  ]
+  let gi = 0, guard = 30
+  while (map[seasonKey].length < 6 && guard-- > 0 && groups.some(g => g.length)) {
+    const g = groups[gi % groups.length]; gi += 1
+    if (g.length) map[seasonKey].push(g.shift())
+  }
+  return map
+})
 
 // 별자리의 별 클릭 → 그 기억으로 말 거는 문구를 입력창에 채움 (전송은 사용자가 — 고쳐 보낼 수 있게)
 function onStarPick(mem) {

@@ -1,5 +1,6 @@
 <template>
-  <div class="mc-wrap" :class="{ inactive: !active }" :title="caption"
+  <div class="mc-wrap" :class="{ inactive: !active }"
+       :title="active ? caption : caption + ' · ' + cons.period"
        role="img" :aria-label="caption + (active ? ' — 기억 별자리' : '')">
     <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
       <!-- 배경 잔별 — 이번 달 별자리 주변만 '하늘 한 조각'처럼 채움 -->
@@ -27,7 +28,7 @@
               text-anchor="middle">{{ s.mem.label }}</text>
       </g>
     </svg>
-    <div class="mc-caption">{{ caption }}</div>
+    <div class="mc-caption">{{ caption }}<span v-if="!active" class="mc-period"> · {{ cons.period }}</span></div>
   </div>
 </template>
 
@@ -40,8 +41,8 @@ import { CONSTELLATIONS, getSeasonConstellation } from './config/constellations'
 // 나머지는 은은한 모양만. 데이터는 ChatView의 memoryPanelData 그대로 — 새 API 없음.
 const props = defineProps({
   conKey: { type: String, default: null },       // 별자리 지정 (없으면 이번 달 것)
-  active: { type: Boolean, default: true },      // 이번 달 여부 (기억·클릭·점등)
-  panelData: { type: Object, default: null },    // { upcoming, people, prefs, recent }
+  active: { type: Boolean, default: true },      // 이번 달 여부 (점등·잔별·캡션 강조)
+  memories: { type: Array, default: () => [] },  // 이 별자리에 얹을 기억들 (ChatView가 배분)
   glowName: { type: String, default: null },     // 방금 저장된 기억 반짝임 연동
 })
 defineEmits(['pick'])
@@ -68,31 +69,10 @@ const ambient = props.active
       cons.stars.every(([sx, sy]) => (ax - sx) ** 2 + (ay - sy) ** 2 > 90))
   : []
 
-// 기억 목록 — 종류별 상한, 전체 상한 6. 색 규칙은 기존 칩/팝오버와 동일.
-const memories = computed(() => {
-  if (!props.active || !props.panelData) return []
-  const d = props.panelData
-  const out = []
-  for (const u of (d.upcoming || []).slice(0, 2)) {
-    out.push({ key: 'u' + u.name, color: '#FCD34D',
-               label: u.name + (u.dday === 0 ? ' 오늘' : ' D-' + u.dday),
-               ask: `${u.name} 얼마 안 남았지? 같이 얘기해줘`, name: u.name })
-  }
-  for (const p of (d.people || []).slice(0, 2)) {
-    out.push({ key: 'p' + p.name, color: '#7dd3fc', label: p.name,
-               ask: `${p.name} 얘기 기억하고 있어?`, name: p.name })
-  }
-  for (const t of (d.prefs || []).slice(0, 2)) {
-    out.push({ key: 't' + t.topic, color: '#f9a8d4', label: t.topic,
-               ask: `나 요즘 ${t.topic} 좋아하는 거 알지?`, name: t.topic })
-  }
-  for (const n of (d.recent || []).slice(0, 1)) {
-    out.push({ key: 'r' + n, color: '#cbc3e6', label: n,
-               ask: `저번에 ${n} 얘기했던 거 기억나?`, name: n })
-  }
-  const cap = Math.min(6, cons.labelOrder.length)
-  return out.slice(0, cap).map(m => ({ ...m, glow: m.name === props.glowName }))
-})
+// 이 별자리에 얹을 기억 — 배분은 ChatView(skyAssign)가 함. 여기선 꼭짓점 수만큼만.
+const memories = computed(() =>
+  props.memories.slice(0, cons.labelOrder.length)
+    .map(m => ({ ...m, glow: m.name === props.glowName })))
 
 // labelOrder(겹침 방지 순서)대로 기억을 별에 배정, 남는 별은 잔별
 const starNodes = computed(() => {
@@ -152,6 +132,8 @@ function labelX(x) { return Math.min(82, Math.max(18, x)) }
 .mc-wrap.inactive:hover { opacity: 1; }
 .mc-wrap.inactive .mc-line { stroke-opacity: .5; stroke-width: .7; }
 .mc-wrap.inactive .mc-caption { opacity: .6; }
+.mc-period { opacity: 0; transition: opacity .25s ease; color: #d9d2f0; }
+.mc-wrap.inactive:hover .mc-period { opacity: 1; }
 
 @keyframes mc-amb-tw { 0%, 100% { opacity: .35; } 50% { opacity: .8; } }
 @keyframes mc-tw { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
