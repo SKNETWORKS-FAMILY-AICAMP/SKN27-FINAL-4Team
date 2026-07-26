@@ -72,6 +72,23 @@
       <!-- 펼침: 큰 캐릭터 + 기억 별자리 칩 -->
       <template v-if="!isCollapsed">
         <div class="room-label">{{ isSecret ? '밤하늘 아래 · 비밀 이야기' : timeGreeting }}</div>
+        <!-- 기억 별자리 하늘 (2026-07-24 멘토 피드백) — 12궁을 좌우 하늘에 전부 배치.
+             이번 달 별자리만 점등되어 기억을 얹고(별 클릭 = 그 기억으로 말 걸기),
+             나머지 11개는 은은한 모양으로 잠들어 있음. 넓은 화면 전용 장식. -->
+        <template v-if="!isSecret">
+          <div class="sky-panel sky-left">
+            <MemoryConstellation v-for="k in zodiacLeft" :key="k" :con-key="k"
+                                 :active="k === seasonKey"
+                                 :memories="skyAssign[k] || []"
+                                 :glow-name="glowName" @pick="onStarPick" />
+          </div>
+          <div class="sky-panel sky-right">
+            <MemoryConstellation v-for="k in zodiacRight" :key="k" :con-key="k"
+                                 :active="k === seasonKey"
+                                 :memories="skyAssign[k] || []"
+                                 :glow-name="glowName" @pick="onStarPick" />
+          </div>
+        </template>
         <div class="hero-wrap" @click="pokeCharacter" title="쓰다듬기">
           <div class="hero-react" :style="reactStyle" :key="'r' + animKey">
             <div class="hero-circle">
@@ -260,6 +277,8 @@ import { useRouter, useRoute } from 'vue-router'
 import { chatApi } from '../../api/chat.js'
 import chatBg from '../../assets/chat-bg.png'
 import { useSecret } from '../../composables/useSecret.js'
+import MemoryConstellation from './MemoryConstellation.vue'
+import { getSeasonConstellation } from './config/constellations'
 import { useTts } from '../../composables/useTts.js'
 import { useStt } from '../../composables/useStt.js'
 
@@ -420,6 +439,7 @@ function toggleStt() {
   })
 }
 const sessionId      = ref(null)
+const sessionEpoch   = ref(0)   // 방 세대 — 일반↔시크릿 전환·종료 시 +1 (늦게 온 응답 폐기용)
 const coldStartDone  = ref(false)
 const showExitModal  = ref(false)
 const messages       = ref([])
@@ -882,9 +902,14 @@ async function sendMessage() {
   inputText.value = ''
   attachedImage.value = null
   isTyping.value = true
+  // 방 세대 표식 (2026-07-24 멘토 재현 버그): 답변이 오기 전에 일반↔시크릿 전환·종료를
+  // 하면 "옛 방의 답변"이 새 방 화면에 늦게 도착해 붙는다(채팅 두 번 나옴).
+  // 전송 시점의 세대를 기억해두고, 응답이 왔을 때 방이 바뀌었으면 조용히 버린다.
+  const epoch = sessionEpoch.value
   await scrollToBottom()
   try {
     const res = await chatApi.sendChat(sessionId.value, content, character.value, isSecret.value, image, ttsEnabled.value)
+    if (epoch !== sessionEpoch.value) return   // 방이 바뀜 — 유령 답변 폐기
     const m = pushAssistant(res.message.text, {
       id: res.message_id ?? undefined,
       emotion_label: res.emotion_label,
@@ -895,7 +920,10 @@ async function sendMessage() {
     // MBTI 질문 — 본문 말풍선에 이어붙이지 않고 별도 버블로 (2026-07-21).
     // 백엔드가 mbti_probe로 따로 내려준다. TTS는 본문만 재생된다.
     if (res.mbti_probe?.text) {
-      afterReveal(m, () => { pushAssistant(res.mbti_probe.text); scrollToBottom() })
+      afterReveal(m, () => {
+        if (epoch !== sessionEpoch.value) return   // 방 바뀌면 MBTI 질문도 폐기
+        pushAssistant(res.mbti_probe.text); scrollToBottom()
+      })
     }
     if (res.emotion_label) {
       currentEmotion.value = res.emotion_label
@@ -905,17 +933,25 @@ async function sendMessage() {
       }
     }
   } catch {
-    messages.value.push({ _tempId: Date.now(), role: 'assistant', content: '잠시 연결이 끊겼어요. 다시 시도해 줄래요? 🙏' })
+    if (epoch === sessionEpoch.value) {
+      messages.value.push({ _tempId: Date.now(), role: 'assistant', content: '잠시 연결이 끊겼어요. 다시 시도해 줄래요? 🙏' })
+    }
   } finally {
-    isTyping.value = false
-    await scrollToBottom()
-    // 기억 패널 갱신 (UI #3) — 그래프 저장이 비동기라 잠깐 뒤에 (말한 게 기억으로 뜨는 순간)
-    setTimeout(refreshMemoryPanel, 4000)
+    if (epoch === sessionEpoch.value) {
+      isTyping.value = false
+      await scrollToBottom()
+      // 기억 패널 갱신 (UI #3) — 그래프 저장이 비동기라 잠깐 뒤에 (말한 게 기억으로 뜨는 순간)
+      setTimeout(refreshMemoryPanel, 4000)
+    }
   }
 }
 
 async function toggleSecret() {
   clearIdleTimer()
+  sessionEpoch.value += 1   // 진행 중이던 턴의 응답은 도착해도 폐기 (유령 답변 방지)
+  ttsStop()
+  isTyping.value = false
+  currentEmotion.value = 'default'   // 이전 방의 감정 표정을 새 방에 안 끌고 감
   endSessionBeacon()   // 기존 세션 마무리 (일반→시크릿 전환 시 잔여 요약)
   setSecret(!isSecret.value)
   messages.value = []
@@ -927,6 +963,10 @@ async function toggleSecret() {
 async function confirmExitSecret() {
   showExitModal.value = false
   clearIdleTimer()
+  sessionEpoch.value += 1   // 진행 중이던 시크릿 턴의 응답은 도착해도 폐기
+  ttsStop()
+  isTyping.value = false
+  currentEmotion.value = 'default'   // 시크릿의 감정 표정도 흔적 없이 — 표정 초기화
   if (sessionId.value) {
     try {
       // 🔒 시크릿챗 종료 → RAM/세션 캐시 즉시 파기 (API_명세서 v6.0)
@@ -940,6 +980,68 @@ async function confirmExitSecret() {
   coldStartDone.value = false
   await initSession()
   router.replace({ query: { character: displayCharacterId.value } })
+}
+
+// 12궁 배치 — 황도 순서대로 좌 6 / 우 6, 이번 달 것만 점등.
+// (별 색은 컴포넌트가 금·청·은·백을 별마다 섞어서 알아서 입힘)
+const seasonKey = getSeasonConstellation().key
+const zodiacLeft  = ['aries', 'taurus', 'gemini', 'cancer', 'leo', 'virgo']
+const zodiacRight = ['libra', 'scorpio', 'sagittarius', 'capricorn', 'aquarius', 'pisces']
+
+// 하늘 전체에 기억 배분 (2026-07-24 "다 보여주자" → 의미 있는 배치로 개선):
+// · 다가오는 일(D-day) = "그 일이 일어날 날짜의 별자리"에 걸림 — 미래가 그 계절 별자리에 미리 걸리는 컨셉
+// · 사람·취향·최근 이야기 = 날짜가 없으니 이번 달(점등) 별자리에
+// · 넘치는 기억은 잠든 별자리에 순서대로 2개씩 (하늘이 채워지는 연출)
+// 글씨는 호버 때만 떠서 안 난잡. 색 규칙은 칩/팝오버와 동일.
+const skyAssign = computed(() => {
+  const d = memoryPanelData.value
+  const map = {}
+  for (const k of [...zodiacLeft, ...zodiacRight]) map[k] = []
+
+  // ① 일정 → 해당 날짜의 별자리 (오늘 + dday로 날짜 계산).
+  // 이번 달 별자리 몫은 아래 ②에서 2개까지만 배정 (종류별 2개 규칙 — 팝오버와 동일).
+  const seasonUpcoming = []
+  for (const u of (d.upcoming || [])) {
+    const when = new Date()
+    when.setDate(when.getDate() + (u.dday || 0))
+    const key = getSeasonConstellation(when).key
+    const mem = { key: 'u' + u.name, color: '#FCD34D',
+                  label: u.name + (u.dday === 0 ? ' 오늘' : ' D-' + u.dday),
+                  ask: `${u.name} 얼마 안 남았지? 같이 얘기해줘`, name: u.name }
+    if (key === seasonKey) seasonUpcoming.push(mem)
+    else map[key].push(mem)
+  }
+
+  // ② 날짜 없는 기억들 — 이번 달 별자리의 남은 칸에 사람→취향→최근 순으로 번갈아 담아
+  // 한 종류가 독식하지 못하게 함 (일정이 많아도 취향·사람이 최소 하나씩은 보이게).
+  // 넘치는 기억은 하늘에 억지로 안 올림 — 잠든 별자리엔 "정말 그 계절의 일정"만
+  // 걸린다 (배치의 정직함 유지, 나머지는 더보기에서 전부 확인).
+  const people = (d.people || []).map(p => ({ key: 'p' + p.name, color: '#7dd3fc', label: p.name,
+                                              ask: `${p.name} 얘기 기억하고 있어?`, name: p.name }))
+  const prefs = (d.prefs || []).map(t => ({ key: 't' + t.topic, color: '#f9a8d4', label: t.topic,
+                                            ask: `나 요즘 ${t.topic} 좋아하는 거 알지?`, name: t.topic }))
+  const recent = (d.recent || []).map(n => ({ key: 'r' + n, color: '#cbc3e6', label: n,
+                                              ask: `저번에 ${n} 얘기했던 거 기억나?`, name: n }))
+
+  // 종류별 2개씩 (팝오버 대표 규칙과 동일): 일정 2 · 사람 2 · 취향 2 = 6.
+  map[seasonKey].push(...seasonUpcoming.splice(0, 2))
+  map[seasonKey].push(...people.splice(0, 2))
+  map[seasonKey].push(...prefs.splice(0, 2))
+  // 어떤 종류가 모자라 6이 안 되면 남은 기억(일정 초과분→최근→사람→취향)으로 채움
+  for (const g of [seasonUpcoming, recent, people, prefs]) {
+    while (map[seasonKey].length < 6 && g.length) map[seasonKey].push(g.shift())
+  }
+  return map
+})
+
+// 별자리의 별 클릭 → 그 기억으로 말 거는 문구를 입력창에 채움 (전송은 사용자가 — 고쳐 보낼 수 있게)
+function onStarPick(mem) {
+  if (isTyping.value) return
+  inputText.value = (mem.ask || '').slice(0, 300)
+  nextTick(() => {
+    const el = inputRef.value
+    if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; el.focus() }
+  })
 }
 
 function autoResize(e) {
