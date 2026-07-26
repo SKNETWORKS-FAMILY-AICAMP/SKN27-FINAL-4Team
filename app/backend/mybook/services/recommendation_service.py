@@ -17,6 +17,7 @@ from ..constants import (
 )
 from ..exceptions import BookRecommendationUnavailable
 from ..models import DailyBookRecommendation
+from ..utils import _is_safe_book_candidate
 from .profile_service import public_profile_basis
 
 
@@ -104,6 +105,8 @@ def payload_has_real_books(payload):
 
     for book in books:
         if not isinstance(book, dict) or not str(book.get("title") or "").strip():
+            return False
+        if not _is_safe_book_candidate(book):
             return False
         review = str(
             (book.get("ai_curation") or {}).get("review")
