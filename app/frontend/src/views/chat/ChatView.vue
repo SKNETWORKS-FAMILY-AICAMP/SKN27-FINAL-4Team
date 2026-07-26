@@ -951,6 +951,7 @@ async function toggleSecret() {
   sessionEpoch.value += 1   // 진행 중이던 턴의 응답은 도착해도 폐기 (유령 답변 방지)
   ttsStop()
   isTyping.value = false
+  currentEmotion.value = 'default'   // 이전 방의 감정 표정을 새 방에 안 끌고 감
   endSessionBeacon()   // 기존 세션 마무리 (일반→시크릿 전환 시 잔여 요약)
   setSecret(!isSecret.value)
   messages.value = []
@@ -965,6 +966,7 @@ async function confirmExitSecret() {
   sessionEpoch.value += 1   // 진행 중이던 시크릿 턴의 응답은 도착해도 폐기
   ttsStop()
   isTyping.value = false
+  currentEmotion.value = 'default'   // 시크릿의 감정 표정도 흔적 없이 — 표정 초기화
   if (sessionId.value) {
     try {
       // 🔒 시크릿챗 종료 → RAM/세션 캐시 즉시 파기 (API_명세서 v6.0)
