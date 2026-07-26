@@ -1134,13 +1134,13 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 0 8px;
-  width: min(620px, calc(50% - 285px));
+  width: min(560px, calc(50% - 466px));   /* 대화 기둥(880px 고정, 중앙정렬)+여유 26px과 절대 안 겹침 */
   z-index: 0;                /* 캐릭터·칩·버튼보다 뒤 */
   pointer-events: none;      /* 판 자체는 클릭 통과 (별·별자리만 개별 활성) */
 }
 .sky-panel > * { pointer-events: auto; }
 .sky-left  { left: 14px; }
 .sky-right { right: 14px; top: 78px; }   /* 시크릿챗 버튼 회피 */
-@media (max-width: 1320px) {
+@media (max-width: 1500px) {
   .sky-panel { display: none; }
 }
