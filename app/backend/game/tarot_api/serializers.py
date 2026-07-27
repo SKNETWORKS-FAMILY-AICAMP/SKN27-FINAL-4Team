@@ -46,7 +46,18 @@ class TarotReadingRequestSerializer(serializers.Serializer):
         allow_blank=True,
         max_length=500,
     )
+    card_numbers = serializers.ListField(
+        child=serializers.IntegerField(min_value=0, max_value=77),
+        min_length=3,
+        max_length=3,
+        required=False,
+    )
     date = serializers.DateField(required=False)
+
+    def validate_card_numbers(self, value):
+        if len(set(value)) != len(value):
+            raise serializers.ValidationError('card_numbers must contain three distinct cards.')
+        return value
 
 
 class DailyTarotFortuneSerializer(serializers.Serializer):
