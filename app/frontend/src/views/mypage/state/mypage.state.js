@@ -50,6 +50,7 @@ export function createMypageState() {
     bookPayload: null,
     bookLoading: false,
     bookError: "",
+    bookRequestId: 0,
     todayEmotionPayload: null,
     todayEmotionLoading: false,
     todayEmotionError: "",

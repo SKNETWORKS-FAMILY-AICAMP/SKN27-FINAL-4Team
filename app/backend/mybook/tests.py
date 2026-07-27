@@ -11,48 +11,18 @@ from .agent import (
     BookRecommendationAgent,
     BookRecommendationUnavailable,
     KAKAO_BOOK_PROVIDER_INFO,
-    OPEN_LIBRARY_COVER_PROVIDER_INFO,
-    _cached_external_book_info,
-    _is_general_book,
-    _is_recent_book,
     _is_safe_book_candidate,
     _daum_book_search_url,
-    _nlk_items,
-    _nlk_probe_page_numbers,
     _rank_kakao_books,
-    _rank_personalized_books,
-    _request_kakao_book_info,
-    _request_nlk_books,
-    _semantic_search_terms,
     _without_excluded_books,
 )
-from .utils import _catalog_search_terms, _nlk_search_terms
 from .models import DailyBookRecommendation
+from .services.catalog_service import request_kakao_book_search
 from .services.recommendation_service import payload_has_real_books
 from .views import book_recommendation
 
 
-def _general_book_item(**overrides):
-    item = {
-        'BIBLIO_ID': 'KMO202600001',
-        'DCTERMS_title': '사진을 즐기는 새로운 방법',
-        'DC_creator': ['국립 작가'],
-        'DC_publisher': '공공 출판사',
-        'DCTERMS_abstract': '사진 촬영과 감상을 함께 다룬다.',
-        'DCTERMS_subject': ['사진', '촬영'],
-        'BIBO_isbn': '9788959710256',
-        'DCTERMS_issued': '2025',
-        'RDF_type': [
-            'http://lod.nl.go.kr/ontology/OfflineMaterial',
-            'http://lod.nl.go.kr/ontology/Book',
-        ],
-        'URI': 'https://lod.nl.go.kr/resource/KMO202600001',
-    }
-    item.update(overrides)
-    return item
-
-
-class NationalBibliographyBookSearchTests(SimpleTestCase):
+class KakaoBookRecommendationTests(SimpleTestCase):
     def test_adult_content_filter_blocks_explicit_and_suspicious_metadata(self):
         blocked = [
             {'title': '[19금] 위험한 로맨스', 'description': ''},
@@ -96,15 +66,6 @@ class NationalBibliographyBookSearchTests(SimpleTestCase):
         self.assertIn('"search_terms"', prompt)
         self.assertIn("'헬스'→'근력 운동'", prompt)
         self.assertIn('"selected_basis"', prompt)
-
-    def test_catalog_terms_keep_profile_topic_and_reject_sentence_style(self):
-        terms = _catalog_search_terms(
-            ['인물 촬영 가이드입니다', '빛과 노출'],
-            selected_basis='사진 찍기',
-            keyword='사진 찍기 인물 촬영',
-        )
-
-        self.assertEqual(terms, ['인물 촬영 가이드입니다', '빛과 노출', '사진'])
 
     def test_hobby_search_intent_restores_selected_profile_topic_if_llm_omits_it(self):
         keyword, content_terms = BookRecommendationAgent._anchor_profile_topic(
@@ -210,43 +171,6 @@ class NationalBibliographyBookSearchTests(SimpleTestCase):
         self.assertEqual(required_by_theme['interests'], '심리학')
         self.assertEqual(required_by_theme['hobbies'], '요리')
 
-    @patch.dict('os.environ', {'NLK_BIBLIO_SERVICE_KEY': 'public-data-key'}, clear=False)
-    @patch('mybook.agent.requests.get')
-    def test_searches_actual_top_level_contract_and_normalizes_general_book(self, request_get):
-        response = Mock(status_code=200)
-        response.raise_for_status.return_value = None
-        response.json.return_value = {
-            'header': {'resultCode': '00', 'resultMsg': 'NORMAL_CODE'},
-            'body': {
-                'pageNo': 1,
-                'numOfRows': 20,
-                'totalCount': 1,
-                'items': [_general_book_item()],
-            },
-        }
-        request_get.return_value = response
-
-        books = BookRecommendationAgent._search_nlk_books(
-            '사진 촬영',
-            display=1,
-            basis_values=['사진'],
-            theme_id='hobbies',
-        )
-
-        self.assertEqual(books[0]['title'], '사진을 즐기는 새로운 방법')
-        self.assertEqual(books[0]['subjects'], ['사진', '촬영'])
-        self.assertEqual(books[0]['isbn'], '9788959710256')
-        self.assertTrue(books[0]['general_book_verified'])
-        self.assertIn('사진', books[0]['match_terms'])
-        self.assertEqual(books[0]['source_provider']['id'], 'nlk_national_bibliography_lod')
-        search_url = urlparse(books[0]['link'])
-        search_query = parse_qs(search_url.query)
-        self.assertEqual(search_url.hostname, 'search.daum.net')
-        self.assertEqual(search_query['w'], ['book'])
-        self.assertEqual(search_query['q'], ['사진을 즐기는 새로운 방법'])
-        self.assertEqual(request_get.call_args_list[0].kwargs['params']['label'], '사진')
-        self.assertNotIn('headers', request_get.call_args_list[0].kwargs.get('params', {}))
-
     def test_daum_book_link_uses_title_without_isbn_or_author(self):
         link = _daum_book_search_url(title='사진책')
 
@@ -254,7 +178,7 @@ class NationalBibliographyBookSearchTests(SimpleTestCase):
         self.assertEqual(query['q'], ['사진책'])
 
     @patch.dict('os.environ', {'KAKAO_REST_API_KEY': 'kakao-key'}, clear=False)
-    @patch('mybook.agent.requests.get')
+    @patch('mybook.services.catalog_service.requests.get')
     def test_kakao_candidate_search_normalizes_rich_book_metadata(self, request_get):
         response = Mock(status_code=200)
         response.raise_for_status.return_value = None
@@ -344,7 +268,7 @@ class NationalBibliographyBookSearchTests(SimpleTestCase):
         self.assertNotIn('target', request_get.call_args_list[0].kwargs['params'])
 
     @patch.dict('os.environ', {'KAKAO_REST_API_KEY': 'kakao-key'}, clear=False)
-    @patch('mybook.agent.requests.get')
+    @patch('mybook.services.catalog_service.requests.get')
     def test_kakao_candidate_service_failure_is_retryable(self, request_get):
         response = Mock(status_code=401)
         response.raise_for_status.side_effect = requests.HTTPError('unauthorized')
@@ -358,6 +282,20 @@ class NationalBibliographyBookSearchTests(SimpleTestCase):
             )
 
         self.assertEqual(raised.exception.code, 'KAKAO_SERVICE_UNAVAILABLE')
+
+    @patch('mybook.services.catalog_service.time.sleep')
+    @patch('mybook.services.catalog_service.requests.get')
+    def test_kakao_transport_timeout_is_retried(self, request_get, sleep):
+        response = Mock(status_code=200)
+        response.raise_for_status.return_value = None
+        response.json.return_value = {'documents': [], 'meta': {}}
+        request_get.side_effect = [requests.Timeout('slow'), response]
+
+        payload = request_kakao_book_search('key', '사진')
+
+        self.assertEqual(payload['documents'], [])
+        self.assertEqual(request_get.call_count, 2)
+        sleep.assert_called_once()
 
     def test_previous_recommendation_is_excluded_without_reordering_the_rest(self):
         books = [
@@ -436,54 +374,6 @@ class NationalBibliographyBookSearchTests(SimpleTestCase):
         self.assertIn('마음 환기', content_terms)
         self.assertIn('환기·회복', BookRecommendationAgent._emotion_reading_goal(['슬픔']))
 
-    def test_rejects_thesis_even_when_it_has_an_isbn(self):
-        item = _general_book_item(
-            BIBLIO_ID='KDM202600001',
-            BIBO_degree='석사',
-            DCTERMS_title='사진 교육에 관한 연구',
-        )
-        book = BookRecommendationAgent._normalize_nlk_book_item(1, item)
-
-        self.assertFalse(_is_general_book(item, book))
-
-    def test_rejects_non_book_and_missing_isbn(self):
-        non_book = _general_book_item(RDF_type=['http://lod.nl.go.kr/ontology/Audio'])
-        missing_isbn = _general_book_item(BIBO_isbn='')
-
-        self.assertFalse(
-            _is_general_book(non_book, BookRecommendationAgent._normalize_nlk_book_item(1, non_book))
-        )
-        self.assertFalse(
-            _is_general_book(missing_isbn, BookRecommendationAgent._normalize_nlk_book_item(1, missing_isbn))
-        )
-
-    def test_rejects_books_older_than_ten_years_or_without_a_year(self):
-        self.assertTrue(_is_recent_book({'issued_year': 2016}, reference_year=2026))
-        self.assertFalse(_is_recent_book({'issued_year': 2015}, reference_year=2026))
-        self.assertFalse(_is_recent_book({'issued_year': None}, reference_year=2026))
-
-    def test_personalized_ranking_prefers_basis_match(self):
-        books = [
-            {
-                'title': '일상의 기록', 'subjects': ['에세이'], 'description': '',
-                'isbn': '9788959710256', 'issued_year': 2025,
-            },
-            {
-                'title': '사진 촬영의 기술', 'subjects': ['사진', '카메라'], 'description': '촬영 실습',
-                'isbn': '9788959710256', 'issued_year': 2020,
-            },
-        ]
-
-        ranked = _rank_personalized_books(
-            books,
-            keyword='사진 입문',
-            basis_values=['사진'],
-            theme_id='hobbies',
-        )
-
-        self.assertEqual(ranked[0]['title'], '사진 촬영의 기술')
-        self.assertIn('사진', ranked[0]['match_terms'])
-
     def test_kakao_profile_ranking_rejects_other_saved_topic_and_incidental_result(self):
         ranked = _rank_kakao_books(
             [
@@ -535,150 +425,6 @@ class NationalBibliographyBookSearchTests(SimpleTestCase):
 
         self.assertEqual([book['title'] for book in ranked], ['빛으로 완성하는 한 장'])
         self.assertEqual(ranked[0]['intent_metadata_match_terms'], ['구도', '노출'])
-
-    def test_profile_basis_outweighs_peripheral_search_word(self):
-        books = [
-            {
-                'title': '감상의 심리학', 'subjects': ['감상'], 'description': '',
-                'isbn': '9788959710256', 'issued_year': 2025,
-            },
-            {
-                'title': '음악을 듣는 시간', 'subjects': ['음악'], 'description': '',
-                'isbn': '9788959710256', 'issued_year': 2021,
-            },
-        ]
-
-        ranked = _rank_personalized_books(
-            books,
-            keyword='음악 감상',
-            basis_values=['음악'],
-            theme_id='interests',
-        )
-
-        self.assertEqual(ranked[0]['title'], '음악을 듣는 시간')
-        self.assertEqual(len(ranked), 1)
-
-    def test_content_metadata_outweighs_a_title_only_match(self):
-        books = [
-            {
-                'title': '사진과 산책', 'subjects': ['에세이'], 'description': '',
-                'isbn': '9788959710256', 'issued_year': 2025,
-            },
-            {
-                'title': '장면을 엮는 법', 'subjects': ['시각적 스토리텔링'],
-                'description': '사진으로 일상을 관찰하고 서사를 구성하는 방법',
-                'isbn': '9788937460449', 'issued_year': 2021,
-            },
-        ]
-
-        ranked = _rank_personalized_books(
-            books,
-            keyword='사진으로 일상 기록',
-            content_terms=['시각적 스토리텔링', '관찰과 서사'],
-            basis_values=['사진'],
-            theme_id='hobbies',
-        )
-
-        self.assertEqual(ranked[0]['title'], '장면을 엮는 법')
-        self.assertGreater(ranked[0]['content_match_score'], 0)
-
-    def test_hobby_ranking_prefers_activity_over_academic_context(self):
-        books = [
-            {
-                'title': '사진측량 및 원격탐측', 'subjects': ['사진', '측량'], 'description': '',
-                'isbn': '9788959710256', 'issued_year': 2021,
-            },
-            {
-                'title': '사진 촬영 스타일링 가이드', 'subjects': ['사진', '촬영'], 'description': '',
-                'isbn': '9788959710256', 'issued_year': 2021,
-            },
-        ]
-
-        ranked = _rank_personalized_books(
-            books,
-            keyword='사진 실용서',
-            basis_values=['사진'],
-            theme_id='hobbies',
-        )
-
-        self.assertEqual(ranked[0]['title'], '사진 촬영 스타일링 가이드')
-
-    def test_hobby_ranking_rejects_incidental_keyword_without_activity_domain(self):
-        books = [
-            {
-                'title': '보정 선생 서화집',
-                'subjects': ['한국 회화', '서화'],
-                'description': '보정 김정회 작품과 소장 현황을 정리한 작품집',
-                'isbn': '9788959710256',
-                'issued_year': 2020,
-            },
-            {
-                'title': '카메라로 배우는 빛과 구도',
-                'subjects': ['카메라', '촬영'],
-                'description': '사진 촬영과 노출 보정 기술을 실습한다.',
-                'isbn': '9788937460449',
-                'issued_year': 2022,
-            },
-        ]
-
-        ranked = _rank_personalized_books(
-            books,
-            keyword='사진 촬영 실전 기술',
-            content_terms=['노출 보정', '구도'],
-            basis_values=['사진 찍기', '산책'],
-            theme_id='hobbies',
-        )
-
-        self.assertEqual([book['title'] for book in ranked], ['카메라로 배우는 빛과 구도'])
-        self.assertIn('카메라', ranked[0]['basis_match_terms'])
-
-    def test_hobby_ranking_follows_the_hobby_selected_by_search_intent(self):
-        books = [
-            {
-                'title': '사진, 빛으로 그린 이야기',
-                'subjects': ['사진'],
-                'description': '카메라 촬영의 표현을 살펴본다.',
-                'isbn': '9788959710256',
-                'issued_year': 2022,
-            },
-            {
-                'title': '구도자의 산책',
-                'subjects': ['산책'],
-                'description': '',
-                'isbn': '9788937460449',
-                'issued_year': 2025,
-            },
-        ]
-
-        ranked = _rank_personalized_books(
-            books,
-            keyword='사진 촬영 기법',
-            content_terms=['구도', '노출'],
-            basis_values=['사진 찍기', '산책'],
-            theme_id='hobbies',
-        )
-
-        self.assertEqual(
-            [book['title'] for book in ranked],
-            ['사진, 빛으로 그린 이야기'],
-        )
-
-    @patch('mybook.services.catalog_service.time.sleep')
-    @patch('mybook.agent.requests.get')
-    def test_transport_timeout_is_retried(self, request_get, sleep):
-        response = Mock(status_code=200)
-        response.raise_for_status.return_value = None
-        response.json.return_value = {
-            'header': {'resultCode': '00'},
-            'body': {'items': []},
-        }
-        request_get.side_effect = [requests.Timeout('slow'), response]
-
-        payload = _request_nlk_books('key', '사진', 20)
-
-        self.assertEqual(payload['header']['resultCode'], '00')
-        self.assertEqual(request_get.call_count, 2)
-        sleep.assert_called_once()
 
     @patch.object(BookRecommendationAgent, '_search_kakao_books')
     def test_theme_fallback_keeps_profile_basis(self, search_books):
@@ -738,137 +484,6 @@ class NationalBibliographyBookSearchTests(SimpleTestCase):
             call.kwargs['llm'] is shared_llm
             for call in generate_review.call_args_list
         ))
-
-    @patch.dict('os.environ', {'NLK_BIBLIO_SERVICE_KEY': 'public-data-key'}, clear=False)
-    @patch('mybook.agent.requests.get')
-    def test_service_failure_is_not_treated_as_empty_result(self, request_get):
-        response = Mock(status_code=401)
-        response.raise_for_status.side_effect = requests.HTTPError('unauthorized')
-        request_get.return_value = response
-
-        with self.assertRaises(BookRecommendationUnavailable) as raised:
-            BookRecommendationAgent._search_nlk_books('사진', display=1)
-
-        self.assertEqual(raised.exception.code, 'NLK_SERVICE_UNAVAILABLE')
-
-    def test_no_data_response_is_a_valid_empty_result(self):
-        payload = {
-            'header': {'resultCode': '03', 'resultMsg': 'NODATA_ERROR'},
-            'body': {'pageNo': 1, 'numOfRows': 20, 'totalCount': 0, 'items': []},
-        }
-
-        self.assertEqual(_nlk_items(payload), [])
-
-    def test_catalog_probe_checks_latest_page_first(self):
-        payload = {
-            'body': {'numOfRows': 20, 'totalCount': 100},
-        }
-
-        self.assertEqual(_nlk_probe_page_numbers(payload)[0], 4)
-
-    def test_search_terms_keep_specific_words_for_catalog_search(self):
-        self.assertEqual(
-            _nlk_search_terms('사진 실용 도서'),
-            ['사진 실용 도서', '사진'],
-        )
-
-    def test_semantic_search_terms_anchor_profile_topic_before_ai_phrases(self):
-        terms = _semantic_search_terms(
-            '사진으로 일상 기록',
-            ['시각적 스토리텔링', '관찰과 서사'],
-            ['사진'],
-        )
-
-        self.assertEqual(terms[:4], [
-            '사진',
-            '카메라',
-            '시각적 스토리텔링',
-            '관찰과 서사',
-        ])
-
-    def test_semantic_search_budget_keeps_profile_hobby_core_terms(self):
-        terms = _semantic_search_terms(
-            '일상 사진 구도와 걷기 기록',
-            ['빛과 노출 기술', '시각적 스토리텔링', '렌즈 선택', '야외 관찰'],
-            ['사진 찍기', '산책'],
-        )
-
-        self.assertEqual(terms[:4], [
-            '사진',
-            '카메라',
-            '빛과 노출 기술',
-            '시각적 스토리텔링',
-        ])
-
-    def test_fashion_interest_search_uses_catalog_friendly_alias(self):
-        terms = _semantic_search_terms(
-            '패션 문화비평',
-            ['유행 형성', '소비문화', '브랜드 전략', '복식사'],
-            ['패션', '팝업스토어', '맛집 탐방'],
-        )
-
-        self.assertEqual(terms[:4], [
-            '패션',
-            '스타일',
-            '유행 형성',
-            '소비문화',
-        ])
-
-    def test_llm_catalog_terms_are_used_before_the_profile_fallback(self):
-        terms = _semantic_search_terms(
-            '사진 찍기 인물 촬영',
-            ['빛과 노출', '구도'],
-            ['사진 찍기', '산책'],
-            ['인물 촬영', '사진'],
-        )
-
-        self.assertEqual(terms[:4], ['인물 촬영', '사진', '카메라', '빛과 노출'])
-
-    def test_metadata_confirmed_topic_beats_title_only_topic_match(self):
-        ranked = _rank_personalized_books(
-            [
-                {
-                    'title': '사진으로 만나는 일상',
-                    'subjects': [],
-                    'description': '',
-                    'isbn': '9788959710256',
-                    'issued_year': 2025,
-                },
-                {
-                    'title': '빛을 이해하는 시간',
-                    'subjects': ['사진', '촬영'],
-                    'description': '카메라 노출과 구도를 다룬다.',
-                    'isbn': '9788937460449',
-                    'issued_year': 2024,
-                },
-            ],
-            keyword='사진 촬영',
-            content_terms=['노출', '구도'],
-            basis_values=['사진'],
-            theme_id='hobbies',
-        )
-
-        self.assertEqual([book['title'] for book in ranked], ['빛을 이해하는 시간'])
-
-    def test_fashion_interest_ranking_accepts_style_alias_metadata(self):
-        ranked = _rank_personalized_books(
-            [
-                {
-                    'title': '나만의 스타일링 원칙',
-                    'subjects': ['퍼스널 스타일'],
-                    'description': '옷차림과 이미지 연출 방법을 설명한다.',
-                    'isbn': '9788937460449',
-                    'issued_year': 2024,
-                },
-            ],
-            keyword='패션 문화비평',
-            content_terms=['유행 형성', '소비문화'],
-            basis_values=['패션', '팝업스토어', '맛집 탐방'],
-            theme_id='interests',
-        )
-
-        self.assertEqual([book['title'] for book in ranked], ['나만의 스타일링 원칙'])
-        self.assertIn('스타일', ranked[0]['basis_match_terms'])
 
     def test_payload_separates_kakao_metadata_and_ai_curation(self):
         theme = {
@@ -996,116 +611,6 @@ class NationalBibliographyBookSearchTests(SimpleTestCase):
         )
 
 
-class ExternalBookCoverTests(SimpleTestCase):
-    @patch('mybook.agent.requests.get')
-    def test_kakao_title_result_supplies_cover_and_title_search_link(self, request_get):
-        response = Mock(status_code=200)
-        response.raise_for_status.return_value = None
-        response.json.return_value = {
-            'meta': {'total_count': 2},
-            'documents': [
-                {
-                    'title': '카메라 교본',
-                    'authors': ['다른 저자'],
-                    'thumbnail': 'https://search1.kakaocdn.net/thumb/wrong',
-                    'url': 'https://search.daum.net/search?w=bookpage&bookId=wrong',
-                },
-                {
-                    'title': '카메라 교본',
-                    'authors': ['윤관식'],
-                    'thumbnail': 'http://search1.kakaocdn.net/thumb/R120x174.q85/?fname=cover',
-                    'url': 'http://search.daum.net/search?w=bookpage&bookId=1234',
-                }
-            ],
-        }
-        request_get.return_value = response
-
-        book_info = _request_kakao_book_info('kakao-key', '카메라 교본', '윤관식')
-
-        self.assertEqual(
-            book_info['image'],
-            'https://search1.kakaocdn.net/thumb/R120x174.q85/?fname=cover',
-        )
-        link_query = parse_qs(urlparse(book_info['link']).query)
-        self.assertEqual(link_query['q'], ['카메라 교본'])
-        self.assertEqual(request_get.call_args.kwargs['params']['query'], '카메라 교본')
-        self.assertEqual(request_get.call_args.kwargs['params']['target'], 'title')
-        self.assertEqual(
-            request_get.call_args.kwargs['headers']['Authorization'],
-            'KakaoAK kakao-key',
-        )
-        self.assertEqual(request_get.call_args.kwargs['timeout'], 3.0)
-
-    @patch('mybook.agent.cache')
-    @patch('mybook.agent._kakao_rest_api_key', return_value='')
-    def test_open_library_and_daum_search_are_used_without_kakao_key(self, kakao_key, cache):
-        cache.get.return_value = None
-
-        book_info = _cached_external_book_info(
-            '사진책',
-            author='국립 작가',
-            isbn='9788959710256',
-        )
-
-        self.assertEqual(
-            book_info['image'],
-            'https://covers.openlibrary.org/b/isbn/9788959710256-L.jpg?default=false',
-        )
-        self.assertEqual(book_info['cover_provider'], OPEN_LIBRARY_COVER_PROVIDER_INFO)
-        self.assertEqual(book_info['link_provider'], KAKAO_BOOK_PROVIDER_INFO)
-        self.assertIn('search.daum.net/search?', book_info['link'])
-        self.assertEqual(parse_qs(urlparse(book_info['link']).query)['q'], ['사진책'])
-        cache.set.assert_called_once()
-
-    @patch('mybook.agent._cached_external_book_info')
-    def test_final_recommendation_receives_kakao_media_in_both_payload_shapes(self, lookup):
-        lookup.return_value = {
-            'image': 'https://search1.kakaocdn.net/thumb/R120x174.q85/?fname=book',
-            'link': 'https://search.daum.net/search?w=bookpage&bookId=1234',
-            'cover_provider': KAKAO_BOOK_PROVIDER_INFO,
-            'link_provider': KAKAO_BOOK_PROVIDER_INFO,
-        }
-        book = {
-            'isbn': '9788959710256',
-            'title': '사진책',
-            'author': '국립 작가',
-            'image': '',
-            'link': '',
-            'source_result': {'isbn': '9788959710256', 'image': '', 'link': ''},
-        }
-
-        BookRecommendationAgent._enrich_book_covers([book])
-
-        self.assertIn('search1.kakaocdn.net', book['image'])
-        self.assertIn('search.daum.net', book['link'])
-        self.assertEqual(
-            book['source_result']['image'],
-            book['image'],
-        )
-        self.assertEqual(book['source_result']['link'], book['link'])
-        self.assertEqual(book['cover_provider'], KAKAO_BOOK_PROVIDER_INFO)
-        self.assertEqual(
-            book['source_result']['cover_provider'],
-            KAKAO_BOOK_PROVIDER_INFO,
-        )
-        lookup.assert_called_once_with('사진책', '국립 작가', '9788959710256')
-
-    @patch('mybook.agent._cached_external_book_info', side_effect=requests.Timeout('slow'))
-    def test_external_lookup_failure_does_not_fail_or_mutate_recommendation(self, lookup):
-        book = {
-            'isbn': '9788959710256',
-            'title': '사진책',
-            'author': '국립 작가',
-            'image': '',
-            'source_result': {'isbn': '9788959710256', 'image': ''},
-        }
-
-        BookRecommendationAgent._enrich_book_covers([book])
-
-        self.assertEqual(book['image'], '')
-        self.assertEqual(book['source_result']['image'], '')
-
-
 class BookRecommendationViewStabilityTests(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
@@ -1120,6 +625,32 @@ class BookRecommendationViewStabilityTests(TestCase):
             'interests': ['사진'],
             'hobbies': ['산책'],
         }
+
+    @patch('mybook.views._build_user_profile')
+    @patch('mybook.views.BookRecommendationAgent.recommend')
+    def test_invalid_theme_is_rejected_before_recommendation_work(
+        self,
+        recommend,
+        build_profile,
+    ):
+        request = self.factory.get(
+            '/api/mybook/recommendation/?force=true&theme=unknown',
+        )
+        force_authenticate(request, user=self.user)
+
+        response = book_recommendation(request)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.data['code'],
+            'BOOK_RECOMMENDATION_INVALID_THEME',
+        )
+        self.assertEqual(
+            response.data['supported_themes'],
+            ['emotion', 'interests', 'hobbies'],
+        )
+        build_profile.assert_not_called()
+        recommend.assert_not_called()
 
     @patch('mybook.views._build_user_profile')
     @patch('mybook.views.BookRecommendationAgent.recommend')
@@ -1444,8 +975,8 @@ class BookRecommendationViewStabilityTests(TestCase):
     def test_uncached_service_failure_returns_retryable_503(self, recommend, build_profile):
         build_profile.return_value = self.profile
         recommend.side_effect = BookRecommendationUnavailable(
-            '서지 서비스 장애',
-            code='NLK_SERVICE_UNAVAILABLE',
+            'Kakao 도서 검색 서비스 장애',
+            code='KAKAO_SERVICE_UNAVAILABLE',
         )
         request = self.factory.get('/api/mybook/recommendation/')
         force_authenticate(request, user=self.user)
@@ -1455,7 +986,7 @@ class BookRecommendationViewStabilityTests(TestCase):
 
         self.assertEqual(response.status_code, 503)
         self.assertTrue(response.data['retryable'])
-        self.assertEqual(response.data['code'], 'NLK_SERVICE_UNAVAILABLE')
+        self.assertEqual(response.data['code'], 'KAKAO_SERVICE_UNAVAILABLE')
 
     @patch('mybook.views._build_user_profile')
     @patch('mybook.views.BookRecommendationAgent.recommend')
@@ -1521,8 +1052,8 @@ class BookRecommendationViewStabilityTests(TestCase):
             profile_basis=self.profile,
         )
         recommend.side_effect = BookRecommendationUnavailable(
-            '서지 서비스 장애',
-            code='NLK_SERVICE_UNAVAILABLE',
+            'Kakao 도서 검색 서비스 장애',
+            code='KAKAO_SERVICE_UNAVAILABLE',
         )
         request = self.factory.get('/api/mybook/recommendation/?force=true')
         force_authenticate(request, user=self.user)
@@ -1561,8 +1092,8 @@ class BookRecommendationViewStabilityTests(TestCase):
             profile_basis=self.profile,
         )
         recommend.side_effect = BookRecommendationUnavailable(
-            '서지 서비스 장애',
-            code='NLK_SERVICE_UNAVAILABLE',
+            'Kakao 도서 검색 서비스 장애',
+            code='KAKAO_SERVICE_UNAVAILABLE',
         )
         request = self.factory.get('/api/mybook/recommendation/')
         force_authenticate(request, user=self.user)

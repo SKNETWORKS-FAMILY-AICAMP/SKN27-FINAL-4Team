@@ -20,8 +20,17 @@ from .services.recommendation_service import (
 @permission_classes([IsAuthenticated])
 def book_recommendation(request):
     """Validate HTTP input and delegate recommendation work to the service layer."""
-    force = request.query_params.get("force", "").lower() == "true"
-    requested_theme = request.query_params.get("theme", "").lower()
+    force = request.query_params.get("force", "").strip().lower() == "true"
+    requested_theme = request.query_params.get("theme", "").strip().lower()
+    if requested_theme and requested_theme not in SUPPORTED_THEME_IDS:
+        return Response(
+            {
+                "detail": "지원하지 않는 책 추천 테마입니다.",
+                "code": "BOOK_RECOMMENDATION_INVALID_THEME",
+                "supported_themes": list(SUPPORTED_THEME_IDS),
+            },
+            status=400,
+        )
     force_theme = requested_theme if requested_theme in SUPPORTED_THEME_IDS else None
 
     result = build_recommendation_response(

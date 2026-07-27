@@ -10,6 +10,10 @@ from mindreport.constants import PERIOD_LABELS, PERIOD_MONTH, PERIOD_WEEK
 from mindreport.exceptions import MindReportError, MindReportGenerationError
 from mindreport.services.graph_flow import MindReportSupervisorAgent
 from mindreport.services.payloads import payload_from_graph_state, serialize_report
+from mindreport.services.periods import (
+    last_completed_month,
+    last_completed_week_target_date,
+)
 from mindreport.services.persistence import (
     list_latest_period_reports,
     period_report_exists,
@@ -37,23 +41,23 @@ class MindReportService:
         *,
         user,
         target_date: date,
-        include_monthly: bool,
     ) -> list[dict[str, Any]]:
-        """Load reports and automatically catch up a missing scheduled period."""
+        """Load reports and catch up the latest completed scheduled periods."""
+        weekly_target_date = last_completed_week_target_date(target_date)
+        monthly_year, monthly_month = last_completed_month(target_date)
         self.ensure_period_report(
             user=user,
             period_type=PERIOD_WEEK,
             period_name=PERIOD_LABELS[PERIOD_WEEK],
-            target_date=target_date,
+            target_date=weekly_target_date,
         )
-        if include_monthly:
-            self.ensure_period_report(
-                user=user,
-                period_type=PERIOD_MONTH,
-                period_name=PERIOD_LABELS[PERIOD_MONTH],
-                year=target_date.year,
-                month=target_date.month,
-            )
+        self.ensure_period_report(
+            user=user,
+            period_type=PERIOD_MONTH,
+            period_name=PERIOD_LABELS[PERIOD_MONTH],
+            year=monthly_year,
+            month=monthly_month,
+        )
         return self.list_reports(user=user)
 
     def ensure_period_report(

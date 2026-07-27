@@ -29,6 +29,11 @@
               <strong>마이룸 기능</strong>
             </div>
           </div>
+          <button class="character-action" type="button" @click="openPanel('character')">
+            <span class="menu-object" aria-hidden="true"><img src="/icons/캐릭터아이콘.png" alt="캐릭터 정보" /></span>
+            <span class="menu-copy"><strong>캐릭터 정보</strong><small>캐릭터 조회 및 변경</small></span>
+            <span class="menu-arrow" aria-hidden="true">→</span>
+          </button>
           <button type="button" @click="openPanel('mbti')">
             <span class="menu-object" aria-hidden="true"><img src="/icons/분석아이콘.png" alt="MBTI 분석" /></span>
             <span class="menu-copy"><strong>MBTI 분석</strong><small>성향과 변화</small></span>
@@ -47,11 +52,6 @@
           <button class="memory-action" type="button" @click="openPanel('memory')">
             <span class="menu-object" aria-hidden="true"><img src="/icons/기억아이콘.png" alt="기억 보관함" /></span>
             <span class="menu-copy"><strong>기억 보관함</strong><small>저장된 기억</small></span>
-            <span class="menu-arrow" aria-hidden="true">→</span>
-          </button>
-          <button class="character-action" type="button" @click="openPanel('character')">
-            <span class="menu-object" aria-hidden="true"><img src="/icons/캐릭터아이콘.png" alt="캐릭터 정보" /></span>
-            <span class="menu-copy"><strong>캐릭터 정보</strong><small>동행 캐릭터</small></span>
             <span class="menu-arrow" aria-hidden="true">→</span>
           </button>
         </nav>
@@ -160,7 +160,6 @@
           :mbti-data="mbtiData"
           :mbti-view-mode="mbtiViewMode"
           :mbti-views="mbtiViews"
-          :current-mbti-view="currentMbtiView"
           :analysis-eligibility="mbtiAnalysisEligibility"
           :analysis-polling="mbtiAnalysisPolling"
           @refresh="refreshMbtiDemoData"
@@ -186,7 +185,6 @@
           :loading="bookLoading"
           :error="bookError"
           @refresh="loadBookData"
-          @close="closePanel"
         />
 
         <MemoryPanel
@@ -279,9 +277,6 @@ export default {
     t() {
       return i18n[this.settings.language];
     },
-    currentMbtiView() {
-      return this.mbtiViews.find(view => view.key === this.mbtiViewMode) || this.mbtiViews[0];
-    },
     currentPanelTitle() {
       if (!this.activePanel) return "";
       return this.t[this.activePanel];
@@ -304,16 +299,6 @@ export default {
       const onboarding = this.mbtiData?.onboarding?.type;
       const profileType = this.profile?.mbti;
       return [current, onboarding, profileType].find(type => type && type !== "----") || "미등록";
-    },
-    mbtiSummaryText() {
-      const previous = this.mbtiData?.previous?.type;
-      if (this.profileMbtiLabel === "미등록") return "설정 필요";
-      if (previous && previous !== "----" && previous !== this.profileMbtiLabel) {
-        return `${previous} -> ${this.profileMbtiLabel}`;
-      }
-      return this.mbtiData?.current?.type && this.mbtiData.current.type !== "----"
-        ? "최근 월간 분석 기준"
-        : "온보딩 기준";
     },
     todayEmotionLabel() {
       if (this.todayEmotionLoading) return "확인 중";
@@ -384,6 +369,7 @@ export default {
   },
   beforeUnmount() {
     this.mbtiPollToken += 1;
+    this.bookRequestId += 1;
     if (this.weatherRefreshTimer) window.clearInterval(this.weatherRefreshTimer);
     if (this.toastTimer) window.clearTimeout(this.toastTimer);
   },
@@ -561,7 +547,10 @@ export default {
             }
           }
           this.profileSavedAt = new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+          this.bookRequestId += 1;
+          this.bookLoading = false;
           this.bookPayload = null;
+          this.bookError = "";
           this.showToast("프로필 수정 내용이 정상적으로 반영되었습니다.");
           this.profileSnapshot = null;
         } catch (e) {
@@ -754,17 +743,28 @@ export default {
       } else {
         forceBool = Boolean(force);
       }
-      if (!forceBool && this.bookPayload) return;
+      if (!forceBool && (this.bookPayload || this.bookLoading)) return;
 
+      const requestId = ++this.bookRequestId;
       this.bookLoading = true;
       this.bookError = "";
       try {
-        this.bookPayload = await fetchBookRecommendation(forceBool, themeParam);
+        const payload = await fetchBookRecommendation(forceBool, themeParam);
+        if (requestId !== this.bookRequestId) return;
+        this.bookPayload = payload;
       } catch (error) {
+        if (requestId !== this.bookRequestId) return;
         console.error(error);
-        this.bookError = error.message || "책 추천 정보를 불러오지 못했습니다.";
+        const message = error.message || "책 추천 정보를 불러오지 못했습니다.";
+        if (this.bookPayload) {
+          this.showToast("새 추천을 불러오지 못해 기존 추천을 유지합니다.");
+        } else {
+          this.bookError = message;
+        }
       } finally {
-        this.bookLoading = false;
+        if (requestId === this.bookRequestId) {
+          this.bookLoading = false;
+        }
       }
     },
     async loadMemoryData(force = false) {
@@ -830,9 +830,9 @@ export default {
         this.showToast("지원하지 않는 MBTI거나 통신 오류가 발생했습니다.");
       }
     },
-    async loadMbtiDemoData(force = false, periodKey = "") {
+    async loadMbtiDemoData(periodKey = "") {
       try {
-        const payload = await fetchMbtiDemoPayload(force, periodKey);
+        const payload = await fetchMbtiDemoPayload(periodKey);
         const hasMonthlyAnalysis = this.hasRenderableMonthlyMbtiData(payload.mbti_data);
         const hasOnboardingProfile = this.hasRenderableOnboardingMbtiData(payload.mbti_data);
 
@@ -887,7 +887,7 @@ export default {
           this.showToast("분석 요청이 접수되었습니다. 결과를 만드는 중입니다...");
           finalPayload = await this.pollMbtiAnalysis(periodKey, pollToken) || requestPayload;
         } else {
-          finalPayload = await this.loadMbtiDemoData(false, periodKey) || requestPayload;
+          finalPayload = await this.loadMbtiDemoData(periodKey) || requestPayload;
         }
 
         const jobStatus = finalPayload?.analysis_job?.status || requestedStatus;
@@ -913,13 +913,13 @@ export default {
         await new Promise((resolve) => window.setTimeout(resolve, 2000));
         if (pollToken !== this.mbtiPollToken) return null;
 
-        const payload = await this.loadMbtiDemoData(false, periodKey);
+        const payload = await this.loadMbtiDemoData(periodKey);
         const jobStatus = payload?.analysis_job?.status;
         if (["completed", "failed", "skipped"].includes(jobStatus)) {
           return payload;
         }
       }
-      return this.loadMbtiDemoData(false, periodKey);
+      return this.loadMbtiDemoData(periodKey);
     },
     applySettings() {
       document.documentElement.dataset.contrast = String(this.settings.highContrast);

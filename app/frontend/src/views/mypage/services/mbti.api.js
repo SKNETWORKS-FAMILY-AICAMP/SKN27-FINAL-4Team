@@ -1,9 +1,8 @@
 // 2026-07-23: PUT/POST/DELETE는 CSRF 토큰 필수 — 생짜 fetch라 axios 인터셉터를
 // 못 타서 운영(세션 인증)에서 전부 403이었다. 공용 토큰 저장소에서 첨부한다.
 import { getCsrfToken } from '../../../api/client.js'
-export async function fetchMbtiDemoPayload(force = false, periodKey = "") {
+export async function fetchMbtiDemoPayload(periodKey = "") {
   const queryParams = new URLSearchParams();
-  if (force) queryParams.set("force", "true");
   if (periodKey) queryParams.set("period_key", periodKey);
   const queryString = queryParams.toString();
   const response = await fetch(`/api/mbti/monthly-demo/${queryString ? `?${queryString}` : ""}`, {

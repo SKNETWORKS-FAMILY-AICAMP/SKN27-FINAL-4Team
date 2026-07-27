@@ -236,7 +236,6 @@ export default {
     mbtiData: { type: Object, default: null },
     mbtiViewMode: { type: String, required: true },
     mbtiViews: { type: Array, required: true },
-    currentMbtiView: { type: Object, required: true },
     analysisEligibility: { type: Object, default: null },
     analysisPolling: { type: Boolean, default: false }
   },

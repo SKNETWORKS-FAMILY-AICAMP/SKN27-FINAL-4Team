@@ -121,3 +121,17 @@ def is_last_week_of_month(target_date: date) -> bool:
     sunday_date = target_date + timedelta(days=days_to_sunday)
     _, last_day = calendar.monthrange(target_date.year, target_date.month)
     return sunday_date.month != target_date.month or sunday_date.day == last_day
+
+
+def last_completed_week_target_date(reference_date: date | None = None) -> date:
+    """Return a date inside the most recently completed Monday-Sunday week."""
+    resolved_date = reference_date or timezone.localdate()
+    current_week_start = resolved_date - timedelta(days=resolved_date.weekday())
+    return current_week_start - timedelta(days=1)
+
+
+def last_completed_month(reference_date: date | None = None) -> tuple[int, int]:
+    """Return the year and month immediately preceding the reference date."""
+    resolved_date = reference_date or timezone.localdate()
+    previous_month_end = resolved_date.replace(day=1) - timedelta(days=1)
+    return previous_month_end.year, previous_month_end.month

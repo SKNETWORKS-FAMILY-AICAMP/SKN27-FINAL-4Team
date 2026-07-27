@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Sequence
 
 from mindreport.services.emotion_flow import (
     EmotionFlowResult,
@@ -47,24 +47,6 @@ def build_alternative_plan(
         if candidates
         else '감정 흐름에 맞는 실천 대안 후보를 구성하지 못했습니다.',
     )
-
-
-def alternative_plan_to_payload(result: AlternativePlanResult) -> dict[str, Any]:
-    return {
-        'flow_type': result.flow_type,
-        'maintenance_type': result.maintenance_type,
-        'action_direction': result.action_direction,
-        'candidate_count': len(result.candidates),
-        'candidates': [
-            {
-                'title': candidate.title,
-                'category': candidate.category,
-                'priority': candidate.priority,
-                'rationale': candidate.rationale,
-            }
-            for candidate in result.candidates
-        ],
-    }
 
 
 def _candidates_for_flow(

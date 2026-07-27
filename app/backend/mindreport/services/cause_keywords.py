@@ -7,10 +7,7 @@ import re
 from typing import Any, Mapping, Protocol, Sequence
 
 from mindreport.constants import (
-    FLOW_SCORE_DOWNWARD,
-    FLOW_SCORE_MAINTENANCE,
     FLOW_SCORE_UPWARD,
-    FLOW_SCORE_VOLATILE,
     MINDREPORT_CAUSE_KEYWORD_MODEL,
     MINDREPORT_CAUSE_MAX_TOKENS,
     MINDREPORT_LLM_TEMPERATURE,

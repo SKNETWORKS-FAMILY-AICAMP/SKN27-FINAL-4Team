@@ -3,19 +3,6 @@
 import os
 
 
-NLK_BOOK_API_URL = os.environ.get(
-    "NLK_BOOK_API_URL",
-    "https://apis.data.go.kr/1371029/BookInformationService_v2/getbookList_v2",
-)
-NLK_BOOK_TIMEOUT_SECONDS = float(os.environ.get("NLK_BOOK_TIMEOUT_SECONDS", "5"))
-NLK_BOOK_RETRY_COUNT = max(0, int(os.environ.get("NLK_BOOK_RETRY_COUNT", "1")))
-NLK_BOOK_PAGE_SIZE = min(20, max(1, int(os.environ.get("NLK_BOOK_PAGE_SIZE", "20"))))
-NLK_BOOK_QUERY_LIMIT = min(6, max(2, int(os.environ.get("NLK_BOOK_QUERY_LIMIT", "4"))))
-NLK_BOOK_MAX_PROBE_PAGES = min(
-    2,
-    max(0, int(os.environ.get("NLK_BOOK_MAX_PROBE_PAGES", "1"))),
-)
-
 KAKAO_BOOK_API_URL = os.environ.get(
     "KAKAO_BOOK_API_URL",
     "https://dapi.kakao.com/v3/search/book",
@@ -31,20 +18,10 @@ KAKAO_BOOK_QUERY_LIMIT = min(
     max(2, int(os.environ.get("KAKAO_BOOK_QUERY_LIMIT", "4"))),
 )
 KAKAO_API_KEY_ENV_VARS = ("KAKAO_REST_API_KEY", "KAKAO_CLIENT_ID")
-NLK_API_KEY_ENV_VARS = ("NLK_BIBLIO_SERVICE_KEY", "DATA_GO_KR_SERVICE_KEY")
 
 RECOMMENDATION_ENGINE_VERSION = "kakao_books_v3"
 RECOMMENDATION_HISTORY_LIMIT = 12
-BOOK_COVER_TIMEOUT_SECONDS = float(os.environ.get("BOOK_COVER_TIMEOUT_SECONDS", "3"))
-BOOK_COVER_CACHE_SECONDS = max(
-    3600,
-    int(os.environ.get("BOOK_COVER_CACHE_SECONDS", str(60 * 60 * 24 * 7))),
-)
-MAX_BOOK_AGE_YEARS = 10
 RETRYABLE_HTTP_STATUSES = frozenset((429, 500, 502, 503, 504))
-NLK_NO_DATA_CODES = frozenset(("03", "3"))
-NLK_SUCCESS_CODES = frozenset(("00", "0", "NORMAL_SERVICE"))
-NLK_PROBE_PAGE_RATIOS = (0.8, 1.0, 0.6, 0.4, 0.2)
 
 SUPPORTED_THEME_IDS = ("emotion", "interests", "hobbies")
 PROFILE_TOPIC_THEME_IDS = frozenset(("interests", "hobbies"))
@@ -111,15 +88,6 @@ ADULT_CONTENT_PATTERNS = (
     r"(?:섹스|(?<![A-Za-z])sex(?![A-Za-z]))\s*(?:소설|스토리|판타지|테크닉|가이드)?",
 )
 
-NLK_PROVIDER_INFO = {
-    "id": "nlk_national_bibliography_lod",
-    "label": LEGACY_BOOK_METADATA_SOURCE,
-    "short_label": "국가서지 LOD",
-    "portal_url": "https://www.data.go.kr/data/15154402/openapi.do",
-    "detail_url": "https://www.nl.go.kr/NL/contents/N11000000000.do",
-    "license": "공공누리 제1유형 · CC0 1.0",
-    "attribution": "출처: 문화체육관광부 국립중앙도서관 국가서지 LOD",
-}
 KAKAO_BOOK_PROVIDER_INFO = {
     "id": "kakao_daum_book_search",
     "label": "Kakao Daum 책 검색",
@@ -127,14 +95,6 @@ KAKAO_BOOK_PROVIDER_INFO = {
     "detail_url": "https://developers.kakao.com/docs/latest/ko/daum-search/dev-guide#search-book",
     "attribution": "책 상세·표지: Kakao Daum 책 검색",
 }
-OPEN_LIBRARY_COVER_PROVIDER_INFO = {
-    "id": "open_library_covers",
-    "label": "Open Library Covers",
-    "short_label": "Open Library 표지",
-    "detail_url": "https://openlibrary.org/dev/docs/api/covers",
-    "attribution": "표지: Open Library Covers",
-}
-
 FALLBACK_KEYWORDS = {
     "emotion": ("마음 회복 소설", "오늘 감정이 좋다면 유지하고, 무겁다면 덜어내는 독서 방향입니다."),
     "interests": ("교양 입문", "프로필 관심사 자체를 더 깊이 읽을 수 있는 방향입니다."),
@@ -191,20 +151,7 @@ CATALOG_ACTION_TOKENS = frozenset(
     ("하기", "보기", "듣기", "읽기", "찍기", "만들기", "다니기", "감상", "탐방", "투어", "활동", "생활")
 )
 REJECTED_KAKAO_TITLE_MARKERS = ("체험판", "미리보기", "요약본")
-ALLOWED_COVER_HOSTS = frozenset(("covers.openlibrary.org",))
 ALLOWED_COVER_HOST_SUFFIXES = (".kakaocdn.net", ".daumcdn.net")
-THESIS_TITLE_MARKERS = ("학위논문", "학위 청구", "석사학위", "박사학위")
-NON_READING_TITLE_MARKERS = (
-    "교과서",
-    "지도서",
-    "문제집",
-    "수험서",
-    "정답과 해설",
-    "연구보고서",
-    "연구 보고서",
-    "교육과정 개발",
-    "에 관한 연구",
-)
 PERSONALIZATION_STOPWORDS = frozenset(
     ("추천", "도서", "책", "입문", "실용", "교양", "오늘", "기반", "관련", "위한", "좋은", "읽기", "소설", "에세이")
 )
@@ -219,26 +166,6 @@ GENRE_RULES = (
     ("자기계발", ("자기계발", "커리어", "습관", "성장")),
     ("에세이", ("에세이", "산문")),
 )
-HOBBY_POSITIVE_MARKERS = (
-    "방법",
-    "기술",
-    "가이드",
-    "레시피",
-    "배우",
-    "연습",
-    "활용",
-    "촬영",
-    "스타일링",
-    "사진책",
-    "입문",
-    "기초",
-    "교본",
-    "안내서",
-    "렌즈",
-)
-HOBBY_NEGATIVE_MARKERS = ("측량", "탐측", "창립", "기념", "교육과정", "교재")
-EMOTION_POSITIVE_MARKERS = ("위로", "회복", "행복", "감정", "휴식", "치유")
-
 HEALTHY_SERVICE_STATUS = {"state": "healthy", "retryable": False}
 DEGRADED_SERVICE_MESSAGE = "책 추천 생성에 실패해 이전 추천을 표시합니다."
 UNEXPECTED_ERROR_CODE = "BOOK_RECOMMENDATION_UNEXPECTED_ERROR"

@@ -9,3 +9,6 @@ class MindreportConfig(AppConfig):
 
     def ready(self):
         from . import checks  # noqa: F401
+        from mindreport.services.runtime import start_background_service
+
+        start_background_service()

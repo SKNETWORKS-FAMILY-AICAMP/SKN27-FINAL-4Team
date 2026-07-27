@@ -21,9 +21,6 @@ from mindreport.constants import (
     KCELECTRA_SCORE_WEIGHTS,
     KCELECTRA_SCORING_METHOD,
     LABEL_GROUNDED_AFFECT_SCORING_METHOD,
-    MINDREPORT_LLM_TEMPERATURE,
-    MINDREPORT_SCORING_MAX_TOKENS,
-    MINDREPORT_SCORING_MODEL,
     PERIOD_MONTH,
     PERIOD_WEEK,
     SCORING_ROUTE_KCELECTRA,
@@ -333,45 +330,6 @@ def _extract_json_object(text: str) -> Mapping[str, Any]:
     return parsed
 
 
-class LangChainEmotionScoreClient:
-    def score_messages(self, *, payload: Mapping[str, Any]) -> Mapping[str, Any]:
-        from langchain_core.messages import SystemMessage
-        from langchain_core.prompts import ChatPromptTemplate, HumanMessagePromptTemplate
-        from langchain_openai import ChatOpenAI
-
-        prompt = ChatPromptTemplate(
-            messages=[
-                SystemMessage(
-                    content=(
-                        '너는 마음리포트의 일 단위 감정 근거 분류기다. '
-                        '하루의 사용자 발화에서 긍정 정서, 부정 정서, 각성도를 각각 독립적으로 분류한다. '
-                        '모든 발화에 감정이 있다고 보지 말고, 감정 근거가 있는 발화만 근거로 삼는다. '
-                        '긍정과 부정이 함께 드러나면 둘 다 점수를 부여한다. '
-                        '0~100 최종 점수는 서버가 계산하므로 직접 생성하지 않는다. '
-                        '이 결과는 진단이나 평가가 아니라 날짜별 감정 흐름 분석의 입력값이다. '
-                        '입력 근거 밖의 사실을 만들지 말고 JSON 객체만 반환한다.'
-                    )
-                ),
-                HumanMessagePromptTemplate.from_template('{scoring_payload}'),
-            ]
-        )
-        llm = ChatOpenAI(
-            model=MINDREPORT_SCORING_MODEL,
-            temperature=MINDREPORT_LLM_TEMPERATURE,
-            max_tokens=MINDREPORT_SCORING_MAX_TOKENS,
-        )
-        message = (prompt | llm).invoke(
-            {'scoring_payload': json.dumps(payload, ensure_ascii=False)}
-        )
-        content = message.content
-        if isinstance(content, list):
-            content = ''.join(
-                str(item.get('text', item)) if isinstance(item, dict) else str(item)
-                for item in content
-            )
-        return _extract_json_object(str(content))
-
-
 def emotion_state_from_score(score: float) -> str:
     """Return the canonical downstream state for every 0..100 score."""
     if score > EMOTION_SCORE_POSITIVE_MIN:
@@ -379,10 +337,6 @@ def emotion_state_from_score(score: float) -> str:
     if score < EMOTION_SCORE_NEGATIVE_MAX:
         return 'negative'
     return 'neutral'
-
-
-# Backward-compatible private name used by older parsing helpers.
-_state_from_score = emotion_state_from_score
 
 
 def _parse_affect_dimension(row: Mapping[str, Any], key: str) -> float | None:
@@ -471,7 +425,7 @@ def parse_emotion_scores(
                 positive_affect,
                 negative_affect,
             )
-            emotion_state = _state_from_score(emotion_score)
+            emotion_state = emotion_state_from_score(emotion_score)
             confidence = (
                 _nearest_confidence_level(row.get('confidence'))
                 if evidence_ids
@@ -486,7 +440,7 @@ def parse_emotion_scores(
             emotion_score = max(0.0, min(100.0, emotion_score))
             emotion_state = str(row.get('emotion_state') or '').strip().lower()
             if emotion_state not in {'positive', 'neutral', 'negative'}:
-                emotion_state = _state_from_score(emotion_score)
+                emotion_state = emotion_state_from_score(emotion_score)
             try:
                 confidence = float(row.get('confidence'))
             except (TypeError, ValueError):
