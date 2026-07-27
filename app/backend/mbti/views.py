@@ -37,17 +37,6 @@ def monthly_demo(request):
     requested_period_key = request.query_params.get("period_key") or None
     active_period_key = requested_period_key or current_period_key()
 
-    # 이전 클라이언트의 force=true도 동기 LLM 호출 대신 작업 큐로 보낸다.
-    if request.query_params.get("force") == "true":
-        try:
-            enqueue_user_month_job(
-                user_id=user_id,
-                period_key=active_period_key,
-                trigger_source='dashboard_on_demand',
-            )
-        except Exception:
-            logger.exception("Failed to enqueue monthly MBTI analysis.")
-
     try:
         payload = load_latest_frontend_payload(
             user_id=user_id,

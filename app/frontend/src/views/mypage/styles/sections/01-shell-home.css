@@ -588,12 +588,12 @@
 .quick-actions button {
   position: relative;
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr);
+  grid-template-columns: 32px minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
   min-height: 56px;
-  padding: 8px 12px;
+  padding: 8px 10px;
   border: 0;
   border-bottom: 1px solid rgba(215, 183, 255, 0.18);
   background: transparent;
@@ -602,13 +602,21 @@
   transition: background 180ms ease;
 }
 
-.quick-actions button:nth-of-type(odd) {
+.quick-actions button:nth-of-type(even) {
   border-right: 1px solid rgba(215, 183, 255, 0.18);
 }
 
 .quick-actions .character-action {
   grid-column: 1 / -1;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  gap: 11px;
+  min-height: 64px;
+  padding: 9px 14px;
   border-right: 0;
+  background: linear-gradient(90deg, rgba(229, 155, 95, 0.09), rgba(130, 144, 160, 0.025));
+}
+
+.quick-actions button:nth-last-of-type(-n + 2) {
   border-bottom: 0;
 }
 
@@ -634,8 +642,8 @@
 
 .quick-actions .menu-object {
   display: grid;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   place-items: center;
   border: 1px solid rgba(215, 183, 255, 0.18);
   border-radius: 10px;
@@ -691,6 +699,18 @@
   display: none;
 }
 
+.quick-actions .character-action .menu-object {
+  width: 40px;
+  height: 40px;
+}
+
+.quick-actions .character-action .menu-arrow {
+  display: block;
+  color: rgba(255, 247, 223, 0.58);
+  font-size: 15px;
+  transition: color 180ms ease, transform 180ms ease;
+}
+
 .quick-actions button:hover .menu-arrow,
 .quick-actions button:focus-visible .menu-arrow {
   color: #fff7df;
@@ -699,6 +719,11 @@
 
 .quick-actions .memory-action {
   background: transparent;
+}
+
+.quick-actions .memory-action .menu-copy strong {
+  font-size: 13px;
+  letter-spacing: -0.04em;
 }
 
 .quick-actions .memory-action .menu-object {

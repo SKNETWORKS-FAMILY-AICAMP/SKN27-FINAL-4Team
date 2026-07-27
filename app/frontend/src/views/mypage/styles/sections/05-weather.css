@@ -28,7 +28,7 @@
 .weather-current-card {
   position: relative;
   display: grid;
-  grid-template-rows: auto minmax(178px, 1fr) auto auto auto;
+  grid-template-rows: auto minmax(214px, 1fr) auto auto auto;
   gap: 10px;
   padding: 14px;
   background: linear-gradient(160deg, rgba(63, 46, 72, 0.82), rgba(31, 21, 45, 0.92));
@@ -696,18 +696,65 @@
   }
 }
 
+/* The hero artwork is rendered by WeatherScene's layered SVG. These rules only
+   frame the scene and keep the live weather label legible over every palette. */
+.weather-visual {
+  min-height: 214px;
+  display: block;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 16px;
+  background: #292444;
+  overflow: hidden;
+  position: relative;
+  isolation: isolate;
+  box-shadow:
+    0 18px 34px rgba(8, 5, 24, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.weather-visual::before {
+  z-index: 2;
+  inset: 0;
+  background:
+    linear-gradient(108deg, rgba(255, 255, 255, 0.08), transparent 23%, transparent 72%, rgba(255, 255, 255, 0.025)),
+    linear-gradient(180deg, transparent 48%, rgba(13, 12, 34, 0.14) 68%, rgba(13, 12, 34, 0.72) 100%);
+}
+
+.weather-visual::after {
+  z-index: 3;
+  left: 9%;
+  right: 9%;
+  bottom: 54px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+}
+
+.weather-visual-caption {
+  position: absolute;
+  z-index: 4;
+  right: 18px;
+  bottom: 14px;
+  left: 18px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  text-shadow: 0 2px 10px rgba(7, 5, 22, 0.72);
+}
+
 .weather-visual strong {
   color: #fff7df;
-  font-size: 20px;
+  font-size: 21px;
   line-height: 1.2;
-  z-index: 1;
+  letter-spacing: -0.02em;
 }
 
 .weather-visual span {
-  color: rgba(255, 245, 230, 0.7);
+  color: rgba(255, 248, 235, 0.76);
   font-size: 13px;
   font-weight: 850;
-  z-index: 1;
+  text-align: right;
 }
 
 .weather-main-metrics {

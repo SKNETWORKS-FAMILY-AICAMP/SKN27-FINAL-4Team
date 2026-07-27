@@ -404,7 +404,6 @@ class WeatherExternalProcessingTests(SimpleTestCase):
                 {'kind': 'general', 'title': '겉옷 준비', 'summary': '기온에 대비해요.', 'actions': ['겉옷 챙기기']},
             ],
             {'condition': '흐림'},
-            {'hobbies': ['사진']},
         )
 
         self.assertEqual([item['kind'] for item in recommendations], ['general', 'general', 'hobby'])
@@ -426,7 +425,6 @@ class WeatherExternalProcessingTests(SimpleTestCase):
         recommendations = WeatherWebAgent._normalize_recommendations(
             [{'kind': 'general', 'title': '제목만 있음'}],
             {'condition': '맑음'},
-            {'hobbies': ['사진']},
         )
 
         self.assertEqual(recommendations, [])

@@ -3,19 +3,6 @@
 import os
 
 
-NLK_BOOK_API_URL = os.environ.get(
-    "NLK_BOOK_API_URL",
-    "https://apis.data.go.kr/1371029/BookInformationService_v2/getbookList_v2",
-)
-NLK_BOOK_TIMEOUT_SECONDS = float(os.environ.get("NLK_BOOK_TIMEOUT_SECONDS", "5"))
-NLK_BOOK_RETRY_COUNT = max(0, int(os.environ.get("NLK_BOOK_RETRY_COUNT", "1")))
-NLK_BOOK_PAGE_SIZE = min(20, max(1, int(os.environ.get("NLK_BOOK_PAGE_SIZE", "20"))))
-NLK_BOOK_QUERY_LIMIT = min(6, max(2, int(os.environ.get("NLK_BOOK_QUERY_LIMIT", "4"))))
-NLK_BOOK_MAX_PROBE_PAGES = min(
-    2,
-    max(0, int(os.environ.get("NLK_BOOK_MAX_PROBE_PAGES", "1"))),
-)
-
 KAKAO_BOOK_API_URL = os.environ.get(
     "KAKAO_BOOK_API_URL",
     "https://dapi.kakao.com/v3/search/book",
@@ -31,20 +18,10 @@ KAKAO_BOOK_QUERY_LIMIT = min(
     max(2, int(os.environ.get("KAKAO_BOOK_QUERY_LIMIT", "4"))),
 )
 KAKAO_API_KEY_ENV_VARS = ("KAKAO_REST_API_KEY", "KAKAO_CLIENT_ID")
-NLK_API_KEY_ENV_VARS = ("NLK_BIBLIO_SERVICE_KEY", "DATA_GO_KR_SERVICE_KEY")
 
-RECOMMENDATION_ENGINE_VERSION = "kakao_books_v2"
+RECOMMENDATION_ENGINE_VERSION = "kakao_books_v3"
 RECOMMENDATION_HISTORY_LIMIT = 12
-BOOK_COVER_TIMEOUT_SECONDS = float(os.environ.get("BOOK_COVER_TIMEOUT_SECONDS", "3"))
-BOOK_COVER_CACHE_SECONDS = max(
-    3600,
-    int(os.environ.get("BOOK_COVER_CACHE_SECONDS", str(60 * 60 * 24 * 7))),
-)
-MAX_BOOK_AGE_YEARS = 10
 RETRYABLE_HTTP_STATUSES = frozenset((429, 500, 502, 503, 504))
-NLK_NO_DATA_CODES = frozenset(("03", "3"))
-NLK_SUCCESS_CODES = frozenset(("00", "0", "NORMAL_SERVICE"))
-NLK_PROBE_PAGE_RATIOS = (0.8, 1.0, 0.6, 0.4, 0.2)
 
 SUPPORTED_THEME_IDS = ("emotion", "interests", "hobbies")
 PROFILE_TOPIC_THEME_IDS = frozenset(("interests", "hobbies"))
@@ -77,20 +54,40 @@ BASIS_TOKEN_ALIASES = {
     "필사": ("쓰기", "문장", "손글씨"),
     "요가": ("명상", "호흡", "스트레칭"),
     "패션": ("스타일", "복식", "의류", "디자인"),
-    "팝업스토어": ("팝업", "브랜드", "전시", "공간"),
+    "팝업스토어": ("팝업", "브랜드팝업", "체험공간"),
     "맛집": ("미식", "식문화", "음식", "외식"),
     "탐방": ("여행", "답사", "기행"),
+    "헬스": ("근력", "웨이트", "피트니스", "트레이닝"),
+    "홈트레이닝": ("홈트", "근력", "피트니스", "운동"),
+    "러닝": ("달리기", "마라톤", "조깅"),
+    "반려동물": ("강아지", "고양이", "반려견", "반려묘", "펫"),
+    "애완동물": ("강아지", "고양이", "반려견", "반려묘", "펫"),
+    "가드닝": ("원예", "정원", "화분", "식물"),
+    "베이킹": ("제빵", "제과", "빵", "디저트"),
+    "카페": ("커피", "원두", "바리스타"),
+    "뷰티": ("메이크업", "화장품", "스킨케어", "퍼스널컬러"),
+    "인테리어": ("가구", "조명", "집꾸미기", "공간디자인"),
+    "웹툰": ("만화", "그래픽노블"),
+    "애니메이션": ("애니", "만화", "캐릭터"),
+    "디지털": ("테크", "플랫폼", "온라인", "기술"),
+    "문화예술": ("전시", "미술관", "박물관", "예술"),
+    "악기": ("기타", "피아노", "드럼", "연주"),
+    "외국어": ("영어", "일본어", "중국어", "어학"),
+    "차/티": ("홍차", "녹차", "허브티", "티타임", "차문화"),
 }
 
-NLK_PROVIDER_INFO = {
-    "id": "nlk_national_bibliography_lod",
-    "label": LEGACY_BOOK_METADATA_SOURCE,
-    "short_label": "국가서지 LOD",
-    "portal_url": "https://www.data.go.kr/data/15154402/openapi.do",
-    "detail_url": "https://www.nl.go.kr/NL/contents/N11000000000.do",
-    "license": "공공누리 제1유형 · CC0 1.0",
-    "attribution": "출처: 문화체육관광부 국립중앙도서관 국가서지 LOD",
-}
+# Kakao 도서 API에는 성인 등급 필드가 없으므로 제목·소개에 노출되는
+# 명시적 등급/유해 신호를 후보 단계에서 보수적으로 차단한다.
+ADULT_CONTENT_PATTERNS = (
+    r"(?<!\d)1\s*9\s*(?:금|禁|\+|세\s*(?:이상|미만))|십구금",
+    r"청소년\s*(?:이용|구독|관람)?\s*(?:불가|금지|유해)",
+    r"미성년자\s*(?:이용|구독|관람)?\s*(?:불가|금지)",
+    r"성인\s*(?:전용|용|물|만화|웹툰|소설|로맨스|비엘|BL)",
+    r"adult\s*only",
+    r"(?:고수위|야설|포르노|에로티카?|관능\s*소설|성애\s*소설)",
+    r"(?:섹스|(?<![A-Za-z])sex(?![A-Za-z]))\s*(?:소설|스토리|판타지|테크닉|가이드)?",
+)
+
 KAKAO_BOOK_PROVIDER_INFO = {
     "id": "kakao_daum_book_search",
     "label": "Kakao Daum 책 검색",
@@ -98,14 +95,6 @@ KAKAO_BOOK_PROVIDER_INFO = {
     "detail_url": "https://developers.kakao.com/docs/latest/ko/daum-search/dev-guide#search-book",
     "attribution": "책 상세·표지: Kakao Daum 책 검색",
 }
-OPEN_LIBRARY_COVER_PROVIDER_INFO = {
-    "id": "open_library_covers",
-    "label": "Open Library Covers",
-    "short_label": "Open Library 표지",
-    "detail_url": "https://openlibrary.org/dev/docs/api/covers",
-    "attribution": "표지: Open Library Covers",
-}
-
 FALLBACK_KEYWORDS = {
     "emotion": ("마음 회복 소설", "오늘 감정이 좋다면 유지하고, 무겁다면 덜어내는 독서 방향입니다."),
     "interests": ("교양 입문", "프로필 관심사 자체를 더 깊이 읽을 수 있는 방향입니다."),
@@ -162,20 +151,7 @@ CATALOG_ACTION_TOKENS = frozenset(
     ("하기", "보기", "듣기", "읽기", "찍기", "만들기", "다니기", "감상", "탐방", "투어", "활동", "생활")
 )
 REJECTED_KAKAO_TITLE_MARKERS = ("체험판", "미리보기", "요약본")
-ALLOWED_COVER_HOSTS = frozenset(("covers.openlibrary.org",))
 ALLOWED_COVER_HOST_SUFFIXES = (".kakaocdn.net", ".daumcdn.net")
-THESIS_TITLE_MARKERS = ("학위논문", "학위 청구", "석사학위", "박사학위")
-NON_READING_TITLE_MARKERS = (
-    "교과서",
-    "지도서",
-    "문제집",
-    "수험서",
-    "정답과 해설",
-    "연구보고서",
-    "연구 보고서",
-    "교육과정 개발",
-    "에 관한 연구",
-)
 PERSONALIZATION_STOPWORDS = frozenset(
     ("추천", "도서", "책", "입문", "실용", "교양", "오늘", "기반", "관련", "위한", "좋은", "읽기", "소설", "에세이")
 )
@@ -190,26 +166,6 @@ GENRE_RULES = (
     ("자기계발", ("자기계발", "커리어", "습관", "성장")),
     ("에세이", ("에세이", "산문")),
 )
-HOBBY_POSITIVE_MARKERS = (
-    "방법",
-    "기술",
-    "가이드",
-    "레시피",
-    "배우",
-    "연습",
-    "활용",
-    "촬영",
-    "스타일링",
-    "사진책",
-    "입문",
-    "기초",
-    "교본",
-    "안내서",
-    "렌즈",
-)
-HOBBY_NEGATIVE_MARKERS = ("측량", "탐측", "창립", "기념", "교육과정", "교재")
-EMOTION_POSITIVE_MARKERS = ("위로", "회복", "행복", "감정", "휴식", "치유")
-
 HEALTHY_SERVICE_STATUS = {"state": "healthy", "retryable": False}
 DEGRADED_SERVICE_MESSAGE = "책 추천 생성에 실패해 이전 추천을 표시합니다."
 UNEXPECTED_ERROR_CODE = "BOOK_RECOMMENDATION_UNEXPECTED_ERROR"

@@ -8,22 +8,6 @@
 자유 대화를 임상 점수로 직접 변환하는 공인 표준은 없다. 따라서 검증된 감정 이론에서
 차원의 구조만 참고하고, 마음리포트의 환산식과 데이터 충족 기준은 제품 규칙으로 명시한다.
 
-## 근거
-
-1. Watson, Clark, Tellegen의 PANAS는 긍정 정서와 부정 정서를 서로 독립적인 차원으로
-   측정한다. 마음리포트도 두 차원을 별도로 분류하며, 긍정과 부정이 동시에 높을 수 있다.
-   - https://doi.org/10.1037/0022-3514.54.6.1063
-2. Russell의 감정 원형 모델은 쾌·불쾌(valence)와 각성(arousal)을 구분한다. 마음리포트는
-   각성도를 별도 정보로 보존하며 긍정·부정 균형 점수와 혼합하지 않는다.
-   - https://doi.org/10.1037/h0077714
-3. EMA 연구는 한 시점보다 여러 시점의 반복 측정이 개인 내 변화를 해석하는 데 필요함을
-   전제로 한다. 477개 연구의 메타분석에서 전형적인 설계는 7일 동안 하루 평균 6회였다.
-   이것은 마음리포트의 최소치를 직접 검증하는 자료가 아니라 반복 관측 원칙의 근거다.
-   - https://doi.org/10.1177/10731911211067538
-4. FDA PRO 지침은 측정 도구가 목적에 적합해야 하고 결측 및 측정 설계를 사전에 명시해야
-   한다고 권고한다. 따라서 마음리포트는 임상 척도를 표방하지 않고 근거 부족 상태를 별도로
-   표시한다.
-   - https://www.fda.gov/regulatory-information/search-fda-guidance-documents/principles-selecting-developing-modifying-and-adapting-patient-reported-outcome-instruments-use
 
 ## 생성 데이터 기준
 

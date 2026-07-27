@@ -439,13 +439,3 @@ def build_memory_introduction(unit):
     sections['original_text'] = source_text
     sections['text'] = narrative_text
     return sections
-
-
-def build_memory_content(unit):
-    return build_memory_introduction(unit)['text']
-
-
-# 기존 내부 import를 사용하는 코드와 테스트를 위한 호환 별칭.
-_memory_title = build_memory_title
-_memory_introduction = build_memory_introduction
-_memory_content = build_memory_content

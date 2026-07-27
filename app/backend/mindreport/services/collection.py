@@ -260,10 +260,6 @@ def format_ltm_context(events: tuple[LtmEvent, ...]) -> str:
     return '\n'.join(lines)
 
 
-def collect_ltm_context(**kwargs) -> str:
-    return format_ltm_context(collect_ltm_events(**kwargs))
-
-
 def check_generation_criteria(
     *,
     user,
