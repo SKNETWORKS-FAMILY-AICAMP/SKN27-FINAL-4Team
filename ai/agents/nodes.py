@@ -473,16 +473,14 @@ def crisis_agent_node(state: ChatState) -> dict:
 
 # ── [최종 응답 생성] ─────────────────────────────────────────
 
-# eleven_v3 오디오 태그 연기 지시 (공식 프롬프팅 가이드 기반)
-# 태그는 TTS 전용 — 화면 표시 전에 views에서 제거된다.
-TTS_ACTING_RULES = (
-    "[음성 연기 지시 — 태그는 화면에 안 보이고 목소리 연기에만 쓰입니다]\n"
-    "- 기쁨/슬픔/분노가 실린 응답이면 문장 사이 자연스러운 위치에 태그를 반드시 1~2개 넣으세요:\n"
-    "  기쁨: [excited] [laughs] · 슬픔: [sighs] [sad] · 화나는 얘기에 공감: [frustrated] [sighs]\n"
-    "  그 외: [whispers](비밀 얘기) [curious](궁금할 때)\n"
-    "- 위로할 땐 문장 앞에 [sighs], 축하할 땐 [excited] 처럼 감정 흐름에 맞게.\n"
-    "- 호흡이 필요한 곳엔 말줄임표(…)를 쓰세요. 담담한 일상 대화만 태그 없이 갑니다."
-)
+# TTS 연기 태그 규칙 은퇴 (2026-07-27)
+#   [sighs] [excited] 같은 오디오 태그는 ElevenLabs(eleven_v3) 전용 문법이었다.
+#   2026-07-19 OpenAI gpt-audio로 전환하면서 감정 표현은 태그가 아니라 TTS 요청의
+#   '연기 지시문'(_OPENAI_EMOTION_STYLE)이 담당하게 됐고, 태그는 두 소비처에서
+#   모두 제거된다 — tts_service.py(소리로 읽혀서 제거) · views.py _strip_tags(화면·DB용).
+#   즉 생성만 되고 쓰이는 곳이 없어 프롬프트에서 뺐다. 토큰도 줄고 출력도 깨끗해진다.
+#   ※ 두 곳의 제거 로직은 방어용으로 그대로 둔다(LLM이 대괄호를 뱉는 경우 대비).
+TTS_ACTING_RULES = ''   # 은퇴 — 하위 호환용 빈 문자열
 
 
 def resp_prep_node(state: ChatState) -> dict:
@@ -500,7 +498,7 @@ def resp_prep_node(state: ChatState) -> dict:
               f"{_now_kst.strftime('%H:%M')} (한국) — 날짜·요일·시간 얘기는 이 값이 기준. "
               "안 물어봤는데 굳이 시간을 언급하진 마.")
 
-    system_parts = [guide, COMMON_RULES, TTS_ACTING_RULES, _clock]
+    system_parts = [guide, COMMON_RULES, _clock]
     if state.get('memory_summary'):
         system_parts.append(f"[사용자에 대한 기억 요약]\n{state['memory_summary']}")
 
