@@ -24,20 +24,9 @@ from .constants import (
 )
 from .driver import get_memory_driver
 from .services import (
-    _cause_lead,
-    _memory_content,
-    _memory_introduction,
-    _serialise_units,
     delete_memory_unit,
-    find_memory_origin,
     load_memory_units,
 )
-
-# 기존 내부 import를 사용하는 코드와 테스트를 위한 호환 별칭.
-_load_memory_units = load_memory_units
-_find_memory_origin = find_memory_origin
-_delete_memory_unit = delete_memory_unit
-
 
 @api_view(['GET'])
 @authentication_classes([CsrfExemptSessionAuthentication])

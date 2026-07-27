@@ -26,7 +26,6 @@ class MindReportGenerateAPIView(APIView):
             reports = self._service().load_reports(
                 user=request.user,
                 target_date=target_date,
-                include_monthly=self._is_last_week_of_month(target_date),
             )
             eligibility = self._get_eligibility(request.user, target_date)
         except MindReportError as exc:
@@ -41,7 +40,7 @@ class MindReportGenerateAPIView(APIView):
             )
         return Response({
             'status': 'success',
-            'message': '정기 주간·월간 마음 리포트를 불러왔습니다.',
+            'message': '매주 월요일과 매월 1일에 갱신되는 마음 리포트를 불러왔습니다.',
             'reports': reports,
             'eligibility': eligibility,
         })

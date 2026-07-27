@@ -112,7 +112,7 @@
   .quick-actions {
     grid-template-columns: minmax(0, 1fr);
   }
-  .quick-actions button:nth-of-type(odd) {
+  .quick-actions button:nth-of-type(even) {
     border-right: 0;
   }
   .quick-actions .character-action {

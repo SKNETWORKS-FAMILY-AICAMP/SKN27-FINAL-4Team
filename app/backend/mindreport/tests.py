@@ -23,7 +23,11 @@ from mindreport.services.cause_keywords import (
     parse_cause_keywords,
 )
 from mindreport.services.cause_keyword_agent import MindReportCauseKeywordAgent
-from mindreport.services.collection import LtmEvent, collect_ltm_context, collect_ltm_events
+from mindreport.services.collection import (
+    LtmEvent,
+    collect_ltm_events,
+    format_ltm_context,
+)
 from mindreport.services.criteria_agent import (
     FALLBACK_ROUTE,
     GENERATION_ROUTE,
@@ -49,7 +53,12 @@ from mindreport.services.payloads import (
     select_comfort_message,
     serialize_report,
 )
-from mindreport.services.periods import suggestion_time_context
+from mindreport.services.periods import (
+    last_completed_month,
+    last_completed_week_target_date,
+    period_range_text,
+    suggestion_time_context,
+)
 from mindreport.services.validation_agent import (
     VALIDATION_ROUTE_CAUSE,
     VALIDATION_ROUTE_CRITERIA,
@@ -92,6 +101,20 @@ class MindReportSuggestionTimingTests(SimpleTestCase):
         self.assertEqual(context['action_window_start'], '2026-08-01')
         self.assertEqual(context['action_window_end'], '2026-08-28')
         self.assertEqual(context['action_window_days'], 28)
+
+
+class MindReportScheduledPeriodTests(SimpleTestCase):
+    def test_weekly_schedule_targets_the_completed_monday_to_sunday_week(self):
+        target_date = last_completed_week_target_date(date(2026, 7, 27))
+
+        self.assertEqual(target_date, date(2026, 7, 26))
+        self.assertEqual(
+            period_range_text(period_type='week', target_date=target_date),
+            '2026.07.20 ~ 2026.07.26',
+        )
+
+    def test_monthly_schedule_targets_previous_month_across_year_boundary(self):
+        self.assertEqual(last_completed_month(date(2026, 1, 1)), (2025, 12))
 
 
 class MindReportFallbackSafetyTests(SimpleTestCase):
@@ -210,7 +233,7 @@ class LegacyFallbackSanitizationTests(TestCase):
 
 class MindReportV2GraphCollectionTests(SimpleTestCase):
     @patch('chat.graph_memory_v2_base._get_driver')
-    def test_collect_ltm_context_uses_v2_schema_and_formats_context(
+    def test_collect_ltm_events_and_format_ltm_context_use_v2_schema(
         self,
         get_driver,
     ):
@@ -229,11 +252,12 @@ class MindReportV2GraphCollectionTests(SimpleTestCase):
         ]
         get_driver.return_value.session.return_value.__enter__.return_value = session
 
-        result = collect_ltm_context(
+        events = collect_ltm_events(
             user=SimpleNamespace(id=17),
             period_type='week',
             target_date=date(2026, 7, 8),
         )
+        result = format_ltm_context(events)
 
         query = session.run.call_args.args[0]
         self.assertIn('(ep:Episode', query)
@@ -292,15 +316,16 @@ class MindReportV2GraphCollectionTests(SimpleTestCase):
         self.assertEqual(events[0].emotions[0]['score'], 0.78)
 
     @patch('chat.graph_memory_v2_base._get_driver', return_value=None)
-    def test_collect_ltm_context_returns_empty_message_without_v2_driver(
+    def test_format_ltm_context_returns_empty_message_without_v2_driver(
         self,
         _get_driver,
     ):
-        result = collect_ltm_context(
+        events = collect_ltm_events(
             user=SimpleNamespace(id=17),
             period_type='week',
             target_date=date(2026, 7, 8),
         )
+        result = format_ltm_context(events)
 
         self.assertEqual(result, '조회 가능한 장기 기억(LTM)이 없습니다.')
 
@@ -811,12 +836,19 @@ class MindReportScoringServiceTests(TestCase):
 
     def test_narrative_action_agent_generates_evidence_and_practical_actions(self):
         self._create_user_messages(5)
+        target_date = date(2026, 7, 23)
+        target_datetime = timezone.make_aware(
+            datetime.combine(target_date, datetime.min.time())
+        )
+        ChatMessage.objects.filter(session=self.session).update(
+            created_at=target_datetime
+        )
         narrative_client = FakeNarrativeClient()
         initial_state = build_initial_mindreport_state(
             user=self.user,
             period_type='week',
-            target_date=date(2026, 7, 23),
-            generated_on=date(2026, 7, 23),
+            target_date=target_date,
+            generated_on=target_date,
             score_client=FakeEmotionScoreClient(),
             keyword_client=FakeKeywordCandidateClient(keyword='meeting prep'),
             cause_client=FakeCauseKeywordClient(cause_type='stress'),
@@ -2113,15 +2145,10 @@ class MindReportGraphAPIViewTests(TestCase):
 
         self.assertIn(response.status_code, (401, 403))
 
-    @patch(
-        'mindreport.views.MindReportGenerateAPIView._is_last_week_of_month',
-        return_value=False,
-    )
     @patch('mindreport.views.MindReportSupervisorAgent')
     def test_get_automatically_creates_fallback_when_criteria_is_not_met(
         self,
         supervisor_class,
-        _is_last_week,
     ):
         payload = self._report_payload()
         payload.update({
@@ -2141,21 +2168,19 @@ class MindReportGraphAPIViewTests(TestCase):
         response = self.client.get('/api/report/generate/')
 
         self.assertEqual(response.status_code, 200)
-        report = response.json()['reports'][0]
+        report = next(
+            item for item in response.json()['reports']
+            if item['type'].startswith('주간')
+        )
         self.assertEqual(report['title'], '주간 마음 리포트를 준비하고 있어요')
         self.assertTrue(report['is_fallback'])
         self.assertTrue(report['id'].startswith('fallback-weekly-'))
-        self.assertEqual(MindReport.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(MindReport.objects.filter(user=self.user).count(), 2)
 
-    @patch(
-        'mindreport.views.MindReportGenerateAPIView._is_last_week_of_month',
-        return_value=False,
-    )
     @patch('mindreport.views.MindReportSupervisorAgent')
     def test_get_automatically_creates_missing_full_weekly_report(
         self,
         supervisor_class,
-        _is_last_week,
     ):
         supervisor_class.return_value.run.return_value = {
             'status': 'completed',
@@ -2165,19 +2190,17 @@ class MindReportGraphAPIViewTests(TestCase):
         response = self.client.get('/api/report/generate/')
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['reports'][0]['type'], '주간')
-        self.assertFalse(response.json()['reports'][0]['is_fallback'])
-        supervisor_class.return_value.run.assert_called_once()
+        weekly_report = next(
+            item for item in response.json()['reports']
+            if item['type'] == '주간'
+        )
+        self.assertFalse(weekly_report['is_fallback'])
+        self.assertEqual(supervisor_class.return_value.run.call_count, 2)
 
-    @patch(
-        'mindreport.views.MindReportGenerateAPIView._is_last_week_of_month',
-        return_value=True,
-    )
     @patch('mindreport.views.MindReportSupervisorAgent')
     def test_get_automatically_catches_up_weekly_and_monthly_reports(
         self,
         supervisor_class,
-        _is_last_week,
     ):
         def graph_result(**kwargs):
             payload = self._report_payload()
@@ -2199,6 +2222,22 @@ class MindReportGraphAPIViewTests(TestCase):
             {'주간', '월간'},
         )
         self.assertEqual(supervisor_class.return_value.run.call_count, 2)
+        calls_by_period = {
+            call.kwargs['period_type']: call.kwargs
+            for call in supervisor_class.return_value.run.call_args_list
+        }
+        today = timezone.localdate()
+        self.assertEqual(
+            calls_by_period['week']['target_date'],
+            last_completed_week_target_date(today),
+        )
+        self.assertEqual(
+            (
+                calls_by_period['month']['year'],
+                calls_by_period['month']['month'],
+            ),
+            last_completed_month(today),
+        )
 
     @patch(
         'mindreport.views.MindReportGenerateAPIView._is_last_week_of_month',
@@ -2388,10 +2427,16 @@ class MindReportGraphAPIViewTests(TestCase):
 
     @patch('mindreport.views.MindReportSupervisorAgent')
     def test_get_returns_stored_reports_without_running_graph(self, supervisor_class):
+        today = timezone.localdate()
+        weekly_target = last_completed_week_target_date(today)
+        monthly_year, monthly_month = last_completed_month(today)
         stored_report = MindReport.objects.create(
             user=self.user,
             report_type='주간',
-            range_text='2026.07.13 ~ 2026.07.19',
+            range_text=period_range_text(
+                period_type='week',
+                target_date=weekly_target,
+            ),
             title='저장된 마음 리포트',
             summary='저장된 요약',
             stress_causes=['일정'],
@@ -2400,36 +2445,76 @@ class MindReportGraphAPIViewTests(TestCase):
             analysis=['저장된 분석'],
             recommendations=['잠깐 쉬기'],
         )
+        MindReport.objects.create(
+            user=self.user,
+            report_type='월간',
+            range_text=period_range_text(
+                period_type='month',
+                year=monthly_year,
+                month=monthly_month,
+            ),
+            title='저장된 월간 마음 리포트',
+            summary='저장된 월간 요약',
+        )
 
         response = self.client.get('/api/report/generate/')
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['reports'][0]['id'], f'weekly-{stored_report.id}')
-        self.assertEqual(response.json()['reports'][0]['title'], '저장된 마음 리포트')
-        self.assertEqual(response.json()['reports'][0]['causeLabels'], [])
+        weekly_report = next(
+            item for item in response.json()['reports']
+            if item['type'].startswith('주간')
+        )
+        self.assertEqual(weekly_report['id'], f'weekly-{stored_report.id}')
+        self.assertEqual(weekly_report['title'], '저장된 마음 리포트')
+        self.assertEqual(weekly_report['causeLabels'], [])
         supervisor_class.assert_not_called()
 
-    def test_get_shows_only_latest_report_for_each_period(self):
+    @patch('mindreport.views.MindReportSupervisorAgent')
+    def test_get_shows_only_latest_report_for_each_period(self, supervisor_class):
+        today = timezone.localdate()
+        weekly_target = last_completed_week_target_date(today)
+        weekly_range = period_range_text(
+            period_type='week',
+            target_date=weekly_target,
+        )
+        monthly_year, monthly_month = last_completed_month(today)
         MindReport.objects.create(
             user=self.user,
             report_type='주간 (데이터 부족)',
-            range_text='2026.07.13 생성',
+            range_text=weekly_range,
             title='이전 리포트',
             summary='이전 요약',
+            is_fallback=True,
         )
         latest_report = MindReport.objects.create(
             user=self.user,
             report_type='주간',
-            range_text='2026.07.13 ~ 2026.07.19',
+            range_text=weekly_range,
             title='최신 리포트',
             summary='최신 요약',
+        )
+        MindReport.objects.create(
+            user=self.user,
+            report_type='월간',
+            range_text=period_range_text(
+                period_type='month',
+                year=monthly_year,
+                month=monthly_month,
+            ),
+            title='월간 리포트',
+            summary='월간 요약',
         )
 
         response = self.client.get('/api/report/generate/')
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.json()['reports']), 1)
-        self.assertEqual(response.json()['reports'][0]['id'], f'weekly-{latest_report.id}')
+        weekly_reports = [
+            item for item in response.json()['reports']
+            if item['type'].startswith('주간')
+        ]
+        self.assertEqual(len(weekly_reports), 1)
+        self.assertEqual(weekly_reports[0]['id'], f'weekly-{latest_report.id}')
+        supervisor_class.assert_not_called()
 
 
     @patch(
@@ -2577,10 +2662,14 @@ class MindReportSafetyResponse24hExpirationTests(TestCase):
         from mindreport.services.persistence import period_report_exists
 
         now = timezone.now()
+        target_date = timezone.localdate(now)
         report = MindReport.objects.create(
             user=self.user,
             report_type='주간',
-            range_text='2026.07.20 ~ 2026.07.26',
+            range_text=period_range_text(
+                period_type='week',
+                target_date=target_date,
+            ),
             title='안전 안내',
             summary='요약',
             is_safety_response=True,
@@ -2591,7 +2680,7 @@ class MindReportSafetyResponse24hExpirationTests(TestCase):
             user=self.user,
             period_type='week',
             period_name='주간',
-            target_date=now.date(),
+            target_date=target_date,
         )
         self.assertFalse(exists)
 
@@ -2600,7 +2689,7 @@ class MindReportSafetyResponse24hExpirationTests(TestCase):
             user=self.user,
             period_type='week',
             period_name='주간',
-            target_date=now.date(),
+            target_date=target_date,
         )
         self.assertTrue(exists_recent)
 

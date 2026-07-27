@@ -32,5 +32,4 @@ export const MEMORY_DATE_FORMAT = Object.freeze({
   day: "numeric",
 });
 
-export const DEFAULT_MEMORY_RELATION = "지인";
 export const DEFAULT_MEMORY_POLARITY = "호";

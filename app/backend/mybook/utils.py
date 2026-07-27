@@ -4,20 +4,13 @@ import html
 import re
 from urllib.parse import urlencode, urlparse
 
-from django.utils import timezone
-
 from .constants import (
     ADULT_CONTENT_PATTERNS,
-    ALLOWED_COVER_HOSTS,
     ALLOWED_COVER_HOST_SUFFIXES,
     BASIS_TOKEN_ALIASES,
     CATALOG_ACTION_TOKENS,
     GENERIC_SEARCH_TERMS,
-    MAX_BOOK_AGE_YEARS,
-    NLK_BOOK_QUERY_LIMIT,
-    NON_READING_TITLE_MARKERS,
     PERSONALIZATION_STOPWORDS,
-    THESIS_TITLE_MARKERS,
 )
 
 
@@ -26,7 +19,7 @@ _ADULT_CONTENT_REGEXES = tuple(
 )
 
 
-def _nlk_search_terms(keyword):
+def _fallback_search_terms(keyword):
     cleaned = re.sub(r"[^0-9A-Za-z가-힣\s]", " ", str(keyword or ""))
     tokens = [token for token in cleaned.split() if len(token) >= 2]
     meaningful = [token for token in tokens if token not in GENERIC_SEARCH_TERMS]
@@ -40,7 +33,7 @@ def _nlk_search_terms(keyword):
 
 
 def _catalog_core_term(value):
-    """Return a short noun-like anchor suitable for the NLK ``label`` lookup."""
+    """Return a short noun-like anchor suitable for a Kakao book query."""
     cleaned = re.sub(r"[^0-9A-Za-z가-힣\s]", " ", str(value or ""))
     tokens = [token for token in cleaned.split() if len(token) >= 2]
     if not tokens:
@@ -78,7 +71,7 @@ def _book_search_terms(values, *, selected_basis="", keyword=""):
         terms.append(basis_core)
 
     if len(terms) < 2:
-        for value in _nlk_search_terms(keyword):
+        for value in _fallback_search_terms(keyword):
             tokens = value.split()[:2]
             term = " ".join(tokens).strip()
             if term and term not in terms:
@@ -86,93 +79,6 @@ def _book_search_terms(values, *, selected_basis="", keyword=""):
             if len(terms) >= 2:
                 break
     return terms[:4]
-
-
-def _catalog_search_terms(values, *, selected_basis="", keyword=""):
-    """Backward-compatible alias for stored payloads and older callers."""
-    return _book_search_terms(
-        values,
-        selected_basis=selected_basis,
-        keyword=keyword,
-    )
-
-
-def _semantic_search_terms(keyword, content_terms=None, basis_values=None, catalog_terms=None):
-    """Prefer LLM catalog terms, then use the profile topic as a guardrail."""
-    terms = []
-    content_values = [value for value in content_terms or [] if str(value).strip()]
-    basis_values = [value for value in basis_values or [] if str(value).strip()]
-    catalog_values = [value for value in catalog_terms or [] if str(value).strip()]
-
-    # The keyword is server-anchored to the LLM-selected profile value. Do not
-    # infer the selected topic from broader content terms because words such as
-    # "브랜드" could accidentally activate another saved interest.
-    intent_tokens = set(_personalization_tokens(keyword, [], catalog_values[:1]))
-    focused_basis_values = [
-        value
-        for value in basis_values
-        if _expanded_basis_tokens([value]).intersection(intent_tokens)
-    ]
-    discovery_basis_values = (focused_basis_values or basis_values[:1])[:1]
-
-    # The LLM has already been constrained to short, noun-like bibliography
-    # terms. Search those specific terms before the broader profile label.
-    for value in catalog_values:
-        exact_terms = _nlk_search_terms(value)
-        if exact_terms and exact_terms[0] not in terms:
-            terms.append(exact_terms[0])
-
-    for value in discovery_basis_values:
-        core_term = _catalog_core_term(value)
-        if core_term and core_term not in terms:
-            terms.append(core_term)
-
-    for value in discovery_basis_values:
-        raw_tokens = _personalization_tokens("", [value])
-        alias_added = False
-        for token in raw_tokens:
-            for source, aliases in BASIS_TOKEN_ALIASES.items():
-                if source not in token and token not in source:
-                    continue
-                alias = next((item for item in aliases if item not in terms), None)
-                if alias:
-                    terms.append(alias)
-                    alias_added = True
-                    break
-            if alias_added or len(terms) >= NLK_BOOK_QUERY_LIMIT:
-                break
-
-    for value in content_values:
-        exact_terms = _nlk_search_terms(value)
-        if exact_terms and exact_terms[0] not in terms:
-            terms.append(exact_terms[0])
-
-    for value in [keyword, *basis_values]:
-        for term in _nlk_search_terms(value):
-            if term not in terms:
-                terms.append(term)
-    return terms[:8]
-
-
-def _text_values(item, *keys):
-    values = []
-    for key in keys:
-        value = item.get(key) if isinstance(item, dict) else None
-        candidates = value if isinstance(value, list) else [value]
-        for candidate in candidates:
-            if isinstance(candidate, dict):
-                candidate = candidate.get("value") or candidate.get("label") or ""
-            text = str(candidate or "").strip()
-            if text and text not in values:
-                values.append(text)
-    return values
-
-
-def _first_text(item, *keys):
-    values = _text_values(item, *keys)
-    return values[0] if values else ""
-
-
 def _safe_http_url(value):
     text = str(value or "").strip()
     return text if text.startswith(("https://", "http://")) else ""
@@ -222,15 +128,11 @@ def _is_safe_book_candidate(book):
     return not any(pattern.search(normalized) for pattern in _ADULT_CONTENT_REGEXES)
 
 
-def _open_library_cover_url(isbn):
-    return f"https://covers.openlibrary.org/b/isbn/{isbn}-L.jpg?default=false"
-
-
 def _safe_external_cover_url(value):
     url = _safe_http_url(value)
     parsed = urlparse(url)
     host = (parsed.hostname or "").lower()
-    if host not in ALLOWED_COVER_HOSTS and not host.endswith(ALLOWED_COVER_HOST_SUFFIXES):
+    if not host.endswith(ALLOWED_COVER_HOST_SUFFIXES):
         return ""
     if url.startswith("http://"):
         return "https://" + url[len("http://"):]
@@ -275,52 +177,6 @@ def _valid_isbn_checksum(isbn):
         total += 10 if isbn[-1] == "X" else int(isbn[-1])
         return total % 11 == 0
     return False
-
-
-def _issued_year(item):
-    for value in _text_values(
-        item,
-        "DCTERMS_issued",
-        "NLON_issuedYear",
-        "NLON_datePublished",
-        "DCTERMS_created",
-    ):
-        match = re.search(r"(?:19|20)\d{2}", value)
-        if match:
-            return int(match.group(0))
-    return None
-
-
-def _is_general_book(item, book):
-    if not book.get("title") or not book.get("isbn"):
-        return False
-
-    bibliographic_id = str(book.get("bibliographic_id") or "").upper()
-    if bibliographic_id.startswith("KDM"):
-        return False
-
-    degree_values = _text_values(item, "BIBO_degree", "NLON_degreeYear", "NLON_department")
-    if degree_values:
-        return False
-
-    type_values = [value.lower() for value in _text_values(item, "RDF_type")]
-    if not any(value.rstrip("/").endswith("/book") for value in type_values):
-        return False
-
-    title = str(book.get("title") or "")
-    if any(marker in title for marker in THESIS_TITLE_MARKERS):
-        return False
-    if any(marker in title for marker in NON_READING_TITLE_MARKERS):
-        return False
-    return True
-
-
-def _is_recent_book(book, reference_year=None):
-    issued_year = book.get("issued_year")
-    if not isinstance(issued_year, int):
-        return False
-    current_year = reference_year or timezone.localdate().year
-    return current_year - MAX_BOOK_AGE_YEARS <= issued_year <= current_year + 1
 
 
 def _personalization_tokens(keyword, basis_values, content_terms=None):
@@ -411,7 +267,7 @@ def _clean_content_terms(values, fallback_keyword=""):
             terms.append(cleaned)
 
     if len(terms) < 2:
-        for term in _nlk_search_terms(fallback_keyword):
+        for term in _fallback_search_terms(fallback_keyword):
             if term not in terms:
                 terms.append(term)
             if len(terms) >= 2:

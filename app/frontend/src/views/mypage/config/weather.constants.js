@@ -21,8 +21,3 @@ export const WEATHER_INDEX_COLORS = Object.freeze({
   safe: "#22c55e",
   unknown: "#8ea7ff",
 });
-
-export const WEATHER_SCORE_THRESHOLDS = Object.freeze({
-  high: 66,
-  medium: 38,
-});

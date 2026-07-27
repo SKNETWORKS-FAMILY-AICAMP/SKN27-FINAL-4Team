@@ -1,3 +1,1 @@
-from django.contrib import admin
-
-# Register your models here.
+"""기억은 Neo4j에 저장되므로 Django 관리자 등록 대상이 없다."""

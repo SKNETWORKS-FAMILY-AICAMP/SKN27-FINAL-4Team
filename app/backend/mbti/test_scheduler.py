@@ -211,6 +211,24 @@ class MonthlyAnalysisApiTests(APITestCase):
         self.assertEqual(response.data['status'], 'not_eligible')
         self.assertEqual(MbtiMonthlyAnalysisJob.objects.count(), 0)
 
+    def test_get_remains_read_only_when_legacy_force_query_is_supplied(self):
+        period_key = timezone.localtime().strftime('%Y-%m')
+        for index in range(5):
+            MbtiQuestionResponse.objects.create(
+                user_id=self.user.id,
+                question_text=f'질문 {index}',
+                answer_text=f'답변 {index}',
+                target_axis='IE',
+                period_key=period_key,
+                answered_at=timezone.now(),
+                created_at=timezone.now(),
+            )
+
+        response = self.client.get('/api/mbti/monthly-demo/', {'force': 'true'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(MbtiMonthlyAnalysisJob.objects.count(), 0)
+
     def test_post_requeues_a_failed_job_for_the_same_input(self):
         period_key = timezone.localtime().strftime('%Y-%m')
         for index in range(5):

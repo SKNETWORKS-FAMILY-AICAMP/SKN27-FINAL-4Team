@@ -313,7 +313,6 @@ import {
   WEATHER_DAY_START_HOUR,
   WEATHER_EMOJI_NIGHT_START_HOUR,
   WEATHER_INDEX_COLORS,
-  WEATHER_SCORE_THRESHOLDS,
   WEATHER_SECTIONS,
 } from "../config/weather.constants";
 import { getWeatherAstronomy } from "../utils/weather.astronomy";
@@ -611,15 +610,6 @@ export default {
       if (this.isPrecipitationCondition(item?.condition)) return true;
       const value = String(item?.rainfall || "").trim();
       return Boolean(value && value !== "강수없음" && !/^0(?:\.0+)?(?:\s*mm)?$/i.test(value));
-    },
-    numberValue(value) {
-      const number = Number(value);
-      return Number.isFinite(number) ? number : null;
-    },
-    scoreLevel(score) {
-      if (score >= WEATHER_SCORE_THRESHOLDS.high) return "높음";
-      if (score >= WEATHER_SCORE_THRESHOLDS.medium) return "보통";
-      return "낮음";
     }
   }
 };

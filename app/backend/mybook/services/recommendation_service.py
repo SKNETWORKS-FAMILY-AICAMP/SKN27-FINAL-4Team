@@ -132,11 +132,6 @@ def _recent_valid_previous_records(user, today):
     return valid
 
 
-def _latest_valid_previous_record(user, today):
-    records = _recent_valid_previous_records(user, today)
-    return records[0] if records else None
-
-
 def _failure_response(exc):
     return RecommendationResponse(
         payload={"detail": str(exc), "code": exc.code, "retryable": True},
