@@ -24,8 +24,6 @@ def _decrypt_source(value):
 
 
 from .introduction import (
-    _cause_lead,
-    build_memory_content,
     build_memory_introduction,
     build_memory_title,
 )
@@ -538,13 +536,3 @@ def delete_memory_unit(tx, uid, memory_id):
         'deleted_event_count': deleted_event_count,
         'event_keys': event_keys,
     }
-
-
-# 기존 내부 import를 사용하는 코드와 테스트를 위한 호환 별칭.
-_memory_content = build_memory_content
-_memory_introduction = build_memory_introduction
-_memory_title = build_memory_title
-_serialise_units = serialise_units
-_load_memory_units = load_memory_units
-_find_memory_origin = find_memory_origin
-_delete_memory_unit = delete_memory_unit

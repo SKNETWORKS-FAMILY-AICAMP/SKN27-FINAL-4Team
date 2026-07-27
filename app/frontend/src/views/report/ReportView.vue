@@ -1,9 +1,9 @@
 <template>
   <main class="diary-page" :style="{ '--report-bg': `url(${reportBg})` }">
-    <!-- 수동 갱신 프로그레스 모달 (Progress Overlay) -->
+    <!-- 최초 로딩 및 수동 갱신 프로그레스 모달 (Progress Overlay) -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="isRefreshing" class="refresh-progress-overlay" role="dialog" aria-modal="true" aria-label="마음리포트 분석 중">
+        <div v-if="showProgressModal" class="refresh-progress-overlay" role="dialog" aria-modal="true" aria-label="마음리포트 준비 중">
           <div class="refresh-progress-modal">
             <div class="progress-header">
               <div class="progress-icon-wrap character-icon-wrap">
@@ -146,7 +146,6 @@
                 <span class="ri-date"><b>{{ reportPeriodLabel(period) }}</b> · {{ periodDateLabel(period) }}</span>
                 <strong class="ri-title">{{ period.title }}</strong>
                 <img v-if="selectedReportId === period.id" class="ri-heart" :src="heartIcon" alt="" aria-hidden="true" />
-                <span v-else class="ri-lock" aria-hidden="true">🔒</span>
               </button>
             </li>
           </ul>
@@ -159,7 +158,7 @@
         <div v-if="!isLoading && (fetchError || !currentReport)" class="board-state">
           <img :src="bubbleHeart" class="state-icon" alt="" aria-hidden="true" />
           <template v-if="fetchError"><h1>마음 리포트를 불러오지 못했어요.</h1><p>{{ fetchError }}</p></template>
-          <template v-else><h1>첫 정기 리포트를 준비하고 있어요</h1><p>주간·월간 리포트는 정해진 시점에 자동으로 준비돼요. 최신 대화를 먼저 반영하고 싶다면 ‘지금 확인’을 이용해 주세요.</p></template>
+          <template v-else><h1>첫 정기 리포트를 준비하고 있어요</h1><p>주간 리포트는 매주 월요일, 월간 리포트는 매월 1일에 지난 기간을 기준으로 자동 갱신돼요. 최신 대화를 먼저 반영하고 싶다면 ‘지금 확인’을 이용해 주세요.</p></template>
         </div>
 
         <!-- 안전 -->
@@ -371,7 +370,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { reportApi } from '../../api/report.js'
 import { userApi } from '../../api/user.js'
 import reportBg from '../../assets/report-bg.png'
@@ -429,9 +428,14 @@ const reports = ref([])
 const eligibility = ref(null)
 const isLoading = ref(true)
 const isRefreshing = ref(false)
+const isInitialProgressVisible = ref(false)
 const refreshProgress = ref(0)
 const currentStageIndex = ref(0)
 let progressTimer = null
+let initialProgressDelayTimer = null
+const showProgressModal = computed(() => (
+  isRefreshing.value || (isLoading.value && isInitialProgressVisible.value)
+))
 
 const remainingChatNotice = computed(() => {
   if (!eligibility.value?.weekly) return ''
@@ -487,8 +491,16 @@ const startProgressTimer = () => {
 
 const completeProgress = () => {
   if (progressTimer) clearInterval(progressTimer)
+  progressTimer = null
   refreshProgress.value = 100
   currentStageIndex.value = 5
+}
+
+const resetProgress = () => {
+  if (progressTimer) clearInterval(progressTimer)
+  progressTimer = null
+  refreshProgress.value = 0
+  currentStageIndex.value = 0
 }
 
 const fetchError = ref('')
@@ -979,15 +991,29 @@ const applyReports = (data) => {
 }
 
 const loadReports = async () => {
+  initialProgressDelayTimer = setTimeout(() => {
+    if (!isLoading.value) return
+    isInitialProgressVisible.value = true
+    startProgressTimer()
+  }, 700)
+
   try {
     fetchError.value = ''
     const data = await reportApi.getReports()
+    if (isInitialProgressVisible.value) {
+      completeProgress()
+      await new Promise((resolve) => setTimeout(resolve, 350))
+    }
     applyReports(data)
   } catch (error) {
     fetchError.value = error?.message ?? '마음 리포트를 불러오지 못했습니다.'
     console.error('Failed to fetch stored reports:', error)
   } finally {
+    if (initialProgressDelayTimer) clearTimeout(initialProgressDelayTimer)
+    initialProgressDelayTimer = null
     isLoading.value = false
+    isInitialProgressVisible.value = false
+    resetProgress()
   }
 }
 
@@ -1005,13 +1031,12 @@ const refreshReports = async () => {
     fetchError.value = ''
     refreshFeedback.value = data?.message || '최신 대화를 반영한 리포트를 확인했어요.'
   } catch (error) {
-    if (progressTimer) clearInterval(progressTimer)
+    resetProgress()
     refreshFeedback.value = error?.message ?? '최신 대화를 지금 반영하지 못했어요. 기존 정기 리포트는 그대로 볼 수 있어요.'
     console.error('Failed to refresh reports:', error)
   } finally {
     isRefreshing.value = false
-    refreshProgress.value = 0
-    currentStageIndex.value = 0
+    resetProgress()
   }
 }
 
@@ -1041,6 +1066,12 @@ const saveCurrentReportAsPdf = async () => {
 onMounted(() => {
   fetchCurrentUser()
   loadReports()
+})
+
+onBeforeUnmount(() => {
+  if (initialProgressDelayTimer) clearTimeout(initialProgressDelayTimer)
+  initialProgressDelayTimer = null
+  resetProgress()
 })
 </script>
 
@@ -1451,14 +1482,6 @@ button {
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.ri-lock {
-  position: absolute;
-  top: 12px;
-  right: 13px;
-  font-size: 12px;
-  opacity: 0.6;
 }
 
 .ri-heart {
@@ -2213,23 +2236,10 @@ button {
   50% { transform: translateY(-7px) rotate(3deg); }
 }
 
-.heart-bounce {
-  position: relative;
-  width: 44px;
-  height: 44px;
-  z-index: 1;
-  animation: floatHeart 2s ease-in-out infinite;
-}
-
 @keyframes spinPulse {
   0% { transform: rotate(0deg) scale(0.95); opacity: 0.4; }
   50% { transform: rotate(180deg) scale(1.1); opacity: 0.85; }
   100% { transform: rotate(360deg) scale(0.95); opacity: 0.4; }
-}
-
-@keyframes floatHeart {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
 }
 
 .progress-title {

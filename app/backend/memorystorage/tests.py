@@ -4,6 +4,8 @@ from django.test import SimpleTestCase
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from memorystorage import views
+from memorystorage.introduction import _cause_lead, build_memory_introduction
+from memorystorage.services import serialise_units
 
 
 class _Result:
@@ -81,7 +83,7 @@ class _Driver:
 
 class MemoryUnitSerialisationTests(SimpleTestCase):
     def test_groups_connected_v2_context_by_memory_origin(self):
-        memories = views._serialise_units(
+        memories = serialise_units(
             [{
                 'memory_id': 'ep_1',
                 'saved_at': '2026-07-20T10:00:00',
@@ -250,7 +252,7 @@ class MemoryUnitSerialisationTests(SimpleTestCase):
 
     def test_recovers_missing_saved_at_from_event_metadata(self):
         created_at = '2026-07-21T11:35:57'
-        memories = views._serialise_units(
+        memories = serialise_units(
             [{
                 'memory_id': 'legacy-event',
                 'saved_at': '',
@@ -282,12 +284,12 @@ class MemoryUnitSerialisationTests(SimpleTestCase):
 class StructuredIntroductionTests(SimpleTestCase):
     def test_cause_phrase_keeps_existing_korean_connector(self):
         self.assertEqual(
-            views._cause_lead({'cause': '연속 야근 때문에'}),
+            _cause_lead({'cause': '연속 야근 때문에'}),
             '연속 야근 때문에 ',
         )
 
     def test_connects_multiple_events_with_shared_timeline(self):
-        introduction = views._memory_introduction({
+        introduction = build_memory_introduction({
             'source_text': '',
             'events': [
                 {
@@ -335,7 +337,7 @@ class StructuredIntroductionTests(SimpleTestCase):
             '연속 야근 때문에 지쳐서 2026년 8월 3일부터 8월 5일까지 '
             '대학 동기이자 절친인 민지와 제주 애월로 휴가를 가기로 했어.'
         )
-        introduction = views._memory_introduction({
+        introduction = build_memory_introduction({
             'source_text': source,
             'events': [
                 {
@@ -411,7 +413,7 @@ class StructuredIntroductionTests(SimpleTestCase):
         self.assertEqual(len(introduction['events']), 2)
 
     def test_handles_relation_preference_and_empty_shapes(self):
-        relation_only = views._memory_introduction({
+        relation_only = build_memory_introduction({
             'source_text': '',
             'events': [],
             'relations': [{
@@ -424,7 +426,7 @@ class StructuredIntroductionTests(SimpleTestCase):
         self.assertEqual(
             relation_only['text'], '민수는 직장 동료로 기억하고 있어요.')
 
-        preference_only = views._memory_introduction({
+        preference_only = build_memory_introduction({
             'source_text': '',
             'events': [],
             'relations': [],
@@ -439,7 +441,7 @@ class StructuredIntroductionTests(SimpleTestCase):
             '과거의 취향이었던 게임은 지금은 종료된 기록이에요.',
         )
 
-        empty = views._memory_introduction({
+        empty = build_memory_introduction({
             'source_text': '',
             'events': [],
             'relations': [],
@@ -447,7 +449,7 @@ class StructuredIntroductionTests(SimpleTestCase):
         })
         self.assertEqual(empty['text'], '대화에서 저장된 기억이에요.')
 
-        source_only = views._memory_introduction({
+        source_only = build_memory_introduction({
             'source_text': '요즘 새로운 취미를 찾고 있어.',
             'events': [],
             'relations': [],
@@ -463,7 +465,7 @@ class StructuredIntroductionTests(SimpleTestCase):
         )
 
     def test_keeps_original_below_sparse_event_story(self):
-        introduction = views._memory_introduction({
+        introduction = build_memory_introduction({
             'source_text': '연속 야근',
             'events': [{
                 'name': '연속 야근',

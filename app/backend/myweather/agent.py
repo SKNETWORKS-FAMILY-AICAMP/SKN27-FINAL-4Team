@@ -281,7 +281,6 @@ class WeatherWebAgent:
             "recommendations": WeatherWebAgent._normalize_recommendations(
                 recommendations,
                 weather,
-                user_profile,
             ),
             "careNote": WeatherWebAgent._soften_phrasing(
                 data.get("careNote") or "",
@@ -471,7 +470,7 @@ class WeatherWebAgent:
         return [indices[label] for label in WEATHER_INDEX_ORDER]
 
     @staticmethod
-    def _normalize_recommendations(recommendations, weather=None, user_profile=None):
+    def _normalize_recommendations(recommendations, weather=None):
         normalized = []
         for index, item in enumerate(recommendations[:6]):
             if not isinstance(item, dict):

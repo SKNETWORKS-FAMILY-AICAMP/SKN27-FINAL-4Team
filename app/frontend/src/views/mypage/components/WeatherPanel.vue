@@ -36,23 +36,16 @@
         </div>
 
         <div :class="['weather-visual', weatherArtClass, timeOfDayClass]">
-          <div :class="['weather-illustration', weatherArtClass, timeOfDayClass]" aria-hidden="true">
-            <span class="weather-art-star star-one"></span>
-            <span class="weather-art-star star-two"></span>
-            <span class="weather-art-star star-three"></span>
-            <span class="weather-art-sun"></span>
-            <span class="weather-art-moon"></span>
-            <span class="weather-art-cloud cloud-main"></span>
-            <span class="weather-art-cloud cloud-soft"></span>
-            <span class="weather-art-drop drop-one"></span>
-            <span class="weather-art-drop drop-two"></span>
-            <span class="weather-art-drop drop-three"></span>
-            <span class="weather-art-snow snow-one"></span>
-            <span class="weather-art-snow snow-two"></span>
-            <span class="weather-art-snow snow-three"></span>
+          <WeatherScene
+            :condition-class="weatherArtClass"
+            :time-class="timeOfDayClass"
+            :astronomy="weatherAstronomy"
+            :weather="weather"
+          />
+          <div class="weather-visual-caption">
+            <strong>{{ weatherCondition }}</strong>
+            <span>{{ locationName }}</span>
           </div>
-          <strong>{{ weatherCondition }}</strong>
-          <span>{{ locationName }}</span>
         </div>
 
         <div class="weather-main-metrics">
@@ -312,6 +305,7 @@
 </template>
 
 <script>
+import WeatherScene from "./WeatherScene.vue";
 import { DEFAULT_WEATHER_REGION } from "../config/mypage.constants";
 import {
   DEFAULT_KMA_ATTRIBUTION,
@@ -319,12 +313,13 @@ import {
   WEATHER_DAY_START_HOUR,
   WEATHER_EMOJI_NIGHT_START_HOUR,
   WEATHER_INDEX_COLORS,
-  WEATHER_SCORE_THRESHOLDS,
   WEATHER_SECTIONS,
 } from "../config/weather.constants";
+import { getWeatherAstronomy } from "../utils/weather.astronomy";
 
 export default {
   name: "WeatherPanel",
+  components: { WeatherScene },
   props: {
     payload: { type: Object, default: null },
     loading: { type: Boolean, default: false },
@@ -420,12 +415,21 @@ export default {
       if (condition.includes("흐림")) return "is-overcast";
       return "is-cloudy";
     },
+    weatherAstronomy() {
+      return getWeatherAstronomy({
+        baseDate: this.weather?.base_date,
+        baseTime: this.weather?.base_time,
+        latitude: this.weather?.location?.lat ?? this.location?.lat,
+        longitude: this.weather?.location?.lon ?? this.location?.lon,
+      });
+    },
     timeOfDayClass() {
+      if (this.weather?.base_date && this.weather?.base_time) {
+        return this.weatherAstronomy.solar.isDay ? "is-day" : "is-night";
+      }
       const hour = this.weatherHour;
       if (hour === null) return "is-day";
-      return hour >= WEATHER_DAY_START_HOUR && hour < WEATHER_DAY_END_HOUR
-        ? "is-day"
-        : "is-night";
+      return hour >= WEATHER_DAY_START_HOUR && hour < WEATHER_DAY_END_HOUR ? "is-day" : "is-night";
     },
     weatherHour() {
       const time = this.weather?.base_time;
@@ -606,15 +610,6 @@ export default {
       if (this.isPrecipitationCondition(item?.condition)) return true;
       const value = String(item?.rainfall || "").trim();
       return Boolean(value && value !== "강수없음" && !/^0(?:\.0+)?(?:\s*mm)?$/i.test(value));
-    },
-    numberValue(value) {
-      const number = Number(value);
-      return Number.isFinite(number) ? number : null;
-    },
-    scoreLevel(score) {
-      if (score >= WEATHER_SCORE_THRESHOLDS.high) return "높음";
-      if (score >= WEATHER_SCORE_THRESHOLDS.medium) return "보통";
-      return "낮음";
     }
   }
 };

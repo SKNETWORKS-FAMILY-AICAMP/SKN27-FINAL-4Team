@@ -122,9 +122,6 @@ GRAPH_REPORT_PAYLOAD_STATUSES = frozenset(('completed', 'safety_ready'))
 GRAPH_FALLBACK_PAYLOAD_STATUS = 'fallback_ready'
 
 # Model defaults
-MINDREPORT_SCORING_MODEL = os.environ.get(
-    'MINDREPORT_SCORING_MODEL', 'gpt-5.4-mini'
-)
 MINDREPORT_KEYWORD_MODEL = os.environ.get(
     'MINDREPORT_KEYWORD_MODEL', 'gpt-5.4-mini'
 )
@@ -135,9 +132,6 @@ MINDREPORT_NARRATIVE_MODEL = os.environ.get(
     'MINDREPORT_NARRATIVE_MODEL', 'gpt-5.4-mini'
 )
 MINDREPORT_LLM_TEMPERATURE = 0
-MINDREPORT_SCORING_MAX_TOKENS = _bounded_int(
-    'MINDREPORT_SCORING_MAX_TOKENS', 1400, minimum=200, maximum=8000
-)
 MINDREPORT_KEYWORD_MAX_TOKENS = _bounded_int(
     'MINDREPORT_KEYWORD_MAX_TOKENS', 1200, minimum=200, maximum=8000
 )

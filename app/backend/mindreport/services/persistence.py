@@ -11,7 +11,7 @@ from django.utils import timezone
 from mindreport.constants import PERIOD_MONTH
 from mindreport.models import MindReport
 from mindreport.services.payloads import serialize_report
-from mindreport.services.periods import period_label, resolve_period_window
+from mindreport.services.periods import period_label, period_range_text
 
 
 def list_latest_period_reports(user) -> list[dict[str, Any]]:
@@ -23,12 +23,8 @@ def list_latest_period_reports(user) -> list[dict[str, Any]]:
     queryset = MindReport.objects.filter(user=user).order_by('is_fallback', '-created_at')
 
     for report in queryset:
-        created_date = timezone.localtime(report.created_at).date()
-        if report.report_type.startswith(monthly_label):
-            period_key = (PERIOD_MONTH, created_date.year, created_date.month)
-        else:
-            week_start = created_date - timedelta(days=created_date.weekday())
-            period_key = ('week', week_start)
+        period_type = PERIOD_MONTH if report.report_type.startswith(monthly_label) else 'week'
+        period_key = (period_type, report.range_text)
         if period_key in seen_periods:
             continue
         seen_periods.add(period_key)
@@ -46,7 +42,7 @@ def period_report_exists(
     month: int | None = None,
 ) -> bool:
     """Return whether the user already has a valid non-expired report for the resolved period."""
-    window = resolve_period_window(
+    expected_range = period_range_text(
         period_type=period_type,
         target_date=target_date,
         year=year,
@@ -55,8 +51,7 @@ def period_report_exists(
     report = MindReport.objects.filter(
         user=user,
         report_type__startswith=period_name,
-        created_at__gte=window.start,
-        created_at__lt=window.end_exclusive,
+        range_text=expected_range,
     ).first()
 
     if report is None:
@@ -79,9 +74,22 @@ def save_period_report(
     year: int | None = None,
     month: int | None = None,
 ) -> MindReport:
+    expected_range = period_range_text(
+        period_type=period_type,
+        target_date=target_date,
+        year=year,
+        month=month,
+    )
+    payload_type = str(payload['type'])
+    if not payload_type.startswith(period_name):
+        payload_type = (
+            f'{period_name} (데이터 부족)'
+            if payload.get('is_fallback')
+            else period_name
+        )
     defaults = {
-        'report_type': payload['type'],
-        'range_text': payload['range'],
+        'report_type': payload_type,
+        'range_text': expected_range,
         'title': payload['title'],
         'summary': payload['summary'],
         'stress_causes': payload['stressCauses'],
@@ -93,17 +101,10 @@ def save_period_report(
         'is_fallback': payload['is_fallback'],
         'is_safety_response': payload['is_safety_response'],
     }
-    window = resolve_period_window(
-        period_type=period_type,
-        target_date=target_date,
-        year=year,
-        month=month,
-    )
     period_reports = MindReport.objects.filter(
         user=user,
         report_type__startswith=period_name,
-        created_at__gte=window.start,
-        created_at__lt=window.end_exclusive,
+        range_text=expected_range,
     )
 
     with transaction.atomic():

@@ -60,7 +60,7 @@ function fitPageToReport(width, height) {
   }
 }
 
-export function createSingleImagePdf({
+function createSingleImagePdf({
   jpegBytes,
   imageWidth,
   imageHeight,

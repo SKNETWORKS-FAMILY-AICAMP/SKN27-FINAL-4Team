@@ -12,7 +12,7 @@
       <button class="primary" type="button" @click="$emit('refresh', true)">다시 시도</button>
     </section>
 
-    <section v-else-if="tabItems.length" class="book-layout">
+    <section v-else-if="hasRecommendationData" class="book-layout">
       <p v-if="payload?.is_stale" class="book-service-notice" role="status">
         새 추천 생성이 지연되어 검증된 이전 추천을 표시하고 있습니다.
       </p>
@@ -147,7 +147,7 @@ export default {
     loading: { type: Boolean, default: false },
     error: { type: String, default: "" }
   },
-  emits: ["refresh", "close"],
+  emits: ["refresh"],
   data: () => ({
     currentIndex: 0,
     failedCoverUrl: "",
@@ -160,6 +160,9 @@ export default {
     },
     themeList() {
       return Array.isArray(this.payload?.themes) ? this.payload.themes : [];
+    },
+    hasRecommendationData() {
+      return this.bookList.length > 0 || this.themeList.length > 0;
     },
     tabItems() {
       const booksByTheme = new Map(this.bookList.map(book => [book.theme_id, book]));
