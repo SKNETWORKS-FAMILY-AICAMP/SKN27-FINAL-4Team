@@ -54,6 +54,29 @@ AXIS_ANSWERS = {
     ),
 }
 
+CHAT_ANSWERS = {
+    "IE_1": "주말에는 여러 약속을 잡기보다 혼자 책을 읽거나 산책하면서 쉬어야 기운이 충전돼.",
+    "IE_2": "새로운 모임에서는 먼저 말을 걸기보다 분위기를 살피다가 누가 다가오면 천천히 이야기하는 편이야.",
+    "IE_3": "힘든 하루에는 바로 친구에게 연락하기보다 혼자 조용히 쉬면서 생각을 정리하고 싶어.",
+    "IE_4": "파티나 모임은 즐거워도 돌아오면 에너지가 빠져서 다음 날까지 혼자 쉬어야 회복돼.",
+    "IE_5": "혼자 조용히 보내는 시간은 전혀 어색하지 않고, 오히려 마음이 편해지고 다시 충전되는 느낌이야.",
+    "SN_1": "여행에서는 코스를 세세하게 고정하기보다 그 장소의 분위기와 새로운 가능성을 따라 움직이는 게 좋아.",
+    "SN_2": "누군가의 이야기를 들으면 사실만 확인하기보다 그 뒤에 어떤 의미와 의도가 있는지 먼저 궁금해져.",
+    "SN_3": "새 물건은 스펙을 전부 비교하기보다 전체적인 디자인과 앞으로 어떻게 쓸지 떠오르는 느낌으로 고르는 편이야.",
+    "SN_4": "구체적인 사실을 나열하는 대화보다 새로운 아이디어와 앞으로의 가능성을 연결하는 이야기가 더 재미있어.",
+    "SN_5": "책이나 새로운 분야를 배울 때는 차례대로 세부 내용을 보기보다 큰 그림과 핵심 주제부터 파악하는 게 좋아.",
+    "TF_1": "친구가 고민을 말하면 해결책을 찾기 전에 그 친구가 어떤 마음이었는지 듣고 공감하는 게 먼저야.",
+    "TF_2": "결정할 때 논리만 맞는지보다 그 선택 때문에 주변 사람이 상처받지 않을지를 더 중요하게 생각해.",
+    "TF_3": "틀린 말을 들어도 바로 지적하기보다 상대가 상처받지 않도록 상황과 말투를 골라서 이야기하는 편이야.",
+    "TF_4": "능력을 인정받는 말도 좋지만 내 마음과 노력을 알아줬다는 말을 들을 때 훨씬 더 크게 힘이 나.",
+    "TF_5": "토론에서는 결론을 이기는 것보다 서로 존중받았다고 느끼고 관계를 지키는 게 더 중요해.",
+    "JP_1": "할 일을 일찍 고정해 끝내기보다 여러 가능성을 열어두다가 마감이 가까워지면 집중해서 처리하는 편이야.",
+    "JP_2": "계획이 갑자기 바뀌어도 스트레스받기보다 새로 생긴 선택지를 재미있게 받아들이는 편이야.",
+    "JP_3": "여행 짐은 미리 완벽하게 싸두기보다 필요한 것만 생각해뒀다가 출발 직전에 유연하게 챙기는 편이야.",
+    "JP_4": "할 일 목록을 엄격히 지키기보다 그때 상황과 우선순위를 보면서 필요한 일을 유연하게 하는 게 편해.",
+    "JP_5": "약속 장소에는 너무 일찍 가서 기다리기보다 상황을 보면서 시간에 맞춰 도착하는 편이야.",
+}
+
 
 class Command(BaseCommand):
     help = "실제 PostgreSQL과 LLM을 사용해 채팅 질문부터 월간 MBTI 리포트까지 검증합니다."
@@ -62,6 +85,11 @@ class Command(BaseCommand):
         parser.add_argument("--email")
         parser.add_argument("--period-key")
         parser.add_argument("--chat-max-turns", type=int, default=9)
+        parser.add_argument(
+            "--reuse-existing-user",
+            action="store_true",
+            help="이미 존재하는 로컬 테스트 사용자를 재사용합니다.",
+        )
 
     def _emit(self, stage: str, payload) -> None:
         self.stdout.write(
@@ -100,15 +128,41 @@ class Command(BaseCommand):
                 "Q&A API는 현재 월로 저장되므로 --period-key는 현재 월만 사용할 수 있습니다."
             )
 
-        user = User.objects.create_user(
-            email=email,
-            password="CodexMbtiE2E!",
-            nickname=f"MBTI검증{run_stamp[-6:]}",
-            onboarding_done=True,
-        )
+        if options["reuse_existing_user"]:
+            if not options.get("email"):
+                raise CommandError("--reuse-existing-user 사용 시 --email이 필요합니다.")
+            try:
+                user = User.objects.get(email=email)
+            except User.DoesNotExist as exc:
+                raise CommandError(f"재사용할 사용자가 없습니다: {email}") from exc
+            if MbtiQuestionResponse.objects.filter(
+                user_id=user.id,
+                period_key=period_key,
+            ).exists():
+                raise CommandError(
+                    "재사용 사용자의 현재 월 MBTI 응답이 이미 존재합니다: "
+                    f"user_id={user.id}, period_key={period_key}"
+                )
+            if not user.onboarding_done:
+                user.onboarding_done = True
+                user.save(update_fields=["onboarding_done"])
+        else:
+            user = User.objects.create_user(
+                email=email,
+                password="CodexMbtiE2E!",
+                nickname=f"MBTI검증{run_stamp[-6:]}",
+                onboarding_done=True,
+            )
         client = APIClient()
         client.force_authenticate(user=user)
-        self._emit("user_created", {"user_id": user.id, "email": user.email})
+        self._emit(
+            "user_ready",
+            {
+                "user_id": user.id,
+                "email": user.email,
+                "reused": options["reuse_existing_user"],
+            },
+        )
 
         onboarding = self._require_status(
             client.post(
@@ -183,7 +237,7 @@ class Command(BaseCommand):
             session = ChatSession.objects.get(id=session_id)
             question_code = session.mbti_last_question_code
             axis = question_code[:2]
-            answer_text = AXIS_ANSWERS[axis][0]
+            answer_text = CHAT_ANSWERS.get(question_code, AXIS_ANSWERS[axis][0])
             answer_turn = self._require_status(
                 client.post(
                     "/api/chat/",

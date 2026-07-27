@@ -108,8 +108,8 @@ def clean_generated_question(text: str) -> str:
 
     # 모델이 의문문 내용은 만들었지만 문장부호를 빠뜨리는 경우가 있다.
     # 화면에 노출되는 질문 계약을 지키도록 마지막 문장부호를 정규화한다.
-    if question and "?" not in question:
-        question = question.rstrip(".! ") + "?"
+    if question and not question.endswith("?"):
+        question = question.rstrip(".!？? ") + "?"
 
     return question
 
