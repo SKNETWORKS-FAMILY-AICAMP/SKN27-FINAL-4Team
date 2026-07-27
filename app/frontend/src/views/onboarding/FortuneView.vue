@@ -67,6 +67,7 @@ const selectedSlots = computed(() => selectedSlotIds.value
   })
   .filter(Boolean));
 const selectedCount = computed(() => selectedSlots.value.length);
+const selectedCardNumbers = computed(() => selectedSlots.value.map((slot) => slot.cardNumber));
 const drawnCards = computed(() => readingResult.value?.cards || []);
 const canAnalyze = computed(() => (
   selectedCount.value === MAX_SELECTED_CARDS &&
@@ -403,6 +404,7 @@ async function requestTarotReading() {
     const payload = {
       topic: selectedCategoryData.value.apiId,
       question: question.value.trim(),
+      card_numbers: selectedCardNumbers.value,
     };
     nextReadingResult = await tarotApi.createReading(payload);
     readingResult.value = nextReadingResult;
@@ -431,10 +433,22 @@ function isSlotSelected(slotId) {
 }
 
 function createCardSlots() {
+  const cardNumbers = shuffle([...Array(78).keys()]).slice(0, 20);
+
   return Array.from({ length: 20 }, (_, index) => ({
     id: `slot-${index + 1}-${Math.random().toString(36).slice(2, 7)}`,
     index: index + 1,
+    cardNumber: cardNumbers[index],
   }));
+}
+
+function shuffle(values) {
+  const shuffled = [...values];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const nextIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[nextIndex]] = [shuffled[nextIndex], shuffled[index]];
+  }
+  return shuffled;
 }
 
 </script>
@@ -489,7 +503,10 @@ function createCardSlots() {
               :aria-label="`타로 카드 선택`"
               @click="selectCard(slot)"
             >
-              <img :src="tarotCardBackImage" alt="">
+              <img
+                :src="isSlotSelected(slot.id) ? getTarotCardImage(slot.cardNumber) : tarotCardBackImage"
+                :alt="isSlotSelected(slot.id) ? '선택한 타로 카드' : ''"
+              >
             </button>
           </div>
         </section>
@@ -520,14 +537,15 @@ function createCardSlots() {
               class="selected-card-preview"
               @click="removeSelectedCard(selectedSlots[position - 1].id)"
             >
-              <img :src="tarotCardBackImage" alt="선택한 타로 카드">
+              <img
+                :src="getTarotCardImage(selectedSlots[position - 1].cardNumber)"
+                alt="선택한 타로 카드"
+              >
             </button>
             <div v-else class="empty-slot"></div>
             <strong v-if="selectedSlots[position - 1]" class="selected-slot-name">
-              카드 선택 완료
             </strong>
             <small v-if="selectedSlots[position - 1]" class="selected-slot-orientation">
-              결과와 함께 공개돼요
             </small>
           </article>
         </div>

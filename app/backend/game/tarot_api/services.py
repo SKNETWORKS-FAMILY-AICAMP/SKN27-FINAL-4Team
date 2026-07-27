@@ -352,22 +352,30 @@ def fetch_cards(selected_cards):
     return [cards_by_number[number] for number in card_numbers]
 
 
-def draw_reading_cards():
+def draw_reading_cards(card_numbers=None):
     """Choose the reading cards and orientations on the server."""
     with connection.cursor() as cursor:
         cursor.execute("SELECT card_number FROM tarot_cards")
-        card_numbers = [row[0] for row in cursor.fetchall()]
+        available_card_numbers = [row[0] for row in cursor.fetchall()]
 
-    if len(card_numbers) < TAROT_READING_CARD_COUNT:
+    if len(available_card_numbers) < TAROT_READING_CARD_COUNT:
         raise ValueError("Tarot card data is not ready.")
 
     randomizer = secrets.SystemRandom()
+    if card_numbers is not None:
+        if len(card_numbers) != TAROT_READING_CARD_COUNT or len(set(card_numbers)) != TAROT_READING_CARD_COUNT:
+            raise ValueError('Select exactly three different tarot cards.')
+        if any(card_number not in available_card_numbers for card_number in card_numbers):
+            raise ValueError('Selected tarot card data is not ready.')
+    else:
+        card_numbers = randomizer.sample(available_card_numbers, TAROT_READING_CARD_COUNT)
+
     return [
         {
             "card_number": card_number,
             "orientation": randomizer.choice(("upright", "reversed")),
         }
-        for card_number in randomizer.sample(card_numbers, TAROT_READING_CARD_COUNT)
+        for card_number in card_numbers
     ]
 
 
@@ -848,7 +856,7 @@ def create_reading(data, user=None):
         'gender': data.get('gender') or '',
         'age': data.get('age') or '',
     }
-    selected_cards = draw_reading_cards()
+    selected_cards = draw_reading_cards(data.get('card_numbers'))
 
     db_cards = fetch_cards(selected_cards)
     cards = build_card_payload(selected_cards, db_cards, retrieval_topic)
