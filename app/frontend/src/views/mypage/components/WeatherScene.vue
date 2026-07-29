@@ -47,6 +47,23 @@
           <stop offset="0.62" stop-color="#3e4967" />
           <stop offset="1" stop-color="#26324e" />
         </radialGradient>
+        <linearGradient id="weather-lunar-mare" x1="0.12" y1="0.08" x2="0.9" y2="0.92">
+          <stop offset="0" stop-color="#9ba4bd" stop-opacity="0.52" />
+          <stop offset="0.52" stop-color="#68758f" stop-opacity="0.62" />
+          <stop offset="1" stop-color="#46536f" stop-opacity="0.48" />
+        </linearGradient>
+        <radialGradient id="weather-lunar-crater" cx="0.38" cy="0.3" r="0.75">
+          <stop offset="0" stop-color="#5b667e" stop-opacity="0.68" />
+          <stop offset="0.56" stop-color="#737f97" stop-opacity="0.5" />
+          <stop offset="0.72" stop-color="#f6f2dc" stop-opacity="0.34" />
+          <stop offset="1" stop-color="#66728b" stop-opacity="0.14" />
+        </radialGradient>
+        <clipPath id="weather-moon-disc">
+          <circle cx="88" cy="58" r="27" />
+        </clipPath>
+        <clipPath id="weather-moon-illuminated">
+          <path :d="moonPhasePath" />
+        </clipPath>
         <radialGradient
           id="weather-sunlight"
           gradientUnits="userSpaceOnUse"
@@ -94,6 +111,16 @@
           <feTurbulence type="fractalNoise" baseFrequency="0.72" numOctaves="3" seed="21" stitchTiles="stitch" />
           <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 .11 0" />
         </filter>
+        <filter id="weather-moon-texture" x="-20%" y="-20%" width="140%" height="140%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.13" numOctaves="3" seed="37" result="lunar-noise" />
+          <feColorMatrix
+            in="lunar-noise"
+            type="matrix"
+            values=".55 0 0 0 .18  0 .58 0 0 .2  0 0 .65 0 .25  0 0 0 .22 0"
+            result="lunar-grain"
+          />
+          <feBlend in="SourceGraphic" in2="lunar-grain" mode="multiply" />
+        </filter>
       </defs>
 
       <rect class="scene-sky scene-sky-day" width="320" height="190" fill="url(#weather-day-sky)" />
@@ -108,15 +135,22 @@
       />
 
       <g class="scene-stars">
-        <circle cx="30" cy="29" r="1.3" />
-        <circle cx="51" cy="61" r="0.9" />
-        <circle cx="132" cy="25" r="1" />
-        <circle cx="164" cy="51" r="1.4" />
-        <circle cx="204" cy="23" r="0.8" />
-        <circle cx="247" cy="44" r="1.2" />
-        <circle cx="291" cy="25" r="0.8" />
-        <path d="M277 67h8M281 63v8" />
-        <path d="M115 66h6M118 63v6" />
+        <g
+          v-for="star in nearbyStars"
+          :key="star.id"
+          :class="['scene-celestial-star', { 'is-prominent': star.prominent }]"
+          :transform="`translate(${star.x} ${star.y})`"
+          :style="{
+            '--star-alpha': star.opacity,
+            '--star-delay': `${star.twinkleDelay}s`
+          }"
+        >
+          <circle :r="star.radius" />
+          <path
+            v-if="star.prominent"
+            :d="`M${-star.radius * 2.5} 0H${star.radius * 2.5}M0 ${-star.radius * 2.5}V${star.radius * 2.5}`"
+          />
+        </g>
       </g>
 
       <g class="scene-sun" filter="url(#weather-soft-glow)" :transform="sunTransform" :style="sunStyle">
@@ -130,10 +164,45 @@
 
       <g class="scene-moon" filter="url(#weather-soft-glow)" :transform="moonTransform" :style="moonStyle">
         <circle class="moon-aura" cx="88" cy="58" r="38" />
-        <circle class="moon-shadow" cx="88" cy="58" r="27" fill="url(#weather-moon-shadow)" />
-        <path class="moon-phase" :d="moonPhasePath" fill="url(#weather-moon-core)" />
-        <circle class="moon-crater" cx="76" cy="66" r="3" />
-        <circle class="moon-crater crater-small" cx="82" cy="43" r="1.8" />
+        <g :transform="moonSurfaceTransform">
+          <circle class="moon-shadow" cx="88" cy="58" r="27" fill="url(#weather-moon-shadow)" />
+          <g clip-path="url(#weather-moon-disc)">
+            <path
+              class="moon-phase"
+              :d="moonPhasePath"
+              fill="url(#weather-moon-core)"
+              filter="url(#weather-moon-texture)"
+            />
+            <g class="moon-geography" clip-path="url(#weather-moon-illuminated)">
+              <path
+                class="moon-mare mare-procellarum"
+                d="M66 46c4-7 11-10 16-5 3 3 1 8 4 12 2 4 1 9-3 13-3 4-2 9-6 12-5 3-11-2-12-8-2-7 2-10 0-15-1-3-1-6 1-9Z"
+              />
+              <path class="moon-mare mare-imbrium" d="M76 42c4-6 13-8 19-3 5 4 4 11-1 15-5 4-14 5-19 0-3-3-2-8 1-12Z" />
+              <path class="moon-mare mare-serenitatis" d="M94 41c5-3 12-1 14 4 2 5-2 10-7 12-5 1-11-2-12-7-1-4 1-7 5-9Z" />
+              <path class="moon-mare mare-tranquillitatis" d="M97 52c6-2 13 2 14 8 1 5-4 9-9 9-6 0-11-4-10-9 0-4 2-7 5-8Z" />
+              <path class="moon-mare mare-crisium" d="M107 47c4-1 8 2 8 6 0 4-3 7-7 7-4 0-7-3-7-6 0-4 2-6 6-7Z" />
+              <path class="moon-mare mare-nubium" d="M76 63c5-4 13-2 16 3 3 6-2 12-8 13-6 1-12-3-12-8 0-3 1-6 4-8Z" />
+              <path class="moon-mare mare-fecunditatis" d="M96 65c5-3 12-1 14 4 2 4-1 9-6 11-5 2-11-1-12-6-1-4 1-7 4-9Z" />
+              <g class="moon-ray-system">
+                <path d="M88 74 77 46M88 74l17-25M88 74l-23-7M88 74l24 6M88 74 82 84M88 74l8 10" />
+              </g>
+              <circle class="moon-crater crater-tycho" cx="88" cy="74" r="3.2" />
+              <circle class="moon-crater crater-copernicus" cx="80" cy="57" r="2.6" />
+              <circle class="moon-crater crater-plato" cx="86" cy="42" r="1.9" />
+              <circle class="moon-crater crater-kepler" cx="72" cy="59" r="1.5" />
+              <circle class="moon-crater crater-aristarchus" cx="70" cy="50" r="1.1" />
+              <g class="moon-minor-craters">
+                <circle cx="99" cy="44" r="0.8" />
+                <circle cx="104" cy="61" r="1.2" />
+                <circle cx="96" cy="77" r="0.9" />
+                <circle cx="77" cy="74" r="0.75" />
+                <circle cx="108" cy="70" r="0.7" />
+              </g>
+            </g>
+            <path class="moon-limb" :d="moonPhasePath" />
+          </g>
+        </g>
       </g>
 
       <path class="scene-horizon" d="M0 130C54 114 92 127 132 120c58-10 87-27 188-9v79H0Z" fill="url(#weather-horizon)" />
@@ -210,8 +279,8 @@ export default {
       return this.astronomy || getWeatherAstronomy();
     },
     sunTransform() {
-      const { x, y, scale } = this.sceneAstronomy.solar;
-      return `translate(${x} ${y}) scale(${scale}) translate(-82 -61)`;
+      const { x, y, scale, verticalScale = 1 } = this.sceneAstronomy.solar;
+      return `translate(${x} ${y}) scale(${scale} ${scale * verticalScale}) translate(-82 -61)`;
     },
     moonTransform() {
       const { x, y, scale } = this.sceneAstronomy.moon;
@@ -219,6 +288,13 @@ export default {
     },
     moonPhasePath() {
       return getMoonIlluminatedPath(this.sceneAstronomy.moon.phase);
+    },
+    nearbyStars() {
+      return Array.isArray(this.sceneAstronomy.stars) ? this.sceneAstronomy.stars : [];
+    },
+    moonSurfaceTransform() {
+      const rotation = Number(this.sceneAstronomy.moon.surfaceRotationDegrees) || 0;
+      return `rotate(${rotation.toFixed(2)} 88 58)`;
     },
     sunStyle() {
       return {
@@ -228,13 +304,15 @@ export default {
       };
     },
     moonStyle() {
+      const visibility = this.sceneAstronomy.moon.visibility ?? 1;
       return {
-        "--moon-opacity": this.sceneAstronomy.moon.opacity,
-        "--moon-cloud-opacity": this.sceneAstronomy.moon.opacity * 0.58,
+        "--moon-opacity": this.sceneAstronomy.moon.opacity * visibility,
+        "--moon-cloud-opacity": this.sceneAstronomy.moon.opacity * visibility * 0.58,
       };
     },
     sunlightStyle() {
-      const opacity = 0.07 + this.sceneAstronomy.solar.strength * 0.2;
+      const twilightStrength = this.sceneAstronomy.solar.twilightStrength ?? 1;
+      const opacity = twilightStrength * (0.07 + this.sceneAstronomy.solar.strength * 0.2);
       return {
         "--light-opacity": opacity,
         "--light-cloud-opacity": opacity * 0.52,
@@ -262,7 +340,6 @@ export default {
 .sky-stop { transition: stop-color 1200ms ease; }
 .scene-sky { transition: opacity 600ms ease; }
 .scene-sunlight { opacity: var(--light-opacity, 0.2); mix-blend-mode: screen; transition: opacity 600ms ease; }
-.is-night .scene-sunlight,
 .is-overcast .scene-sunlight,
 .is-rain .scene-sunlight,
 .is-snow .scene-sunlight,
@@ -288,14 +365,26 @@ export default {
 .scene-stars {
   fill: #fffbea;
   stroke: #fffbea;
-  stroke-width: 1;
   opacity: 0;
   filter: drop-shadow(0 0 4px rgba(255, 248, 218, 0.9));
 }
 .is-night:not(.is-rain):not(.is-snow):not(.is-mixed):not(.is-overcast) .scene-stars { opacity: var(--star-opacity, 0.84); }
-.scene-stars > * { transform-box: fill-box; transform-origin: center; animation: weather-star 3.6s ease-in-out infinite; }
-.scene-stars > *:nth-child(2n) { animation-delay: -1.4s; }
-.scene-stars > *:nth-child(3n) { animation-delay: -2.3s; }
+.scene-celestial-star {
+  opacity: var(--star-alpha, 0.8);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.scene-celestial-star circle,
+.scene-celestial-star path {
+  animation: weather-star 3.6s ease-in-out infinite;
+  animation-delay: var(--star-delay, 0s);
+}
+.scene-celestial-star path {
+  fill: none;
+  stroke-width: 0.55;
+  stroke-linecap: round;
+  opacity: 0.72;
+}
 
 .scene-sun,
 .scene-moon { opacity: 0; transform-box: fill-box; transform-origin: center; transition: opacity 500ms ease; }
@@ -312,8 +401,37 @@ export default {
 }
 .moon-shadow { stroke: rgba(219, 226, 245, 0.16); stroke-width: 0.8; }
 .moon-phase { filter: drop-shadow(0 0 3px rgba(240, 239, 255, 0.25)); }
-.moon-crater { fill: rgba(159, 170, 198, 0.22); }
-.crater-small { fill: rgba(255, 255, 255, 0.18); }
+.moon-geography { opacity: 0.76; }
+.moon-mare {
+  fill: url(#weather-lunar-mare);
+  stroke: rgba(64, 75, 99, 0.18);
+  stroke-width: 0.35;
+}
+.mare-imbrium,
+.mare-serenitatis { opacity: 0.84; }
+.mare-crisium,
+.mare-fecunditatis { opacity: 0.72; }
+.moon-crater {
+  fill: url(#weather-lunar-crater);
+  stroke: rgba(255, 252, 232, 0.34);
+  stroke-width: 0.42;
+}
+.moon-ray-system {
+  fill: none;
+  stroke: rgba(255, 252, 230, 0.22);
+  stroke-width: 0.48;
+  stroke-linecap: round;
+}
+.moon-minor-craters {
+  fill: rgba(78, 89, 111, 0.46);
+  stroke: rgba(250, 246, 225, 0.24);
+  stroke-width: 0.22;
+}
+.moon-limb {
+  fill: none;
+  stroke: rgba(255, 253, 239, 0.28);
+  stroke-width: 0.55;
+}
 
 .scene-horizon { opacity: 0.82; }
 .scene-ridge { transition: fill 500ms ease, opacity 500ms ease; }

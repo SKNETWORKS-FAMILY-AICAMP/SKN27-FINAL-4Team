@@ -86,3 +86,36 @@ class MindReportScheduledGenerationTests(TestCase):
             year=2026,
             month=7,
         )
+
+    @patch('mindreport.services.runtime._active_user_ids')
+    @patch('mindreport.services.runtime.MindReportService')
+    def test_generation_materializes_users_before_per_user_connection_cleanup(
+        self,
+        service_class,
+        active_user_ids,
+    ):
+        second_user = get_user_model().objects.create_user(
+            email='mindreport-scheduler-second@example.com',
+            password='password',
+            nickname='리포트 스케줄러 두 번째 사용자',
+        )
+        active_user_ids.return_value = [self.user.pk, second_user.pk]
+        service_class.return_value.ensure_period_report.return_value = {'id': 'weekly'}
+
+        with patch(
+            'django.db.models.query.QuerySet.iterator',
+            side_effect=AssertionError(
+                'The scheduler must not keep a queryset cursor open while '
+                'closing per-user database connections.'
+            ),
+        ):
+            count = generate_scheduled_reports(
+                period_type='week',
+                reference_date=date(2026, 7, 27),
+            )
+
+        self.assertEqual(count, 2)
+        self.assertEqual(
+            service_class.return_value.ensure_period_report.call_count,
+            2,
+        )

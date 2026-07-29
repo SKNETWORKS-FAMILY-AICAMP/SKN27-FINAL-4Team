@@ -1,0 +1,927 @@
+.room-interaction-guide > p {
+  margin: 0;
+}
+
+.room-interaction-guide > p b {
+  color: #ffd37a;
+  font-size: 0.94em;
+  letter-spacing: 0.08em;
+}
+
+.room-interaction-guide.is-game-guide {
+  border-bottom-color: rgba(142, 167, 255, 0.28);
+  background:
+    linear-gradient(90deg, rgba(32, 41, 105, 0.74), rgba(50, 24, 73, 0.72));
+}
+
+.room-game-start-button,
+.room-game-exit-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-height: 30px;
+  margin-left: auto;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 211, 122, 0.5);
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(229, 155, 95, 0.28), rgba(142, 167, 255, 0.2));
+  color: #fff7df;
+  box-shadow: 0 0 18px rgba(229, 155, 95, 0.13);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.room-game-start-button small {
+  padding-left: 8px;
+  border-left: 1px solid rgba(255, 247, 223, 0.2);
+  color: #d7b7ff;
+  font-size: 9px;
+  letter-spacing: 0.02em;
+}
+
+.room-game-start-button:hover,
+.room-game-start-button:focus-visible,
+.room-game-exit-button:hover,
+.room-game-exit-button:focus-visible {
+  border-color: rgba(255, 211, 122, 0.86);
+  background: linear-gradient(135deg, rgba(229, 155, 95, 0.4), rgba(142, 167, 255, 0.3));
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.room-game-start-button:disabled {
+  cursor: wait;
+  opacity: 0.5;
+  transform: none;
+}
+
+.room-game-exit-button {
+  margin-left: 0;
+  border-color: rgba(215, 183, 255, 0.3);
+  background: rgba(15, 10, 49, 0.42);
+  color: rgba(255, 245, 230, 0.76);
+  letter-spacing: 0;
+}
+
+.room-canvas.is-game-mode::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    radial-gradient(circle at 50% 75%, rgba(142, 167, 255, 0.07), transparent 38%),
+    linear-gradient(180deg, rgba(10, 8, 40, 0.08), rgba(12, 7, 29, 0.22));
+  pointer-events: none;
+}
+
+.room-canvas.is-game-playing {
+  box-shadow: inset 0 0 70px rgba(142, 167, 255, 0.08);
+}
+
+.room-canvas.is-game-mode .room-character {
+  z-index: 24;
+}
+
+.room-canvas.is-game-mode .room-character::after {
+  display: none;
+}
+
+.room-game-hud {
+  position: absolute;
+  top: 2.4%;
+  left: 50%;
+  z-index: 34;
+  display: flex;
+  align-items: stretch;
+  gap: 1px;
+  min-width: 42%;
+  padding: 4px;
+  border: 1px solid rgba(215, 183, 255, 0.24);
+  border-radius: 12px;
+  background: rgba(15, 10, 49, 0.82);
+  box-shadow: 0 10px 28px rgba(5, 5, 31, 0.3);
+  backdrop-filter: blur(10px);
+  transform: translateX(-50%);
+}
+
+.room-game-hud > div {
+  display: grid;
+  flex: 1 1 0;
+  min-width: 0;
+  place-items: center;
+  padding: 5px 10px;
+  border-right: 1px solid rgba(215, 183, 255, 0.14);
+}
+
+.room-game-hud > div:last-of-type {
+  border-right: 0;
+}
+
+.room-game-hud span {
+  color: rgba(215, 183, 255, 0.68);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.room-game-hud strong {
+  margin-top: 1px;
+  color: #fff7df;
+  font-size: clamp(12px, 1.45vw, 20px);
+  line-height: 1;
+}
+
+.room-game-hud strong.urgent {
+  color: #ff8aae;
+  animation: room-game-urgent 650ms ease-in-out infinite;
+}
+
+.room-game-combo {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  min-width: max-content;
+  padding: 4px 9px;
+  border: 1px solid rgba(255, 211, 122, 0.32);
+  border-radius: 999px;
+  background: rgba(58, 36, 64, 0.9);
+  color: #ffd37a;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  transform: translateX(-50%);
+  animation: room-game-combo-pop 260ms ease-out;
+}
+
+.room-game-control-hint {
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 4px;
+  min-width: max-content;
+  color: rgba(215, 183, 255, 0.68);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.room-game-lives {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 4px;
+  display: inline-flex;
+  gap: 3px;
+  min-width: max-content;
+  color: #ff789f;
+  font-size: 12px;
+  filter: drop-shadow(0 0 5px rgba(255, 109, 158, 0.45));
+}
+
+.room-game-lives i {
+  font-style: normal;
+  transition: opacity 180ms ease, filter 180ms ease, transform 180ms ease;
+}
+
+.room-game-lives i.lost {
+  opacity: 0.22;
+  filter: grayscale(1);
+  transform: scale(0.8);
+}
+
+.room-game-skillbar {
+  position: absolute;
+  top: 15%;
+  right: 1.6%;
+  z-index: 35;
+  display: grid;
+  gap: 5px;
+  width: clamp(104px, 12.5%, 154px);
+}
+
+.room-game-skillbar button {
+  position: relative;
+  display: grid;
+  grid-template-columns: 30px 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  min-height: 38px;
+  padding: 3px 6px 3px 4px;
+  border: 1px solid rgba(215, 183, 255, 0.25);
+  border-radius: 10px;
+  background: rgba(15, 10, 49, 0.82);
+  color: #fff7df;
+  box-shadow: 0 6px 18px rgba(5, 5, 31, 0.28);
+  text-align: left;
+  backdrop-filter: blur(8px);
+  transition: opacity 160ms ease, transform 160ms ease, border-color 160ms ease;
+}
+
+.room-game-skillbar button:not(:disabled):hover,
+.room-game-skillbar button:not(:disabled):focus-visible {
+  border-color: rgba(255, 232, 176, 0.76);
+  outline: none;
+  transform: translateX(-2px);
+}
+
+.room-game-skillbar button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.room-game-skillbar button.active {
+  border-color: rgba(123, 233, 255, 0.86);
+  box-shadow:
+    0 0 0 2px rgba(123, 233, 255, 0.12),
+    0 0 18px rgba(87, 206, 255, 0.4);
+  opacity: 1;
+}
+
+.room-game-skillbar img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 3px rgba(5, 5, 31, 0.42));
+}
+
+.room-game-skillbar kbd {
+  display: grid;
+  width: 19px;
+  height: 19px;
+  place-items: center;
+  border: 1px solid rgba(255, 247, 223, 0.34);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.room-game-skillbar span {
+  display: grid;
+  min-width: 0;
+}
+
+.room-game-skillbar b {
+  overflow: hidden;
+  font-size: clamp(8px, 0.72vw, 11px);
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.room-game-skillbar small {
+  color: #9feeff;
+  font-size: 8px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.room-game-enemy {
+  position: absolute;
+  z-index: 23;
+  display: grid;
+  width: 7.4%;
+  height: 17.6%;
+  place-items: end center;
+  pointer-events: none;
+  transform-origin: center bottom;
+}
+
+.room-game-enemy::before {
+  content: "";
+  position: absolute;
+  left: 2%;
+  right: 2%;
+  bottom: -4%;
+  height: 30%;
+  border: 2px solid rgba(255, 109, 158, 0.5);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 109, 158, 0.24), transparent 68%);
+  box-shadow: 0 0 18px rgba(255, 109, 158, 0.42);
+  animation: room-game-enemy-aura 850ms ease-in-out infinite;
+}
+
+.room-game-enemy.is-chasing::before {
+  border-color: rgba(255, 67, 104, 0.82);
+  background: radial-gradient(circle, rgba(255, 67, 104, 0.4), transparent 68%);
+  box-shadow: 0 0 23px rgba(255, 67, 104, 0.68);
+  animation-duration: 540ms;
+}
+
+.room-game-enemy-alert {
+  position: absolute;
+  z-index: 2;
+  top: -8%;
+  left: 50%;
+  display: grid;
+  width: clamp(18px, 30%, 28px);
+  aspect-ratio: 1;
+  place-items: center;
+  border: 1px solid rgba(255, 235, 240, 0.84);
+  border-radius: 50%;
+  background: rgba(185, 31, 69, 0.94);
+  color: #fff;
+  box-shadow: 0 3px 14px rgba(72, 5, 29, 0.58);
+  font-size: clamp(10px, 1vw, 15px);
+  font-weight: 900;
+  transform: translateX(-50%);
+  animation: room-game-enemy-alert 480ms ease-in-out infinite alternate;
+}
+
+.room-game-enemy img {
+  position: relative;
+  z-index: 1;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  filter:
+    drop-shadow(0 10px 12px rgba(6, 3, 18, 0.5))
+    drop-shadow(0 0 8px rgba(255, 109, 158, 0.42));
+  animation: room-game-enemy-walk 420ms linear infinite;
+}
+
+.room-game-enemy[data-facing="left"] img {
+  --enemy-facing: -1;
+}
+
+.room-game-enemy[data-facing="right"] img {
+  --enemy-facing: 1;
+}
+
+.room-game-enemy.is-turning img {
+  animation: room-game-enemy-turn 420ms ease-out;
+}
+
+.room-game-enemy.is-stunned::before {
+  border-color: rgba(101, 226, 255, 0.86);
+  background: radial-gradient(circle, rgba(101, 226, 255, 0.42), transparent 68%);
+  box-shadow: 0 0 26px rgba(101, 226, 255, 0.72);
+  animation: none;
+}
+
+.room-game-enemy.is-stunned img {
+  filter:
+    grayscale(0.35)
+    brightness(1.35)
+    drop-shadow(0 0 11px rgba(101, 226, 255, 0.72));
+  animation: none;
+}
+
+.room-character.is-invulnerable {
+  animation: room-game-player-invulnerable 180ms steps(2, end) infinite;
+}
+
+.room-canvas.is-game-mode .room-character.is-game-invisible {
+  opacity: 0.3;
+}
+
+.room-canvas.is-game-mode .room-character.is-game-invisible img {
+  filter:
+    saturate(0.55)
+    brightness(1.5)
+    drop-shadow(0 10px 12px rgba(6, 3, 18, 0.25))
+    drop-shadow(0 0 14px rgba(174, 236, 255, 0.86));
+  animation: room-game-invisibility-pulse 760ms ease-in-out infinite alternate;
+}
+
+.room-canvas.is-game-mode .room-character.is-game-invisible::after {
+  content: "";
+  position: absolute;
+  inset: -12% -20% -6%;
+  display: block;
+  border: 1px dashed rgba(190, 243, 255, 0.72);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(205, 247, 255, 0.13), rgba(90, 180, 255, 0.02));
+  box-shadow:
+    inset 0 0 18px rgba(205, 247, 255, 0.18),
+    0 0 22px rgba(125, 215, 255, 0.35);
+  pointer-events: none;
+  animation: room-game-invisibility-ring 1100ms linear infinite;
+}
+
+.room-character.has-speed-boost img {
+  filter:
+    brightness(1.22)
+    drop-shadow(0 10px 12px rgba(6, 3, 18, 0.44))
+    drop-shadow(0 0 13px rgba(255, 224, 107, 0.9));
+}
+
+.room-game-item {
+  position: absolute;
+  z-index: 20;
+  display: grid;
+  width: clamp(32px, 4.4%, 58px);
+  aspect-ratio: 1;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 247, 223, 0.7);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(255, 247, 223, 0.94) 0 16%, rgba(229, 155, 95, 0.58) 38%, rgba(229, 155, 95, 0.08) 70%);
+  color: #fff7df;
+  box-shadow:
+    0 0 0 6px rgba(229, 155, 95, 0.08),
+    0 0 22px rgba(255, 211, 122, 0.7);
+  transform: translate(-50%, -50%);
+  animation: room-game-item-float 1.6s ease-in-out infinite;
+  transition: filter 160ms ease, opacity 160ms ease;
+}
+
+.room-game-item-icon {
+  display: grid;
+  width: 76%;
+  height: 76%;
+  place-items: center;
+  filter: drop-shadow(0 0 6px rgba(255, 247, 223, 0.8));
+}
+
+.room-game-item-icon img,
+.room-game-item-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.room-game-item.is-light .room-game-item-icon {
+  width: 82%;
+  height: 82%;
+  filter:
+    drop-shadow(0 2px 3px rgba(86, 24, 69, 0.38))
+    drop-shadow(0 0 8px rgba(255, 198, 156, 0.88));
+}
+
+.room-game-item.is-time .room-game-item-icon {
+  width: 72%;
+  height: 72%;
+  filter:
+    drop-shadow(0 2px 3px rgba(34, 50, 101, 0.38))
+    drop-shadow(0 0 8px rgba(156, 229, 255, 0.86));
+}
+
+.room-game-cloud-icon {
+  overflow: visible;
+  color: #9e86bc;
+  filter: drop-shadow(0 4px 4px rgba(9, 3, 25, 0.48));
+}
+
+.room-game-cloud-icon path {
+  fill: currentColor;
+  stroke: rgba(255, 176, 215, 0.48);
+  stroke-width: 3;
+}
+
+.room-game-cloud-icon .cloud-highlight {
+  fill: rgba(220, 184, 234, 0.34);
+  stroke: none;
+}
+
+.room-game-time-badge {
+  position: absolute;
+  right: -9%;
+  bottom: -9%;
+  z-index: 2;
+  padding: 2px 4px;
+  border: 1px solid rgba(225, 250, 255, 0.78);
+  border-radius: 999px;
+  background: rgba(22, 80, 135, 0.94);
+  color: #effcff;
+  box-shadow: 0 2px 8px rgba(7, 21, 54, 0.45);
+  font-size: clamp(7px, 0.7vw, 10px);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.room-game-item:hover,
+.room-game-item:focus-visible {
+  outline: 2px solid #fff7df;
+  outline-offset: 4px;
+  filter: brightness(1.18);
+}
+
+.room-game-item:disabled {
+  cursor: default;
+}
+
+.room-game-item.targeted {
+  animation: room-game-targeted 420ms ease-in-out infinite alternate;
+}
+
+.room-game-item.is-time {
+  border-color: rgba(142, 220, 255, 0.88);
+  background:
+    radial-gradient(circle, rgba(232, 250, 255, 0.96) 0 16%, rgba(90, 180, 255, 0.62) 40%, rgba(90, 180, 255, 0.08) 72%);
+  color: #dff8ff;
+  box-shadow:
+    0 0 0 6px rgba(90, 180, 255, 0.08),
+    0 0 24px rgba(90, 180, 255, 0.78);
+  animation-delay: -520ms;
+}
+
+.room-game-item.is-shadow {
+  border-color: rgba(255, 109, 158, 0.55);
+  background:
+    radial-gradient(circle, rgba(58, 27, 76, 0.96), rgba(29, 13, 47, 0.9) 54%, rgba(29, 13, 47, 0.12) 74%);
+  color: #d18cac;
+  box-shadow:
+    0 0 0 6px rgba(255, 109, 158, 0.06),
+    0 0 20px rgba(82, 35, 96, 0.72);
+  animation-name: room-game-shadow-float;
+  animation-duration: 1.25s;
+}
+
+.room-game-item[class*="is-skill-"] {
+  border-width: 2px;
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, 0.96) 0 13%, rgba(165, 121, 229, 0.64) 40%, rgba(76, 43, 117, 0.1) 72%);
+  box-shadow:
+    0 0 0 7px rgba(168, 117, 238, 0.09),
+    0 0 25px rgba(183, 132, 255, 0.76);
+}
+
+.room-game-item[class*="is-skill-"] .room-game-item-icon {
+  width: 78%;
+  height: 78%;
+  filter:
+    drop-shadow(0 2px 4px rgba(32, 11, 55, 0.48))
+    drop-shadow(0 0 7px rgba(255, 255, 255, 0.7));
+}
+
+.room-game-item.is-skill-invisibility {
+  border-color: rgba(255, 154, 195, 0.88);
+}
+
+.room-game-item.is-skill-time-stop {
+  border-color: rgba(157, 218, 255, 0.9);
+}
+
+.room-game-item.is-skill-speed {
+  border-color: rgba(255, 225, 121, 0.92);
+}
+
+.room-game-score-feedback {
+  position: absolute;
+  top: 17%;
+  left: 50%;
+  z-index: 36;
+  min-width: max-content;
+  padding: 7px 14px;
+  border: 1px solid rgba(255, 211, 122, 0.42);
+  border-radius: 999px;
+  background: rgba(42, 28, 57, 0.92);
+  color: #ffd37a;
+  box-shadow: 0 10px 24px rgba(5, 5, 31, 0.32);
+  font-size: clamp(11px, 1.1vw, 15px);
+  font-weight: 900;
+  transform: translateX(-50%);
+}
+
+.room-game-score-feedback.is-time {
+  border-color: rgba(142, 220, 255, 0.5);
+  color: #c8f2ff;
+}
+
+.room-game-score-feedback.is-danger {
+  border-color: rgba(255, 109, 158, 0.52);
+  color: #ff9aba;
+}
+
+.room-game-feedback-enter-active,
+.room-game-feedback-leave-active {
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.room-game-feedback-enter-from,
+.room-game-feedback-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 9px) scale(0.92);
+}
+
+.room-game-countdown,
+.room-game-stage-clear,
+.room-game-result {
+  position: absolute;
+  inset: 0;
+  z-index: 42;
+  display: grid;
+  place-items: center;
+  background: rgba(10, 6, 30, 0.58);
+  backdrop-filter: blur(4px);
+}
+
+.room-game-countdown {
+  align-content: center;
+  gap: 4px;
+  color: #fff7df;
+  text-align: center;
+}
+
+.room-game-stage-clear {
+  align-content: center;
+  gap: 3px;
+  color: #fff7df;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(229, 155, 95, 0.2), transparent 36%),
+    rgba(10, 6, 30, 0.62);
+}
+
+.room-game-stage-clear > span {
+  color: #d7b7ff;
+  font-size: clamp(11px, 1.3vw, 17px);
+  font-weight: 900;
+  letter-spacing: 0.16em;
+}
+
+.room-game-stage-clear > strong {
+  color: #ffd37a;
+  font-family: var(--font-display);
+  font-size: clamp(36px, 6vw, 76px);
+  line-height: 1;
+  text-shadow: 0 0 24px rgba(255, 211, 122, 0.46);
+  animation: room-game-result-in 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.room-game-stage-clear > p {
+  margin: 6px 0 0;
+  color: rgba(255, 245, 230, 0.68);
+  font-size: clamp(10px, 1vw, 13px);
+}
+
+.room-game-countdown > span {
+  color: #d7b7ff;
+  font-size: clamp(12px, 1.4vw, 18px);
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.room-game-countdown > strong {
+  min-width: 1.2em;
+  color: #ffd37a;
+  font-family: var(--font-display);
+  font-size: clamp(64px, 10vw, 132px);
+  line-height: 0.95;
+  text-shadow: 0 0 28px rgba(255, 211, 122, 0.5);
+  animation: room-game-countdown-pop 850ms ease-out infinite;
+}
+
+.room-game-countdown > p {
+  margin: 5px 0 0;
+  color: rgba(255, 245, 230, 0.74);
+  font-size: clamp(11px, 1.1vw, 15px);
+}
+
+.room-game-result {
+  background:
+    radial-gradient(circle at 50% 44%, rgba(142, 167, 255, 0.18), transparent 38%),
+    rgba(10, 6, 30, 0.72);
+}
+
+.room-game-result-card {
+  width: min(390px, 72%);
+  padding: clamp(18px, 2.8vw, 34px);
+  border: 1px solid rgba(215, 183, 255, 0.3);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(229, 155, 95, 0.16), transparent 42%),
+    rgba(28, 15, 49, 0.94);
+  box-shadow: 0 24px 70px rgba(3, 5, 25, 0.5);
+  color: #fff7df;
+  text-align: center;
+  animation: room-game-result-in 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.room-game-result-badge {
+  display: inline-flex;
+  padding: 5px 10px;
+  border: 1px solid rgba(255, 211, 122, 0.32);
+  border-radius: 999px;
+  color: #ffd37a;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+}
+
+.room-game-result-card h3 {
+  margin: 10px 0 4px;
+  font-size: clamp(17px, 2vw, 25px);
+  line-height: 1.3;
+}
+
+.room-game-result-card > p {
+  margin: 0;
+  color: rgba(255, 245, 230, 0.68);
+  font-size: clamp(10px, 1vw, 13px);
+}
+
+.room-game-result-card dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 16px 0;
+  border: 1px solid rgba(215, 183, 255, 0.15);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.room-game-result-card dl > div {
+  padding: 10px;
+  background: rgba(32, 41, 105, 0.18);
+}
+
+.room-game-result-card dl > div + div {
+  border-left: 1px solid rgba(215, 183, 255, 0.15);
+}
+
+.room-game-result-card dt {
+  color: rgba(215, 183, 255, 0.68);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.room-game-result-card dd {
+  margin: 3px 0 0;
+  color: #fff7df;
+  font-size: clamp(15px, 1.8vw, 22px);
+  font-weight: 900;
+}
+
+.room-game-result-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.room-game-result-actions button {
+  min-height: 36px;
+  padding: 0 16px;
+  border: 1px solid rgba(215, 183, 255, 0.25);
+  border-radius: 999px;
+  background: rgba(255, 247, 223, 0.07);
+  color: #fff7df;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.room-game-result-actions button.retry {
+  border-color: rgba(229, 155, 95, 0.4);
+  background: linear-gradient(135deg, rgba(229, 155, 95, 0.3), rgba(142, 167, 255, 0.22));
+}
+
+.room-game-result-actions button:hover,
+.room-game-result-actions button:focus-visible {
+  border-color: rgba(255, 247, 223, 0.62);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+@keyframes room-game-item-float {
+  0%, 100% { transform: translate(-50%, -50%) translateY(0) scale(1); }
+  50% { transform: translate(-50%, -50%) translateY(-6px) scale(1.08); }
+}
+
+@keyframes room-game-shadow-float {
+  0%, 100% { transform: translate(-50%, -50%) translate(0, 0) scale(0.98); opacity: 0.86; }
+  50% { transform: translate(-50%, -50%) translate(5px, -4px) scale(1.08); opacity: 1; }
+}
+
+@keyframes room-game-targeted {
+  from { filter: brightness(1); }
+  to { filter: brightness(1.35); box-shadow: 0 0 0 9px rgba(255, 247, 223, 0.12), 0 0 30px rgba(255, 211, 122, 0.92); }
+}
+
+@keyframes room-game-countdown-pop {
+  0% { opacity: 0; transform: scale(1.28); }
+  22% { opacity: 1; transform: scale(1); }
+  78% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.82); }
+}
+
+@keyframes room-game-combo-pop {
+  from { opacity: 0; transform: translateX(-50%) scale(0.7); }
+  to { opacity: 1; transform: translateX(-50%) scale(1); }
+}
+
+@keyframes room-game-result-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.94); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes room-game-urgent {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.48; }
+}
+
+@keyframes room-game-enemy-walk {
+  0%, 50%, 100% {
+    transform: scaleX(var(--enemy-facing, 1)) translateY(0) rotate(0);
+  }
+  25% {
+    transform: scaleX(var(--enemy-facing, 1)) translateY(-2px) rotate(-1.5deg);
+  }
+  75% {
+    transform: scaleX(var(--enemy-facing, 1)) translateY(-2px) rotate(1.5deg);
+  }
+}
+
+@keyframes room-game-enemy-aura {
+  0%, 100% { opacity: 0.55; transform: scale(0.86); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+@keyframes room-game-enemy-alert {
+  from { transform: translateX(-50%) translateY(2px) scale(0.92); }
+  to { transform: translateX(-50%) translateY(-2px) scale(1.08); }
+}
+
+@keyframes room-game-enemy-turn {
+  0% { transform: scaleX(var(--enemy-facing, 1)) rotate(-8deg) scale(0.9); }
+  55% { transform: scaleX(var(--enemy-facing, 1)) rotate(4deg) scale(1.06); }
+  100% { transform: scaleX(var(--enemy-facing, 1)) rotate(0) scale(1); }
+}
+
+@keyframes room-game-player-invulnerable {
+  0%, 100% { opacity: 1; filter: brightness(1.35); }
+  50% { opacity: 0.35; filter: brightness(1.8); }
+}
+
+@keyframes room-game-invisibility-pulse {
+  from { opacity: 0.45; transform: scale(0.96); }
+  to { opacity: 0.86; transform: scale(1.03); }
+}
+
+@keyframes room-game-invisibility-ring {
+  from { opacity: 0.32; transform: rotate(0deg) scale(0.94); }
+  to { opacity: 0.72; transform: rotate(360deg) scale(1.05); }
+}
+
+@media (max-width: 560px) {
+  .room-interaction-guide {
+    flex-wrap: wrap;
+  }
+
+  .room-interaction-guide > p {
+    flex: 1 1 calc(100% - 24px);
+  }
+
+  .room-game-start-button,
+  .room-game-exit-button {
+    width: 100%;
+    justify-content: center;
+    margin-left: 0;
+  }
+
+  .room-game-hud {
+    top: 2%;
+    min-width: 70%;
+  }
+
+  .room-game-hud > div {
+    padding: 4px 6px;
+  }
+
+  .room-game-skillbar {
+    top: 18%;
+    right: 1%;
+    width: 92px;
+  }
+
+  .room-game-skillbar button {
+    grid-template-columns: 25px 17px minmax(0, 1fr);
+    min-height: 32px;
+    padding: 2px 4px 2px 3px;
+  }
+
+  .room-game-skillbar img {
+    width: 25px;
+    height: 25px;
+  }
+
+  .room-game-skillbar kbd {
+    width: 16px;
+    height: 16px;
+    font-size: 8px;
+  }
+
+  .room-game-result-card {
+    width: min(410px, 86%);
+    border-radius: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .room-game-item,
+  .room-game-countdown > strong,
+  .room-game-hud strong.urgent,
+  .room-game-enemy img,
+  .room-game-enemy::before,
+  .room-game-enemy-alert,
+  .room-game-enemy.is-turning img,
+  .room-character.is-invulnerable,
+  .room-canvas.is-game-mode .room-character.is-game-invisible img,
+  .room-canvas.is-game-mode .room-character.is-game-invisible::after {
+    animation: none;
+  }
+}

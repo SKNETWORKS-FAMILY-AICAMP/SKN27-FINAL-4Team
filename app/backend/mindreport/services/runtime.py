@@ -105,11 +105,16 @@ def generate_scheduled_reports(*, period_type: str, reference_date=None) -> int:
         raise ValueError(f'Unsupported mindreport period_type: {period_type}')
 
     user_ids = _active_user_ids(period_type=period_type, **period_kwargs)
-    users = get_user_model().objects.filter(pk__in=user_ids, is_active=True)
+    # Materialize the queryset before processing users. QuerySet.iterator() keeps
+    # a database cursor open, but the per-user cleanup below may close its
+    # connection when CONN_MAX_AGE is 0 (Django's default).
+    users = list(
+        get_user_model().objects.filter(pk__in=user_ids, is_active=True)
+    )
     generated_count = 0
     failed_count = 0
     service = MindReportService()
-    for user in users.iterator():
+    for user in users:
         try:
             result = service.ensure_period_report(
                 user=user,
