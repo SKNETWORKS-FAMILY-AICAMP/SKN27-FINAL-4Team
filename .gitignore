@@ -148,3 +148,7 @@ app/backend/test_mindreport_e2e.py
 etl/data/018.*/
 artifacts/
 ai/emotion/evaluate_songwon.ipynb
+ai/emotion/exp3_mapping_ab.py
+ai/emotion/실험3_매핑AB비교.py
+ai/emotion/실험3_매핑AB비교_Colab.ipynb
+ai/emotion/confusion_matrix_check.py
