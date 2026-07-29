@@ -4,6 +4,7 @@ import json
 import logging
 import random
 import re
+import threading
 import uuid
 from html import escape
 from pathlib import Path
@@ -677,4 +678,19 @@ def create_generation_job(scene, style_id, user, idempotency_key=None):
         if getattr(settings, "EMOTION_CARD_ENABLE_REAL_IMAGE_API", False)
         else _fake_complete
     )
-    return provider(job), False
+    # 2026-07-27: 응답을 막지 않는 백그라운드 생성으로 전환.
+    # 진짜 이미지 API(gpt-image-2)는 30~60초가 걸리는데, 여기서 동기로 기다리면
+    # CloudFront(대기 30초)가 응답을 끊어 프론트가 job_id조차 못 받는다.
+    # 프론트는 원래 job 폴링(1.2초 간격) 구조 — 설계대로 생성은 뒤에서, 202는 즉시.
+    # (job 상태 갱신은 provider 내부에서 COMPLETED/FAILED/BLOCKED로 전부 처리됨)
+    def _run_provider():
+        try:
+            provider(job)
+        except Exception:
+            logger.exception("[emotion_card] background generation crashed")
+            EmotionCardJob.objects.filter(id=job.id).exclude(
+                status__in=["COMPLETED", "FAILED", "BLOCKED"]
+            ).update(status="FAILED", error_code="EMOTION_CARD_GENERATION_ERROR")
+
+    threading.Thread(target=_run_provider, daemon=True).start()
+    return job, False

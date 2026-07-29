@@ -108,6 +108,11 @@ take_screenshot*
 view_svgs*
 shot_dark*
 
+# 새로 추가되는 PNG·MD·TXT 커밋 제외 (기존 추적 파일은 영향 없음)
+*.png
+*.md
+*.txt
+
 # 아카이브 (미사용 파일 보관소 — v6.0 정리, _archive/README.md 참조)
 _archive/
 
