@@ -407,9 +407,3 @@
   }
 }
 
-@media (max-height: 560px) {
-
-  #app .category-chip-row {
-    display: none !important;
-  }
-}
