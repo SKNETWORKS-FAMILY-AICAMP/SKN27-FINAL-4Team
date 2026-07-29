@@ -42,6 +42,13 @@ const categories = [
 ];
 
 const cardRoles = ["오늘의 흐름", "핵심 신호", "조언"];
+const majorArcanaNames = [
+  "바보", "마법사", "여사제", "여황제", "황제", "교황", "연인", "전차", "힘", "은둔자",
+  "운명의 수레바퀴", "정의", "매달린 사람", "죽음", "절제", "악마", "탑", "별", "달", "태양",
+  "심판", "세계",
+];
+const minorArcanaRanks = ["에이스", "2", "3", "4", "5", "6", "7", "8", "9", "10", "페이지", "기사", "여왕", "왕"];
+const minorArcanaSuits = ["완드", "컵", "소드", "펜타클"];
 const selectedCategory = ref(getInitialCategory());
 const cardSlots = ref(createCardSlots());
 const selectedSlotIds = ref([]);
@@ -432,6 +439,20 @@ function isSlotSelected(slotId) {
   return selectedSlotIds.value.includes(slotId);
 }
 
+function getTarotCardName(cardNumber) {
+  const number = Number(cardNumber);
+
+  if (number >= 0 && number < majorArcanaNames.length) {
+    return majorArcanaNames[number];
+  }
+
+  const minorArcanaIndex = number - majorArcanaNames.length;
+  const suit = minorArcanaSuits[Math.floor(minorArcanaIndex / minorArcanaRanks.length)];
+  const rank = minorArcanaRanks[minorArcanaIndex % minorArcanaRanks.length];
+
+  return suit && rank ? `${suit} ${rank}` : "타로 카드";
+}
+
 function createCardSlots() {
   const cardNumbers = shuffle([...Array(78).keys()]).slice(0, 20);
 
@@ -504,7 +525,7 @@ function shuffle(values) {
               @click="selectCard(slot)"
             >
               <img
-                :src="isSlotSelected(slot.id) ? getTarotCardImage(slot.cardNumber) : tarotCardBackImage"
+                :src="tarotCardBackImage"
                 :alt="isSlotSelected(slot.id) ? '선택한 타로 카드' : ''"
               >
             </button>
@@ -544,6 +565,7 @@ function shuffle(values) {
             </button>
             <div v-else class="empty-slot"></div>
             <strong v-if="selectedSlots[position - 1]" class="selected-slot-name">
+              {{ getTarotCardName(selectedSlots[position - 1].cardNumber) }}
             </strong>
             <small v-if="selectedSlots[position - 1]" class="selected-slot-orientation">
             </small>
