@@ -6,11 +6,11 @@ import { characterApi } from "../../api/character.js";
 const router = useRouter();
 const route = useRoute();
 
+// 감정 분류 4종(기쁨·슬픔·분노·일반)에 맞춘다 — 기본 표정이 '일반'에 해당한다.
 const expressions = [
   { id: "joy", label: "기쁨" },
   { id: "sadness", label: "슬픔"},
   { id: "anger", label: "화남"},
-  { id: "anxiety", label: "불안"},
 ];
 const defaultExpression = {
   id: "default",

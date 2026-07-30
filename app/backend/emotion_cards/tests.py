@@ -25,6 +25,22 @@ from .scene_pipeline import (
 from .services import analyze, build_scene
 
 
+class _InlineThread:
+    """테스트 전용 — 백그라운드 스레드를 같은 트랜잭션에서 즉시 실행 (IS-002).
+
+    2026-07-27 마음카드 이미지 생성이 백그라운드 스레드로 전환되어(services.py,
+    CloudFront 30초 제한 대응) 202 직후의 작업 상태는 QUEUED다. 실제 스레드를
+    기다리면 TestCase 트랜잭션과 DB 커넥션이 갈라져 결과가 비결정적이므로,
+    스레드 생성을 인라인 실행으로 치환해 완료 상태를 결정적으로 검증한다."""
+
+    def __init__(self, target=None, daemon=None, **kwargs):
+        self._target = target
+
+    def start(self):
+        if self._target:
+            self._target()
+
+
 @override_settings(
     EMOTION_CARD_ENABLE_LLM_ANALYSIS=False,
     EMOTION_CARD_SCENE_DIRECTOR_ENABLED=False,
@@ -587,6 +603,7 @@ class EmotionCardApiTests(TestCase):
     def setUp(self):
         self.client.force_login(self.user)
 
+    @patch("emotion_cards.services.threading.Thread", new=_InlineThread)
     def test_existing_five_step_flow_and_feedback_remain_compatible(self):
         analysis_response = self.client.post(
             "/api/emotion-cards/analyze/",
@@ -644,6 +661,7 @@ class EmotionCardApiTests(TestCase):
         self.assertEqual(feedback.status_code, 200)
         self.assertTrue(feedback.json()["feedback"]["helpful"])
 
+    @patch("emotion_cards.services.threading.Thread", new=_InlineThread)
     def test_successful_new_card_replaces_the_previous_card_and_image(self):
         def generate_card(idempotency_key):
             analysis = self.client.post(
@@ -661,7 +679,7 @@ class EmotionCardApiTests(TestCase):
             ).json()
             return generation
 
-        # The job endpoint exposes the new card ID after synchronous completion.
+        # 인라인 스레드 패치로 생성이 즉시 완료되므로 job 조회에서 card_id를 얻는다.
         first_job = generate_card("replace-first-card")
         first_card_id = self.client.get(f"/api/emotion-cards/jobs/{first_job['job_id']}/").json()["card_id"]
         first_card = self.client.get(f"/api/emotion-cards/{first_card_id}/").json()
