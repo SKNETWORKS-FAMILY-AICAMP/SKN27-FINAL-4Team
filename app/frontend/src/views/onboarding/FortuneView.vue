@@ -242,6 +242,12 @@ function selectCategory(categoryId) {
   shuffleCards();
 }
 
+function resizeQuestionInput(event) {
+  const textarea = event.target;
+  textarea.style.height = "auto";
+  textarea.style.height = `${textarea.scrollHeight}px`;
+}
+
 function selectCard(slot) {
   if (isShuffling.value) return;
   if (selectedSlotIds.value.includes(slot.id) || selectedSlotIds.value.length >= MAX_SELECTED_CARDS) return;
@@ -571,6 +577,19 @@ function shuffle(values) {
             </small>
           </article>
         </div>
+
+        <section class="question-box" aria-label="타로 질문 입력">
+          <label for="tarot-question">{{ selectedCategoryData.label }}에 대해 궁금한 점을 적어주세요</label>
+          <textarea
+            id="tarot-question"
+            v-model="question"
+            :maxlength="QUESTION_MAX_LENGTH"
+            placeholder="예: 이번 주에 중요한 대화를 잘 풀어갈 수 있을까요?"
+            :disabled="isReadingLoading || isResultStreaming"
+            @input="resizeQuestionInput"
+          ></textarea>
+          <small>{{ question.length }} / {{ QUESTION_MAX_LENGTH }}</small>
+        </section>
 
         <button
           class="btn primary full analyze-button"
@@ -1165,7 +1184,8 @@ function shuffle(values) {
 
 .question-box textarea {
   min-height: 112px;
-  resize: vertical;
+  resize: none;
+  overflow-y: hidden;
   padding: 14px;
   border: 1px solid rgba(255, 116, 180, 0.24);
   border-radius: 14px;
