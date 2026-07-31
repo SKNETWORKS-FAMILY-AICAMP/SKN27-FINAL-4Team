@@ -102,6 +102,8 @@
 | 데이터 수집·전처리 보고서 | `docs/` |
 | 감정분류 모델 개선 실험 보고서 | `docs/` |
 | **중간 발표 자료** | `docs/빈틈사이_중간발표자료_한솔작성.pptx` |
+| **최종 산출물 일체 (17종)** | `docs/산출물/` |
+| **최종 발표 자료** | `docs/산출물/빈틈사이_최종 발표자료.pdf` |
 
 ### 개발 일정 (WBS)
 
@@ -124,9 +126,9 @@
 |---|---|
 | **Backend** | ![Python](https://img.shields.io/badge/Python-3776AB?style=flat&logo=python&logoColor=white) ![Django](https://img.shields.io/badge/Django-092E20?style=flat&logo=django&logoColor=white) ![DRF](https://img.shields.io/badge/DRF-A30000?style=flat&logo=django&logoColor=white) |
 | **Frontend** | ![Vue](https://img.shields.io/badge/Vue%203-42B883?style=flat&logo=vuedotjs&logoColor=white) ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat&logo=vite&logoColor=white) ![JS](https://img.shields.io/badge/JavaScript-F7DF1E?style=flat&logo=javascript&logoColor=black) |
-| **AI Core** | ![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=flat&logo=pytorch&logoColor=white) ![HF](https://img.shields.io/badge/KcELECTRA%20파인튜닝-FFD21E?style=flat&logo=huggingface&logoColor=black) ![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?style=flat&logo=langgraph&logoColor=white) ![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=flat&logo=langchain&logoColor=white) ![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=flat&logo=openai&logoColor=white) ![Groq](https://img.shields.io/badge/Groq-F55036?style=flat&logo=groq&logoColor=white) ![XGBoost](https://img.shields.io/badge/XGBoost%20baseline-8C5AB4?style=flat) ![TTS](https://img.shields.io/badge/ElevenLabs%20TTS-111111?style=flat) |
-| **Database** | ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat&logo=postgresql&logoColor=white) |
-| **학습·배포·협업** | ![Colab](https://img.shields.io/badge/Colab%20T4-F9AB00?style=flat&logo=googlecolab&logoColor=white) ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white) ![AWS](https://img.shields.io/badge/AWS-FF9900?style=flat&logo=amazonaws&logoColor=white) ![Git](https://img.shields.io/badge/Git-F05032?style=flat&logo=git&logoColor=white) |
+| **AI Core** | ![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=flat&logo=pytorch&logoColor=white) ![HF](https://img.shields.io/badge/KcELECTRA%20파인튜닝-FFD21E?style=flat&logo=huggingface&logoColor=black) ![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?style=flat&logo=langgraph&logoColor=white) ![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=flat&logo=langchain&logoColor=white) ![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=flat&logo=openai&logoColor=white) ![Groq](https://img.shields.io/badge/Groq-F55036?style=flat&logo=groq&logoColor=white) ![XGBoost](https://img.shields.io/badge/XGBoost%20baseline-8C5AB4?style=flat) ![TTS](https://img.shields.io/badge/OpenAI%20gpt--audio%20TTS-412991?style=flat) |
+| **Database** | ![PostgreSQL](https://img.shields.io/badge/PostgreSQL%20(AWS%20RDS)-4169E1?style=flat&logo=postgresql&logoColor=white) ![Neo4j](https://img.shields.io/badge/Neo4j%20AuraDB%20(그래프%20장기기억)-008CC1?style=flat&logo=neo4j&logoColor=white) |
+| **학습·배포·협업** | ![Colab](https://img.shields.io/badge/Colab%20T4-F9AB00?style=flat&logo=googlecolab&logoColor=white) ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white) ![AWS](https://img.shields.io/badge/AWS%20EC2·RDS·Lambda·CloudFront·ECR-FF9900?style=flat&logo=amazonaws&logoColor=white) ![GHA](https://img.shields.io/badge/GitHub%20Actions%20CI%2FCD-2088FF?style=flat&logo=githubactions&logoColor=white) ![Git](https://img.shields.io/badge/Git-F05032?style=flat&logo=git&logoColor=white) |
 
 ---
 
@@ -135,23 +137,27 @@
 | 기능 | 설명 | 상태 |
 |---|---|---|
 | **친구 챗봇 (감정 분석)** | 친구 같은 캐릭터와 반말 대화. 매 턴 4감정 자동 분류 → 표정·톤·음성에 반영 | ✅ 구현 |
-| **2단 장기 기억** | 매 턴 기억 가치를 즉시 캡처 + 주기적 압축·정리 → 재방문 시 회상 | ✅ 구현 |
+| **그래프 장기 기억** | Neo4j 그래프에 사건·인물·감정을 관계로 축적 — 회상 93%·환각 0%·"잊어줘" 만료 처리 | ✅ 구현 |
 | **선제 첫인사** | 진입 시 캐릭터가 먼저 말 걸기 (기억·날씨·시간대 기반) | ✅ 구현 |
 | **시크릿챗** | 대화·감정·기억을 저장하지 않는 완전 무저장 세션 | ✅ 구현 |
-| **TTS 음성 응답** | ElevenLabs 감정 연기 음성 (1회 재생 후 파기) | ✅ 구현 |
+| **TTS 음성 응답** | OpenAI gpt-audio 감정 연기 음성 — 1회 재생 후 즉시 파기·10분 자동 소멸·서버 저장 0건 | ✅ 구현 |
 | **온보딩 · 캐릭터** | 소셜 로그인, 성격 기반 캐릭터 4종, 회원정보·관심 키워드 | ✅ 구현 |
 | **카드 운세 (타로)** | 오늘의 메이저 카드 + 상황별 3장 리딩(LLM 해석) | ✅ 구현 |
 | **감정 캘린더** | 날짜별 대화 감정을 캐릭터 아이콘으로 시각화 | ✅ 구현 |
-| **마이페이지 · MBTI** | 방 일러스트 프로필, 대화 기반 MBTI 성향 분석 | 🔧 진행 중 |
-| **마음 리포트** | 주/월간 감정 리포트, 스트레스 원인·이완 키워드, 행동 대안 | 🔧 진행 중 |
+| **마이페이지 · MBTI** | 방 일러스트 프로필, 대화 기반 MBTI 성향 분석 | ✅ 구현 |
+| **마음 리포트** | 주/월간 감정 리포트, 스트레스 원인·이완 키워드, 행동 대안 (Supervisor 멀티에이전트) | ✅ 구현 |
+| **위기 신호 대응** | 규칙+문맥 LLM 2단 감지 → 위로 전담 응답 전환, 신고·통보·기록 없음, 위기 턴은 기억 제외 | ✅ 구현 |
+| **마음 카드** | 감정 기반 그림 카드 생성(gpt-image-2), 비동기 폴링 | ✅ 구현 |
 
 ---
 
 ## 6. 시스템 아키텍처
 
-사용자 → **Vue 프론트(화면)** → REST API → **Django + DRF 웹 서버(LangGraph 대화 흐름)** ↔ **PostgreSQL** 구조이며, 감정 분류(KcELECTRA)·ElevenLabs TTS가 백엔드에 연동됩니다. 감정 분류 모델은 Colab T4에서 파인튜닝 후 배포합니다.
+**운영 구성 (AWS 배포 완료)** — CloudFront + WAF → EC2 t3.micro(nginx·gunicorn, Docker) → **PostgreSQL(RDS)** + **Neo4j AuraDB(그래프 장기기억)**. 감정 분류 모델(KcELECTRA 488MB)은 **AWS Lambda 컨테이너**로 분리 서빙하며, main push 시 GitHub Actions가 ECR을 거쳐 약 13분 만에 자동 배포합니다. 고정비는 ECR 보관료뿐(월 1,000원 미만, 전 구성 프리티어).
 
-![시스템 아키텍처](docs/중간발표_이미지/13_시스템아키텍처.png)
+![운영 배포 아키텍처](docs/최종발표_이미지/운영배포_구성도.png)
+
+![챗봇 LangGraph 흐름도](docs/최종발표_이미지/챗봇_LangGraph_흐름도.png)
 
 **대화 흐름 (LangGraph):** MBTI 판별 → 컨텍스트 조회 → 감정 분석 → 감정별 응답(톤 지침) → 최종 정제 · 저장/기억은 백그라운드 비동기 처리.
 
@@ -193,6 +199,12 @@
 
 > 상세 ERD·테이블 정의서·제약조건은 `docs/한재웅/[데이터 수집 및 저장] 데이터베이스_저장소 설계 문서_27기_4팀_최종본.docx` 참고. 시크릿챗 세션은 애플리케이션 레벨에서 영구 저장 대상에서 제외.
 
+### 7.4 그래프 저장소 (Neo4j AuraDB) — 장기 기억
+
+발화에서 사건·인물·감정을 추출해 **라벨 8종**(User·Episode·Event·Emotion·Person·Place·Topic·Date)·**관계 11종**(HAS_EVENT·RECORDS·EVOKED·PREFERS·AT/ON/INVOLVES/ABOUT·BECAUSE_OF 등)의 그래프로 축적합니다. Episode 원문은 **암호문으로 저장**되고, 사실이 바뀌면 삭제 대신 **만료 처리**(occurs_start/end·end_reason)합니다. 전용 평가 27개 시나리오에서 **회상 93%(25/27)·환각 0%·"잊어줘" 준수 3/3**을 실측했습니다.
+
+![Neo4j 운영 그래프](docs/최종발표_이미지/Neo4j_운영그래프.png)
+
 ---
 
 ## 8. 감정 분류 모델링 & 성능
@@ -217,16 +229,16 @@ KcELECTRA vs KoBERT × 동결 임베딩 vs 파인튜닝 + 임베딩 레시피 4�
 
 ### 최종 배포 모델 (무누수 조건)
 
-- **KcELECTRA 파인튜닝 (+음성·KOTE, lr 5e-5 · 3 epoch)** · 학습 90,456건
-- 작성체 Macro-F1 **0.71** · 채팅체 Macro-F1 **0.78** (기준선 0.48 → 0.78)
-- 클래스별 F1(채팅체): 기쁨 0.93 · 분노 0.75 · 일반 0.73 · 슬픔 0.70
-- 재현성: 시드 3회 표준편차 ±0.003
-- epoch 탐색(2·3·4): 3 epoch에서 채팅체 F1 최고 (4 epoch 과적합) → **3 epoch 확정**
+- **KcELECTRA 파인튜닝 (+음성·KOTE, lr 5e-5 · 3 epoch)** · 학습 90,456건 · Colab T4 35분 03초(8,481 steps)
+- 채팅체 Macro-F1 **0.7764** (목표 0.75 충족) · 작성체 **0.7059** — **배포 가중치를 다시 불러 소수 셋째 자리까지 재현 확인**
+- 클래스별 F1(채팅체): 기쁨 0.925 · 분노 0.747 · 일반 0.730 · 슬픔 0.704 (슬픔 Recall 0.676이 최저 — 개선 계획 명시)
+- 재현성: 시드 3회 표준편차 ±0.0031 · 학습률 탐색(2e-5→5e-5, 개선폭이 시드 편차의 5.6배로 유의) · 4 epoch 과적합 확인 → **3 epoch 확정**
+- 운영 서빙: **AWS Lambda 컨테이너(488MB)** — 운영 로그 3,566건 기준 p50 68.1ms · **p95 233.5ms** · p99 649.9ms
 
 ### 확신도 게이트 (서빙)
 - 초단문(10자 미만) → 직전 감정 유지
 - 모델 확신도 0.70 미만 → 최근 대화 문맥을 포함한 **LLM 재분류** ("애매하면 찍지 않는다")
-- 임계값 0.70에서 모델 채택률 82.7% · 채택분 정확도 0.83
+- 임계값 0.70에서 모델 채택률 82.7% · 채택분 정확도 **0.831** (배포 가중치 재현 실행에서 산출)
 
 ---
 
@@ -241,8 +253,8 @@ KcELECTRA vs KoBERT × 동결 임베딩 vs 파인튜닝 + 임베딩 레시피 4�
 
 | 항목 | 목표 | 설계 |
 |---|---|---|
-| 응답 속도 | p95 < 3.0초 | 텍스트 즉시 반환 + TTS 비동기 폴링(2단 응답) |
-| 감정 추론 | **실측 p95 17.5ms** (목표 < 300ms) | 파인튜닝 KcELECTRA GPU(T4) 서빙 · 단건 150문장 기준 |
+| 응답 속도 | p95 < 3.0초 | 텍스트 즉시 반환 + TTS 비동기 폴링. 배포 실측 중앙값 3,143ms로 목표 초과(IS-005) — 응답 스트리밍 도입 예정 |
+| 감정 추론 | **운영 실측 p95 233.5ms** (목표 < 300ms 충족) | AWS Lambda 컨테이너(488MB) 서빙 · 5분 예열로 콜드 2% · 운영 로그 3,566건 |
 | 저장 무결성 | 저장 장애 시 **응답 무중단** | 기억·저장은 응답과 분리된 백그라운드 비동기 |
 | 반응성 | 감정 → 캐릭터 표정 실시간 전환 | 감정 매핑 즉시 반영 |
 | 보안·프라이버시 | 온보딩 동의·암호화·시크릿챗 즉시 소거·탈퇴 시 영구 파기 | 개인정보보호법 준수(민감정보) |
@@ -262,7 +274,7 @@ KcELECTRA vs KoBERT × 동결 임베딩 vs 파인튜닝 + 임베딩 레시피 4�
 
 > "지치고 마음이 무거워"라고 입력하면 캐릭터가 **우는 표정**으로 바뀌고, 감정에 맞춘 공감 응답 + TTS 음성이 재생됩니다.
 
-📊 **중간 발표 자료** : [`빈틈사이_중간발표자료_한솔작성.pptx`](docs/빈틈사이_중간발표자료_한솔작성.pptx) · 🎬 시연 영상 · 🔗 배포 URL : **배포 시 공개 예정 (향후)**
+📊 **최종 발표 자료** : [`docs/산출물/빈틈사이_최종 발표자료.pdf`](docs/산출물/) · 🎬 시연 영상 : 최종 발표(08/04) 제출 · 🚀 **AWS 배포 완료** — CloudFront+WAF, EC2, RDS, AuraDB, Lambda. 요구사항 64건 중 62건 배포 환경 실측 달성
 
 ---
 
@@ -342,19 +354,23 @@ SKN27-FINAL-4Team/
 
 | 이슈 | 원인 | 해결 |
 |---|---|---|
-| 소셜 로그인 연동 | 서버 재실행 시 로그인 실패 | 조사·진행 중 |
+| 채팅체에서 감정 분류 붕괴 (0.4793) | 문어체 학습 데이터 vs 실사용 채팅체 도메인 격차 | 구어체 5만 건(음성 전사+KOTE) 증강 재학습 → **0.7764** + 확신도 게이트(저확신 17.3%는 문맥 LLM 재판정) |
+| 배포 후 채팅 사진 첨부가 403 | CloudFront **WAF SizeRestrictions_BODY**(8KB 초과 body 차단)가 이미지 업로드를 엣지에서 차단 | 해당 룰만 Count 오버라이드 — nginx 20MB·Django 검증은 유지, 실서비스 업로드 검증 완료 |
+| TTS가 감정 무관하게 똑같이 들림 | 전용 TTS의 낭독체 한계 | **gpt-audio 전환** + 감정별 영어 연기 지시문 + 출력 전사·대본 글자 단위 대조(이탈 시 폐기·재시도) |
+| 마음카드 테스트 2건 실패 (IS-002) | 백그라운드 전환 후 테스트가 동기 완료를 기대 | 인라인 스레드 패치로 테스트 동기화 — 전체 테스트 그린 확인 후 커밋 |
+| 소셜 로그인 후 원래 화면 복귀 실패 (IS-007) | 요구사항 033 vs 033-1이 서로 모순 — 콜백이 홈 고정 | 원인 규명 완료, 정의서 정리 후 콜백이 저장된 복귀 경로를 쓰도록 수정 예정 |
 | MBTI 프롬프트 결과 불안정 | 점수 산정 기준 모호 → 반복 실행 시 결과 변동 | 프롬프트에 산정 규칙을 구체·명확화 → 일관성 확보 |
 | MBTI 데이터셋 부족 | 신뢰 가능한 라벨 데이터 부족 → ML 학습 실패 | ML 대신 **LLM 프롬프트 기반 점수 산정**으로 전환 |
-| 챗봇 설계 관점 | 기능 중심 설계로 사용자·비즈니스 관점 결여 | 사용자 관점에서 기능 간소화·소통 중심으로 흐름도 재작성 |
 
 ---
 
 ## 13. 향후 계획
 
-- **MVP+** : 친밀도 말투·캐릭터 메모리, 주/월간 마음 리포트, MBTI·취향 분석, 접근성
-- **Phase 2** : 음성 대화·장기 기억, 감정 시계열 분석, 선물·도토리·구독(BM)
-- **고도화·배포** : 마음 리포트 시계열 + ML/DL + 키워드 분류, **AWS 배포** → 배포 시 웹 서비스 URL·시연 영상 공개
-- **모델** : 서술형 분노·중립 문장 데이터 보강, 실사용 로그 기반 저확신 샘플 재학습 루프
+- **성능** : 응답 스트리밍 도입으로 체감 지연 단축(IS-005) · 기억 주입량 조정
+- **운영·보안** : 배포 게이트(CI 성공 조건) 연결(IS-004) · 비밀값 SSM 이관·로테이션 · 전역 요청 제한 · LLM 토큰/비용 관측
+- **모델** : 서술형 분노·중립 문장 데이터 보강, 실사용 저확신 로그 재학습 루프(동의·비식별화 전제)
+- **검증** : 부하 테스트 · 정식 사용자 평가(만족도) — 웰니스 효과 검증의 선행 조건
+- **서비스** : 도메인 연결, 친밀도 말투·캐릭터 메모리 고도화, 선물·구독(BM) 탐색
 
 ---
 
@@ -369,7 +385,7 @@ docker compose up -d --build
 cd app/backend
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env            # DB·LLM·ElevenLabs API 키 입력
+cp .env.example .env            # DB·OpenAI(LLM/TTS)·Neo4j 접속 정보 입력
 python manage.py migrate
 python manage.py runserver      # http://localhost:8000
 
